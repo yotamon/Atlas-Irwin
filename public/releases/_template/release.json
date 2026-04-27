@@ -1,0 +1,23 @@
+{
+  "title": "Night Drive EP",
+  "type": "EP",
+  "releaseDate": "2026-04-27",
+  "description": "Replace this copy with a short line about the release.",
+  "featured": false,
+  "cover": "cover.jpg",
+  "coverAlt": "Night Drive EP cover art",
+  "ctaLabel": "Listen Now",
+  "tracks": [
+    {
+      "file": "01-night-drive.mp3",
+      "title": "Night Drive",
+      "duration": "03:42",
+      "active": true
+    },
+    {
+      "file": "02-after-hours.mp3",
+      "title": "After Hours",
+      "duration": "04:08"
+    }
+  ]
+}

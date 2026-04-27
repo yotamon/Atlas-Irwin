@@ -1,0 +1,140 @@
+{
+  "title": "Funkable",
+  "type": "EP",
+  "artist": "Atlas Irwin",
+  "releaseDate": "2026-04-26",
+  "description": "A groove-forward four-track house release built from low-end pressure, chopped vocals, and tactile club motion.",
+  "featured": true,
+  "cover": "cover.png",
+  "coverAlt": "Funkable EP cover art",
+  "ctaLabel": "Listen Now",
+  "genre": "Dance",
+  "subgenre": "House",
+  "label": "P.A.K Sound",
+  "upc": "823191287605",
+  "albumLinks": [
+    {
+      "platform": "Apple Music",
+      "href": "https://music.apple.com/us/album/1895148846"
+    },
+    {
+      "platform": "Deezer",
+      "href": "https://www.deezer.com/us/album/967265631"
+    },
+    {
+      "platform": "Spotify",
+      "href": "https://open.spotify.com/album/0qER9Cst0uFtS4st83JTPw"
+    }
+  ],
+  "partners": [
+    { "name": "Amazon Music", "available": true },
+    { "name": "AMI Entertainment", "available": true },
+    { "name": "Anghami", "region": "Lebanon", "available": true },
+    { "name": "Apple Music", "available": true },
+    { "name": "Boomplay", "region": "Nigeria", "available": true },
+    { "name": "Deezer", "available": true },
+    { "name": "Facebook / Instagram", "available": true },
+    { "name": "iHeartRadio", "available": true },
+    { "name": "Claro Musica", "available": true },
+    { "name": "Jaxsta", "available": false },
+    { "name": "JOOX", "available": true },
+    { "name": "KKBox", "region": "Taiwan", "available": true },
+    { "name": "MediaNet", "available": true },
+    { "name": "Melon Plus", "region": "Korea", "available": true },
+    { "name": "Napster", "available": false },
+    { "name": "NetEase", "region": "China", "available": true },
+    { "name": "Pandora Plus", "available": true },
+    { "name": "Peloton", "available": true },
+    { "name": "Qobuz", "region": "France", "available": true },
+    { "name": "Saavn", "region": "India", "available": true },
+    { "name": "7digital", "available": true },
+    { "name": "Shazam", "available": true },
+    { "name": "Sound Exchange", "available": true },
+    { "name": "Spotify", "available": true },
+    { "name": "Tencent", "region": "China", "available": true },
+    { "name": "Tidal", "available": true },
+    { "name": "TikTok", "available": true },
+    { "name": "VK", "region": "Russia", "available": false },
+    { "name": "Yandex", "region": "Russia", "available": false },
+    { "name": "YouTube Music", "available": true }
+  ],
+  "tracks": [
+    {
+      "file": "Funkable.wav",
+      "title": "Funkable",
+      "duration": "03:15",
+      "active": true,
+      "links": [
+        {
+          "platform": "Apple Music",
+          "href": "https://music.apple.com/us/album/1895148846?i=6763071711"
+        },
+        {
+          "platform": "Deezer",
+          "href": "https://www.deezer.com/us/track/3977714721"
+        },
+        {
+          "platform": "YouTube Art Track",
+          "href": "https://www.youtube.com/watch?v=EV2ci9Gkpl4"
+        }
+      ]
+    },
+    {
+      "file": "Goodie' Shaker.wav",
+      "title": "Goodie Shakin'",
+      "duration": "02:17",
+      "links": [
+        {
+          "platform": "Apple Music",
+          "href": "https://music.apple.com/us/album/1895148846?i=6763071712"
+        },
+        {
+          "platform": "Deezer",
+          "href": "https://www.deezer.com/us/track/3977714731"
+        },
+        {
+          "platform": "YouTube Art Track",
+          "href": "https://www.youtube.com/watch?v=5og7IC5D9AE"
+        }
+      ]
+    },
+    {
+      "file": "A Beat Better.wav",
+      "title": "A Beat Better",
+      "duration": "02:19",
+      "links": [
+        {
+          "platform": "Apple Music",
+          "href": "https://music.apple.com/us/album/1895148846?i=6763071713"
+        },
+        {
+          "platform": "Deezer",
+          "href": "https://www.deezer.com/us/track/3977714741"
+        },
+        {
+          "platform": "YouTube Art Track",
+          "href": "https://www.youtube.com/watch?v=n4KTLjXTVP8"
+        }
+      ]
+    },
+    {
+      "file": "Funkable (Vocal Edit).wav",
+      "title": "Funkable (Vocal Edit)",
+      "duration": "02:59",
+      "links": [
+        {
+          "platform": "Apple Music",
+          "href": "https://music.apple.com/us/album/1895148846?i=6763071714"
+        },
+        {
+          "platform": "Deezer",
+          "href": "https://www.deezer.com/us/track/3977714751"
+        },
+        {
+          "platform": "YouTube Art Track",
+          "href": "https://www.youtube.com/watch?v=vI9IVVSdfYU"
+        }
+      ]
+    }
+  ]
+}
