@@ -35,13 +35,11 @@ export function Hero() {
             className="hero-reveal mt-[1.85rem] flex flex-wrap items-center gap-x-[2.3rem] gap-y-5 sm:flex-nowrap"
             style={{ animationDelay: "320ms" }}
           >
-            <CTAButton href="#contact">Enter the Sound</CTAButton>
-            <CTAButton
-              href="#release-widget"
-              variant="secondary"
-              ariaLabel="Listen now"
-            >
-              Listen Now
+            <CTAButton href="#release-widget" ariaLabel="I want to funk now">
+              I want to funk now
+            </CTAButton>
+            <CTAButton href="#contact" variant="secondary">
+              Contact
             </CTAButton>
           </div>
         </div>

@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
-import { Bebas_Neue, Manrope } from "next/font/google";
+import localFont from "next/font/local";
+import { Manrope } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
-import { FontSwitcher } from "@/components/font-switcher";
 
-const headingFont = Bebas_Neue({
+const headingFont = localFont({
+  src: "../public/fonts/montage_2/Montage-Demo.ttf",
   variable: "--font-heading",
-  weight: "400",
-  subsets: ["latin"],
+  display: "swap",
 });
 
 const bodyFont = Manrope({
@@ -57,7 +57,6 @@ export default function RootLayout({
           {themeInitScript}
         </Script>
         {children}
-        <FontSwitcher />
       </body>
     </html>
   );
