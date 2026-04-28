@@ -34,8 +34,9 @@ export function ThemeToggle() {
       <button
         type="button"
         aria-label="Switch to light mode"
+        aria-pressed={resolvedTheme === "light"}
         onClick={() => updateTheme("light")}
-        className={`inline-flex h-11 w-11 items-center justify-center rounded-full transition-colors duration-200 ${
+        className={`inline-flex h-11 w-11 items-center justify-center rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/25 ${
           resolvedTheme === "light"
             ? "border border-teal bg-paper text-teal"
             : "text-muted hover:text-ink"
@@ -46,8 +47,9 @@ export function ThemeToggle() {
       <button
         type="button"
         aria-label="Switch to dark mode"
+        aria-pressed={resolvedTheme === "dark"}
         onClick={() => updateTheme("dark")}
-        className={`inline-flex h-11 w-11 items-center justify-center rounded-full transition-colors duration-200 ${
+        className={`inline-flex h-11 w-11 items-center justify-center rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/25 ${
           resolvedTheme === "dark"
             ? "border border-teal bg-paper text-teal"
             : "text-muted hover:text-ink"
