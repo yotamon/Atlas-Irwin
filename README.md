@@ -49,6 +49,13 @@ the same variables to your production host.
 For Gmail, use an app password for `CONTACT_SMTP_PASS`; the regular account
 password will not work.
 
+### Newsletter signup
+
+The newsletter form adds subscribers through the current MailerLite API.
+Set `MAILERLITE_API_KEY` in `.env.local` and in production. If subscribers
+should be added to a specific MailerLite group, set `MAILERLITE_GROUP_IDS` to
+one or more comma-separated group IDs.
+
 ### Deployment note
 
 If you deploy to Vercel or another immutable host, newly added release files will appear after the next deploy because the files ship with the deployment.

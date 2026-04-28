@@ -4,6 +4,7 @@ import { Footer } from "@/components/footer";
 import { Hero } from "@/components/hero";
 import { ListenPlatformsSection } from "@/components/listen-platforms-section";
 import { Navbar } from "@/components/navbar";
+import { NewsletterSignup } from "@/components/newsletter-signup";
 import { ReleaseWidget } from "@/components/release-widget";
 
 export default function Home() {
@@ -16,6 +17,7 @@ export default function Home() {
         <ListenPlatformsSection />
         <AboutSection />
         <ContactSection />
+        <NewsletterSignup />
         <Footer />
       </main>
     </div>
