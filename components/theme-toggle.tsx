@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useSyncExternalStore } from "react";
-
-import { MoonIcon, SunIcon } from "@/components/icons";
+import { IoMoon, IoSunny } from "react-icons/io5";
 
 type ThemeMode = "light" | "dark";
 
@@ -22,7 +21,8 @@ export function ThemeToggle() {
 
   const resolvedTheme = !isClient
     ? "light"
-    : themeOverride ?? (document.documentElement.dataset.theme === "dark" ? "dark" : "light");
+    : (themeOverride ??
+      (document.documentElement.dataset.theme === "dark" ? "dark" : "light"));
 
   const updateTheme = (nextTheme: ThemeMode) => {
     setThemeOverride(nextTheme);
@@ -41,7 +41,7 @@ export function ThemeToggle() {
             : "text-muted hover:text-ink"
         }`}
       >
-        <SunIcon className="h-5 w-5" />
+        <IoSunny className="h-5 w-5" />
       </button>
       <button
         type="button"
@@ -53,7 +53,7 @@ export function ThemeToggle() {
             : "text-muted hover:text-ink"
         }`}
       >
-        <MoonIcon className="h-5 w-5" />
+        <IoMoon className="h-5 w-5" />
       </button>
     </div>
   );

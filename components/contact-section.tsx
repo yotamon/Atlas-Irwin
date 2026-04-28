@@ -14,7 +14,7 @@ const contactChannels = [
   {
     title: "Instagram",
     value: "@atlasirwin",
-    href: "https://instagram.com",
+    href: "https://instagram.com/atlasirwin",
     note: "Current work-in-progress, previews, and release updates.",
   },
 ];
@@ -30,9 +30,9 @@ export function ContactSection() {
           <p className="section-kicker">Contact</p>
           <h2 className="section-title mt-3">Open The Channel</h2>
           <p className="mt-5 max-w-[28rem] text-[1.08rem] leading-8 text-muted">
-            For bookings, collaborations, remix requests, and visual commissions,
-            reach out directly. The most interesting work usually lives in the
-            overlap between sound, motion, and atmosphere.
+            For bookings, collaborations, remix requests, and visual
+            commissions, reach out directly. The most interesting work usually
+            lives in the overlap between sound, motion, and atmosphere.
           </p>
 
           <div className="paper-inset mt-8 rounded-[1.35rem] px-5 py-5">
@@ -63,7 +63,9 @@ export function ContactSection() {
                   Reach out
                 </span>
               </div>
-              <p className="mt-3 text-[1.2rem] leading-7 text-ink">{channel.value}</p>
+              <p className="mt-3 text-[1.2rem] leading-7 text-ink">
+                {channel.value}
+              </p>
               <p className="mt-2 max-w-[31rem] text-[0.98rem] leading-7 text-muted">
                 {channel.note}
               </p>

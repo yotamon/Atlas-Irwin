@@ -3,13 +3,9 @@
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 
-import {
-  ArrowRightIcon,
-  PauseIcon,
-  PlayIcon,
-  StarMarkIcon,
-  WaveformIcon,
-} from "@/components/icons";
+import { FaArrowRight, FaPause, FaPlay } from "react-icons/fa";
+import { HiSparkles } from "react-icons/hi2";
+import { MdGraphicEq } from "react-icons/md";
 
 type ReleaseTrackView = {
   number: string;
@@ -127,7 +123,7 @@ export function ReleaseWidgetClient({ release }: ReleaseWidgetClientProps) {
   return (
     <section
       id="release-widget"
-      className="relative z-30 mx-auto mt-6 w-full max-w-[1180px] px-5 pb-2 sm:px-8 lg:-mt-24 lg:px-0"
+      className="relative top-[-100px] z-30 mx-auto mb-[-100px] w-full max-w-[1180px] px-5 pb-2 sm:px-8 lg:px-0"
     >
       <div className="paper-card rounded-[1.85rem] border border-ink/35 px-4 py-4 shadow-[0_14px_30px_rgba(17,17,17,0.08)] backdrop-blur-[2px] sm:px-6 sm:py-6 lg:px-5 lg:py-4">
         <div className="grid items-stretch gap-6 lg:grid-cols-[220px_1.15fr_1.55fr_84px] lg:gap-5">
@@ -139,14 +135,14 @@ export function ReleaseWidgetClient({ release }: ReleaseWidgetClientProps) {
                 width={210}
                 height={210}
                 unoptimized
-                className="h-auto w-full"
+                className="h-auto"
               />
             </div>
           </div>
 
           <div className="flex flex-col justify-center text-center lg:text-left">
             <div className="flex items-center justify-center gap-3 text-teal lg:justify-start">
-              <StarMarkIcon className="h-4 w-4" />
+              <HiSparkles className="h-4 w-4" />
               <p className="font-display text-[1.15rem] uppercase tracking-[0.28em] sm:text-[1.25rem]">
                 New Release
               </p>
@@ -161,7 +157,8 @@ export function ReleaseWidgetClient({ release }: ReleaseWidgetClientProps) {
             ) : null}
             <p className="mt-3 font-display text-[1.2rem] uppercase tracking-[0.2em] text-ink/80 sm:text-[1.35rem]">
               {release.type ? `${release.type} • ` : ""}
-              {release.trackCount} {release.trackCount === 1 ? "Track" : "Tracks"}
+              {release.trackCount}{" "}
+              {release.trackCount === 1 ? "Track" : "Tracks"}
               {release.totalDurationLabel ? (
                 <>
                   <span className="mx-3 text-coral">•</span>
@@ -179,8 +176,10 @@ export function ReleaseWidgetClient({ release }: ReleaseWidgetClientProps) {
               onClick={togglePlayback}
               className="mx-auto mt-6 inline-flex min-h-14 items-center gap-4 rounded-full border border-teal px-7 py-3 font-display text-[1.4rem] uppercase tracking-[0.14em] text-ink transition-colors duration-200 hover:bg-teal/8 lg:mx-0"
             >
-              <span>{isPlaying ? "Pause Audio" : release.ctaLabel || "Listen Now"}</span>
-              <ArrowRightIcon className="h-4 w-4" />
+              <span>
+                {isPlaying ? "Pause Audio" : release.ctaLabel || "Listen Now"}
+              </span>
+              <FaArrowRight className="h-4 w-4" />
             </button>
           </div>
 
@@ -204,11 +203,13 @@ export function ReleaseWidgetClient({ release }: ReleaseWidgetClientProps) {
                     {isActive ? (
                       <span className="h-0 w-0 border-y-[5px] border-y-transparent border-l-[7px] border-l-teal" />
                     ) : null}
-                    <span className={`${isActive ? "font-medium" : ""} truncate`}>
+                    <span
+                      className={`${isActive ? "font-medium" : ""} truncate`}
+                    >
                       {track.title}
                     </span>
                     {isActive ? (
-                      <WaveformIcon className="hidden h-4 w-20 shrink-0 md:block" />
+                      <MdGraphicEq className="hidden h-4 w-20 shrink-0 md:block" />
                     ) : null}
                   </div>
                   <span className="font-display text-[1.25rem] uppercase tracking-[0.08em]">
@@ -227,17 +228,20 @@ export function ReleaseWidgetClient({ release }: ReleaseWidgetClientProps) {
               className="inline-flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-full border border-teal text-teal transition-transform duration-200 hover:scale-105 hover:bg-teal hover:text-paper"
             >
               {isPlaying ? (
-                <PauseIcon className="h-7 w-7" />
+                <FaPause className="h-7 w-7" />
               ) : (
-                <PlayIcon className="h-7 w-7 translate-x-[1px]" />
+                <FaPlay className="h-7 w-7 translate-x-[1px]" />
               )}
             </button>
           </div>
         </div>
 
-        <audio ref={audioRef} preload="metadata" className="hidden">
-          <source src={selectedTrack.url} />
-        </audio>
+        <audio
+          ref={audioRef}
+          preload="metadata"
+          className="hidden"
+          src={selectedTrack.url}
+        />
       </div>
     </section>
   );
