@@ -1,5 +1,4 @@
 import { BiLogoSoundcloud, BiLogoSpotify } from "react-icons/bi";
-import { FaInstagram } from "react-icons/fa";
 
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -13,11 +12,6 @@ const socials = [
     href: "https://soundcloud.com/atlas-irwin",
     label: "SoundCloud",
     icon: BiLogoSoundcloud,
-  },
-  {
-    href: "https://instagram.com/atlasirwin",
-    label: "Instagram",
-    icon: FaInstagram,
   },
 ];
 

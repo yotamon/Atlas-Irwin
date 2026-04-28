@@ -40,6 +40,15 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+### Contact form email
+
+The contact form sends messages to `atlas.irwin.music@gmail.com` through SMTP.
+Create a local `.env.local` file using `.env.example` as the template, then add
+the same variables to your production host.
+
+For Gmail, use an app password for `CONTACT_SMTP_PASS`; the regular account
+password will not work.
+
 ### Deployment note
 
 If you deploy to Vercel or another immutable host, newly added release files will appear after the next deploy because the files ship with the deployment.
