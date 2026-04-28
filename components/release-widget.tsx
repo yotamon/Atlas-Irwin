@@ -3,11 +3,10 @@ import { ReleaseWidgetClient } from "@/components/release-widget-client";
 
 export function ReleaseWidget() {
   const releases = getReleases();
-  const featuredRelease = releases[0];
 
-  if (!featuredRelease) {
+  if (releases.length === 0) {
     return null;
   }
 
-  return <ReleaseWidgetClient release={featuredRelease} />;
+  return <ReleaseWidgetClient releases={releases} />;
 }

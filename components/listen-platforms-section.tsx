@@ -2,6 +2,7 @@ import { BiLogoSoundcloud, BiLogoSpotify, BiLogoYoutube } from "react-icons/bi";
 import { BsAppleMusic } from "react-icons/bs";
 import { FaDeezer } from "react-icons/fa";
 
+
 const platformLinks = [
   {
     label: "SoundCloud",
@@ -38,10 +39,10 @@ export function ListenPlatformsSection() {
     >
       <div className="flex flex-col items-center text-center">
         <h2 className="font-display text-[3rem] uppercase leading-[0.9] tracking-[0.06em] sm:text-[4rem] lg:text-[4.5rem]">
-          Listen At All Platforms
+          Listen Everywhere
         </h2>
 
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-3 sm:gap-4">
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-6 sm:gap-8">
           {platformLinks.map(({ label, href, icon: Icon }) => (
             <a
               key={label}
@@ -50,12 +51,12 @@ export function ListenPlatformsSection() {
               rel="noreferrer noopener"
               aria-label={label}
               title={label}
-              className="group inline-flex flex-col items-center gap-2 text-ink transition-all duration-200 hover:-translate-y-0.5 hover:text-teal"
+              className="group inline-flex flex-col items-center gap-3 text-ink transition-all duration-200 hover:-translate-y-0.5 hover:text-teal"
             >
               <span className="inline-flex h-15 w-15 items-center justify-center rounded-full border border-line/80 bg-surface-soft/55 transition-all duration-200 group-hover:scale-105 group-hover:border-teal group-hover:bg-surface-soft group-hover:text-teal group-hover:shadow-md sm:h-16 sm:w-16">
                 <Icon className="h-6 w-6 sm:h-7 sm:w-7" />
               </span>
-              <span className="font-display text-[0.72rem] uppercase tracking-[0.18em] text-muted transition-colors duration-200 group-hover:text-teal">
+              <span className="inline-flex items-center font-display text-[0.75rem] uppercase tracking-[0.18em] text-muted transition-colors duration-200 group-hover:text-teal">
                 {label}
               </span>
             </a>

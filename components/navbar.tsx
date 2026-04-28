@@ -7,6 +7,7 @@ import { HiBars3, HiXMark } from "react-icons/hi2";
 
 const links = [
   { href: "#music", id: "music", label: "Music" },
+  { href: "#platforms", id: "platforms", label: "Listen" },
   { href: "#about", id: "about", label: "About" },
   { href: "#contact", id: "contact", label: "Contact" },
 ] as const;
@@ -146,7 +147,7 @@ export function Navbar() {
         <a
           href="#music"
           aria-label="Atlas Irwin — Home"
-          className={`inline-flex items-center rounded-full text-ink transition-transform duration-200 hover:scale-[1.02] ${focusVisible}`}
+          className={`inline-flex items-center rounded-full text-ink ${focusVisible}`}
         >
           <Image
             src="/atlas-irwin-logo-sign.svg"
