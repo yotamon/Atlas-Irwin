@@ -15,6 +15,7 @@
   --purple: #5f46b7;
   --shadow: rgba(17, 17, 17, 0.12);
   --logo-filter: none;
+  --hero-bg: url("/hero-bg.png");
   --texture-image: url("/light-bg.png");
   --texture-opacity: 0.08;
   --grain-opacity: 0.16;
@@ -35,6 +36,7 @@ html[data-theme="dark"] {
   --purple: #ab8cff;
   --shadow: rgba(0, 0, 0, 0.28);
   --logo-filter: invert(1) brightness(1.08);
+  --hero-bg: url("/hero-bg-dark.png");
   --texture-image: url("/dark-bg.png");
   --texture-opacity: 0.12;
   --grain-opacity: 0.06;
@@ -64,26 +66,24 @@ html[data-theme="dark"] {
 html {
   scroll-behavior: smooth;
   background: var(--paper);
+  scrollbar-width: none;
 }
 
 body {
   position: relative;
   min-height: 100vh;
   overflow-x: hidden;
-  background:
-    radial-gradient(circle at 14% 18%, rgba(186, 144, 88, 0.1), transparent 28%),
-    radial-gradient(circle at 78% 12%, rgba(255, 252, 244, 0.42), transparent 22%),
-    radial-gradient(circle at 82% 72%, rgba(132, 98, 45, 0.08), transparent 24%),
-    radial-gradient(circle at 35% 55%, rgba(255, 255, 255, 0.14), transparent 36%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent 18%),
-    linear-gradient(180deg, var(--paper), var(--paper-deep) 82%, var(--paper)),
-    var(--paper);
+  background-color: var(--paper);
   color: var(--ink);
   font-family: var(--font-body), sans-serif;
   text-rendering: optimizeLegibility;
   transition:
     background-color 220ms ease,
     color 220ms ease;
+}
+
+body::-webkit-scrollbar {
+  display: none;
 }
 
 body::before {
@@ -122,7 +122,6 @@ body::after {
 }
 
 main,
-header,
 footer,
 section {
   position: relative;
@@ -153,16 +152,7 @@ button {
   backdrop-filter: blur(8px);
 }
 
-.paper-card::before,
-.section-card::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: var(--texture-image) center top / 720px auto repeat;
-  opacity: 0.1;
-  mix-blend-mode: multiply;
-}
+
 
 .paper-card > *,
 .section-card > * {
@@ -172,6 +162,15 @@ button {
 
 .theme-logo {
   filter: var(--logo-filter);
+}
+
+.hero-scene {
+  background-image: var(--hero-bg);
+  background-position: center center;
+  background-position-x: 0px;
+  background-repeat: no-repeat;
+  background-size: cover;
+  min-height: max(100svh, 55rem);
 }
 
 .section-card {
@@ -261,4 +260,100 @@ button {
   .hero-reveal {
     animation: none;
   }
+}
+
+@media (max-width: 767px) {
+  .hero-copy {
+    position: relative;
+    margin-top: 8.75rem;
+    padding: 0 1.25rem 4rem;
+    left: auto;
+    top: auto;
+    max-width: 24rem;
+  }
+
+  .hero-copy > svg {
+    left: 0;
+    top: 0;
+    width: 2.35rem;
+    height: 2.35rem;
+  }
+
+  .hero-copy h1 {
+    max-width: 3.6ch;
+    margin-top: 0.65rem;
+    font-size: 5.85rem;
+    line-height: 0.82;
+    scale: 1;
+  }
+
+  .hero-copy h1 + div {
+    max-width: 19.8rem;
+    margin-top: 1.15rem;
+    padding-block: 0.46rem;
+  }
+
+  .hero-copy h1 + div > div {
+    column-gap: 0.82rem;
+    font-size: 0.84rem;
+  }
+
+  .hero-copy p {
+    margin-top: 1.7rem;
+    font-size: 0.98rem;
+  }
+}
+
+@media (max-height: 820px) and (min-width: 768px) {
+  .hero-copy {
+    top: 7.7rem;
+  }
+}
+
+@font-face {
+  font-family: "cafeta";
+  src: url("/fonts/cafeta/CAFETA__.TTF") format("truetype");
+  font-display: swap;
+}
+@font-face {
+  font-family: "cinematografica";
+  src: url("/fonts/cinematografica/Cinematografica-Bold-trial.ttf")
+    format("truetype");
+  font-display: swap;
+}
+@font-face {
+  font-family: "godger";
+  src: url("/fonts/godger/Godger-Regular.otf") format("opentype");
+  font-display: swap;
+}
+@font-face {
+  font-family: "heading";
+  src: url("/fonts/heading/Heading-Pro-Bold-trial.ttf") format("truetype");
+  font-display: swap;
+}
+@font-face {
+  font-family: "montage_2";
+  src: url("/fonts/montage_2/Montage-Demo.ttf") format("truetype");
+  font-display: swap;
+}
+@font-face {
+  font-family: "sex_face";
+  src: url("/fonts/sex_face/Sex%20Face.ttf") format("truetype");
+  font-display: swap;
+}
+@font-face {
+  font-family: "stacked_strong";
+  src: url("/fonts/stacked_strong/StackedStrong-Regular.otf") format("opentype");
+  font-display: swap;
+}
+@font-face {
+  font-family: "steelfish";
+  src: url("/fonts/steelfish/Steelfish%20Bd%20It.otf") format("opentype");
+  font-display: swap;
+}
+@font-face {
+  font-family: "tt_bluescreens";
+  src: url("/fonts/tt_bluescreens/TT%20Bluescreens%20Trial%20Black.ttf")
+    format("truetype");
+  font-display: swap;
 }

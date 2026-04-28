@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Bebas_Neue, Manrope } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
+import { FontSwitcher } from "@/components/font-switcher";
 
 const headingFont = Bebas_Neue({
   variable: "--font-heading",
@@ -56,6 +57,7 @@ export default function RootLayout({
           {themeInitScript}
         </Script>
         {children}
+        <FontSwitcher />
       </body>
     </html>
   );
