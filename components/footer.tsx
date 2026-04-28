@@ -1,17 +1,34 @@
-import { BiLogoSoundcloud, BiLogoSpotify } from "react-icons/bi";
+import { BiLogoSoundcloud, BiLogoSpotify, BiLogoYoutube } from "react-icons/bi";
+import { BsAppleMusic } from "react-icons/bs";
+import { FaDeezer } from "react-icons/fa";
 
 import { ThemeToggle } from "@/components/theme-toggle";
 
 const socials = [
+  {
+    href: "https://soundcloud.com/atlas-irwin",
+    label: "SoundCloud",
+    icon: BiLogoSoundcloud,
+  },
   {
     href: "https://open.spotify.com/artist/5BHcMdmbmxYwIFzqZvE3pc?si=a7EU_3TdQYSjGRAcvnJ8pg",
     label: "Spotify",
     icon: BiLogoSpotify,
   },
   {
-    href: "https://soundcloud.com/atlas-irwin",
-    label: "SoundCloud",
-    icon: BiLogoSoundcloud,
+    href: "https://www.deezer.com/en/artist/386920031",
+    label: "Deezer",
+    icon: FaDeezer,
+  },
+  {
+    href: "https://music.apple.com/us/artist/atlas-irwin/1895148790",
+    label: "Apple Music",
+    icon: BsAppleMusic,
+  },
+  {
+    href: "https://www.youtube.com/@AtlasIrwin",
+    label: "YouTube",
+    icon: BiLogoYoutube,
   },
 ];
 

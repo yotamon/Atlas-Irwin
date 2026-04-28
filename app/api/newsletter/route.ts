@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+
 type NewsletterPayload = {
   name?: unknown;
   email?: unknown;
@@ -32,6 +34,15 @@ function firstMailerLiteError(error: MailerLiteErrorResponse) {
 }
 
 export async function POST(request: Request) {
+  const ip = getClientIp(request);
+
+  if (!checkRateLimit(ip, { windowMs: 60_000, maxRequests: 5 })) {
+    return NextResponse.json(
+      { message: "Too many requests. Please try again later." },
+      { status: 429 },
+    );
+  }
+
   let payload: NewsletterPayload;
 
   try {
@@ -75,22 +86,24 @@ export async function POST(request: Request) {
   };
 
   try {
-    const response = await fetch("https://connect.mailerlite.com/api/subscribers", {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
+    const response = await fetch(
+      "https://connect.mailerlite.com/api/subscribers",
+      {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(mailerLitePayload),
       },
-      body: JSON.stringify(mailerLitePayload),
-    });
+    );
 
     if (!response.ok) {
       let mailerLiteError: MailerLiteErrorResponse = {};
 
       try {
-        mailerLiteError =
-          (await response.json()) as MailerLiteErrorResponse;
+        mailerLiteError = (await response.json()) as MailerLiteErrorResponse;
       } catch {
         mailerLiteError = {};
       }

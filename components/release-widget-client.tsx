@@ -5,7 +5,6 @@ import { useEffect, useRef, useState } from "react";
 
 import { FaArrowRight, FaPause, FaPlay } from "react-icons/fa";
 import { HiSparkles } from "react-icons/hi2";
-import { MdGraphicEq } from "react-icons/md";
 
 type ReleaseTrackView = {
   number: string;
@@ -31,8 +30,35 @@ type ReleaseView = {
 };
 
 type ReleaseWidgetClientProps = {
-  release: ReleaseView;
+  releases: ReleaseView[];
 };
+
+/* ── Animated equalizer bars ─────────────────────────────── */
+
+function AnimatedEqualizer({
+  isActive,
+  className = "",
+}: {
+  isActive: boolean;
+  className?: string;
+}) {
+  return (
+    <span
+      className={`flex h-4 items-end gap-[2.5px] ${isActive ? "eq-active" : ""} ${className}`}
+      aria-hidden="true"
+    >
+      {Array.from({ length: 4 }).map((_, i) => (
+        <span
+          key={i}
+          className="eq-bar"
+          style={{ animationDelay: `${i * 70}ms` }}
+        />
+      ))}
+    </span>
+  );
+}
+
+/* ── Helpers ─────────────────────────────────────────────── */
 
 function formatTime(seconds: number): string {
   if (!seconds || !isFinite(seconds)) return "0:00";
@@ -41,21 +67,28 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-export function ReleaseWidgetClient({ release }: ReleaseWidgetClientProps) {
+/* ── Main component ─────────────────────────────────────── */
+
+export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
+  const featuredRelease = releases[0];
+  const otherReleases = releases.slice(1);
+
   const audioRef = useRef<HTMLAudioElement>(null);
   const shouldAutoplayRef = useRef(false);
   const [selectedTrackIndex, setSelectedTrackIndex] = useState(() =>
     Math.max(
       0,
-      release.tracks.findIndex((track) => track.active),
+      featuredRelease.tracks.findIndex((track) => track.active),
     ),
   );
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
-  const selectedTrack = release.tracks[selectedTrackIndex];
+  const selectedTrack = featuredRelease.tracks[selectedTrackIndex];
 
+  /* ── Audio event listeners ────────────────────────────── */
   useEffect(() => {
     const audio = audioRef.current;
 
@@ -63,9 +96,14 @@ export function ReleaseWidgetClient({ release }: ReleaseWidgetClientProps) {
       return;
     }
 
-    const handlePlay = () => setIsPlaying(true);
+    const handlePlay = () => {
+      setIsPlaying(true);
+      setIsBuffering(false);
+    };
     const handlePause = () => setIsPlaying(false);
     const handleEnded = () => setIsPlaying(false);
+    const handleWaiting = () => setIsBuffering(true);
+    const handleCanPlay = () => setIsBuffering(false);
     const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
     const handleLoadedMetadata = () => {
       if (audio.duration && isFinite(audio.duration)) {
@@ -81,6 +119,8 @@ export function ReleaseWidgetClient({ release }: ReleaseWidgetClientProps) {
     audio.addEventListener("play", handlePlay);
     audio.addEventListener("pause", handlePause);
     audio.addEventListener("ended", handleEnded);
+    audio.addEventListener("waiting", handleWaiting);
+    audio.addEventListener("canplay", handleCanPlay);
     audio.addEventListener("timeupdate", handleTimeUpdate);
     audio.addEventListener("loadedmetadata", handleLoadedMetadata);
     audio.addEventListener("durationchange", handleDurationChange);
@@ -89,12 +129,15 @@ export function ReleaseWidgetClient({ release }: ReleaseWidgetClientProps) {
       audio.removeEventListener("play", handlePlay);
       audio.removeEventListener("pause", handlePause);
       audio.removeEventListener("ended", handleEnded);
+      audio.removeEventListener("waiting", handleWaiting);
+      audio.removeEventListener("canplay", handleCanPlay);
       audio.removeEventListener("timeupdate", handleTimeUpdate);
       audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
       audio.removeEventListener("durationchange", handleDurationChange);
     };
   }, []);
 
+  /* ── Track change ─────────────────────────────────────── */
   useEffect(() => {
     const audio = audioRef.current;
 
@@ -106,6 +149,7 @@ export function ReleaseWidgetClient({ release }: ReleaseWidgetClientProps) {
     audio.load();
     setCurrentTime(0);
     setDuration(0);
+    setIsBuffering(shouldAutoplayRef.current);
 
     if (!shouldAutoplayRef.current) {
       return;
@@ -114,6 +158,7 @@ export function ReleaseWidgetClient({ release }: ReleaseWidgetClientProps) {
     shouldAutoplayRef.current = false;
     void audio.play().catch(() => {
       setIsPlaying(false);
+      setIsBuffering(false);
     });
   }, [selectedTrack]);
 
@@ -121,6 +166,7 @@ export function ReleaseWidgetClient({ release }: ReleaseWidgetClientProps) {
     return null;
   }
 
+  /* ── Playback controls ────────────────────────────────── */
   const togglePlayback = () => {
     const audio = audioRef.current;
 
@@ -129,8 +175,10 @@ export function ReleaseWidgetClient({ release }: ReleaseWidgetClientProps) {
     }
 
     if (audio.paused) {
+      setIsBuffering(true);
       void audio.play().catch(() => {
         setIsPlaying(false);
+        setIsBuffering(false);
       });
       return;
     }
@@ -158,18 +206,21 @@ export function ReleaseWidgetClient({ release }: ReleaseWidgetClientProps) {
 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
+  /* ── Render ───────────────────────────────────────────── */
   return (
     <section
       id="release-widget"
       className="relative -top-19 z-30 mx-auto -mb-19 w-full max-w-295 px-5 pb-2 sm:-top-25 sm:-mb-25 sm:px-8 lg:px-0"
     >
+      {/* ── Featured release player ──────────────────────── */}
       <div className="paper-card rounded-[1.45rem] border border-ink/35 px-4 py-4 shadow-[0_14px_30px_rgba(17,17,17,0.08)] backdrop-blur-[2px] sm:rounded-[1.85rem] sm:px-6 sm:py-6 lg:px-5 lg:py-4">
-        <div className="grid items-stretch gap-6 lg:grid-cols-[220px_1.15fr_1.55fr_84px] lg:gap-5">
-          <div className="mx-auto w-full max-w-52.5">
+        <div className="grid items-stretch gap-6 md:grid-cols-[200px_1fr] lg:grid-cols-[220px_1.15fr_1.55fr_84px] lg:gap-5">
+          {/* Cover art */}
+          <div className="mx-auto w-full max-w-52.5 md:mx-0">
             <div className="overflow-hidden rounded-2xl border border-ink/45 bg-paper shadow-[0_8px_18px_rgba(17,17,17,0.08)]">
               <Image
-                src={release.coverUrl}
-                alt={release.coverAlt}
+                src={featuredRelease.coverUrl}
+                alt={featuredRelease.coverAlt}
                 width={210}
                 height={210}
                 className="h-auto"
@@ -177,57 +228,63 @@ export function ReleaseWidgetClient({ release }: ReleaseWidgetClientProps) {
             </div>
           </div>
 
-          <div className="flex flex-col justify-center text-center lg:text-left">
-            <div className="flex items-center justify-center gap-3 text-teal lg:justify-start">
+          {/* Release info */}
+          <div className="flex flex-col justify-center text-center md:text-left lg:text-left">
+            <div className="flex items-center justify-center gap-3 text-teal md:justify-start">
               <HiSparkles className="h-4 w-4" />
               <p className="font-display text-[1.15rem] uppercase tracking-[0.28em] sm:text-[1.25rem]">
                 New Release
               </p>
             </div>
             <h2 className="mt-3 font-display text-[3.35rem] uppercase leading-[0.88] tracking-[0.03em] sm:text-[4.05rem]">
-              {release.title}
+              {featuredRelease.title}
             </h2>
-            {release.artist ? (
+            {featuredRelease.artist ? (
               <p className="mt-2 font-display text-[1.1rem] uppercase tracking-[0.24em] text-muted sm:text-[1.18rem]">
-                {release.artist}
+                {featuredRelease.artist}
               </p>
             ) : null}
             <p className="mt-3 font-display text-[1.2rem] uppercase tracking-[0.2em] text-ink/80 sm:text-[1.35rem]">
-              {release.type ? `${release.type} • ` : ""}
-              {release.trackCount}{" "}
-              {release.trackCount === 1 ? "Track" : "Tracks"}
-              {release.totalDurationLabel ? (
+              {featuredRelease.type ? `${featuredRelease.type} • ` : ""}
+              {featuredRelease.trackCount}{" "}
+              {featuredRelease.trackCount === 1 ? "Track" : "Tracks"}
+              {featuredRelease.totalDurationLabel ? (
                 <>
                   <span className="mx-3 text-coral">•</span>
-                  {release.totalDurationLabel}
+                  {featuredRelease.totalDurationLabel}
                 </>
               ) : null}
             </p>
-            {release.releaseDateLabel ? (
+            {featuredRelease.releaseDateLabel ? (
               <p className="mt-2 text-[0.94rem] uppercase tracking-[0.24em] text-muted">
-                Released {release.releaseDateLabel}
+                Released {featuredRelease.releaseDateLabel}
               </p>
             ) : null}
             <button
               type="button"
               onClick={togglePlayback}
               aria-label={`${isPlaying ? "Pause" : "Play"} ${selectedTrack.title}`}
-              className="mx-auto mt-6 inline-flex min-h-14 items-center gap-4 rounded-full border border-teal px-7 py-3 font-display text-[1.22rem] uppercase tracking-[0.14em] text-ink transition-colors duration-200 hover:bg-teal/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal/30 sm:text-[1.4rem] lg:mx-0"
+              className="mx-auto mt-6 inline-flex min-h-14 items-center gap-4 rounded-full border border-teal px-7 py-3 font-display text-[1.22rem] uppercase tracking-[0.14em] text-ink transition-colors duration-200 hover:bg-teal/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal/30 sm:text-[1.4rem] md:mx-0"
             >
               <span>
-                {isPlaying ? "Pause Audio" : release.ctaLabel || "Listen Now"}
+                {isBuffering
+                  ? "Loading…"
+                  : isPlaying
+                    ? "Pause Audio"
+                    : featuredRelease.ctaLabel || "Listen Now"}
               </span>
               <FaArrowRight className="h-4 w-4" />
             </button>
           </div>
 
-          <div className="grid gap-2.5 border-t border-ink/18 pt-2 lg:border-t-0 lg:pt-0">
-            {release.tracks.map((track, index) => {
+          {/* Track list */}
+          <div className="grid gap-2.5 border-t border-ink/18 pt-2 md:col-span-2 lg:col-span-1 lg:border-t-0 lg:pt-0">
+            {featuredRelease.tracks.map((track, index) => {
               const isActive = index === selectedTrackIndex;
 
               return (
                 <button
-                  key={`${release.slug}-${track.file}`}
+                  key={`${featuredRelease.slug}-${track.file}`}
                   type="button"
                   onClick={() => playTrack(index)}
                   aria-pressed={isActive}
@@ -260,10 +317,7 @@ export function ReleaseWidgetClient({ release }: ReleaseWidgetClientProps) {
                         <span className="sr-only">
                           {isPlaying ? `Now playing: ${track.title}` : "Paused"}
                         </span>
-                        <MdGraphicEq
-                          aria-hidden="true"
-                          className="hidden h-4 w-20 shrink-0 md:block"
-                        />
+                        <AnimatedEqualizer isActive={isPlaying} />
                       </span>
                     ) : null}
                   </div>
@@ -275,14 +329,36 @@ export function ReleaseWidgetClient({ release }: ReleaseWidgetClientProps) {
             })}
           </div>
 
-          <div className="flex items-center justify-center lg:justify-end">
+          {/* Circular play/pause button */}
+          <div className="flex items-center justify-center border-t border-ink/10 pt-4 md:col-span-2 lg:col-span-1 lg:border-t-0 lg:pt-0 lg:justify-end">
             <button
               type="button"
               onClick={togglePlayback}
               aria-label={`${isPlaying ? "Pause" : "Play"} ${selectedTrack.title}`}
               className="inline-flex h-18 w-18 items-center justify-center rounded-full border border-teal text-teal transition-transform duration-200 hover:scale-105 hover:bg-teal hover:text-paper"
             >
-              {isPlaying ? (
+              {isBuffering ? (
+                <svg
+                  className="h-6 w-6 animate-spin"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                  />
+                </svg>
+              ) : isPlaying ? (
                 <FaPause className="h-7 w-7" />
               ) : (
                 <FaPlay className="h-7 w-7 translate-x-px" />
@@ -315,6 +391,9 @@ export function ReleaseWidgetClient({ release }: ReleaseWidgetClientProps) {
               }
             }}
           >
+            {isBuffering && (
+              <div className="buffer-pulse absolute inset-0 rounded-full bg-teal/30" />
+            )}
             <div
               className="h-full rounded-full bg-teal transition-[width] duration-100"
               style={{ width: `${progressPercent}%` }}
@@ -332,6 +411,40 @@ export function ReleaseWidgetClient({ release }: ReleaseWidgetClientProps) {
           src={selectedTrack.url}
         />
       </div>
+
+      {/* ── Other releases ───────────────────────────────── */}
+      {otherReleases.length > 0 && (
+        <div className="mt-5 grid grid-cols-2 gap-3 px-1 sm:grid-cols-3 lg:px-0">
+          {otherReleases.map((rel) => (
+            <div
+              key={rel.slug}
+              className="group overflow-hidden rounded-2xl border border-line/50 bg-surface-soft/35 p-3 transition-all duration-200 hover:border-teal/30 hover:bg-surface-soft/60"
+            >
+              <div className="overflow-hidden rounded-xl">
+                <Image
+                  src={rel.coverUrl}
+                  alt={rel.coverAlt}
+                  width={140}
+                  height={140}
+                  className="h-auto w-full transition-transform duration-200 group-hover:scale-[1.04]"
+                />
+              </div>
+              <h3 className="mt-2.5 truncate font-display text-[1.05rem] uppercase leading-none tracking-[0.06em] text-ink">
+                {rel.title}
+              </h3>
+              <p className="mt-1 text-[0.8rem] uppercase tracking-[0.12em] text-muted">
+                {rel.type} • {rel.trackCount}{" "}
+                {rel.trackCount === 1 ? "Track" : "Tracks"}
+              </p>
+              {rel.releaseDateLabel && (
+                <p className="mt-0.5 text-[0.75rem] uppercase tracking-[0.1em] text-muted/70">
+                  {rel.releaseDateLabel}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

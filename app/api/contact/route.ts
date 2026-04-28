@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 const recipientEmail = "atlas.irwin.music@gmail.com";
 
@@ -28,6 +29,16 @@ function escapeHtml(value: string) {
 }
 
 export async function POST(request: Request) {
+  /* ── Rate limiting ──────────────────────────────────────── */
+  const ip = getClientIp(request);
+
+  if (!checkRateLimit(ip, { windowMs: 60_000, maxRequests: 5 })) {
+    return NextResponse.json(
+      { message: "Too many requests. Please try again later." },
+      { status: 429 },
+    );
+  }
+
   let payload: ContactPayload;
 
   try {
@@ -95,12 +106,7 @@ export async function POST(request: Request) {
         address: email,
       },
       subject: `New website message from ${name}`,
-      text: [
-        `Name: ${name}`,
-        `Email: ${email}`,
-        "",
-        message,
-      ].join("\n"),
+      text: [`Name: ${name}`, `Email: ${email}`, "", message].join("\n"),
       html: `
         <p><strong>Name:</strong> ${safeName}</p>
         <p><strong>Email:</strong> ${safeEmail}</p>

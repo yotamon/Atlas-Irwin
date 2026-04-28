@@ -8,13 +8,14 @@ export default function manifest(): MetadataRoute.Manifest {
       "Producer, DJ, and sound designer creating groove-driven electronic music.",
     start_url: "/",
     display: "standalone",
-    background_color: "#f4eddd",
-    theme_color: "#f4eddd",
+    background_color: "#101111",
+    theme_color: "#101111",
     icons: [
       {
         src: "/atlas-cover.png",
         sizes: "512x512",
         type: "image/png",
+        purpose: "maskable",
       },
       {
         src: "/favicon.ico",
