@@ -152,8 +152,6 @@ button {
   backdrop-filter: blur(8px);
 }
 
-
-
 .paper-card > *,
 .section-card > * {
   position: relative;
@@ -170,7 +168,7 @@ button {
   background-position-x: 0px;
   background-repeat: no-repeat;
   background-size: cover;
-  min-height: max(100svh, 55rem);
+  min-height: 100svh;
 }
 
 .section-card {
@@ -263,6 +261,10 @@ button {
 }
 
 @media (max-width: 767px) {
+  .hero-scene {
+    min-height: max(100svh, 47rem);
+  }
+
   .hero-copy {
     position: relative;
     margin-top: 8.75rem;
@@ -308,52 +310,4 @@ button {
   .hero-copy {
     top: 7.7rem;
   }
-}
-
-@font-face {
-  font-family: "cafeta";
-  src: url("/fonts/cafeta/CAFETA__.TTF") format("truetype");
-  font-display: swap;
-}
-@font-face {
-  font-family: "cinematografica";
-  src: url("/fonts/cinematografica/Cinematografica-Bold-trial.ttf")
-    format("truetype");
-  font-display: swap;
-}
-@font-face {
-  font-family: "godger";
-  src: url("/fonts/godger/Godger-Regular.otf") format("opentype");
-  font-display: swap;
-}
-@font-face {
-  font-family: "heading";
-  src: url("/fonts/heading/Heading-Pro-Bold-trial.ttf") format("truetype");
-  font-display: swap;
-}
-@font-face {
-  font-family: "montage_2";
-  src: url("/fonts/montage_2/Montage-Demo.ttf") format("truetype");
-  font-display: swap;
-}
-@font-face {
-  font-family: "sex_face";
-  src: url("/fonts/sex_face/Sex%20Face.ttf") format("truetype");
-  font-display: swap;
-}
-@font-face {
-  font-family: "stacked_strong";
-  src: url("/fonts/stacked_strong/StackedStrong-Regular.otf") format("opentype");
-  font-display: swap;
-}
-@font-face {
-  font-family: "steelfish";
-  src: url("/fonts/steelfish/Steelfish%20Bd%20It.otf") format("opentype");
-  font-display: swap;
-}
-@font-face {
-  font-family: "tt_bluescreens";
-  src: url("/fonts/tt_bluescreens/TT%20Bluescreens%20Trial%20Black.ttf")
-    format("truetype");
-  font-display: swap;
 }

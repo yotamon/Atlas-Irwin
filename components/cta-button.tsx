@@ -43,10 +43,13 @@ export function CTAButton({
         boxShadow: "0 15px 24px rgba(182, 255, 59, 0.28)",
       }}
       whileTap={{ scale: 0.98 }}
-      className={`group inline-flex min-h-[3.72rem] min-w-[18.65rem] items-center justify-between gap-5 rounded-full border-[1.5px] border-[#101010] bg-accent px-8 py-3 font-sans text-[1rem] font-extrabold uppercase leading-none text-[#101010] shadow-[0_2px_0_var(--shadow)] transition-shadow duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/25 sm:text-[1.05rem] ${className}`}
+      className={`group inline-flex min-h-[3.72rem] w-full max-w-[18.65rem] items-center justify-between gap-4 rounded-full border-[1.5px] border-[#111111] bg-accent px-6 py-3 font-sans text-[0.94rem] font-extrabold uppercase leading-none text-[#111111] shadow-[0_2px_0_var(--shadow)] transition-shadow duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/25 sm:w-auto sm:min-w-[18.65rem] sm:gap-5 sm:px-8 sm:text-[1.05rem] ${className}`}
     >
-      <span>{children}</span>
-      <FaArrowRight className="h-8 w-8 transition-transform duration-200 group-hover:translate-x-1" />
+      <span className="whitespace-nowrap">{children}</span>
+      <FaArrowRight
+        aria-hidden="true"
+        className="h-7 w-7 shrink-0 transition-transform duration-200 group-hover:translate-x-1 sm:h-8 sm:w-8"
+      />
     </motion.a>
   );
 }

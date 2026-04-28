@@ -15,9 +15,94 @@ const bodyFont = Manrope({
   subsets: ["latin"],
 });
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://atlasirwin.com";
+
+const SITE_TITLE = "Atlas Irwin — Producer, DJ & Sound Designer";
+const SITE_DESCRIPTION =
+  "Atlas Irwin is a producer, DJ, and sound designer creating groove-driven electronic music that sits between club utility and visual storytelling. Listen to releases, book shows, and get in touch.";
+
 export const metadata: Metadata = {
-  title: "Atlas Irwin",
-  description: "Producer, DJ, and sound designer moving groove through systems.",
+  title: SITE_TITLE,
+  description: SITE_DESCRIPTION,
+  keywords: [
+    "Atlas Irwin",
+    "producer",
+    "DJ",
+    "sound designer",
+    "electronic music",
+    "groove",
+    "club music",
+    "EP",
+    "singles",
+    "remix",
+    "SoundCloud",
+    "Spotify",
+    "booking",
+  ],
+  authors: [{ name: "Atlas Irwin", url: SITE_URL }],
+  creator: "Atlas Irwin",
+  publisher: "Atlas Irwin",
+  metadataBase: new URL(SITE_URL),
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    title: SITE_TITLE,
+    description:
+      "Groove-driven electronic music. Producer, DJ, and sound designer creating work between club utility and visual storytelling.",
+    url: SITE_URL,
+    siteName: "Atlas Irwin",
+    locale: "en_US",
+    type: "website",
+    images: [
+      {
+        url: "/atlas-cover.png",
+        width: 1200,
+        height: 630,
+        alt: "Atlas Irwin",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_TITLE,
+    description:
+      "Groove-driven electronic music. Producer, DJ, and sound designer creating work between club utility and visual storytelling.",
+    images: ["/atlas-cover.png"],
+  },
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/atlas-cover.png",
+  },
+  other: {
+    "theme-color": "#f4eddd",
+    "color-scheme": "light dark",
+  },
+};
+
+const jsonLdWebsite = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: "Atlas Irwin",
+  url: SITE_URL,
+  description: SITE_DESCRIPTION,
+  inLanguage: "en",
+};
+
+const jsonLdMusicGroup = {
+  "@context": "https://schema.org",
+  "@type": "MusicGroup",
+  name: "Atlas Irwin",
+  url: SITE_URL,
+  genre: "Electronic",
+  sameAs: [
+    "https://soundcloud.com/atlas-irwin",
+    "https://open.spotify.com/artist/5BHcMdmbmxYwIFzqZvE3pc",
+    "https://music.apple.com/us/artist/atlas-irwin/1895148790",
+    "https://www.youtube.com/@AtlasIrwin",
+    "https://www.deezer.com/en/artist/386920031",
+  ],
+  image: `${SITE_URL}/atlas-cover.png`,
 };
 
 const themeInitScript = `
@@ -52,6 +137,26 @@ export default function RootLayout({
       data-theme="light"
       className={`${headingFont.variable} ${bodyFont.variable}`}
     >
+      <head>
+        <meta
+          name="theme-color"
+          content="#f4eddd"
+          media="(prefers-color-scheme: light)"
+        />
+        <meta
+          name="theme-color"
+          content="#101111"
+          media="(prefers-color-scheme: dark)"
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdWebsite) }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdMusicGroup) }}
+        />
+      </head>
       <body className="flex min-h-screen flex-col">
         <Script id="atlas-theme-init" strategy="beforeInteractive">
           {themeInitScript}

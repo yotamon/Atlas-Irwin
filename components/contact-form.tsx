@@ -55,9 +55,7 @@ export function ContactForm() {
       setSubmitState({
         type: "error",
         message:
-          error instanceof Error
-            ? error.message
-            : "Message could not be sent.",
+          error instanceof Error ? error.message : "Message could not be sent.",
       });
     } finally {
       setIsSending(false);
@@ -79,7 +77,7 @@ export function ContactForm() {
             onChange={(event) =>
               setForm((current) => ({ ...current, name: event.target.value }))
             }
-            className="min-h-12 rounded-[0.7rem] border border-line bg-surface-soft px-4 font-sans text-[1rem] normal-case tracking-normal text-ink outline-none transition-colors duration-200 placeholder:text-muted focus:border-teal"
+            className="min-h-12 rounded-[0.7rem] border border-line bg-surface-soft px-4 font-sans text-base normal-case tracking-normal text-ink transition-colors duration-200 placeholder:text-muted focus:border-teal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal"
           />
         </label>
 
@@ -93,7 +91,7 @@ export function ContactForm() {
             onChange={(event) =>
               setForm((current) => ({ ...current, email: event.target.value }))
             }
-            className="min-h-12 rounded-[0.7rem] border border-line bg-surface-soft px-4 font-sans text-[1rem] normal-case tracking-normal text-ink outline-none transition-colors duration-200 placeholder:text-muted focus:border-teal"
+            className="min-h-12 rounded-[0.7rem] border border-line bg-surface-soft px-4 font-sans text-base normal-case tracking-normal text-ink transition-colors duration-200 placeholder:text-muted focus:border-teal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal"
           />
         </label>
       </div>
@@ -103,12 +101,16 @@ export function ContactForm() {
         <textarea
           required
           rows={6}
+          maxLength={5000}
           value={form.message}
           onChange={(event) =>
             setForm((current) => ({ ...current, message: event.target.value }))
           }
-          className="min-h-40 resize-y rounded-[0.7rem] border border-line bg-surface-soft px-4 py-3 font-sans text-[1rem] leading-7 normal-case tracking-normal text-ink outline-none transition-colors duration-200 placeholder:text-muted focus:border-teal"
+          className="min-h-40 resize-y rounded-[0.7rem] border border-line bg-surface-soft px-4 py-3 font-sans text-base leading-7 normal-case tracking-normal text-ink transition-colors duration-200 placeholder:text-muted focus:border-teal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal"
         />
+        <span className="mt-1 text-right font-sans text-xs text-muted">
+          {form.message.length} / 5000
+        </span>
       </label>
 
       <label className="hidden" aria-hidden="true">
@@ -129,7 +131,29 @@ export function ContactForm() {
           disabled={isSending}
           className="inline-flex min-h-12 items-center justify-center rounded-full bg-ink px-6 font-display text-[1.02rem] uppercase tracking-[0.18em] text-paper transition-transform duration-200 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30"
         >
-          {isSending ? "Sending" : "Send Message"}
+          {isSending && (
+            <svg
+              className="mr-2 h-4 w-4 animate-spin"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+              />
+            </svg>
+          )}
+          {isSending ? "Sending\u2026" : "Send Message"}
         </button>
 
         <p
