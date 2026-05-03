@@ -67,25 +67,29 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+function getActiveTrackIndex(release: ReleaseView): number {
+  return Math.max(
+    0,
+    release.tracks.findIndex((track) => track.active),
+  );
+}
+
 /* ── Main component ─────────────────────────────────────── */
 
 export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
-  const featuredRelease = releases[0];
-  const otherReleases = releases.slice(1);
-
   const audioRef = useRef<HTMLAudioElement>(null);
   const shouldAutoplayRef = useRef(false);
-  const [selectedTrackIndex, setSelectedTrackIndex] = useState(() =>
-    Math.max(
-      0,
-      featuredRelease.tracks.findIndex((track) => track.active),
-    ),
-  );
+  const [selectedReleaseIndex, setSelectedReleaseIndex] = useState(0);
+  const [selectedTrackIndex, setSelectedTrackIndex] = useState(() => getActiveTrackIndex(releases[0]));
   const [isPlaying, setIsPlaying] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
+  const featuredRelease = releases[selectedReleaseIndex] ?? releases[0];
+  const otherReleases = releases
+    .map((release, index) => ({ release, index }))
+    .filter(({ index }) => index !== selectedReleaseIndex);
   const selectedTrack = featuredRelease.tracks[selectedTrackIndex];
 
   /* ── Audio event listeners ────────────────────────────── */
@@ -147,6 +151,7 @@ export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
 
     audio.pause();
     audio.load();
+    setIsPlaying(false);
     setCurrentTime(0);
     setDuration(0);
     setIsBuffering(shouldAutoplayRef.current);
@@ -196,6 +201,18 @@ export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
     shouldAutoplayRef.current = true;
   };
 
+  const selectRelease = (index: number) => {
+    const nextRelease = releases[index];
+
+    if (!nextRelease || index === selectedReleaseIndex) {
+      return;
+    }
+
+    shouldAutoplayRef.current = false;
+    setSelectedReleaseIndex(index);
+    setSelectedTrackIndex(getActiveTrackIndex(nextRelease));
+  };
+
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
     const audio = audioRef.current;
     if (!audio || !duration) return;
@@ -205,6 +222,11 @@ export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
   };
 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const releaseSummaryLabel = `${featuredRelease.type ? `${featuredRelease.type}, ` : ""}${
+    featuredRelease.trackCount
+  } ${featuredRelease.trackCount === 1 ? "Track" : "Tracks"}${
+    featuredRelease.totalDurationLabel ? `, ${featuredRelease.totalDurationLabel}` : ""
+  }`;
 
   /* ── Render ───────────────────────────────────────────── */
   return (
@@ -244,13 +266,18 @@ export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
                 {featuredRelease.artist}
               </p>
             ) : null}
-            <p className="mt-3 font-display text-[1.2rem] uppercase tracking-[0.2em] text-ink/80 sm:text-[1.35rem]">
+            <p
+              className="mt-3 font-display text-[1.2rem] uppercase tracking-[0.2em] text-ink/80 sm:text-[1.35rem]"
+              aria-label={releaseSummaryLabel}
+            >
               {featuredRelease.type ? `${featuredRelease.type} • ` : ""}
               {featuredRelease.trackCount}{" "}
               {featuredRelease.trackCount === 1 ? "Track" : "Tracks"}
               {featuredRelease.totalDurationLabel ? (
                 <>
-                  <span className="mx-3 text-coral">•</span>
+                  <span className="mx-3 text-coral" aria-hidden="true">
+                    •
+                  </span>
                   {featuredRelease.totalDurationLabel}
                 </>
               ) : null}
@@ -415,10 +442,13 @@ export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
       {/* ── Other releases ───────────────────────────────── */}
       {otherReleases.length > 0 && (
         <div className="mt-5 grid grid-cols-2 gap-3 px-1 sm:grid-cols-3 lg:px-0">
-          {otherReleases.map((rel) => (
-            <div
+          {otherReleases.map(({ release: rel, index }) => (
+            <button
               key={rel.slug}
-              className="group overflow-hidden rounded-2xl border border-line/50 bg-surface-soft/35 p-3 transition-all duration-200 hover:border-teal/30 hover:bg-surface-soft/60"
+              type="button"
+              onClick={() => selectRelease(index)}
+              className="group overflow-hidden rounded-2xl border border-line/50 bg-surface-soft/35 p-3 text-left transition-all duration-200 hover:border-teal/30 hover:bg-surface-soft/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal/30"
+              aria-label={`Switch player to ${rel.title}`}
             >
               <div className="overflow-hidden rounded-xl">
                 <Image
@@ -441,7 +471,7 @@ export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
                   {rel.releaseDateLabel}
                 </p>
               )}
-            </div>
+            </button>
           ))}
         </div>
       )}

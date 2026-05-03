@@ -1,0 +1,93 @@
+{
+  "title": "Love Like This",
+  "type": "Single",
+  "artist": "Atlas Irwin",
+  "releaseDate": "2026-05-01",
+  "description": "A vibrant nu-disco single driven by a groovy bassline, shimmering synths, and a soulful female vocal. Uplifting, emotional, and irresistibly danceable.",
+  "featured": true,
+  "cover": "cover.png",
+  "coverAlt": "Love Like This cover art",
+  "ctaLabel": "Listen Now",
+  "genre": "Dance",
+  "subgenre": "Nu-Disco",
+  "label": "P.A.K Sound",
+  "upc": "823191287605",
+  "albumLinks": [
+    {
+      "platform": "Apple Music",
+      "href": "https://music.apple.com/il/album/love-like-this-single/1895831152"
+    },
+    {
+      "platform": "Deezer",
+      "href": "https://creators.deezer.com/analytic/album/823191160045"
+    },
+    {
+      "platform": "Spotify",
+      "href": "https://open.spotify.com/album/19OMKB7TYtPU9UDOsTrSBQ?si=yr8lScLSR8ioaK7gRBZPNA"
+    },
+    {
+      "platform": "YouTube Music",
+      "href": "https://music.youtube.com/watch?v=cMp9GbT5xHU&si=vAqW3B7vRlW4x4ds"
+    }
+  ],
+  "partners": [
+    {
+      "name": "Amazon Music",
+      "available": true
+    },
+    {
+      "name": "Apple Music",
+      "available": true
+    },
+    {
+      "name": "Deezer",
+      "available": true
+    },
+    {
+      "name": "Spotify",
+      "available": true
+    },
+    {
+      "name": "Tidal",
+      "available": true
+    },
+    {
+      "name": "YouTube Music",
+      "available": true
+    },
+    {
+      "name": "TikTok",
+      "available": true
+    },
+    {
+      "name": "Shazam",
+      "available": true
+    },
+    {
+      "name": "Facebook / Instagram",
+      "available": true
+    }
+  ],
+  "tracks": [
+    {
+      "file": "Like This.wav",
+      "title": "Love Like This",
+      "duration": "04:07",
+      "active": true,
+      "links": [
+        {
+          "platform": "Apple Music",
+          "href": "https://music.apple.com/il/album/love-like-this-single/1895831152"
+        },
+        {
+          "platform": "Deezer",
+          "href": "https://creators.deezer.com/analytic/album/823191160045"
+        },
+        {
+          "platform": "YouTube Art Track",
+          "href": "https://www.youtube.com/watch?v=cMp9GbT5xHU&list=OLAK5uy_lLkLZGSdRfXh68tdDhvO8XAxIBC4nQbAc"
+        }
+      ]
+    }
+  ]
+}

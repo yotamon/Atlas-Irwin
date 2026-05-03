@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
 const RELEASES_DIR = path.join(process.cwd(), "public", "releases");
@@ -91,6 +91,7 @@ export type Release = {
   trackCount: number;
   totalDurationLabel?: string;
   tracks: ReleaseTrack[];
+  sortUpdatedAtMs: number;
 };
 
 export function getReleases(): Release[] {
@@ -133,6 +134,7 @@ function readRelease(slug: string): Release | null {
     trackCount: tracks.length,
     totalDurationLabel: formatTotalDuration(tracks),
     tracks,
+    sortUpdatedAtMs: getReleaseUpdatedAtMs(releaseDir),
   };
 }
 
@@ -362,7 +364,22 @@ function sortReleases(left: Release, right: Release): number {
     return rightTime - leftTime;
   }
 
+  if (left.sortUpdatedAtMs !== right.sortUpdatedAtMs) {
+    return right.sortUpdatedAtMs - left.sortUpdatedAtMs;
+  }
+
   return left.title.localeCompare(right.title);
+}
+
+function getReleaseUpdatedAtMs(releaseDir: string): number {
+  return readdirSync(releaseDir, { withFileTypes: true }).reduce((latest, entry) => {
+    const entryPath = path.join(releaseDir, entry.name);
+    const updatedAt = entry.isDirectory()
+      ? getReleaseUpdatedAtMs(entryPath)
+      : statSync(entryPath).mtimeMs;
+
+    return Math.max(latest, updatedAt);
+  }, statSync(releaseDir).mtimeMs);
 }
 
 function toPublicPath(...segments: string[]): string {
