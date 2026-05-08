@@ -8,9 +8,6 @@ Quick example:
 public/releases/night-drive-ep/
   cover.jpg
   release.json
-  audio/
-    01-night-drive.mp3
-    02-after-hours.mp3
 ```
 
-Use `public/releases/_template` as the starter folder for new releases.
+Use `public/releases/_template` as the starter folder for new releases. Add SoundCloud track URLs with `soundcloudUrl` in `release.json`; local audio files in an `audio/` folder still work as a fallback.

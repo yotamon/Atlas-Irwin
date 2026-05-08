@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { FaArrowRight, FaPause, FaPlay } from "react-icons/fa";
 import { HiSparkles } from "react-icons/hi2";
@@ -12,6 +12,7 @@ type ReleaseTrackView = {
   duration?: string;
   file: string;
   url: string;
+  source: "local" | "soundcloud";
   active: boolean;
 };
 
@@ -32,6 +33,40 @@ type ReleaseView = {
 type ReleaseWidgetClientProps = {
   releases: ReleaseView[];
 };
+
+type SoundCloudWidgetEvent = {
+  currentPosition?: number;
+  loadedProgress?: number;
+};
+
+type SoundCloudWidget = {
+  bind: (eventName: string, listener: (event?: SoundCloudWidgetEvent) => void) => void;
+  unbind: (eventName: string) => void;
+  play: () => void;
+  pause: () => void;
+  seekTo: (milliseconds: number) => void;
+  getDuration: (callback: (milliseconds: number) => void) => void;
+  isPaused: (callback: (paused: boolean) => void) => void;
+};
+
+type SoundCloudApi = {
+  Widget: ((iframe: HTMLIFrameElement) => SoundCloudWidget) & {
+    Events: {
+      READY: string;
+      PLAY: string;
+      PAUSE: string;
+      FINISH: string;
+      PLAY_PROGRESS: string;
+      LOAD_PROGRESS: string;
+    };
+  };
+};
+
+declare global {
+  interface Window {
+    SC?: SoundCloudApi;
+  }
+}
 
 /* ── Animated equalizer bars ─────────────────────────────── */
 
@@ -74,10 +109,29 @@ function getActiveTrackIndex(release: ReleaseView): number {
   );
 }
 
+function getSoundCloudWidgetUrl(trackUrl: string): string {
+  const params = new URLSearchParams({
+    url: trackUrl,
+    auto_play: "false",
+    buying: "false",
+    sharing: "false",
+    download: "false",
+    show_comments: "false",
+    show_playcount: "false",
+    show_user: "true",
+    hide_related: "true",
+    visual: "false",
+  });
+
+  return `https://w.soundcloud.com/player/?${params.toString()}`;
+}
+
 /* ── Main component ─────────────────────────────────────── */
 
 export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const soundCloudIframeRef = useRef<HTMLIFrameElement>(null);
+  const soundCloudWidgetRef = useRef<SoundCloudWidget | null>(null);
   const shouldAutoplayRef = useRef(false);
   const [selectedReleaseIndex, setSelectedReleaseIndex] = useState(0);
   const [selectedTrackIndex, setSelectedTrackIndex] = useState(() => getActiveTrackIndex(releases[0]));
@@ -85,12 +139,39 @@ export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
   const [isBuffering, setIsBuffering] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [isSoundCloudApiReady, setIsSoundCloudApiReady] = useState(false);
+  const [soundCloudIframeElement, setSoundCloudIframeElement] = useState<HTMLIFrameElement | null>(null);
 
   const featuredRelease = releases[selectedReleaseIndex] ?? releases[0];
   const otherReleases = releases
     .map((release, index) => ({ release, index }))
     .filter(({ index }) => index !== selectedReleaseIndex);
   const selectedTrack = featuredRelease.tracks[selectedTrackIndex];
+  const isSoundCloudTrack = selectedTrack?.source === "soundcloud";
+  const setSoundCloudIframeRef = useCallback((node: HTMLIFrameElement | null) => {
+    soundCloudIframeRef.current = node;
+    setSoundCloudIframeElement(node);
+  }, []);
+
+  useEffect(() => {
+    if (!isSoundCloudTrack || isSoundCloudApiReady) {
+      return;
+    }
+
+    if (window.SC?.Widget) {
+      queueMicrotask(() => setIsSoundCloudApiReady(true));
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      if (window.SC?.Widget) {
+        setIsSoundCloudApiReady(true);
+        window.clearInterval(intervalId);
+      }
+    }, 100);
+
+    return () => window.clearInterval(intervalId);
+  }, [isSoundCloudTrack, isSoundCloudApiReady]);
 
   /* ── Audio event listeners ────────────────────────────── */
   useEffect(() => {
@@ -145,7 +226,8 @@ export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
   useEffect(() => {
     const audio = audioRef.current;
 
-    if (!audio || !selectedTrack) {
+    if (!audio || !selectedTrack || selectedTrack.source === "soundcloud") {
+      audio?.pause();
       return;
     }
 
@@ -167,12 +249,137 @@ export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
     });
   }, [selectedTrack]);
 
+  useEffect(() => {
+    const iframe = soundCloudIframeElement;
+
+    soundCloudWidgetRef.current?.pause();
+    soundCloudWidgetRef.current = null;
+
+    if (!iframe || !selectedTrack || selectedTrack.source !== "soundcloud") {
+      return;
+    }
+
+    let cancelled = false;
+    const autoplay = shouldAutoplayRef.current;
+
+    queueMicrotask(() => {
+      if (cancelled) {
+        return;
+      }
+
+      setIsPlaying(false);
+      setCurrentTime(0);
+      setDuration(0);
+      setIsBuffering(autoplay);
+    });
+
+    const soundCloudApi = window.SC;
+
+    if (!soundCloudApi?.Widget) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!cancelled) {
+      const widget = soundCloudApi.Widget(iframe);
+      const events = soundCloudApi.Widget.Events;
+      soundCloudWidgetRef.current = widget;
+
+      widget.bind(events.READY, () => {
+        if (cancelled) {
+          return;
+        }
+
+        widget.getDuration((milliseconds) => {
+          if (!cancelled && milliseconds && isFinite(milliseconds)) {
+            setDuration(milliseconds / 1000);
+          }
+        });
+
+        if (!autoplay && !shouldAutoplayRef.current) {
+          setIsBuffering(false);
+          return;
+        }
+
+        shouldAutoplayRef.current = false;
+        widget.play();
+      });
+
+      widget.bind(events.PLAY, () => {
+        setIsPlaying(true);
+        setIsBuffering(false);
+      });
+      widget.bind(events.PAUSE, () => setIsPlaying(false));
+      widget.bind(events.FINISH, () => setIsPlaying(false));
+      widget.bind(events.PLAY_PROGRESS, (event) => {
+        if (typeof event?.currentPosition === "number") {
+          setCurrentTime(event.currentPosition / 1000);
+        }
+      });
+      widget.bind(events.LOAD_PROGRESS, () => setIsBuffering(false));
+    }
+
+    return () => {
+      cancelled = true;
+      const widget = soundCloudWidgetRef.current;
+
+      if (widget) {
+        const events = window.SC?.Widget.Events;
+        if (events) {
+          widget.unbind(events.READY);
+          widget.unbind(events.PLAY);
+          widget.unbind(events.PAUSE);
+          widget.unbind(events.FINISH);
+          widget.unbind(events.PLAY_PROGRESS);
+          widget.unbind(events.LOAD_PROGRESS);
+        }
+        widget.pause();
+      }
+    };
+  }, [selectedTrack, soundCloudIframeElement, isSoundCloudApiReady]);
+
   if (!selectedTrack) {
     return null;
   }
 
   /* ── Playback controls ────────────────────────────────── */
   const togglePlayback = () => {
+    if (isSoundCloudTrack) {
+      let widget = soundCloudWidgetRef.current;
+
+      if (!widget && window.SC?.Widget && soundCloudIframeRef.current) {
+        widget = window.SC.Widget(soundCloudIframeRef.current);
+        soundCloudWidgetRef.current = widget;
+        widget.getDuration((milliseconds) => {
+          if (milliseconds && isFinite(milliseconds)) {
+            setDuration(milliseconds / 1000);
+          }
+        });
+      }
+
+      if (!widget) {
+        setIsBuffering(true);
+        shouldAutoplayRef.current = true;
+        return;
+      }
+
+      if (isPlaying) {
+        widget.pause();
+        return;
+      }
+
+      setIsBuffering(true);
+      widget.play();
+      window.setTimeout(() => {
+        widget.isPaused((isStillPaused) => {
+          setIsPlaying(!isStillPaused);
+          setIsBuffering(false);
+        });
+      }, 500);
+      return;
+    }
+
     const audio = audioRef.current;
 
     if (!audio) {
@@ -214,11 +421,40 @@ export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
   };
 
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
-    const audio = audioRef.current;
-    if (!audio || !duration) return;
+    if (!duration) return;
+
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
-    audio.currentTime = (x / rect.width) * duration;
+    const nextTime = (x / rect.width) * duration;
+
+    if (isSoundCloudTrack) {
+      soundCloudWidgetRef.current?.seekTo(nextTime * 1000);
+      setCurrentTime(nextTime);
+      return;
+    }
+
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.currentTime = nextTime;
+  };
+
+  const seekBy = (seconds: number) => {
+    if (!duration) {
+      return;
+    }
+
+    const nextTime = Math.min(Math.max(currentTime + seconds, 0), duration);
+
+    if (isSoundCloudTrack) {
+      soundCloudWidgetRef.current?.seekTo(nextTime * 1000);
+      setCurrentTime(nextTime);
+      return;
+    }
+
+    const audio = audioRef.current;
+    if (audio) {
+      audio.currentTime = nextTime;
+    }
   };
 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
@@ -409,12 +645,10 @@ export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
             aria-valuenow={Math.round(progressPercent)}
             tabIndex={0}
             onKeyDown={(e) => {
-              const audio = audioRef.current;
-              if (!audio) return;
               if (e.key === "ArrowRight") {
-                audio.currentTime = Math.min(audio.currentTime + 5, duration);
+                seekBy(5);
               } else if (e.key === "ArrowLeft") {
-                audio.currentTime = Math.max(audio.currentTime - 5, 0);
+                seekBy(-5);
               }
             }}
           >
@@ -435,8 +669,36 @@ export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
           ref={audioRef}
           preload="metadata"
           className="hidden"
-          src={selectedTrack.url}
+          src={isSoundCloudTrack ? undefined : selectedTrack.url}
         />
+        {isSoundCloudTrack ? (
+          <>
+            <script
+              src="https://w.soundcloud.com/player/api.js"
+              async
+              onLoad={() => setIsSoundCloudApiReady(true)}
+            />
+            <iframe
+              ref={setSoundCloudIframeRef}
+              title={`SoundCloud player for ${selectedTrack.title}`}
+              src={getSoundCloudWidgetUrl(selectedTrack.url)}
+              allow="autoplay"
+              className="pointer-events-none absolute -left-[9999px] top-0 h-[166px] w-[300px] opacity-0"
+              tabIndex={-1}
+            />
+            <p className="mt-2 px-2 text-right text-[0.72rem] uppercase tracking-[0.18em] text-muted">
+              Playing via{" "}
+              <a
+                href={selectedTrack.url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-teal underline-offset-4 transition-colors hover:text-coral hover:underline"
+              >
+                SoundCloud
+              </a>
+            </p>
+          </>
+        ) : null}
       </div>
 
       {/* ── Other releases ───────────────────────────────── */}

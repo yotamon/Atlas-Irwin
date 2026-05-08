@@ -9,13 +9,13 @@
   "ctaLabel": "Listen Now",
   "tracks": [
     {
-      "file": "01-night-drive.mp3",
+      "soundcloudUrl": "https://soundcloud.com/artist/night-drive",
       "title": "Night Drive",
       "duration": "03:42",
       "active": true
     },
     {
-      "file": "02-after-hours.mp3",
+      "soundcloudUrl": "https://soundcloud.com/artist/after-hours",
       "title": "After Hours",
       "duration": "04:08"
     }

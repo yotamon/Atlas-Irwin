@@ -27,40 +27,140 @@
     }
   ],
   "partners": [
-    { "name": "Amazon Music", "available": true },
-    { "name": "AMI Entertainment", "available": true },
-    { "name": "Anghami", "region": "Lebanon", "available": true },
-    { "name": "Apple Music", "available": true },
-    { "name": "Boomplay", "region": "Nigeria", "available": true },
-    { "name": "Deezer", "available": true },
-    { "name": "Facebook / Instagram", "available": true },
-    { "name": "iHeartRadio", "available": true },
-    { "name": "Claro Musica", "available": true },
-    { "name": "Jaxsta", "available": false },
-    { "name": "JOOX", "available": true },
-    { "name": "KKBox", "region": "Taiwan", "available": true },
-    { "name": "MediaNet", "available": true },
-    { "name": "Melon Plus", "region": "Korea", "available": true },
-    { "name": "Napster", "available": false },
-    { "name": "NetEase", "region": "China", "available": true },
-    { "name": "Pandora Plus", "available": true },
-    { "name": "Peloton", "available": true },
-    { "name": "Qobuz", "region": "France", "available": true },
-    { "name": "Saavn", "region": "India", "available": true },
-    { "name": "7digital", "available": true },
-    { "name": "Shazam", "available": true },
-    { "name": "Sound Exchange", "available": true },
-    { "name": "Spotify", "available": true },
-    { "name": "Tencent", "region": "China", "available": true },
-    { "name": "Tidal", "available": true },
-    { "name": "TikTok", "available": true },
-    { "name": "VK", "region": "Russia", "available": false },
-    { "name": "Yandex", "region": "Russia", "available": false },
-    { "name": "YouTube Music", "available": true }
+    {
+      "name": "Amazon Music",
+      "available": true
+    },
+    {
+      "name": "AMI Entertainment",
+      "available": true
+    },
+    {
+      "name": "Anghami",
+      "region": "Lebanon",
+      "available": true
+    },
+    {
+      "name": "Apple Music",
+      "available": true
+    },
+    {
+      "name": "Boomplay",
+      "region": "Nigeria",
+      "available": true
+    },
+    {
+      "name": "Deezer",
+      "available": true
+    },
+    {
+      "name": "Facebook / Instagram",
+      "available": true
+    },
+    {
+      "name": "iHeartRadio",
+      "available": true
+    },
+    {
+      "name": "Claro Musica",
+      "available": true
+    },
+    {
+      "name": "Jaxsta",
+      "available": false
+    },
+    {
+      "name": "JOOX",
+      "available": true
+    },
+    {
+      "name": "KKBox",
+      "region": "Taiwan",
+      "available": true
+    },
+    {
+      "name": "MediaNet",
+      "available": true
+    },
+    {
+      "name": "Melon Plus",
+      "region": "Korea",
+      "available": true
+    },
+    {
+      "name": "Napster",
+      "available": false
+    },
+    {
+      "name": "NetEase",
+      "region": "China",
+      "available": true
+    },
+    {
+      "name": "Pandora Plus",
+      "available": true
+    },
+    {
+      "name": "Peloton",
+      "available": true
+    },
+    {
+      "name": "Qobuz",
+      "region": "France",
+      "available": true
+    },
+    {
+      "name": "Saavn",
+      "region": "India",
+      "available": true
+    },
+    {
+      "name": "7digital",
+      "available": true
+    },
+    {
+      "name": "Shazam",
+      "available": true
+    },
+    {
+      "name": "Sound Exchange",
+      "available": true
+    },
+    {
+      "name": "Spotify",
+      "available": true
+    },
+    {
+      "name": "Tencent",
+      "region": "China",
+      "available": true
+    },
+    {
+      "name": "Tidal",
+      "available": true
+    },
+    {
+      "name": "TikTok",
+      "available": true
+    },
+    {
+      "name": "VK",
+      "region": "Russia",
+      "available": false
+    },
+    {
+      "name": "Yandex",
+      "region": "Russia",
+      "available": false
+    },
+    {
+      "name": "YouTube Music",
+      "available": true
+    }
   ],
   "tracks": [
     {
-      "file": "Funkable.wav",
+      "soundcloudUrl": "https://soundcloud.com/atlas-irwin/funkable",
       "title": "Funkable",
       "duration": "03:15",
       "active": true,
@@ -80,9 +180,10 @@
       ]
     },
     {
-      "file": "Goodie' Shaker.wav",
+      "soundcloudUrl": "https://soundcloud.com/atlas-irwin/goodie-shakin",
       "title": "Goodie Shakin'",
       "duration": "02:17",
+      "active": true,
       "links": [
         {
           "platform": "Apple Music",
@@ -99,9 +200,10 @@
       ]
     },
     {
-      "file": "A Beat Better.wav",
+      "soundcloudUrl": "https://soundcloud.com/atlas-irwin/a-beat-better",
       "title": "A Beat Better",
       "duration": "02:19",
+      "active": true,
       "links": [
         {
           "platform": "Apple Music",
@@ -118,9 +220,10 @@
       ]
     },
     {
-      "file": "Funkable (Vocal Edit).wav",
+      "soundcloudUrl": "https://soundcloud.com/atlas-irwin/funkable-vocal-edit",
       "title": "Funkable (Vocal Edit)",
       "duration": "02:59",
+      "active": true,
       "links": [
         {
           "platform": "Apple Music",

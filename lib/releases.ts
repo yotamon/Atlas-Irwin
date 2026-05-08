@@ -6,9 +6,11 @@ const AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac
 const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".avif"]);
 
 type ReleaseManifestTrack = {
-  file: string;
+  file?: string;
+  soundcloudUrl?: string;
   title?: string;
   duration?: string;
+  number?: string;
   active?: boolean;
   links?: ReleaseManifestLink[];
 };
@@ -36,6 +38,7 @@ type ReleaseManifest = {
   coverAlt?: string;
   ctaLabel?: string;
   ctaHref?: string;
+  soundcloudUrl?: string;
   genre?: string;
   subgenre?: string;
   label?: string;
@@ -64,6 +67,7 @@ export type ReleaseTrack = {
   duration?: string;
   file: string;
   url: string;
+  source: "local" | "soundcloud";
   active: boolean;
   links: ReleaseLink[];
 };
@@ -163,7 +167,23 @@ function readTracks(slug: string, releaseDir: string, manifest: ReleaseManifest)
 
   const manifestTracks =
     manifest.tracks?.map((track, index) => {
-      const manifestFileName = track.file.trim();
+      const soundcloudUrl = track.soundcloudUrl?.trim() || (index === 0 ? manifest.soundcloudUrl?.trim() : undefined);
+
+      if (soundcloudUrl) {
+        return createSoundCloudTrack(soundcloudUrl, index, {
+          title: track.title,
+          duration: track.duration,
+          number: track.number,
+          active: track.active,
+          links: track.links,
+        });
+      }
+
+      const manifestFileName = track.file?.trim();
+
+      if (!manifestFileName) {
+        return null;
+      }
 
       // Find the actual file on disk that matches this manifest entry.
       // We check for exact match or a match where the disk file has a numeric prefix (e.g., "01-Track.wav" matching "Track.wav").
@@ -180,6 +200,7 @@ function readTracks(slug: string, releaseDir: string, manifest: ReleaseManifest)
       return createTrack(slug, matchedFile, index, {
         title: track.title,
         duration: track.duration,
+        number: track.number,
         active: track.active,
         links: track.links,
       });
@@ -188,14 +209,16 @@ function readTracks(slug: string, releaseDir: string, manifest: ReleaseManifest)
   const curatedTracks = manifestTracks.filter((track): track is ReleaseTrack => track !== null);
 
   if (curatedTracks.length > 0) {
-    // Sort curated tracks by their actual filename on disk to honor the user's numeric prefixes.
-    curatedTracks.sort((a, b) => a.file.localeCompare(b.file, undefined, { numeric: true }));
+    if (curatedTracks.every((track) => track.source === "local")) {
+      // Sort curated local tracks by their actual filename on disk to honor the user's numeric prefixes.
+      curatedTracks.sort((a, b) => a.file.localeCompare(b.file, undefined, { numeric: true }));
+    }
 
     return curatedTracks.map((track, index) => ({
       ...track,
       // Re-assign track number based on final sorted order.
       // deriveTrackNumber prefers filename numbers (01-, 02-) but falls back to index-based.
-      number: deriveTrackNumber(track.file, index),
+      number: track.number || deriveTrackNumber(track.file, index),
       active: curatedTracks.some((item) => item.active) ? track.active : index === 0,
     }));
   }
@@ -210,16 +233,41 @@ function createTrack(
   options: {
     title?: string;
     duration?: string;
+    number?: string;
     active?: boolean;
     links?: ReleaseManifestLink[];
   },
 ): ReleaseTrack {
   return {
-    number: deriveTrackNumber(fileName, index),
+    number: options.number?.trim() || deriveTrackNumber(fileName, index),
     title: options.title?.trim() || formatTitle(path.parse(fileName).name),
     duration: options.duration?.trim(),
     file: fileName,
     url: toPublicPath("releases", slug, "audio", fileName),
+    source: "local",
+    active: options.active ?? false,
+    links: readLinks(options.links),
+  };
+}
+
+function createSoundCloudTrack(
+  soundcloudUrl: string,
+  index: number,
+  options: {
+    title?: string;
+    duration?: string;
+    number?: string;
+    active?: boolean;
+    links?: ReleaseManifestLink[];
+  },
+): ReleaseTrack {
+  return {
+    number: options.number?.trim() || String(index + 1).padStart(2, "0"),
+    title: options.title?.trim() || formatTitle(soundcloudUrl.split("/").filter(Boolean).pop() || "SoundCloud Track"),
+    duration: options.duration?.trim(),
+    file: soundcloudUrl,
+    url: soundcloudUrl,
+    source: "soundcloud",
     active: options.active ?? false,
     links: readLinks(options.links),
   };
