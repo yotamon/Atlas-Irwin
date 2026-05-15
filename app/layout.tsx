@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { Manrope } from "next/font/google";
 import Script from "next/script";
+import { getSiteUrl } from "@/lib/site-url";
 import "./globals.css";
 
 const headingFont = localFont({
@@ -15,7 +16,7 @@ const bodyFont = Manrope({
   subsets: ["latin"],
 });
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://atlasirwin.com";
+const SITE_URL = getSiteUrl();
 
 const SITE_TITLE = "Atlas Irwin — Producer, DJ & Sound Designer";
 const SITE_DESCRIPTION =
