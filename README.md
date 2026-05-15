@@ -56,6 +56,17 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+Set `NEXT_PUBLIC_SITE_URL` to the production HTTPS origin, for example
+`https://atlasirwin.com`. Production builds force non-local site URLs to HTTPS
+for metadata, robots, and sitemap output.
+
+### HTTPS and security headers
+
+The app redirects production HTTP requests to HTTPS and sends HSTS, CSP,
+clickjacking, content-sniffing, referrer, and browser permissions headers from
+`next.config.ts`. Keep TLS certificate and HTTP-to-HTTPS support enabled on the
+production host as the outer edge layer.
+
 ### Contact form email
 
 The contact form sends messages to `atlas.irwin.music@gmail.com` through SMTP.

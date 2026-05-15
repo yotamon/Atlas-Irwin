@@ -3,8 +3,20 @@
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { FaArrowRight, FaPause, FaPlay } from "react-icons/fa";
+import {
+  FaArrowRight,
+  FaExternalLinkAlt,
+  FaPause,
+  FaPlay,
+  FaSoundcloud,
+} from "react-icons/fa";
 import { HiSparkles } from "react-icons/hi2";
+
+type ReleaseLinkView = {
+  platform: string;
+  href: string;
+  label: string;
+};
 
 type ReleaseTrackView = {
   number: string;
@@ -14,6 +26,7 @@ type ReleaseTrackView = {
   url: string;
   source: "local" | "soundcloud";
   active: boolean;
+  links: ReleaseLinkView[];
 };
 
 type ReleaseView = {
@@ -34,6 +47,16 @@ type ReleaseWidgetClientProps = {
   releases: ReleaseView[];
 };
 
+type PlaybackState =
+  | "idle"
+  | "loading-widget"
+  | "ready"
+  | "buffering"
+  | "playing"
+  | "paused"
+  | "ended"
+  | "error";
+
 type SoundCloudWidgetEvent = {
   currentPosition?: number;
   loadedProgress?: number;
@@ -45,6 +68,7 @@ type SoundCloudWidget = {
   play: () => void;
   pause: () => void;
   seekTo: (milliseconds: number) => void;
+  getPosition: (callback: (milliseconds: number) => void) => void;
   getDuration: (callback: (milliseconds: number) => void) => void;
   isPaused: (callback: (paused: boolean) => void) => void;
 };
@@ -58,6 +82,7 @@ type SoundCloudApi = {
       FINISH: string;
       PLAY_PROGRESS: string;
       LOAD_PROGRESS: string;
+      ERROR?: string;
     };
   };
 };
@@ -67,6 +92,10 @@ declare global {
     SC?: SoundCloudApi;
   }
 }
+
+const SOUNDCLOUD_SCRIPT_SRC = "https://w.soundcloud.com/player/api.js";
+const SOUNDCLOUD_READY_TIMEOUT_MS = 10_000;
+const SOUNDCLOUD_PLAY_TIMEOUT_MS = 1_200;
 
 /* ── Animated equalizer bars ─────────────────────────────── */
 
@@ -102,6 +131,20 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+function parseDurationLabel(value?: string): number | null {
+  if (!value) {
+    return null;
+  }
+
+  const parts = value.split(":").map((part) => Number(part));
+
+  if (parts.length !== 2 || parts.some((part) => Number.isNaN(part))) {
+    return null;
+  }
+
+  return parts[0] * 60 + parts[1];
+}
+
 function getActiveTrackIndex(release: ReleaseView): number {
   return Math.max(
     0,
@@ -126,17 +169,64 @@ function getSoundCloudWidgetUrl(trackUrl: string): string {
   return `https://w.soundcloud.com/player/?${params.toString()}`;
 }
 
+function getTrackActions(track: ReleaseTrackView): ReleaseLinkView[] {
+  const actions =
+    track.source === "soundcloud"
+      ? [
+          {
+            platform: "SoundCloud",
+            href: track.url,
+            label: "Open on SoundCloud",
+          },
+        ]
+      : [];
+
+  for (const link of track.links ?? []) {
+    const isDuplicate = actions.some(
+      (action) =>
+        action.href === link.href ||
+        action.platform.toLowerCase() === link.platform.toLowerCase(),
+    );
+
+    if (!isDuplicate) {
+      actions.push(link);
+    }
+  }
+
+  return actions;
+}
+
+function getStatusLabel(state: PlaybackState, isSoundCloudTrack: boolean): string {
+  if (state === "loading-widget") return "Loading SoundCloud...";
+  if (state === "buffering") return "Buffering...";
+  if (state === "playing") return "Now playing";
+  if (state === "paused") return "Paused";
+  if (state === "ended") return "Ended";
+  if (state === "error") return isSoundCloudTrack ? "SoundCloud unavailable" : "Audio unavailable";
+  if (state === "ready") return "Ready";
+  return isSoundCloudTrack ? "Preparing SoundCloud" : "Ready";
+}
+
+function safelyUseSoundCloudWidget(action: () => void) {
+  try {
+    action();
+  } catch {
+    // SoundCloud can throw if a widget iframe was already replaced during a React render.
+  }
+}
+
 /* ── Main component ─────────────────────────────────────── */
 
 export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const soundCloudIframeRef = useRef<HTMLIFrameElement>(null);
   const soundCloudWidgetRef = useRef<SoundCloudWidget | null>(null);
+  const soundCloudProgressTimerRef = useRef<number | null>(null);
   const shouldAutoplayRef = useRef(false);
   const [selectedReleaseIndex, setSelectedReleaseIndex] = useState(0);
   const [selectedTrackIndex, setSelectedTrackIndex] = useState(() => getActiveTrackIndex(releases[0]));
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isBuffering, setIsBuffering] = useState(false);
+  const [playbackState, setPlaybackState] = useState<PlaybackState>("idle");
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isSoundCloudApiReady, setIsSoundCloudApiReady] = useState(false);
@@ -148,10 +238,55 @@ export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
     .filter(({ index }) => index !== selectedReleaseIndex);
   const selectedTrack = featuredRelease.tracks[selectedTrackIndex];
   const isSoundCloudTrack = selectedTrack?.source === "soundcloud";
+  const isPlaying = playbackState === "playing";
+  const isBuffering = playbackState === "buffering" || playbackState === "loading-widget";
+  const isPlayDisabled = isSoundCloudTrack && playbackState === "loading-widget";
+  const canSeek = duration > 0 && playbackState !== "loading-widget" && playbackState !== "error";
+  const progressPercent = duration > 0 ? Math.min((currentTime / duration) * 100, 100) : 0;
+  const trackActions = selectedTrack ? getTrackActions(selectedTrack) : [];
+  const statusLabel = getStatusLabel(playbackState, Boolean(isSoundCloudTrack));
+  const sourceLabel = isSoundCloudTrack ? "Playing from SoundCloud" : "Playing from site audio";
+  const releaseSummaryLabel = `${featuredRelease.type ? `${featuredRelease.type}, ` : ""}${
+    featuredRelease.trackCount
+  } ${featuredRelease.trackCount === 1 ? "Track" : "Tracks"}${
+    featuredRelease.totalDurationLabel ? `, ${featuredRelease.totalDurationLabel}` : ""
+  }`;
+
   const setSoundCloudIframeRef = useCallback((node: HTMLIFrameElement | null) => {
     soundCloudIframeRef.current = node;
     setSoundCloudIframeElement(node);
   }, []);
+
+  const stopSoundCloudProgressTimer = useCallback(() => {
+    if (soundCloudProgressTimerRef.current !== null) {
+      window.clearInterval(soundCloudProgressTimerRef.current);
+      soundCloudProgressTimerRef.current = null;
+    }
+  }, []);
+
+  const syncSoundCloudProgress = useCallback((widget: SoundCloudWidget) => {
+    widget.getPosition((milliseconds) => {
+      if (milliseconds && isFinite(milliseconds)) {
+        setCurrentTime(milliseconds / 1000);
+      }
+    });
+    widget.getDuration((milliseconds) => {
+      if (milliseconds && isFinite(milliseconds)) {
+        setDuration(milliseconds / 1000);
+      }
+    });
+  }, []);
+
+  const startSoundCloudProgressTimer = useCallback(
+    (widget: SoundCloudWidget) => {
+      stopSoundCloudProgressTimer();
+      syncSoundCloudProgress(widget);
+      soundCloudProgressTimerRef.current = window.setInterval(() => {
+        syncSoundCloudProgress(widget);
+      }, 500);
+    },
+    [stopSoundCloudProgressTimer, syncSoundCloudProgress],
+  );
 
   useEffect(() => {
     if (!isSoundCloudTrack || isSoundCloudApiReady) {
@@ -182,14 +317,18 @@ export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
     }
 
     const handlePlay = () => {
-      setIsPlaying(true);
-      setIsBuffering(false);
+      setPlaybackState("playing");
+      setPlaybackError(null);
     };
-    const handlePause = () => setIsPlaying(false);
-    const handleEnded = () => setIsPlaying(false);
-    const handleWaiting = () => setIsBuffering(true);
-    const handleCanPlay = () => setIsBuffering(false);
+    const handlePause = () => setPlaybackState("paused");
+    const handleEnded = () => setPlaybackState("ended");
+    const handleWaiting = () => setPlaybackState("buffering");
+    const handleCanPlay = () => setPlaybackState((state) => (state === "buffering" ? "ready" : state));
     const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
+    const handleError = () => {
+      setPlaybackState("error");
+      setPlaybackError("This audio file could not be played.");
+    };
     const handleLoadedMetadata = () => {
       if (audio.duration && isFinite(audio.duration)) {
         setDuration(audio.duration);
@@ -207,6 +346,7 @@ export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
     audio.addEventListener("waiting", handleWaiting);
     audio.addEventListener("canplay", handleCanPlay);
     audio.addEventListener("timeupdate", handleTimeUpdate);
+    audio.addEventListener("error", handleError);
     audio.addEventListener("loadedmetadata", handleLoadedMetadata);
     audio.addEventListener("durationchange", handleDurationChange);
 
@@ -217,6 +357,7 @@ export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
       audio.removeEventListener("waiting", handleWaiting);
       audio.removeEventListener("canplay", handleCanPlay);
       audio.removeEventListener("timeupdate", handleTimeUpdate);
+      audio.removeEventListener("error", handleError);
       audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
       audio.removeEventListener("durationchange", handleDurationChange);
     };
@@ -233,10 +374,13 @@ export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
 
     audio.pause();
     audio.load();
-    setIsPlaying(false);
-    setCurrentTime(0);
-    setDuration(0);
-    setIsBuffering(shouldAutoplayRef.current);
+
+    queueMicrotask(() => {
+      setPlaybackState(shouldAutoplayRef.current ? "buffering" : "ready");
+      setPlaybackError(null);
+      setCurrentTime(0);
+      setDuration(parseDurationLabel(selectedTrack.duration) ?? 0);
+    });
 
     if (!shouldAutoplayRef.current) {
       return;
@@ -244,139 +388,209 @@ export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
 
     shouldAutoplayRef.current = false;
     void audio.play().catch(() => {
-      setIsPlaying(false);
-      setIsBuffering(false);
+      setPlaybackState("error");
+      setPlaybackError("This audio file could not be played.");
     });
   }, [selectedTrack]);
 
   useEffect(() => {
-    const iframe = soundCloudIframeElement;
-
-    soundCloudWidgetRef.current?.pause();
+    const previousWidget = soundCloudWidgetRef.current;
+    if (previousWidget) {
+      safelyUseSoundCloudWidget(() => previousWidget.pause());
+    }
     soundCloudWidgetRef.current = null;
 
-    if (!iframe || !selectedTrack || selectedTrack.source !== "soundcloud") {
+    if (!selectedTrack || selectedTrack.source !== "soundcloud") {
       return;
     }
 
+    const iframe = soundCloudIframeElement;
     let cancelled = false;
+    let isReady = false;
     const autoplay = shouldAutoplayRef.current;
+    const manifestDuration = parseDurationLabel(selectedTrack.duration);
+
+    audioRef.current?.pause();
+    stopSoundCloudProgressTimer();
 
     queueMicrotask(() => {
       if (cancelled) {
         return;
       }
 
-      setIsPlaying(false);
+      setPlaybackState("loading-widget");
+      setPlaybackError(null);
       setCurrentTime(0);
-      setDuration(0);
-      setIsBuffering(autoplay);
+      setDuration(manifestDuration ?? 0);
     });
+
+    const timeoutId = window.setTimeout(() => {
+      if (!cancelled && !isReady) {
+        setPlaybackState("error");
+        setPlaybackError("SoundCloud took too long to load this track.");
+      }
+    }, SOUNDCLOUD_READY_TIMEOUT_MS);
 
     const soundCloudApi = window.SC;
 
-    if (!soundCloudApi?.Widget) {
+    const iframeTrackUrl = iframe ? new URL(iframe.src).searchParams.get("url") : null;
+
+    if (!iframe || iframeTrackUrl !== selectedTrack.url || !soundCloudApi?.Widget) {
       return () => {
         cancelled = true;
+        window.clearTimeout(timeoutId);
       };
     }
 
-    if (!cancelled) {
-      const widget = soundCloudApi.Widget(iframe);
-      const events = soundCloudApi.Widget.Events;
-      soundCloudWidgetRef.current = widget;
+    const widget = soundCloudApi.Widget(iframe);
+    const events = soundCloudApi.Widget.Events;
+    soundCloudWidgetRef.current = widget;
 
-      widget.bind(events.READY, () => {
-        if (cancelled) {
-          return;
-        }
+    const markReady = () => {
+      if (cancelled) {
+        return;
+      }
 
-        widget.getDuration((milliseconds) => {
-          if (!cancelled && milliseconds && isFinite(milliseconds)) {
-            setDuration(milliseconds / 1000);
-          }
-        });
-
-        if (!autoplay && !shouldAutoplayRef.current) {
-          setIsBuffering(false);
-          return;
-        }
-
-        shouldAutoplayRef.current = false;
-        widget.play();
-      });
-
-      widget.bind(events.PLAY, () => {
-        setIsPlaying(true);
-        setIsBuffering(false);
-      });
-      widget.bind(events.PAUSE, () => setIsPlaying(false));
-      widget.bind(events.FINISH, () => setIsPlaying(false));
-      widget.bind(events.PLAY_PROGRESS, (event) => {
-        if (typeof event?.currentPosition === "number") {
-          setCurrentTime(event.currentPosition / 1000);
+      isReady = true;
+      window.clearTimeout(timeoutId);
+      widget.getDuration((milliseconds) => {
+        if (!cancelled && milliseconds && isFinite(milliseconds)) {
+          setDuration(milliseconds / 1000);
         }
       });
-      widget.bind(events.LOAD_PROGRESS, () => setIsBuffering(false));
+
+      if (!autoplay && !shouldAutoplayRef.current) {
+        setPlaybackState((state) => (state === "loading-widget" ? "ready" : state));
+        return;
+      }
+
+      shouldAutoplayRef.current = false;
+      setPlaybackState("buffering");
+      widget.play();
+    };
+
+    const handleReady = () => markReady();
+
+    const handleWidgetError = () => {
+      if (!cancelled) {
+        setPlaybackState("error");
+        setPlaybackError("SoundCloud could not play this track here.");
+      }
+    };
+
+    widget.bind(events.READY, handleReady);
+    widget.bind(events.PLAY, () => {
+      setPlaybackState("playing");
+      setPlaybackError(null);
+      startSoundCloudProgressTimer(widget);
+    });
+    widget.bind(events.PAUSE, () => {
+      stopSoundCloudProgressTimer();
+      setPlaybackState("paused");
+    });
+    widget.bind(events.FINISH, () => {
+      stopSoundCloudProgressTimer();
+      setPlaybackState("ended");
+    });
+    widget.bind(events.PLAY_PROGRESS, (event) => {
+      if (typeof event?.currentPosition === "number") {
+        setCurrentTime(event.currentPosition / 1000);
+      }
+    });
+    widget.bind(events.LOAD_PROGRESS, () => {
+      setPlaybackState((state) => (state === "loading-widget" ? "ready" : state));
+    });
+    if (events.ERROR) {
+      widget.bind(events.ERROR, handleWidgetError);
     }
+    widget.getDuration((milliseconds) => {
+      if (!cancelled && !isReady && milliseconds && isFinite(milliseconds)) {
+        markReady();
+      }
+    });
 
     return () => {
       cancelled = true;
-      const widget = soundCloudWidgetRef.current;
+      window.clearTimeout(timeoutId);
+      stopSoundCloudProgressTimer();
+      const activeWidget = soundCloudWidgetRef.current;
 
-      if (widget) {
-        const events = window.SC?.Widget.Events;
-        if (events) {
-          widget.unbind(events.READY);
-          widget.unbind(events.PLAY);
-          widget.unbind(events.PAUSE);
-          widget.unbind(events.FINISH);
-          widget.unbind(events.PLAY_PROGRESS);
-          widget.unbind(events.LOAD_PROGRESS);
-        }
-        widget.pause();
+      if (activeWidget) {
+        safelyUseSoundCloudWidget(() => {
+          activeWidget.unbind(events.READY);
+          activeWidget.unbind(events.PLAY);
+          activeWidget.unbind(events.PAUSE);
+          activeWidget.unbind(events.FINISH);
+          activeWidget.unbind(events.PLAY_PROGRESS);
+          activeWidget.unbind(events.LOAD_PROGRESS);
+          if (events.ERROR) {
+            activeWidget.unbind(events.ERROR);
+          }
+          activeWidget.pause();
+        });
       }
     };
-  }, [selectedTrack, soundCloudIframeElement, isSoundCloudApiReady]);
+  }, [
+    selectedTrack,
+    soundCloudIframeElement,
+    isSoundCloudApiReady,
+    startSoundCloudProgressTimer,
+    stopSoundCloudProgressTimer,
+  ]);
 
   if (!selectedTrack) {
     return null;
   }
 
-  /* ── Playback controls ────────────────────────────────── */
-  const togglePlayback = () => {
-    if (isSoundCloudTrack) {
-      let widget = soundCloudWidgetRef.current;
+  const getSoundCloudWidget = (): SoundCloudWidget | null => {
+    if (soundCloudWidgetRef.current) {
+      return soundCloudWidgetRef.current;
+    }
 
-      if (!widget && window.SC?.Widget && soundCloudIframeRef.current) {
-        widget = window.SC.Widget(soundCloudIframeRef.current);
-        soundCloudWidgetRef.current = widget;
-        widget.getDuration((milliseconds) => {
-          if (milliseconds && isFinite(milliseconds)) {
-            setDuration(milliseconds / 1000);
-          }
-        });
+    const iframe = soundCloudIframeRef.current;
+    const iframeTrackUrl = iframe ? new URL(iframe.src).searchParams.get("url") : null;
+
+    if (!window.SC?.Widget || !iframe || iframeTrackUrl !== selectedTrack.url) {
+      return null;
+    }
+
+    const widget = window.SC.Widget(iframe);
+    soundCloudWidgetRef.current = widget;
+    widget.getDuration((milliseconds) => {
+      if (milliseconds && isFinite(milliseconds)) {
+        setDuration(milliseconds / 1000);
       }
+    });
+    return widget;
+  };
+
+  const playSelectedTrack = () => {
+    setPlaybackError(null);
+
+    if (isSoundCloudTrack) {
+      const widget = getSoundCloudWidget();
 
       if (!widget) {
-        setIsBuffering(true);
         shouldAutoplayRef.current = true;
+        setPlaybackState("loading-widget");
         return;
       }
 
-      if (isPlaying) {
-        widget.pause();
-        return;
-      }
-
-      setIsBuffering(true);
+      setPlaybackState("buffering");
       widget.play();
       window.setTimeout(() => {
         widget.isPaused((isStillPaused) => {
-          setIsPlaying(!isStillPaused);
-          setIsBuffering(false);
+          if (isStillPaused) {
+            stopSoundCloudProgressTimer();
+            setPlaybackState("error");
+            setPlaybackError("SoundCloud did not start playback. Open the track on SoundCloud instead.");
+            return;
+          }
+
+          setPlaybackState("playing");
+          startSoundCloudProgressTimer(widget);
         });
-      }, 500);
+      }, SOUNDCLOUD_PLAY_TIMEOUT_MS);
       return;
     }
 
@@ -386,16 +600,59 @@ export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
       return;
     }
 
-    if (audio.paused) {
-      setIsBuffering(true);
-      void audio.play().catch(() => {
-        setIsPlaying(false);
-        setIsBuffering(false);
-      });
+    setPlaybackState("buffering");
+    void audio.play().catch(() => {
+      setPlaybackState("error");
+      setPlaybackError("This audio file could not be played.");
+    });
+  };
+
+  const pauseSelectedTrack = () => {
+    if (isSoundCloudTrack) {
+      const widget = getSoundCloudWidget();
+      if (widget) {
+        safelyUseSoundCloudWidget(() => widget.pause());
+      }
+      stopSoundCloudProgressTimer();
+      setPlaybackState("paused");
       return;
     }
 
-    audio.pause();
+    audioRef.current?.pause();
+    setPlaybackState("paused");
+  };
+
+  const seekSelectedTrack = (nextTime: number) => {
+    if (!canSeek) {
+      return;
+    }
+
+    const clampedTime = Math.min(Math.max(nextTime, 0), duration);
+
+    if (isSoundCloudTrack) {
+      getSoundCloudWidget()?.seekTo(clampedTime * 1000);
+      setCurrentTime(clampedTime);
+      return;
+    }
+
+    const audio = audioRef.current;
+    if (audio) {
+      audio.currentTime = clampedTime;
+    }
+  };
+
+  /* ── Playback controls ────────────────────────────────── */
+  const togglePlayback = () => {
+    if (isPlayDisabled) {
+      return;
+    }
+
+    if (isPlaying) {
+      pauseSelectedTrack();
+      return;
+    }
+
+    playSelectedTrack();
   };
 
   const playTrack = (index: number) => {
@@ -404,6 +661,11 @@ export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
       return;
     }
 
+    const nextTrack = featuredRelease.tracks[index];
+    setCurrentTime(0);
+    setDuration(parseDurationLabel(nextTrack?.duration) ?? 0);
+    setPlaybackError(null);
+    setPlaybackState(nextTrack?.source === "soundcloud" ? "loading-widget" : "buffering");
     setSelectedTrackIndex(index);
     shouldAutoplayRef.current = true;
   };
@@ -415,56 +677,24 @@ export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
       return;
     }
 
+    pauseSelectedTrack();
     shouldAutoplayRef.current = false;
+    const nextTrack = nextRelease.tracks[getActiveTrackIndex(nextRelease)];
+    setCurrentTime(0);
+    setDuration(parseDurationLabel(nextTrack?.duration) ?? 0);
+    setPlaybackError(null);
+    setPlaybackState(nextTrack?.source === "soundcloud" ? "loading-widget" : "ready");
     setSelectedReleaseIndex(index);
     setSelectedTrackIndex(getActiveTrackIndex(nextRelease));
   };
 
-  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!duration) return;
-
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const nextTime = (x / rect.width) * duration;
-
-    if (isSoundCloudTrack) {
-      soundCloudWidgetRef.current?.seekTo(nextTime * 1000);
-      setCurrentTime(nextTime);
-      return;
-    }
-
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.currentTime = nextTime;
+  const seekFromPointer = (clientX: number, element: HTMLDivElement) => {
+    if (!canSeek) return;
+    const rect = element.getBoundingClientRect();
+    const x = Math.min(Math.max(clientX - rect.left, 0), rect.width);
+    seekSelectedTrack((x / rect.width) * duration);
   };
 
-  const seekBy = (seconds: number) => {
-    if (!duration) {
-      return;
-    }
-
-    const nextTime = Math.min(Math.max(currentTime + seconds, 0), duration);
-
-    if (isSoundCloudTrack) {
-      soundCloudWidgetRef.current?.seekTo(nextTime * 1000);
-      setCurrentTime(nextTime);
-      return;
-    }
-
-    const audio = audioRef.current;
-    if (audio) {
-      audio.currentTime = nextTime;
-    }
-  };
-
-  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
-  const releaseSummaryLabel = `${featuredRelease.type ? `${featuredRelease.type}, ` : ""}${
-    featuredRelease.trackCount
-  } ${featuredRelease.trackCount === 1 ? "Track" : "Tracks"}${
-    featuredRelease.totalDurationLabel ? `, ${featuredRelease.totalDurationLabel}` : ""
-  }`;
-
-  /* ── Render ───────────────────────────────────────────── */
   return (
     <section
       id="release-widget"
@@ -526,15 +756,18 @@ export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
             <button
               type="button"
               onClick={togglePlayback}
+              disabled={isPlayDisabled}
               aria-label={`${isPlaying ? "Pause" : "Play"} ${selectedTrack.title}`}
-              className="mx-auto mt-6 inline-flex min-h-14 items-center gap-4 rounded-full border border-teal px-7 py-3 font-display text-[1.22rem] uppercase tracking-[0.14em] text-ink transition-colors duration-200 hover:bg-teal/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal/30 sm:text-[1.4rem] md:mx-0"
+              className="mx-auto mt-6 inline-flex min-h-14 items-center gap-4 rounded-full border border-teal px-7 py-3 font-display text-[1.22rem] uppercase tracking-[0.14em] text-ink transition-colors duration-200 hover:bg-teal/8 disabled:cursor-wait disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal/30 sm:text-[1.4rem] md:mx-0"
             >
               <span>
-                {isBuffering
-                  ? "Loading…"
-                  : isPlaying
-                    ? "Pause Audio"
-                    : featuredRelease.ctaLabel || "Listen Now"}
+                {playbackState === "loading-widget"
+                  ? "Loading SoundCloud..."
+                  : isBuffering
+                    ? "Loading..."
+                    : isPlaying
+                      ? "Pause Audio"
+                      : featuredRelease.ctaLabel || "Listen Now"}
               </span>
               <FaArrowRight className="h-4 w-4" />
             </button>
@@ -550,13 +783,14 @@ export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
                   key={`${featuredRelease.slug}-${track.file}`}
                   type="button"
                   onClick={() => playTrack(index)}
+                  disabled={isActive && isPlayDisabled}
                   aria-pressed={isActive}
                   aria-label={
                     isActive && isPlaying
                       ? `Pause Track ${track.number}: ${track.title}`
                       : `Play Track ${track.number}: ${track.title}`
                   }
-                  className={`grid min-h-12 grid-cols-[2.3rem_minmax(0,1fr)_3.8rem] items-center gap-3 rounded-[0.85rem] border-b border-ink/12 px-2 py-1.5 text-left text-[0.98rem] transition-colors hover:bg-ink/[0.035] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal/30 sm:grid-cols-[2.3rem_minmax(0,1fr)_4.4rem] sm:text-[1.05rem] ${
+                  className={`grid min-h-12 grid-cols-[2.3rem_minmax(0,1fr)_3.8rem] items-center gap-3 rounded-[0.85rem] border-b border-ink/12 px-2 py-1.5 text-left text-[0.98rem] transition-colors hover:bg-ink/[0.035] disabled:cursor-wait disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal/30 sm:grid-cols-[2.3rem_minmax(0,1fr)_4.4rem] sm:text-[1.05rem] ${
                     isActive ? "text-teal" : "text-ink/88"
                   }`}
                 >
@@ -578,7 +812,7 @@ export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
                     {isActive ? (
                       <span aria-live="polite" className="contents">
                         <span className="sr-only">
-                          {isPlaying ? `Now playing: ${track.title}` : "Paused"}
+                          {isPlaying ? `Now playing: ${track.title}` : statusLabel}
                         </span>
                         <AnimatedEqualizer isActive={isPlaying} />
                       </span>
@@ -597,8 +831,9 @@ export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
             <button
               type="button"
               onClick={togglePlayback}
+              disabled={isPlayDisabled}
               aria-label={`${isPlaying ? "Pause" : "Play"} ${selectedTrack.title}`}
-              className="inline-flex h-18 w-18 items-center justify-center rounded-full border border-teal text-teal transition-transform duration-200 hover:scale-105 hover:bg-teal hover:text-paper"
+              className="inline-flex h-18 w-18 items-center justify-center rounded-full border border-teal text-teal transition-transform duration-200 hover:scale-105 hover:bg-teal hover:text-paper disabled:cursor-wait disabled:opacity-60 disabled:hover:scale-100 disabled:hover:bg-transparent disabled:hover:text-teal"
             >
               {isBuffering ? (
                 <svg
@@ -630,39 +865,105 @@ export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
           </div>
         </div>
 
-        {/* Audio progress bar */}
-        <div className="mt-4 flex items-center gap-3 px-2 lg:px-0">
-          <span className="min-w-10 text-right font-sans text-[0.8rem] tabular-nums text-muted">
-            {formatTime(currentTime)}
-          </span>
-          <div
-            className="relative h-1 flex-1 cursor-pointer overflow-hidden rounded-full bg-line"
-            onClick={handleSeek}
-            role="slider"
-            aria-label="Audio progress"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(progressPercent)}
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === "ArrowRight") {
-                seekBy(5);
-              } else if (e.key === "ArrowLeft") {
-                seekBy(-5);
-              }
-            }}
-          >
-            {isBuffering && (
-              <div className="buffer-pulse absolute inset-0 rounded-full bg-teal/30" />
-            )}
-            <div
-              className="h-full rounded-full bg-teal transition-[width] duration-100"
-              style={{ width: `${progressPercent}%` }}
-            />
+        {/* Playback deck */}
+        <div className="mt-5 border-t border-ink/15 px-1 pt-4 lg:px-0">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex min-w-0 items-center gap-2.5 text-[0.76rem] uppercase tracking-[0.18em] text-muted">
+              {isSoundCloudTrack ? (
+                <FaSoundcloud className="h-4 w-4 shrink-0 text-[#ff5500]" aria-hidden="true" />
+              ) : (
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-teal" aria-hidden="true" />
+              )}
+              <span className="truncate">{sourceLabel}</span>
+              <span className="hidden text-coral sm:inline" aria-hidden="true">
+                •
+              </span>
+              <span className="truncate text-ink/70">{statusLabel}</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {trackActions.map((action) => (
+                <a
+                  key={`${action.platform}-${action.href}`}
+                  href={action.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-line bg-surface-soft/45 px-3 font-display text-[0.86rem] uppercase tracking-[0.12em] text-ink transition-colors hover:border-teal/45 hover:text-teal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal/30"
+                >
+                  <span>{action.platform}</span>
+                  <FaExternalLinkAlt className="h-2.5 w-2.5" aria-hidden="true" />
+                </a>
+              ))}
+            </div>
           </div>
-          <span className="min-w-10 font-sans text-[0.8rem] tabular-nums text-muted">
-            {formatTime(duration)}
-          </span>
+
+          {playbackError ? (
+            <div className="mt-3 flex flex-col gap-2 border-l-2 border-coral pl-3 text-[0.82rem] uppercase tracking-[0.14em] text-muted sm:flex-row sm:items-center sm:justify-between">
+              <p>{playbackError}</p>
+              {isSoundCloudTrack ? (
+                <a
+                  href={selectedTrack.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 font-display text-[0.92rem] text-teal transition-colors hover:text-coral"
+                >
+                  Open on SoundCloud
+                  <FaExternalLinkAlt className="h-2.5 w-2.5" aria-hidden="true" />
+                </a>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="mt-4 grid grid-cols-[3.2rem_minmax(0,1fr)_3.2rem] items-center gap-3">
+            <span className="text-right font-sans text-[0.82rem] tabular-nums text-muted">
+              {formatTime(currentTime)}
+            </span>
+            <div
+              className={`group relative h-4 rounded-full py-[5px] ${
+                canSeek ? "cursor-pointer" : "cursor-default opacity-70"
+              }`}
+              onClick={(e) => seekFromPointer(e.clientX, e.currentTarget)}
+              onPointerDown={(e) => {
+                if (!canSeek) return;
+                e.currentTarget.setPointerCapture(e.pointerId);
+                seekFromPointer(e.clientX, e.currentTarget);
+              }}
+              onPointerMove={(e) => {
+                if (!canSeek || e.buttons !== 1) return;
+                seekFromPointer(e.clientX, e.currentTarget);
+              }}
+              role="slider"
+              aria-label="Audio progress"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(progressPercent)}
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowRight") {
+                  seekSelectedTrack(currentTime + 5);
+                } else if (e.key === "ArrowLeft") {
+                  seekSelectedTrack(currentTime - 5);
+                }
+              }}
+            >
+              <div className="relative h-full overflow-hidden rounded-full bg-line">
+                {isBuffering ? (
+                  <div className="buffer-pulse absolute inset-0 rounded-full bg-teal/30" />
+                ) : null}
+                <div
+                  className="absolute inset-y-0 left-0 rounded-full bg-teal shadow-[0_0_12px_rgba(31,151,141,0.35)] transition-[width] duration-150"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+              <span
+                className="absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-paper bg-teal opacity-0 shadow-[0_2px_8px_rgba(17,17,17,0.16)] transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+                style={{ left: `${progressPercent}%` }}
+                aria-hidden="true"
+              />
+            </div>
+            <span className="font-sans text-[0.82rem] tabular-nums text-muted">
+              {formatTime(duration)}
+            </span>
+          </div>
         </div>
 
         <audio
@@ -674,29 +975,24 @@ export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
         {isSoundCloudTrack ? (
           <>
             <script
-              src="https://w.soundcloud.com/player/api.js"
+              src={SOUNDCLOUD_SCRIPT_SRC}
               async
               onLoad={() => setIsSoundCloudApiReady(true)}
+              onError={() => {
+                setPlaybackState("error");
+                setPlaybackError("SoundCloud could not be loaded.");
+              }}
             />
             <iframe
+              key={selectedTrack.url}
               ref={setSoundCloudIframeRef}
               title={`SoundCloud player for ${selectedTrack.title}`}
               src={getSoundCloudWidgetUrl(selectedTrack.url)}
-              allow="autoplay"
+              allow="autoplay; encrypted-media"
+              aria-hidden="true"
               className="pointer-events-none absolute -left-[9999px] top-0 h-[166px] w-[300px] opacity-0"
               tabIndex={-1}
             />
-            <p className="mt-2 px-2 text-right text-[0.72rem] uppercase tracking-[0.18em] text-muted">
-              Playing via{" "}
-              <a
-                href={selectedTrack.url}
-                target="_blank"
-                rel="noreferrer"
-                className="text-teal underline-offset-4 transition-colors hover:text-coral hover:underline"
-              >
-                SoundCloud
-              </a>
-            </p>
           </>
         ) : null}
       </div>
