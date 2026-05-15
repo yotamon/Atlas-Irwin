@@ -1,0 +1,38 @@
+{
+  "title": "Dancing In Color",
+  "type": "Album",
+  "artist": "Atlas Irwin",
+  "releaseDate": "2026-05-12",
+  "description": "A bright disco album full of color, movement, and body-first groove.",
+  "featured": true,
+  "cover": "cover.png",
+  "coverAlt": "Dancing In Color album cover art",
+  "ctaLabel": "Listen Now",
+  "genre": "Disco",
+  "subgenre": "Nu-Disco",
+  "label": "P.A.K Sound",
+  "tracks": [
+    {
+      "soundcloudUrl": "https://soundcloud.com/atlas-irwin/a-body-made-of-disco",
+      "title": "A Body Made Of Disco",
+      "duration": "02:58",
+      "active": true
+    },
+    {
+      "soundcloudUrl": "https://soundcloud.com/atlas-irwin/see-me-dancin",
+      "title": "See Me Dancin'"
+    },
+    {
+      "soundcloudUrl": "https://soundcloud.com/atlas-irwin/baby-dont-stop",
+      "title": "Baby Don't Stop"
+    },
+    {
+      "soundcloudUrl": "https://soundcloud.com/atlas-irwin/twilights",
+      "title": "Twilights"
+    },
+    {
+      "soundcloudUrl": "https://soundcloud.com/atlas-irwin/be-my-man",
+      "title": "Be My Man"
+    }
+  ]
+}
