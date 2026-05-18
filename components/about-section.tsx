@@ -2,24 +2,6 @@ import Image from "next/image";
 
 import { WaveBackground } from "@/components/wave-background";
 
-const principles = [
-  {
-    label: "01",
-    title: "Body Memory",
-    text: "Every piece starts with movement: bass weight, pressure, swing, and the small imperfections that make a machine feel touched.",
-  },
-  {
-    label: "02",
-    title: "Signal Rituals",
-    text: "Fragments, prompts, recordings, and accidents are treated like raw voltage, then shaped until the track begins to breathe on its own.",
-  },
-  {
-    label: "03",
-    title: "World Building",
-    text: "Sound, artwork, motion, and release language are built as one atmosphere, with each detail tuned to the same internal weather.",
-  },
-];
-
 const capabilities = [
   "Original productions",
   "Hybrid live/DJ sets",
@@ -46,7 +28,7 @@ export function AboutSection() {
         <div className="relative grid gap-0 lg:grid-cols-[0.96fr_1.04fr]">
           <div className="relative min-h-[25rem] overflow-hidden border-b border-line bg-ink lg:min-h-[44rem] lg:border-b-0 lg:border-r">
             <Image
-              src="/atlas-irwin-avatar.png"
+              src="/atlas-irwin-avatar.webp"
               alt="Atlas Irwin visual portrait"
               fill
               sizes="(min-width: 1024px) 45vw, 100vw"
@@ -54,60 +36,36 @@ export function AboutSection() {
               priority={false}
             />
             <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(17,17,17,0.08),rgba(17,17,17,0.68)),radial-gradient(circle_at_20%_18%,rgba(182,255,59,0.28),transparent_30%),radial-gradient(circle_at_85%_72%,rgba(15,169,162,0.24),transparent_34%)]" />
-            <div className="absolute inset-x-0 bottom-0 p-6 text-paper sm:p-8 lg:p-10">
-              <p className="font-display text-[1rem] uppercase tracking-[0.32em] text-accent">
-                Private frequency
-              </p>
-              <p className="mt-3 max-w-88 text-[1.02rem] leading-7 text-paper/78">
-                Warm circuits, club pressure, and hand-finished errors arranged
-                into something that still feels lived in.
-              </p>
-            </div>
           </div>
 
           <article className="relative p-6 sm:p-8 lg:p-10 xl:p-12">
             <p className="section-kicker">About</p>
             <h2 className="section-title mt-3 max-w-132">Sound With A Shadow</h2>
-            <div className="mt-7 grid gap-5 text-[1.08rem] leading-8 text-muted sm:text-[1.13rem]">
+            <div className="mt-8 grid gap-6 text-[1.08rem] leading-8 text-muted sm:text-[1.13rem] lg:mt-9 lg:gap-7">
               <p>
-                Atlas Irwin, also known as Yotam Faraggi, is a producer, DJ, and
-                sound designer building groove-driven electronic music where
-                club instinct meets visual storytelling.
+                Atlas Irwin, also known as Yotam Faraggi, creates groove-driven
+                electronic music shaped by movement, atmosphere, and visual
+                imagination.
               </p>
               <p>
-                The work moves through an intimate exchange between the body and
-                the system: sketches become signals, signals become texture, and
-                texture is edited back into something warm enough to feel human.
-                Nothing is treated as finished until the pulse, the image, and
-                the atmosphere seem to recognize each other.
+                Rooted in disco, funk, house, and modern club energy, his sound
+                moves between soulful warmth and futuristic texture: tactile
+                bass, elastic percussion, glowing details, and a sense of
+                late-night release.
               </p>
               <p>
-                His releases favor tactile bass, elastic percussion, and
-                luminous detail, with a process that lets strange sparks enter
-                the room while keeping the final hand visible in every decision.
+                The music lives in the space between body and image: physical,
+                stylish, intimate, and slightly unreal. Each track carries its
+                own atmosphere, where rhythm, color, and emotion move together.
+              </p>
+              <p>
+                Atlas Irwin is built as a world as much as a sound, with music,
+                artwork, motion, and language all tuned to the same internal
+                weather.
               </p>
             </div>
 
-            <div className="mt-8 grid gap-3 sm:grid-cols-3">
-              {principles.map((principle) => (
-                <div
-                  key={principle.title}
-                  className="border-t border-line pt-4"
-                >
-                  <span className="font-display text-[1rem] uppercase tracking-[0.24em] text-teal">
-                    {principle.label}
-                  </span>
-                  <h3 className="mt-2 font-display text-[1.62rem] uppercase leading-none tracking-[0.08em] text-ink">
-                    {principle.title}
-                  </h3>
-                  <p className="mt-3 text-[0.95rem] leading-6 text-muted">
-                    {principle.text}
-                  </p>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-9 border-t border-line pt-6">
+            <div className="mt-10 border-t border-line pt-7 lg:mt-12">
               <h3 className="font-display text-[1.2rem] uppercase tracking-[0.22em] text-purple">
                 Available For
               </h3>
