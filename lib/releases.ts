@@ -4,6 +4,7 @@ import path from "node:path";
 const RELEASES_DIR = path.join(process.cwd(), "public", "releases");
 const AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"]);
 const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".avif"]);
+const CANVAS_VIDEO_FILES = ["canvas.mp4", "canvas.webm", "canvas.mov"];
 
 type ReleaseManifestTrack = {
   file?: string;
@@ -36,6 +37,7 @@ type ReleaseManifest = {
   featured?: boolean;
   cover?: string;
   coverAlt?: string;
+  canvasVideo?: string;
   ctaLabel?: string;
   ctaHref?: string;
   soundcloudUrl?: string;
@@ -83,6 +85,7 @@ export type Release = {
   featured: boolean;
   coverUrl: string;
   coverAlt: string;
+  canvasVideoUrl?: string;
   ctaLabel?: string;
   ctaHref?: string;
   genre?: string;
@@ -126,6 +129,7 @@ function readRelease(slug: string): Release | null {
     featured: manifest.featured ?? false,
     coverUrl: resolveCoverUrl(slug, releaseDir, manifest),
     coverAlt: manifest.coverAlt?.trim() || `${manifest.title?.trim() || formatTitle(slug)} cover art`,
+    canvasVideoUrl: resolveCanvasVideoUrl(slug, releaseDir, manifest),
     ctaLabel: manifest.ctaLabel?.trim(),
     ctaHref: manifest.ctaHref?.trim() || tracks[0]?.url,
     genre: manifest.genre?.trim(),
@@ -313,6 +317,22 @@ function resolveCoverUrl(slug: string, releaseDir: string, manifest: ReleaseMani
     });
 
   return imageFiles[0] ? toPublicPath("releases", slug, imageFiles[0]) : "/atlas-cover.png";
+}
+
+function resolveCanvasVideoUrl(
+  slug: string,
+  releaseDir: string,
+  manifest: ReleaseManifest,
+): string | undefined {
+  if (manifest.canvasVideo?.trim()) {
+    return /^https?:\/\//.test(manifest.canvasVideo) || manifest.canvasVideo.startsWith("/")
+      ? manifest.canvasVideo
+      : toPublicPath("releases", slug, manifest.canvasVideo);
+  }
+
+  const videoFile = CANVAS_VIDEO_FILES.find((file) => existsSync(path.join(releaseDir, file)));
+
+  return videoFile ? toPublicPath("releases", slug, videoFile) : undefined;
 }
 
 function deriveTrackNumber(fileName: string, index: number): string {
