@@ -15,8 +15,8 @@
   --purple: #5f46b7;
   --shadow: rgba(17, 17, 17, 0.12);
   --logo-filter: none;
-  --hero-bg: url("/hero-bg.png");
-  --texture-image: url("/light-bg.png");
+  --hero-bg: url("/hero-bg.webp");
+  --texture-image: url("/light-bg.webp");
   --texture-opacity: 0.08;
   --grain-opacity: 0.16;
 }
@@ -36,8 +36,8 @@ html[data-theme="dark"] {
   --purple: #ab8cff;
   --shadow: rgba(0, 0, 0, 0.28);
   --logo-filter: invert(1) brightness(1.08);
-  --hero-bg: url("/hero-bg-dark.png");
-  --texture-image: url("/dark-bg.png");
+  --hero-bg: url("/hero-bg-dark.webp");
+  --texture-image: url("/dark-bg.webp");
   --texture-opacity: 0.12;
   --grain-opacity: 0.06;
 }
