@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { HiBars3, HiXMark } from "react-icons/hi2";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const links = [
   { href: "#music", id: "music", label: "Music" },
@@ -173,20 +174,37 @@ export function Navbar() {
           ))}
         </nav>
 
-        {/* Hamburger toggle — mobile only */}
-        <button
-          type="button"
-          aria-expanded={menuOpen}
-          aria-label={menuOpen ? "Close menu" : "Open menu"}
-          onClick={() => setMenuOpen((v) => !v)}
-          className={`ml-auto flex items-center justify-center rounded-md p-2 text-ink md:hidden ${focusVisible}`}
-        >
-          {menuOpen ? (
-            <HiXMark className="h-7 w-7" />
-          ) : (
-            <HiBars3 className="h-7 w-7" />
-          )}
-        </button>
+        {/* Desktop ThemeToggle & Mobile menu controls */}
+        <div className="ml-auto flex items-center gap-4 sm:gap-6">
+          <AnimatePresence>
+            {isScrolled && (
+              <motion.div
+                initial={{ opacity: 0, x: 12, scale: 0.94 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: 12, scale: 0.94 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                className="hidden md:block"
+              >
+                <ThemeToggle />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Hamburger toggle — mobile only */}
+          <button
+            type="button"
+            aria-expanded={menuOpen}
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
+            onClick={() => setMenuOpen((v) => !v)}
+            className={`flex items-center justify-center rounded-md p-2 text-ink md:hidden ${focusVisible}`}
+          >
+            {menuOpen ? (
+              <HiXMark className="h-7 w-7" />
+            ) : (
+              <HiBars3 className="h-7 w-7" />
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Mobile slide-down menu */}
@@ -209,6 +227,9 @@ export function Navbar() {
                   {renderLink(link.href, link.id, link.label, "mobile")}
                 </div>
               ))}
+              <div className="mt-4 pt-6 border-t border-line flex justify-start">
+                <ThemeToggle />
+              </div>
             </nav>
           </motion.div>
         )}
