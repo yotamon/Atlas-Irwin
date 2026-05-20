@@ -35,7 +35,13 @@ export function AboutSection() {
               className="object-cover opacity-90 grayscale saturate-75"
               priority={false}
             />
-            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(17,17,17,0.08),rgba(17,17,17,0.68)),radial-gradient(circle_at_20%_18%,rgba(182,255,59,0.28),transparent_30%),radial-gradient(circle_at_85%_72%,rgba(15,169,162,0.24),transparent_34%)]" />
+            <div
+              className="absolute inset-0"
+              style={{
+                backgroundImage:
+                  "linear-gradient(180deg, rgba(17,17,17,0.08), rgba(17,17,17,0.68)), radial-gradient(circle at 20% 18%, color-mix(in srgb, var(--accent) 28%, transparent), transparent 30%), radial-gradient(circle at 85% 72%, color-mix(in srgb, var(--teal) 24%, transparent), transparent 34%)",
+              }}
+            />
           </div>
 
           <article className="relative p-6 sm:p-8 lg:p-10 xl:p-12">

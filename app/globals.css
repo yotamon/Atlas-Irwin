@@ -10,6 +10,7 @@
   --muted: rgba(17, 17, 17, 0.66);
   --line: rgba(17, 17, 17, 0.18);
   --accent: #b6ff3b;
+  --accent-shadow: rgba(182, 255, 59, 0.28);
   --coral: #ff7b73;
   --teal: #0fa9a2;
   --purple: #5f46b7;
@@ -31,6 +32,7 @@ html[data-theme="dark"] {
   --muted: rgba(246, 239, 223, 0.72);
   --line: rgba(246, 239, 223, 0.14);
   --accent: #d3ff67;
+  --accent-shadow: rgba(211, 255, 103, 0.28);
   --coral: #ff8f86;
   --teal: #35d6cf;
   --purple: #ab8cff;
@@ -52,6 +54,7 @@ html[data-theme="dark"] {
   --color-muted: var(--muted);
   --color-line: var(--line);
   --color-accent: var(--accent);
+  --color-accent-shadow: var(--accent-shadow);
   --color-coral: var(--coral);
   --color-teal: var(--teal);
   --color-purple: var(--purple);
@@ -129,7 +132,7 @@ section {
 }
 
 ::selection {
-  background: rgba(182, 255, 59, 0.5);
+  background: color-mix(in srgb, var(--accent) 50%, transparent);
   color: var(--ink);
 }
 
