@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Atlas Irwin",
     short_name: "Atlas Irwin",
     description:
-      "Producer, DJ, and sound designer creating groove-driven electronic music.",
+      "Retro-futuristic electronic music rooted in nu-disco, funk, house, and EDM.",
     start_url: "/",
     display: "standalone",
     background_color: "#101111",

@@ -18,21 +18,22 @@ const bodyFont = Manrope({
 
 const SITE_URL = getSiteUrl();
 
-const SITE_TITLE = "Atlas Irwin — Producer, DJ & Sound Designer";
+const SITE_TITLE = "Atlas Irwin — Retro-Futuristic Electronic Music";
 const SITE_DESCRIPTION =
-  "Atlas Irwin is a producer, DJ, and sound designer creating groove-driven electronic music that sits between club utility and visual storytelling. Listen to releases, book shows, and get in touch.";
+  "Atlas Irwin is a retro-futuristic electronic music project rooted in nu-disco, funk, house, and EDM, blending soulful warmth, polished club energy, and luminous electronic texture.";
 
 export const metadata: Metadata = {
   title: SITE_TITLE,
   description: SITE_DESCRIPTION,
   keywords: [
     "Atlas Irwin",
-    "producer",
-    "DJ",
-    "sound designer",
+    "retro-futuristic",
     "electronic music",
-    "groove",
-    "club music",
+    "nu-disco",
+    "funk",
+    "house",
+    "EDM",
+    "AI music tools",
     "EP",
     "singles",
     "remix",
@@ -49,8 +50,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: SITE_TITLE,
-    description:
-      "Groove-driven electronic music. Producer, DJ, and sound designer creating work between club utility and visual storytelling.",
+    description: SITE_DESCRIPTION,
     url: SITE_URL,
     siteName: "Atlas Irwin",
     locale: "en_US",
@@ -67,8 +67,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: SITE_TITLE,
-    description:
-      "Groove-driven electronic music. Producer, DJ, and sound designer creating work between club utility and visual storytelling.",
+    description: SITE_DESCRIPTION,
     images: ["/atlas-cover.png"],
   },
   icons: {
