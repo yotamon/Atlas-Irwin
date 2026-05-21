@@ -28,7 +28,7 @@ export function AboutSection() {
         <div className="relative grid gap-0 lg:grid-cols-[0.96fr_1.04fr]">
           <div className="relative min-h-[25rem] overflow-hidden border-b border-line bg-ink lg:min-h-[44rem] lg:border-b-0 lg:border-r">
             <Image
-              src="/atlas-irwin-avatar.webp"
+              src="/bio-image.png"
               alt="Atlas Irwin visual portrait"
               fill
               sizes="(min-width: 1024px) 45vw, 100vw"
@@ -46,28 +46,23 @@ export function AboutSection() {
 
           <article className="relative p-6 sm:p-8 lg:p-10 xl:p-12">
             <p className="section-kicker">About</p>
-            <h2 className="section-title mt-3 max-w-132">Sound With A Shadow</h2>
+            <h2 className="section-title mt-3 max-w-132">
+              Retro-Futuristic Electronic Music
+            </h2>
             <div className="mt-8 grid gap-6 text-[1.08rem] leading-8 text-muted sm:text-[1.13rem] lg:mt-9 lg:gap-7">
               <p>
-                Atlas Irwin, also known as Yotam Faraggi, creates groove-driven
-                electronic music shaped by movement, atmosphere, and visual
-                imagination.
+                Atlas Irwin is a retro-futuristic electronic music project
+                rooted in nu-disco, funk, house, and EDM.
               </p>
               <p>
-                Rooted in disco, funk, house, and modern club energy, his sound
-                moves between soulful warmth and futuristic texture: tactile
-                bass, elastic percussion, glowing details, and a sense of
-                late-night release.
+                The sound blends soulful warmth, polished club energy, and
+                luminous electronic texture into tracks built for movement,
+                color, and emotional release.
               </p>
               <p>
-                The music lives in the space between body and image: physical,
-                stylish, intimate, and slightly unreal. Each track carries its
-                own atmosphere, where rhythm, color, and emotion move together.
-              </p>
-              <p>
-                Atlas Irwin is built as a world as much as a sound, with music,
-                artwork, motion, and language all tuned to the same internal
-                weather.
+                Artificial intelligence tools are part of the creative language,
+                expanding the palette while human instinct, taste, and direction
+                stay at the center.
               </p>
             </div>
 
