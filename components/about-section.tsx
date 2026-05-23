@@ -26,9 +26,9 @@ export function AboutSection() {
         <div className="absolute -bottom-24 left-[42%] h-64 w-64 rounded-full border border-coral/20 opacity-60" />
 
         <div className="relative grid gap-0 lg:grid-cols-[0.96fr_1.04fr]">
-          <div className="relative min-h-[25rem] overflow-hidden border-b border-line bg-ink lg:min-h-[44rem] lg:border-b-0 lg:border-r">
+          <div className="relative min-h-[9rem] overflow-hidden border-b border-line bg-ink sm:min-h-[24rem] lg:min-h-[40rem] lg:border-b-0 lg:border-r">
             <Image
-              src="/bio-image.png"
+              src="/bio-image.webp"
               alt="Atlas Irwin visual portrait"
               fill
               sizes="(min-width: 1024px) 45vw, 100vw"
@@ -44,12 +44,12 @@ export function AboutSection() {
             />
           </div>
 
-          <article className="relative p-6 sm:p-8 lg:p-10 xl:p-12">
+          <article className="relative p-4 sm:p-8 lg:p-10 xl:p-12">
             <p className="section-kicker">About</p>
-            <h2 className="section-title mt-3 max-w-132">
+            <h2 className="mt-3 max-w-132 font-display text-[2.15rem] uppercase leading-[0.86] tracking-[0.04em] sm:text-[4.4rem] lg:text-[5rem]">
               Retro-Futuristic Electronic Music
             </h2>
-            <div className="mt-8 grid gap-6 text-[1.08rem] leading-8 text-muted sm:text-[1.13rem] lg:mt-9 lg:gap-7">
+            <div className="mt-4 grid gap-3 text-[0.95rem] leading-6 text-muted sm:mt-6 sm:gap-5 sm:text-[1.13rem] sm:leading-8 lg:mt-8 lg:gap-6">
               <p>
                 Atlas Irwin is a retro-futuristic electronic music project
                 rooted in nu-disco, funk, house, and EDM.
@@ -66,7 +66,7 @@ export function AboutSection() {
               </p>
             </div>
 
-            <div className="mt-10 border-t border-line pt-7 lg:mt-12">
+            <div className="mt-6 border-t border-line pt-5 sm:mt-8 sm:pt-6 lg:mt-10 lg:pt-7">
               <h3 className="font-display text-[1.2rem] uppercase tracking-[0.22em] text-purple">
                 Available For
               </h3>
