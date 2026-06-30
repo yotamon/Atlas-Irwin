@@ -17,9 +17,16 @@ function spotifyErrorCode(error: unknown) {
   const message = error instanceof Error ? error.message.toLowerCase() : "";
   if (message.includes("spotify client environment")) return "missing_spotify_env";
   if (message.includes("supabase_service_role_key")) return "missing_service_role_key";
-  if (message.includes("spotify_token") || message.includes("spotify_accounts")) return "spotify_migration_missing";
+  if (message.includes("spotify_token") || message.includes("spotify_accounts")
+      || message.includes("spotify_albums") || message.includes("spotify_tracks")
+      || message.includes("spotify_playlists") || message.includes("schema cache")) {
+    return "spotify_migration_missing";
+  }
   if (message.includes("token exchange")) return "token_exchange_failed";
   if (message.includes("profile response")) return "profile_fetch_failed";
+  if (message.includes("did not return a refresh token")) return "no_refresh_token";
+  if (message.includes("authorization expired")) return "token_expired";
+  if (message.includes("api request failed")) return "spotify_api_error";
   return "connection_failed";
 }
 
