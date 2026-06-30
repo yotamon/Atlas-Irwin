@@ -7,14 +7,16 @@ const API_BASE_URL = "https://api.spotify.com/v1";
 const AUTHORIZE_URL = "https://accounts.spotify.com/authorize";
 const TOKEN_URL = "https://accounts.spotify.com/api/token";
 const TOKEN_EXPIRY_SKEW_MS = 60_000;
-const SCOPES = [
+// user-top-read requires Spotify Premium; request it only for the pulse
+// feature and handle its absence gracefully during sync.
+const SCOPES_BASE = [
   "user-read-private",
-  "user-top-read",
   "playlist-read-private",
   "playlist-read-collaborative",
   "playlist-modify-public",
   "playlist-modify-private",
 ].join(" ");
+const SCOPES_PREMIUM = `${SCOPES_BASE} user-top-read`;
 
 type TokenResponse = {
   access_token: string;
@@ -142,7 +144,7 @@ export function hasSpotifyEnv() {
   );
 }
 
-export function createSpotifyAuthorizeUrl(origin: string) {
+export function createSpotifyAuthorizeUrl(origin: string, premium = true) {
   const { clientId } = spotifyClientEnv();
   const state = base64Url(randomBytes(32));
   const codeVerifier = base64Url(randomBytes(64));
@@ -153,7 +155,7 @@ export function createSpotifyAuthorizeUrl(origin: string) {
   url.searchParams.set("client_id", clientId);
   url.searchParams.set("response_type", "code");
   url.searchParams.set("redirect_uri", redirectUri(origin));
-  url.searchParams.set("scope", SCOPES);
+  url.searchParams.set("scope", premium ? SCOPES_PREMIUM : SCOPES_BASE);
   url.searchParams.set("state", state);
   url.searchParams.set("code_challenge_method", "S256");
   url.searchParams.set("code_challenge", codeChallenge);
@@ -456,9 +458,11 @@ export async function syncSpotify(ownerId: string) {
     }
   }
 
-  const [topArtists, topTracks, playlists] = await Promise.all([
-    spotifyApiFetch<Page<SpotifyArtist>>(ownerId, "/me/top/artists?time_range=medium_term&limit=10"),
-    spotifyApiFetch<Page<SpotifyTrack>>(ownerId, "/me/top/tracks?time_range=medium_term&limit=10"),
+  const [topArtistsResult, topTracksResult, playlists] = await Promise.all([
+    spotifyApiFetch<Page<SpotifyArtist>>(ownerId, "/me/top/artists?time_range=medium_term&limit=10")
+      .catch(() => null),
+    spotifyApiFetch<Page<SpotifyTrack>>(ownerId, "/me/top/tracks?time_range=medium_term&limit=10")
+      .catch(() => null),
     spotifyPage<SpotifyPlaylist>(ownerId, "/me/playlists?limit=50", 4),
   ]);
   if (playlists.length) {
@@ -488,8 +492,8 @@ export async function syncSpotify(ownerId: string) {
   const { error: updateError } = await supabase
     .from("spotify_accounts")
     .update({
-      top_artists: topArtists.items as Json,
-      top_tracks: topTracks.items as Json,
+      top_artists: (topArtistsResult?.items ?? []) as Json,
+      top_tracks: (topTracksResult?.items ?? []) as Json,
       last_synced_at: now,
     })
     .eq("owner_id", ownerId);

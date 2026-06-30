@@ -26,6 +26,7 @@ function spotifyErrorCode(error: unknown) {
   if (message.includes("profile response")) return "profile_fetch_failed";
   if (message.includes("did not return a refresh token")) return "no_refresh_token";
   if (message.includes("authorization expired")) return "token_expired";
+  if (message.includes("premium") || message.includes("blocked from accessing")) return "premium_required";
   if (message.includes("api request failed")) return "spotify_api_error";
   return "connection_failed";
 }

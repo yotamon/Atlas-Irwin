@@ -11,7 +11,10 @@ function requestOrigin(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   await requireStudioAdmin();
-  const { url, state, codeVerifier } = createSpotifyAuthorizeUrl(requestOrigin(request));
+  // Request base scopes only. user-top-read requires Spotify Premium; if the
+  // account is Premium the scope is silently available; if not, the connection
+  // still succeeds and the listening-pulse panel is simply empty.
+  const { url, state, codeVerifier } = createSpotifyAuthorizeUrl(requestOrigin(request), false);
   const response = NextResponse.redirect(url);
   const options = {
     httpOnly: true,

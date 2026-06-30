@@ -49,13 +49,26 @@ export default async function SpotifyPage({
   );
   const topArtists = pulseItems(account?.top_artists);
   const topTracks = pulseItems(account?.top_tracks);
+  const errorMessages: Record<string, string> = {
+    premium_required: "Spotify Premium is required to connect. Upgrade your Spotify account, then try again.",
+    missing_spotify_env: "Spotify client credentials are not configured.",
+    missing_service_role_key: "SUPABASE_SERVICE_ROLE_KEY is not set.",
+    spotify_migration_missing: "Spotify database tables are missing. Push the latest migration.",
+    token_exchange_failed: "Spotify token exchange failed. Check the client ID and secret.",
+    profile_fetch_failed: "Could not fetch your Spotify profile.",
+    no_refresh_token: "Spotify did not return a refresh token. Re-authorize the app.",
+    token_expired: "Spotify authorization has expired. Reconnect.",
+    invalid_oauth_state: "OAuth state mismatch. Please try connecting again.",
+    spotify_api_error: "Spotify API error. Check Vercel function logs for details.",
+    connection_failed: "Spotify connection failed. Check Vercel function logs for details.",
+  };
   const statusMessage =
     (params.connected && "Spotify connected. Add your artist profile, then run the first sync.") ||
     (params.artist && "Spotify artist profile verified.") ||
     (params.synced && "Spotify catalog, account pulse, and playlists synced.") ||
-    (params.playlist && `Campaign playlist “${params.playlist}” created on Spotify.`) ||
+    (params.playlist && `Campaign playlist "${params.playlist}" created on Spotify.`) ||
     (params.disconnected && "Spotify disconnected.") ||
-    (params.error && `Spotify error: ${params.error.replaceAll("_", " ")}`);
+    (params.error && (errorMessages[params.error] ?? `Spotify error: ${params.error.replaceAll("_", " ")}`));
 
   return (
     <>
