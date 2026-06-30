@@ -136,14 +136,23 @@ export async function completeSoundCloudOAuth({ code, codeVerifier, origin, owne
 	if (!token.refresh_token) {
 		throw new Error("SoundCloud did not return a refresh token.");
 	}
+	const refreshToken = token.refresh_token;
 	const profile = await soundCloudApiFetch<SoundCloudProfile>(ownerId, "/me", {
 		accessToken: token.access_token
 	});
-	await storeSoundCloudConnection(ownerId, token, profile);
+	await storeSoundCloudConnection(
+		ownerId,
+		{ ...token, refresh_token: refreshToken },
+		profile
+	);
 	return profile;
 }
 
-async function storeSoundCloudConnection(ownerId: string, token: TokenResponse, profile: SoundCloudProfile) {
+async function storeSoundCloudConnection(
+	ownerId: string,
+	token: TokenResponse & { refresh_token: string },
+	profile: SoundCloudProfile
+) {
 	const supabase = serviceSupabase();
 	const soundCloudUserId = String(profile.id ?? profile.urn ?? "");
 	if (!soundCloudUserId || !profile.username) {
@@ -164,19 +173,13 @@ async function storeSoundCloudConnection(ownerId: string, token: TokenResponse, 
 	);
 	if (accountError) throw new Error(accountError.message);
 
-	const { error: tokenError } = await supabase
-		.schema("private")
-		.from("soundcloud_tokens")
-		.upsert(
-			{
-				owner_id: ownerId,
-				access_token: token.access_token,
-				refresh_token: token.refresh_token,
-				scope: token.scope ?? null,
-				expires_at: expiresAt
-			},
-			{ onConflict: "owner_id" }
-		);
+	const { error: tokenError } = await supabase.rpc("upsert_soundcloud_token", {
+		p_owner_id: ownerId,
+		p_access_token: token.access_token,
+		p_refresh_token: token.refresh_token,
+		p_scope: token.scope ?? null,
+		p_expires_at: expiresAt
+	});
 	if (tokenError) throw new Error(tokenError.message);
 }
 
@@ -192,27 +195,28 @@ async function refreshSoundCloudToken(ownerId: string, refreshToken: string) {
 	);
 	const expiresAt = new Date(Date.now() + token.expires_in * 1000).toISOString();
 	const nextRefreshToken = token.refresh_token ?? refreshToken;
-	const { error } = await serviceSupabase()
-		.schema("private")
-		.from("soundcloud_tokens")
-		.update({
-			access_token: token.access_token,
-			refresh_token: nextRefreshToken,
-			scope: token.scope ?? null,
-			expires_at: expiresAt
-		})
-		.eq("owner_id", ownerId);
+	const { error } = await serviceSupabase().rpc("upsert_soundcloud_token", {
+		p_owner_id: ownerId,
+		p_access_token: token.access_token,
+		p_refresh_token: nextRefreshToken,
+		p_scope: token.scope ?? null,
+		p_expires_at: expiresAt
+	});
 	if (error) throw new Error(error.message);
 	return token.access_token;
 }
 
 async function validAccessToken(ownerId: string) {
-	const { data, error } = await serviceSupabase().schema("private").from("soundcloud_tokens").select("*").eq("owner_id", ownerId).single();
+	const { data, error } = await serviceSupabase().rpc("get_soundcloud_token", {
+		p_owner_id: ownerId
+	});
 	if (error) throw new Error(error.message);
-	if (new Date(data.expires_at).getTime() > Date.now() + TOKEN_EXPIRY_SKEW_MS) {
-		return data.access_token;
+	const token = data?.[0];
+	if (!token) throw new Error("Connect SoundCloud before using the SoundCloud API.");
+	if (new Date(token.expires_at).getTime() > Date.now() + TOKEN_EXPIRY_SKEW_MS) {
+		return token.access_token;
 	}
-	return refreshSoundCloudToken(ownerId, data.refresh_token);
+	return refreshSoundCloudToken(ownerId, token.refresh_token);
 }
 
 async function soundCloudApiFetch<T>(ownerId: string, endpoint: string, options: RequestInit & { accessToken?: string } = {}) {
@@ -359,7 +363,9 @@ export async function uploadSoundCloudTrack({
 
 export async function disconnectSoundCloud(ownerId: string) {
 	const supabase = serviceSupabase();
-	const { error: tokenError } = await supabase.schema("private").from("soundcloud_tokens").delete().eq("owner_id", ownerId);
+	const { error: tokenError } = await supabase.rpc("delete_soundcloud_token", {
+		p_owner_id: ownerId
+	});
 	if (tokenError) throw new Error(tokenError.message);
 	const { error: accountError } = await supabase.from("soundcloud_accounts").delete().eq("owner_id", ownerId);
 	if (accountError) throw new Error(accountError.message);
