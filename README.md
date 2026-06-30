@@ -2,11 +2,19 @@
 
 ## Atlas Release Engine
 
-Atlas Release Engine is the private release-management and audience-growth studio at `/studio`. It adds release CRUD and readiness, deterministic release-story and content-pack generation, Content Lab kanban/list views, a publishing calendar, outreach CRM, manual analytics, and reusable brand direction. The public filesystem release loader remains separate and unchanged.
+Atlas Release Engine is the private release-management and audience-growth studio at `/studio`. Supabase is the canonical catalog for homepage publishing, media, and platform links. Legacy `public/releases/` folders remain as import input only. See `docs/catalog-architecture.md` for the full model, storage rules, import flow, and rollback strategy.
 
 ### Environment
 
-Copy `.env.example` to `.env.local` and set:
+Copy `.env.example` to `.env.local` and set values, or pull what Vercel allows locally:
+
+```bash
+npm run env:restore
+```
+
+That merges all variable names from Vercel production + preview into `.env.local`. Vercel only exports non-sensitive values via CLI (Supabase URL/anon keys, Postgres host). **Sensitive secrets** (`STUDIO_PASSWORD`, `SUPABASE_SERVICE_ROLE_KEY`, SMTP, SoundCloud, Spotify, MailerLite, etc.) must be copied manually from [Vercel → atlas-irwin → Environment Variables](https://vercel.com/cart-shift/atlas-irwin/settings/environment-variables) (click the eye icon on each). You can also regenerate `SUPABASE_SERVICE_ROLE_KEY` from [Supabase → Project Settings → API](https://supabase.com/dashboard/project/zhyjnpajlvwwbvuryeyv/settings/api-keys).
+
+Required variables:
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=
@@ -15,6 +23,7 @@ SUPABASE_SERVICE_ROLE_KEY=
 STUDIO_ADMIN_EMAILS=artist@example.com
 STUDIO_PASSWORD=your-studio-password
 STUDIO_IMPORT_ADMIN_EMAIL=artist@example.com
+PUBLIC_CATALOG_OWNER_ID=
 SOUNDCLOUD_CLIENT_ID=
 SOUNDCLOUD_CLIENT_SECRET=
 SOUNDCLOUD_REDIRECT_URI=https://atlasirwin.com/studio/soundcloud/callback
@@ -29,7 +38,7 @@ SPOTIFY_ARTIST_ID=
 ### Supabase setup
 
 1. Create a Supabase project.
-2. In the SQL Editor, run `supabase/migrations/20260630012751_atlas_release_engine.sql`, or link the Supabase CLI and run `npx supabase db push`.
+2. Apply all migrations in `supabase/migrations/`, including `20260701000000_catalog_publishing_system.sql`, or link the Supabase CLI and run `npx supabase db push`.
 3. In Authentication → URL Configuration, set the production site URL and add `http://localhost:3000/studio/auth/callback` plus the production `/studio/auth/callback` URL as redirects.
 4. Set `STUDIO_PASSWORD` in `.env.local`.
 5. Sign in at `/studio/login` with that password. Email is optional when only one admin is allowlisted. The migration trigger creates a profile on first sign-in.
@@ -47,7 +56,7 @@ Local development bypasses login for requests served from `localhost`, `127.0.0.
 
 ### SoundCloud Studio integration
 
-Create a SoundCloud developer application and add `/studio/soundcloud/callback` as the redirect URL. Set `SOUNDCLOUD_CLIENT_ID`, `SOUNDCLOUD_CLIENT_SECRET`, and optionally `SOUNDCLOUD_REDIRECT_URI`. The Studio SoundCloud hub uses OAuth 2.1 with PKCE and stores access/refresh tokens only in the private database schema. Syncing promotes SoundCloud playlists and loose tracks into the shared `releases`/`tracks` model, so they immediately participate in content, calendar, outreach, and analytics workflows. Existing public manifests are also synchronized automatically; already-linked tracks are reused instead of duplicated.
+Create a SoundCloud developer application and add `/studio/soundcloud/callback` as the redirect URL. Set `SOUNDCLOUD_CLIENT_ID`, `SOUNDCLOUD_CLIENT_SECRET`, and optionally `SOUNDCLOUD_REDIRECT_URI`. The Studio SoundCloud hub uses OAuth 2.1 with PKCE. Sync updates staging tables and metrics only; unmatched tracks appear in the reconciliation queue instead of silently creating releases.
 
 ### Spotify Studio integration
 

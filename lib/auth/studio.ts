@@ -3,9 +3,8 @@ import { headers } from "next/headers";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
-import { getSupabaseEnv } from "@/lib/supabase/config";
+import { getSupabaseEnv, hasSupabaseEnv } from "@/lib/supabase/config";
 import type { Database } from "@/types/database";
-import { syncPublicReleaseCatalog } from "@/lib/studio/public-catalog";
 import { isLocalStudioBypassHost, LOCAL_STUDIO_EMAIL } from "./local-studio";
 
 type StudioUser = Pick<User, "email" | "id">;
@@ -56,7 +55,6 @@ async function requireLocalStudioAdmin(): Promise<StudioAuthContext> {
     .maybeSingle();
 
   if (preferredProfile) {
-    await syncPublicReleaseCatalog(supabase, preferredProfile.id);
     return {
       supabase,
       user: { id: preferredProfile.id, email: preferredProfile.email },
@@ -71,7 +69,6 @@ async function requireLocalStudioAdmin(): Promise<StudioAuthContext> {
     .maybeSingle();
 
   if (adminProfile) {
-    await syncPublicReleaseCatalog(supabase, adminProfile.id);
     return {
       supabase,
       user: { id: adminProfile.id, email: adminProfile.email },
@@ -108,11 +105,14 @@ async function requireLocalStudioAdmin(): Promise<StudioAuthContext> {
       { onConflict: "id" },
     );
   if (profileError) throw new Error(profileError.message);
-  await syncPublicReleaseCatalog(supabase, localUser.id);
   return { supabase, user: { id: localUser.id, email: preferredEmail } };
 }
 
 export async function requireStudioAdmin(): Promise<StudioAuthContext> {
+  if (!hasSupabaseEnv()) {
+    redirect("/studio/setup");
+  }
+
   if (isLocalStudioBypassHost(await requestHost())) {
     return requireLocalStudioAdmin();
   }

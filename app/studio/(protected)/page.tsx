@@ -1,18 +1,36 @@
 import Link from "next/link";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { contentPerformanceScore } from "@/lib/studio/performance";
+import { isUnmatchedExternal } from "@/lib/studio/reconciliation";
 import { EmptyState, PageHeader, Panel, Status } from "@/components/studio/ui";
+import { publishStateLabel } from "@/lib/studio/catalog-labels";
 
 export default async function Dashboard() {
   const { supabase } = await requireStudioAdmin();
   const today = new Date().toISOString();
-  const [releases, content, followups, metrics, tasks] = await Promise.all([
+  const [
+    activeRelease,
+    homepagePlacements,
+    unmatchedSoundCloud,
+    unmatchedSpotify,
+    content,
+    followups,
+    metrics,
+    tasks,
+    mediaIssues,
+  ] = await Promise.all([
     supabase
       .from("releases")
       .select("*")
-      .neq("status", "Archived")
-      .order("release_date", { ascending: true })
-      .limit(1),
+      .eq("active_release", true)
+      .maybeSingle(),
+    supabase
+      .from("homepage_placements")
+      .select("*")
+      .eq("enabled", true)
+      .order("display_order"),
+    supabase.from("soundcloud_tracks").select("*").eq("reconcile_status", "pending"),
+    supabase.from("spotify_tracks").select("*").eq("reconcile_status", "pending"),
     supabase
       .from("content_items")
       .select("*")
@@ -35,8 +53,22 @@ export default async function Dashboard() {
       .neq("status", "Done")
       .order("due_at")
       .limit(6),
+    supabase
+      .from("releases")
+      .select("id,title,artwork_url,publish_state")
+      .eq("publish_state", "live")
+      .is("artwork_url", null),
   ]);
-  const active = releases.data?.[0];
+
+  const active = activeRelease.data;
+  const placementReleaseIds = (homepagePlacements.data ?? []).map((p) => p.release_id);
+  const { data: homepageReleases } = placementReleaseIds.length
+    ? await supabase.from("releases").select("id,title,slug,publish_state").in("id", placementReleaseIds)
+    : { data: [] };
+  const releaseTitleById = new Map((homepageReleases ?? []).map((release) => [release.id, release]));
+  const unmatchedCount =
+    (unmatchedSoundCloud.data ?? []).filter(isUnmatchedExternal).length +
+    (unmatchedSpotify.data ?? []).filter(isUnmatchedExternal).length;
   const top = [...(content.data ?? [])]
     .map((item) => ({
       item,
@@ -59,11 +91,12 @@ export default async function Dashboard() {
     }))
     .sort((a, b) => b.score - a.score)
     .slice(0, 4);
+
   return (
     <>
       <PageHeader
-        title="Today in the studio"
-        description="The clearest next moves across your active release."
+        title="Now"
+        description="Active release, homepage visibility, unmatched imports, and what needs attention today."
         action={
           <div className="actions">
             <Link className="button primary" href="/studio/releases/new">
@@ -71,12 +104,6 @@ export default async function Dashboard() {
             </Link>
             <Link className="button" href="/studio/content#new">
               New content
-            </Link>
-            <Link className="button" href="/studio/outreach#new">
-              New contact
-            </Link>
-            <Link className="button" href="/studio/analytics#new">
-              Add metrics
             </Link>
           </div>
         }
@@ -92,18 +119,11 @@ export default async function Dashboard() {
                 <div className="empty-orbit" />
               )}
               <div>
-                <Status>{active.status}</Status>
+                <Status>{publishStateLabel(active.publish_state)}</Status>
                 <h2>{active.title}</h2>
-                <p>
-                  {active.core_emotion ||
-                    active.story ||
-                    "Shape the identity and build the release plan."}
-                </p>
-                <Link
-                  className="button primary"
-                  href={`/studio/releases/${active.id}`}
-                >
-                  Open release
+                <p>{active.core_emotion || active.story || "Your current focus release."}</p>
+                <Link className="button primary" href={`/studio/releases/${active.id}`}>
+                  Open release cockpit
                 </Link>
               </div>
             </div>
@@ -112,12 +132,57 @@ export default async function Dashboard() {
           <Panel className="feature">
             <EmptyState
               title="No active release"
-              body="Create the first release workspace and turn the finished track into a campaign."
-              href="/studio/releases/new"
-              label="Create release"
+              body="Choose a release in Catalog and set it as the active focus."
+              href="/studio/releases"
+              label="Open catalog"
             />
           </Panel>
         )}
+
+        <Panel title="Homepage player">
+          {homepagePlacements.data?.length ? (
+            homepagePlacements.data.map((placement) => {
+              const release = releaseTitleById.get(placement.release_id);
+              return (
+                <div className="list-row" key={placement.id}>
+                  <span>
+                    {release?.title ?? "Release"}
+                    <br />
+                    <small>
+                      {publishStateLabel(release?.publish_state ?? "draft")} · order{" "}
+                      {placement.display_order}
+                    </small>
+                  </span>
+                  <Link href={`/studio/releases/${placement.release_id}?tab=website`}>Edit</Link>
+                </div>
+              );
+            })
+          ) : (
+            <EmptyState
+              title="Homepage player empty"
+              body="Enable homepage placement on a published release."
+              href="/studio/releases"
+              label="Open catalog"
+            />
+          )}
+        </Panel>
+
+        <Panel title="Needs attention">
+          <div className="list-row">
+            <span>Unmatched external tracks</span>
+            <strong>{unmatchedCount}</strong>
+          </div>
+          <div className="list-row">
+            <span>Live releases missing artwork</span>
+            <strong>{mediaIssues.data?.length ?? 0}</strong>
+          </div>
+          {unmatchedCount > 0 && (
+            <Link className="button" href="/studio/soundcloud">
+              Review SoundCloud matches
+            </Link>
+          )}
+        </Panel>
+
         <Panel title="Today's priority actions">
           {tasks.data?.length ? (
             tasks.data.map((task) => (
@@ -138,12 +203,27 @@ export default async function Dashboard() {
               </div>
             ))
           ) : (
-            <EmptyState
-              title="Clear runway"
-              body="No open tasks. Review the active release checklist for the next useful action."
-            />
+            <EmptyState title="Clear runway" body="No open tasks due today." />
           )}
         </Panel>
+
+        <Panel title="Outreach follow-ups">
+          {followups.data?.length ? (
+            followups.data.map((message) => (
+              <div className="list-row" key={message.id}>
+                <span>
+                  {(message.outreach_contacts as unknown as { name: string })?.name ?? "Contact"}
+                  <br />
+                  <small>{message.channel}</small>
+                </span>
+                <Status>Due</Status>
+              </div>
+            ))
+          ) : (
+            <EmptyState title="No follow-ups due" body="Your outreach queue is clear today." />
+          )}
+        </Panel>
+
         <Panel title="Upcoming / scheduled">
           {content.data?.filter((x) => x.scheduled_at).length ? (
             content.data
@@ -157,77 +237,41 @@ export default async function Dashboard() {
                       {item.platform} · {item.status}
                     </small>
                   </span>
-                  <small>
-                    {new Date(item.scheduled_at!).toLocaleDateString()}
-                  </small>
+                  <small>{new Date(item.scheduled_at!).toLocaleDateString()}</small>
                 </div>
               ))
           ) : (
             <EmptyState
               title="Nothing scheduled"
-              body="Build a release schedule or date content in the Content Lab."
+              body="Build a release schedule in Content or Calendar."
               href="/studio/calendar"
               label="Open calendar"
             />
           )}
         </Panel>
-        <Panel title="Outreach follow-ups">
-          {followups.data?.length ? (
-            followups.data.map((message) => (
-              <div className="list-row" key={message.id}>
-                <span>
-                  {(message.outreach_contacts as unknown as { name: string })
-                    ?.name ?? "Contact"}
-                  <br />
-                  <small>{message.channel}</small>
-                </span>
-                <Status>Due</Status>
-              </div>
-            ))
-          ) : (
-            <EmptyState
-              title="No follow-ups due"
-              body="Your outreach queue is clear today."
-            />
-          )}
-        </Panel>
+
         <Panel title="Recent performance">
           {metrics.data?.length ? (
             <>
               <div className="metric-row">
                 <span>Views</span>
-                <strong>
-                  {metrics.data
-                    .reduce((s, m) => s + m.views, 0)
-                    .toLocaleString()}
-                </strong>
+                <strong>{metrics.data.reduce((s, m) => s + m.views, 0).toLocaleString()}</strong>
               </div>
               <div className="metric-row">
-                <span>Profile visits</span>
-                <strong>
-                  {metrics.data
-                    .reduce((s, m) => s + m.profile_visits, 0)
-                    .toLocaleString()}
-                </strong>
-              </div>
-              <div className="metric-row">
-                <span>Follows</span>
-                <strong>
-                  {metrics.data
-                    .reduce((s, m) => s + m.follows, 0)
-                    .toLocaleString()}
-                </strong>
+                <span>Streams</span>
+                <strong>{metrics.data.reduce((s, m) => s + m.streams, 0).toLocaleString()}</strong>
               </div>
             </>
           ) : (
             <EmptyState
               title="No snapshots yet"
-              body="Add honest manual metrics to establish a useful baseline."
+              body="Add metrics in Insights."
               href="/studio/analytics#new"
               label="Add snapshot"
             />
           )}
         </Panel>
+
         <Panel title="Top content" className="feature">
           {top.length ? (
             <table className="studio-table">
@@ -236,19 +280,13 @@ export default async function Dashboard() {
                   <tr key={item.id}>
                     <td>{item.title}</td>
                     <td>{item.platform}</td>
-                    <td>
-                      <Status>{item.status}</Status>
-                    </td>
                     <td>{score} score</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           ) : (
-            <EmptyState
-              title="Performance story pending"
-              body="Published content with metric snapshots will rank here."
-            />
+            <EmptyState title="Performance story pending" body="Published content will rank here." />
           )}
         </Panel>
       </div>

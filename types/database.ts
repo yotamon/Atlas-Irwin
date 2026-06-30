@@ -32,6 +32,23 @@ export type Release = {
   story_answers: Json;
   release_identity: Json;
   readiness: Json;
+  is_public: boolean;
+  publish_state: string;
+  published_at: string | null;
+  release_date_precision: string;
+  is_archived: boolean;
+  homepage_eligible: boolean;
+  catalog_sort_order: number | null;
+  artist: string;
+  upc: string | null;
+  genre: string | null;
+  subgenre: string | null;
+  label: string | null;
+  cta_label: string | null;
+  cta_href: string | null;
+  cover_alt: string | null;
+  is_featured: boolean;
+  active_release: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -48,6 +65,8 @@ export type Track = {
   spotify_url: string | null;
   is_primary: boolean;
   notes: string | null;
+  track_number: number | null;
+  display_order: number;
   created_at: string;
   updated_at: string;
 };
@@ -179,6 +198,10 @@ export type SoundCloudTrack = {
   sharing: string | null;
   raw_track: Json;
   synced_at: string;
+  linked_track_id: string | null;
+  linked_release_id: string | null;
+  reconcile_status: string;
+  reconciled_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -240,6 +263,9 @@ export type SpotifyAlbum = {
   uri: string;
   raw_album: Json;
   synced_at: string;
+  linked_release_id: string | null;
+  reconcile_status: string;
+  reconciled_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -258,6 +284,10 @@ export type SpotifyTrack = {
   isrc: string | null;
   raw_track: Json;
   synced_at: string;
+  linked_track_id: string | null;
+  linked_release_id: string | null;
+  reconcile_status: string;
+  reconciled_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -291,6 +321,80 @@ export type Task = {
   updated_at: string;
 };
 
+export type MediaAsset = {
+  id: string;
+  owner_id: string;
+  bucket_name: string;
+  storage_path: string;
+  public_url: string | null;
+  asset_type: string;
+  mime_type: string | null;
+  file_size: number | null;
+  content_hash: string | null;
+  width: number | null;
+  height: number | null;
+  duration_ms: number | null;
+  visibility: string;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MediaLink = {
+  id: string;
+  owner_id: string;
+  media_asset_id: string;
+  release_id: string | null;
+  track_id: string | null;
+  content_item_id: string | null;
+  role: string;
+  display_order: number;
+  is_primary: boolean;
+  caption: string | null;
+  alt_text: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TrackExternalId = {
+  id: string;
+  owner_id: string;
+  track_id: string;
+  provider: string;
+  external_id: string;
+  external_url: string | null;
+  raw_metadata: Json;
+  synced_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ReleaseExternalLink = {
+  id: string;
+  owner_id: string;
+  release_id: string;
+  provider: string;
+  external_id: string | null;
+  external_url: string;
+  label: string | null;
+  raw_metadata: Json;
+  synced_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type HomepagePlacement = {
+  id: string;
+  owner_id: string;
+  release_id: string;
+  enabled: boolean;
+  display_order: number;
+  default_track_id: string | null;
+  placement_type: string;
+  created_at: string;
+  updated_at: string;
+};
+
 type Table<Row> = {
   Row: Row;
   Insert: Partial<Row>;
@@ -315,6 +419,11 @@ export type Database = {
       spotify_tracks: Table<SpotifyTrack>;
       spotify_playlists: Table<SpotifyPlaylist>;
       tasks: Table<Task>;
+      media_assets: Table<MediaAsset>;
+      media_links: Table<MediaLink>;
+      track_external_ids: Table<TrackExternalId>;
+      release_external_links: Table<ReleaseExternalLink>;
+      homepage_placements: Table<HomepagePlacement>;
       release_learnings: Table<{
         id: string;
         owner_id: string;
