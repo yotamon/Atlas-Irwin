@@ -1,8 +1,8 @@
-import { getReleases } from "@/lib/releases";
+import { getPublicReleases } from "@/lib/public-catalog";
 import { ReleaseWidgetClient } from "@/components/release-widget-client";
 
-export function ReleaseWidget() {
-  const releases = getReleases();
+export async function ReleaseWidget() {
+  const releases = await getPublicReleases();
 
   if (releases.length === 0) {
     return null;

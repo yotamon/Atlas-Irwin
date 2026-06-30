@@ -1,27 +1,27 @@
 import Link from "next/link";
-import Image from "next/image";
 import { studioIcons } from "./icons";
 import { signOut } from "@/app/studio/actions";
+
 const links = [
-  [/studio$/, "Dashboard", "dashboard"],
-  [/studio\/releases/, "Releases", "releases"],
-  [/studio\/content/, "Content Lab", "content"],
+  [/studio$/, "Now", "dashboard"],
+  [/studio\/releases/, "Catalog", "releases"],
+  [/studio\/content/, "Content", "content"],
   [/studio\/calendar/, "Calendar", "calendar"],
   [/studio\/outreach/, "Outreach", "outreach"],
-  [/studio\/analytics/, "Analytics", "analytics"],
-  [/studio\/soundcloud/, "SoundCloud", "soundcloud"],
+  [/studio\/analytics/, "Insights", "analytics"],
+  [/studio\/soundcloud/, "Connections", "soundcloud"],
   [/studio\/spotify/, "Spotify", "spotify"],
-  [/studio\/brand/, "Brand", "brand"],
+  [/studio\/brand/, "Brand / Website", "brand"],
 ] as const;
+
 export function StudioSidebar() {
   const Plus = studioIcons.plus;
   const Logout = studioIcons.logout;
   return (
     <aside className="studio-sidebar">
       <Link href="/studio" className="studio-mark">
-        <Image src="/atlas-irwin-logo-sign.svg" alt="" width={38} height={38} />
         <span>
-          ATLAS<small>RELEASE ENGINE</small>
+          ATLAS<small>STUDIO</small>
         </span>
       </Link>
       <nav>

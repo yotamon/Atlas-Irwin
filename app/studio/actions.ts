@@ -19,6 +19,7 @@ import {
   syncSpotify,
 } from "@/lib/studio/spotify";
 import type { MetricSnapshot, SoundCloudTrack } from "@/types/database";
+import { resolveMetricReleaseId } from "@/lib/studio/reconciliation";
 
 const text = z.string().trim().max(10000);
 const required = z.string().trim().min(1).max(300);
@@ -489,6 +490,7 @@ export async function uploadTrackToSoundCloud(form: FormData) {
 export async function importSoundCloudTrack(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
   const id = z.uuid().parse(value(form, "id"));
+  const mode = value(form, "mode") || "create_release";
   const { data: track, error: trackError } = await supabase
     .from("soundcloud_tracks")
     .select("*")
@@ -496,58 +498,76 @@ export async function importSoundCloudTrack(form: FormData) {
     .single();
   if (trackError) throw new Error(trackError.message);
 
-  const { data: existingRelease, error: existingError } = await supabase
-    .from("releases")
-    .select("id")
-    .eq("owner_id", user.id)
-    .eq("soundcloud_url", track.permalink_url)
-    .maybeSingle();
-  if (existingError) throw new Error(existingError.message);
+  if (mode === "dismiss") {
+    await supabase
+      .from("soundcloud_tracks")
+      .update({ reconcile_status: "dismissed", reconciled_at: new Date().toISOString() })
+      .eq("id", id);
+    revalidatePath("/studio/soundcloud");
+    redirect("/studio/soundcloud");
+  }
 
-  let releaseId = existingRelease?.id;
-  if (!releaseId) {
-    const slug = await uniqueReleaseSlug(supabase, user.id, track.title);
-    const { data: release, error: releaseError } = await supabase
-      .from("releases")
+  const releaseIdInput = value(form, "release_id");
+  if (mode === "create_track" && releaseIdInput) {
+    const releaseId = z.uuid().parse(releaseIdInput);
+    const { data: created, error } = await supabase
+      .from("tracks")
       .insert({
         owner_id: user.id,
+        release_id: releaseId,
         title: track.title,
-        slug,
-        release_type: "Single",
-        status: "Live",
-        story: track.description,
+        duration: track.duration ? Math.round(track.duration / 1000) : null,
         soundcloud_url: track.permalink_url,
-        artwork_url: track.artwork_url,
-        release_date: null,
+        is_primary: false,
       })
       .select("id")
       .single();
-    if (releaseError) throw new Error(releaseError.message);
-    releaseId = release.id;
+    if (error) throw new Error(error.message);
+    const { linkSoundCloudTrack } = await import("@/lib/studio/reconciliation");
+    await linkSoundCloudTrack(supabase, user.id, id, created.id);
+    revalidatePath("/studio/soundcloud");
+    redirect(`/studio/releases/${releaseId}?tab=tracks`);
   }
 
-  const { data: existingTrack, error: existingTrackError } = await supabase
-    .from("tracks")
-    .select("id")
-    .eq("release_id", releaseId)
-    .eq("soundcloud_url", track.permalink_url)
-    .maybeSingle();
-  if (existingTrackError) throw new Error(existingTrackError.message);
-  if (!existingTrack) {
-    const { error } = await supabase.from("tracks").insert({
+  const slug = await uniqueReleaseSlug(supabase, user.id, track.title);
+  const { data: release, error: releaseError } = await supabase
+    .from("releases")
+    .insert({
       owner_id: user.id,
-      release_id: releaseId,
+      title: track.title,
+      slug,
+      release_type: "Single",
+      status: "Live",
+      publish_state: "draft",
+      is_public: false,
+      story: track.description,
+      soundcloud_url: track.permalink_url,
+      artwork_url: track.artwork_url,
+      release_date: null,
+    })
+    .select("id")
+    .single();
+  if (releaseError) throw new Error(releaseError.message);
+
+  const { data: createdTrack, error } = await supabase
+    .from("tracks")
+    .insert({
+      owner_id: user.id,
+      release_id: release.id,
       title: track.title,
       duration: track.duration ? Math.round(track.duration / 1000) : null,
       soundcloud_url: track.permalink_url,
       is_primary: true,
       notes: `Imported from SoundCloud track ${track.soundcloud_id}.`,
-    });
-    if (error) throw new Error(error.message);
-  }
+    })
+    .select("id")
+    .single();
+  if (error) throw new Error(error.message);
+  const { linkSoundCloudTrack } = await import("@/lib/studio/reconciliation");
+  await linkSoundCloudTrack(supabase, user.id, id, createdTrack.id);
   revalidatePath("/studio/releases");
   revalidatePath("/studio/soundcloud");
-  redirect(`/studio/releases/${releaseId}`);
+  redirect(`/studio/releases/${release.id}`);
 }
 
 export async function syncSoundCloudMetrics() {
@@ -561,14 +581,8 @@ export async function syncSoundCloudMetrics() {
 
   for (const storedTrack of tracks ?? []) {
     const track = await syncSoundCloudTrack(user.id, storedTrack.soundcloud_id);
-    const { data: release, error: releaseError } = await supabase
-      .from("releases")
-      .select("id")
-      .eq("owner_id", user.id)
-      .eq("soundcloud_url", track.permalink_url)
-      .maybeSingle();
-    if (releaseError) throw new Error(releaseError.message);
-    if (!release) continue;
+    const releaseId = await resolveMetricReleaseId(supabase, user.id, storedTrack);
+    if (!releaseId) continue;
 
     const notes = `SoundCloud API sync: ${track.soundcloud_id}`;
     const snapshot = soundCloudSnapshot(track as SoundCloudTrack);
@@ -576,7 +590,7 @@ export async function syncSoundCloudMetrics() {
       owner_id: user.id,
       date: today,
       platform: "SoundCloud",
-      release_id: release.id,
+      release_id: releaseId,
       content_item_id: null,
       reach: snapshot.views,
       views: snapshot.views,
@@ -599,7 +613,7 @@ export async function syncSoundCloudMetrics() {
       .eq("owner_id", user.id)
       .eq("date", today)
       .eq("platform", "SoundCloud")
-      .eq("release_id", release.id)
+      .eq("release_id", releaseId)
       .eq("notes", notes)
       .maybeSingle();
     if (metricLookupError) throw new Error(metricLookupError.message);
@@ -681,6 +695,8 @@ export async function importSpotifyAlbum(form: FormData) {
         slug,
         release_type: releaseType,
         status: "Live",
+        publish_state: "draft",
+        is_public: false,
         release_date: spotifyReleaseDate(album.release_date, album.release_date_precision),
         spotify_url: album.spotify_url,
         artwork_url: album.image_url,

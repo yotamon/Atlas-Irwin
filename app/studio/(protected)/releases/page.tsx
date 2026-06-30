@@ -1,94 +1,77 @@
 import Link from "next/link";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { EmptyState, PageHeader, Status } from "@/components/studio/ui";
-import { syncPublicReleaseCatalog } from "@/lib/studio/public-catalog";
+import { ReleaseCatalog } from "@/components/studio/release-catalog";
+import { EmptyState, PageHeader } from "@/components/studio/ui";
+import type { HomepagePlacement, Release } from "@/types/database";
+
+type ReleaseWithPlacement = Release & {
+  homepage_placements: HomepagePlacement[];
+};
+
 export default async function ReleasesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    status?: string;
+    publish?: string;
+    homepage?: string;
+    view?: string;
+  }>;
 }) {
   const { supabase, user } = await requireStudioAdmin();
-  await syncPublicReleaseCatalog(supabase, user.id);
   const params = await searchParams;
   let query = supabase
     .from("releases")
     .select("*")
+    .eq("owner_id", user.id)
     .order("updated_at", { ascending: false });
   if (params.status) query = query.eq("status", params.status);
+  if (params.publish) query = query.eq("publish_state", params.publish);
   if (params.q) query = query.ilike("title", `%${params.q}%`);
-  const { data } = await query;
+  const [{ data: releases }, { data: placements }] = await Promise.all([
+    query,
+    supabase.from("homepage_placements").select("*").eq("owner_id", user.id),
+  ]);
+
+  const placementByRelease = new Map(
+    (placements ?? []).map((placement) => [placement.release_id, placement]),
+  );
+  const enriched: ReleaseWithPlacement[] = (releases ?? []).map((release) => ({
+    ...release,
+    homepage_placements: placementByRelease.has(release.id)
+      ? [placementByRelease.get(release.id)!]
+      : [],
+  }));
+
+  const filtered =
+    params.homepage === "visible"
+      ? enriched.filter((release) => release.homepage_placements.some((placement) => placement.enabled))
+      : params.homepage === "hidden"
+        ? enriched.filter((release) => !release.homepage_placements.some((placement) => placement.enabled))
+        : enriched;
+
   return (
     <>
       <PageHeader
-        title="Releases"
-        description="Your public and SoundCloud-backed catalog, ready for release workflows."
+        title="Catalog"
+        description="Manage releases, publishing state, homepage visibility, and media readiness."
         action={
           <Link className="button primary" href="/studio/releases/new">
             New release
           </Link>
         }
       />
-      <form className="studio-tabs">
-        <input name="q" placeholder="Search releases" defaultValue={params.q} />
-        <select name="status" defaultValue={params.status}>
-          <option value="">All statuses</option>
-          {["Idea", "In Progress", "Scheduled", "Live", "Archived"].map((s) => (
-            <option key={s}>{s}</option>
-          ))}
-        </select>
-        <button className="button">Filter</button>
-      </form>
-      {data?.length ? (
-        <table className="studio-table">
-          <thead>
-            <tr>
-              <th>Release</th>
-              <th>Type</th>
-              <th>Status</th>
-              <th>Date</th>
-              <th>Public sync</th>
-              <th>Source</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((release) => (
-              <tr key={release.id}>
-                <td>
-                  <Link href={`/studio/releases/${release.id}`}>
-                    <strong>{release.title}</strong>
-                    <br />
-                    <small>{release.slug}</small>
-                  </Link>
-                </td>
-                <td>{release.release_type}</td>
-                <td>
-                  <Status>{release.status}</Status>
-                </td>
-                <td>
-                  {release.release_date
-                    ? new Date(release.release_date).toLocaleDateString()
-                    : "Unscheduled"}
-                </td>
-                <td>
-                  {release.public_release_path
-                    ? "Linked · manual sync"
-                    : "Studio only"}
-                </td>
-                <td>
-                  {release.soundcloud_url
-                    ? "SoundCloud"
-                    : release.public_release_path
-                      ? "Public catalog"
-                      : "Studio"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {filtered.length ? (
+        <ReleaseCatalog
+          releases={filtered}
+          view={params.view === "table" ? "table" : "grid"}
+          filters={params}
+        />
       ) : (
         <EmptyState
           title="The catalog starts here"
-          body="Create a release or import existing public manifests with the included script."
+          body="Create a release or import legacy public folders with npm run studio:import."
           href="/studio/releases/new"
           label="Create release"
         />

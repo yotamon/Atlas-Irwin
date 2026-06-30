@@ -8,8 +8,10 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "studio:import": "node --env-file=.env.local scripts/import-public-releases.mjs",
-    "studio:seed": "node --env-file=.env.local scripts/seed-studio.mjs"
+    "studio:import": "node --env-file=.env.local scripts/import-legacy-releases.mjs",
+    "studio:import:dry-run": "node --env-file=.env.local scripts/import-legacy-releases.mjs --dry-run",
+    "studio:seed": "node --env-file=.env.local scripts/seed-studio.mjs",
+    "env:restore": "node scripts/restore-vercel-env.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.0",

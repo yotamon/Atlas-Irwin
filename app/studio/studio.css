@@ -620,6 +620,51 @@
 		grid-template-columns: repeat(4, 16rem);
 	}
 }
+.catalog-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+	gap: 1rem;
+}
+.catalog-card {
+	display: grid;
+	gap: 0.75rem;
+	padding: 0.85rem;
+	border: 1px solid var(--s-line);
+	border-radius: 1rem;
+	background: var(--s-surface);
+}
+.catalog-card img {
+	width: 100%;
+	aspect-ratio: 1;
+	object-fit: cover;
+	border-radius: 0.75rem;
+}
+.catalog-card-body h3 {
+	margin: 0.35rem 0 0.2rem;
+	font-size: 1rem;
+}
+.catalog-card-badges {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.35rem;
+}
+.catalog-filters {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.65rem;
+	margin-bottom: 1rem;
+}
+.release-tabs a.active {
+	border-color: var(--s-accent);
+	color: var(--s-accent);
+}
+.link-list {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+	display: grid;
+	gap: 0.5rem;
+}
 @media (max-width: 600px) {
 	.studio-main {
 		padding: 1rem;

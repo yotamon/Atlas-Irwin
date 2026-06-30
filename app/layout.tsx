@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { Manrope } from "next/font/google";
-import Script from "next/script";
 import { getSiteUrl } from "@/lib/site-url";
+import { ThemeInitScript } from "@/components/theme-init-script";
 import "./globals.css";
 
 const headingFont = localFont({
@@ -111,26 +111,6 @@ const jsonLdMusicGroup = {
   image: `${SITE_URL}/atlas-cover.png`,
 };
 
-const themeInitScript = `
-(() => {
-  try {
-    const storedTheme = localStorage.getItem("atlas-theme");
-    const resolvedTheme =
-      storedTheme === "light" || storedTheme === "dark"
-        ? storedTheme
-        : window.matchMedia("(prefers-color-scheme: dark)").matches
-          ? "dark"
-          : "light";
-
-    document.documentElement.dataset.theme = resolvedTheme;
-    document.documentElement.style.colorScheme = resolvedTheme;
-  } catch {
-    document.documentElement.dataset.theme = "light";
-    document.documentElement.style.colorScheme = "light";
-  }
-})();
-`;
-
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -164,9 +144,7 @@ export default function RootLayout({
         />
       </head>
       <body className="flex min-h-screen flex-col">
-        <Script id="atlas-theme-init" strategy="beforeInteractive">
-          {themeInitScript}
-        </Script>
+        <ThemeInitScript />
         {children}
       </body>
     </html>
