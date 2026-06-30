@@ -198,6 +198,87 @@ export type SoundCloudPlaylist = {
   created_at: string;
   updated_at: string;
 };
+export type SpotifyAccount = {
+  owner_id: string;
+  spotify_account_id: string;
+  display_name: string;
+  profile_url: string | null;
+  image_url: string | null;
+  artist_id: string | null;
+  artist_name: string | null;
+  artist_url: string | null;
+  artist_image_url: string | null;
+  raw_profile: Json;
+  raw_artist: Json;
+  top_artists: Json;
+  top_tracks: Json;
+  connected_at: string;
+  last_synced_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+export type SpotifyToken = {
+  owner_id: string;
+  access_token: string;
+  refresh_token: string;
+  scope: string | null;
+  expires_at: string;
+  created_at: string;
+  updated_at: string;
+};
+export type SpotifyAlbum = {
+  id: string;
+  owner_id: string;
+  spotify_id: string;
+  name: string;
+  album_type: string;
+  total_tracks: number;
+  release_date: string | null;
+  release_date_precision: string | null;
+  spotify_url: string;
+  image_url: string | null;
+  uri: string;
+  raw_album: Json;
+  synced_at: string;
+  created_at: string;
+  updated_at: string;
+};
+export type SpotifyTrack = {
+  id: string;
+  owner_id: string;
+  spotify_id: string;
+  album_spotify_id: string;
+  name: string;
+  duration_ms: number;
+  explicit: boolean;
+  disc_number: number;
+  track_number: number;
+  spotify_url: string;
+  uri: string;
+  isrc: string | null;
+  raw_track: Json;
+  synced_at: string;
+  created_at: string;
+  updated_at: string;
+};
+export type SpotifyPlaylist = {
+  id: string;
+  owner_id: string;
+  spotify_id: string;
+  name: string;
+  description: string | null;
+  spotify_url: string;
+  image_url: string | null;
+  uri: string;
+  is_public: boolean | null;
+  collaborative: boolean;
+  item_count: number;
+  owner_name: string | null;
+  raw_playlist: Json;
+  synced_at: string;
+  created_at: string;
+  updated_at: string;
+};
 export type Task = {
   id: string;
   owner_id: string;
@@ -229,6 +310,10 @@ export type Database = {
       soundcloud_accounts: Table<SoundCloudAccount>;
       soundcloud_tracks: Table<SoundCloudTrack>;
       soundcloud_playlists: Table<SoundCloudPlaylist>;
+      spotify_accounts: Table<SpotifyAccount>;
+      spotify_albums: Table<SpotifyAlbum>;
+      spotify_tracks: Table<SpotifyTrack>;
+      spotify_playlists: Table<SpotifyPlaylist>;
       tasks: Table<Task>;
       release_learnings: Table<{
         id: string;
@@ -262,6 +347,19 @@ export type Database = {
         Args: { p_owner_id: string };
         Returns: undefined;
       };
+      delete_spotify_token: {
+        Args: { p_owner_id: string };
+        Returns: undefined;
+      };
+      get_spotify_token: {
+        Args: { p_owner_id: string };
+        Returns: {
+          access_token: string;
+          refresh_token: string;
+          scope: string | null;
+          expires_at: string;
+        }[];
+      };
       get_soundcloud_token: {
         Args: { p_owner_id: string };
         Returns: {
@@ -282,6 +380,16 @@ export type Database = {
         };
         Returns: undefined;
       };
+      upsert_spotify_token: {
+        Args: {
+          p_access_token: string;
+          p_expires_at: string;
+          p_owner_id: string;
+          p_refresh_token: string;
+          p_scope: string | null;
+        };
+        Returns: undefined;
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
@@ -289,6 +397,7 @@ export type Database = {
   private: {
     Tables: {
       soundcloud_tokens: Table<SoundCloudToken>;
+      spotify_tokens: Table<SpotifyToken>;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

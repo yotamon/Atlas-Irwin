@@ -5,11 +5,8 @@ import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { getSupabaseEnv } from "@/lib/supabase/config";
 import type { Database } from "@/types/database";
-import {
-  isLocalStudioBypassHost,
-  LOCAL_STUDIO_EMAIL,
-  LOCAL_STUDIO_USER_ID,
-} from "./local-studio";
+import { syncPublicReleaseCatalog } from "@/lib/studio/public-catalog";
+import { isLocalStudioBypassHost, LOCAL_STUDIO_EMAIL } from "./local-studio";
 
 type StudioUser = Pick<User, "email" | "id">;
 type StudioAuthContext = {
@@ -59,6 +56,7 @@ async function requireLocalStudioAdmin(): Promise<StudioAuthContext> {
     .maybeSingle();
 
   if (preferredProfile) {
+    await syncPublicReleaseCatalog(supabase, preferredProfile.id);
     return {
       supabase,
       user: { id: preferredProfile.id, email: preferredProfile.email },
@@ -72,13 +70,46 @@ async function requireLocalStudioAdmin(): Promise<StudioAuthContext> {
     .limit(1)
     .maybeSingle();
 
-  return {
-    supabase,
-    user: {
-      id: adminProfile?.id ?? LOCAL_STUDIO_USER_ID,
-      email: adminProfile?.email ?? preferredEmail,
-    },
-  };
+  if (adminProfile) {
+    await syncPublicReleaseCatalog(supabase, adminProfile.id);
+    return {
+      supabase,
+      user: { id: adminProfile.id, email: adminProfile.email },
+    };
+  }
+
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {
+    throw new Error(
+      "Local Studio access requires SUPABASE_SERVICE_ROLE_KEY in .env.local.",
+    );
+  }
+  let generated = await supabase.auth.admin.generateLink({
+    type: "magiclink",
+    email: preferredEmail,
+  });
+  if (generated.error) {
+    const created = await supabase.auth.admin.createUser({
+      email: preferredEmail,
+      email_confirm: true,
+    });
+    if (created.error) throw new Error(created.error.message);
+    generated = await supabase.auth.admin.generateLink({
+      type: "magiclink",
+      email: preferredEmail,
+    });
+  }
+  const localUser = generated.data.user;
+  if (!localUser)
+    throw new Error("Unable to create the local Studio administrator.");
+  const { error: profileError } = await supabase
+    .from("profiles")
+    .upsert(
+      { id: localUser.id, email: preferredEmail, is_admin: true },
+      { onConflict: "id" },
+    );
+  if (profileError) throw new Error(profileError.message);
+  await syncPublicReleaseCatalog(supabase, localUser.id);
+  return { supabase, user: { id: localUser.id, email: preferredEmail } };
 }
 
 export async function requireStudioAdmin(): Promise<StudioAuthContext> {

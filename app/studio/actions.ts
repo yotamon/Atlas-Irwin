@@ -12,6 +12,12 @@ import {
   syncSoundCloudTrack,
   uploadSoundCloudTrack,
 } from "@/lib/studio/soundcloud";
+import {
+  createSpotifyCampaignPlaylist,
+  disconnectSpotify,
+  setSpotifyArtist,
+  syncSpotify,
+} from "@/lib/studio/spotify";
 import type { MetricSnapshot, SoundCloudTrack } from "@/types/database";
 
 const text = z.string().trim().max(10000);
@@ -608,6 +614,131 @@ export async function syncSoundCloudMetrics() {
   revalidatePath("/studio/analytics");
   revalidatePath("/studio/soundcloud");
   redirect("/studio/soundcloud?metrics=1");
+}
+
+export async function saveSpotifyArtist(form: FormData) {
+  const { user } = await requireStudioAdmin();
+  await setSpotifyArtist(user.id, required.parse(value(form, "artist")));
+  revalidatePath("/studio/spotify");
+  redirect("/studio/spotify?artist=1");
+}
+
+export async function syncSpotifyCatalog() {
+  const { user } = await requireStudioAdmin();
+  await syncSpotify(user.id);
+  revalidatePath("/studio/spotify");
+  redirect("/studio/spotify?synced=1");
+}
+
+export async function disconnectSpotifyAccount() {
+  const { user } = await requireStudioAdmin();
+  await disconnectSpotify(user.id);
+  revalidatePath("/studio/spotify");
+  redirect("/studio/spotify?disconnected=1");
+}
+
+function spotifyReleaseDate(value: string | null, precision: string | null) {
+  if (!value) return null;
+  if (precision === "year") return `${value}-01-01`;
+  if (precision === "month") return `${value}-01`;
+  return value;
+}
+
+export async function importSpotifyAlbum(form: FormData) {
+  const { supabase, user } = await requireStudioAdmin();
+  const id = z.uuid().parse(value(form, "id"));
+  const { data: album, error: albumError } = await supabase
+    .from("spotify_albums")
+    .select("*")
+    .eq("id", id)
+    .single();
+  if (albumError) throw new Error(albumError.message);
+  const { data: syncedTracks, error: tracksError } = await supabase
+    .from("spotify_tracks")
+    .select("*")
+    .eq("album_spotify_id", album.spotify_id)
+    .order("disc_number")
+    .order("track_number");
+  if (tracksError) throw new Error(tracksError.message);
+
+  const { data: existingRelease, error: existingError } = await supabase
+    .from("releases")
+    .select("id")
+    .eq("owner_id", user.id)
+    .eq("spotify_url", album.spotify_url)
+    .maybeSingle();
+  if (existingError) throw new Error(existingError.message);
+
+  let releaseId = existingRelease?.id;
+  if (!releaseId) {
+    const slug = await uniqueReleaseSlug(supabase, user.id, album.name);
+    const releaseType = album.album_type === "single" ? "Single" : album.total_tracks > 6 ? "Album" : "EP";
+    const { data: release, error } = await supabase
+      .from("releases")
+      .insert({
+        owner_id: user.id,
+        title: album.name,
+        slug,
+        release_type: releaseType,
+        status: "Live",
+        release_date: spotifyReleaseDate(album.release_date, album.release_date_precision),
+        spotify_url: album.spotify_url,
+        artwork_url: album.image_url,
+        notes: `Imported from Spotify album ${album.spotify_id}.`,
+      })
+      .select("id")
+      .single();
+    if (error) throw new Error(error.message);
+    releaseId = release.id;
+  }
+
+  const { data: existingTracks, error: existingTracksError } = await supabase
+    .from("tracks")
+    .select("spotify_url")
+    .eq("release_id", releaseId);
+  if (existingTracksError) throw new Error(existingTracksError.message);
+  const existingUrls = new Set((existingTracks ?? []).map((track) => track.spotify_url));
+  const missing = (syncedTracks ?? []).filter((track) => !existingUrls.has(track.spotify_url));
+  if (missing.length) {
+    const { error } = await supabase.from("tracks").insert(
+      missing.map((track, index) => ({
+        owner_id: user.id,
+        release_id: releaseId,
+        title: track.name,
+        duration: Math.round(track.duration_ms / 1000),
+        spotify_url: track.spotify_url,
+        is_primary: index === 0,
+        notes: `Spotify track ${track.spotify_id}${track.isrc ? ` · ISRC ${track.isrc}` : ""}.`,
+      })),
+    );
+    if (error) throw new Error(error.message);
+  }
+  revalidatePath("/studio/releases");
+  revalidatePath("/studio/spotify");
+  redirect(`/studio/releases/${releaseId}`);
+}
+
+export async function createCampaignPlaylist(form: FormData) {
+  const { supabase, user } = await requireStudioAdmin();
+  const name = required.parse(value(form, "name"));
+  const description = text.parse(value(form, "description"));
+  const ids = form.getAll("track_id").map(String).filter(Boolean).slice(0, 100);
+  if (!ids.length) throw new Error("Choose at least one synced Spotify track.");
+  const { data: tracks, error } = await supabase
+    .from("spotify_tracks")
+    .select("uri")
+    .in("id", ids);
+  if (error) throw new Error(error.message);
+  if (!tracks?.length) throw new Error("The selected Spotify tracks were not found.");
+  const playlist = await createSpotifyCampaignPlaylist({
+    ownerId: user.id,
+    name,
+    description,
+    isPublic: value(form, "visibility") === "public",
+    uris: tracks.map((track) => track.uri),
+  });
+  revalidatePath("/studio/spotify");
+  redirect(`/studio/spotify?playlist=${encodeURIComponent(playlist.name)}`);
 }
 
 export async function saveBrandSetting(form: FormData) {

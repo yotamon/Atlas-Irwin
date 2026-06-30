@@ -51,6 +51,17 @@ async function ensureAuthUser(admin: SupabaseClient<Database>, email: string) {
   return retry;
 }
 
+async function approveStudioProfile(
+  admin: SupabaseClient<Database>,
+  id: string,
+  email: string,
+) {
+  const { error } = await admin
+    .from("profiles")
+    .upsert({ id, email, is_admin: true }, { onConflict: "id" });
+  if (error) throw new Error(error.message);
+}
+
 export async function signInStudioAdmin(
   supabase: SupabaseClient<Database>,
   emailInput: string | undefined,
@@ -77,4 +88,10 @@ export async function signInStudioAdmin(
     type: "email",
   });
   if (verifyError) throw new Error(verifyError.message);
+
+  const { data, error: userError } = await supabase.auth.getUser();
+  if (userError || !data.user) {
+    throw new Error(userError?.message ?? "Unable to verify Studio session.");
+  }
+  await approveStudioProfile(admin, data.user.id, email);
 }
