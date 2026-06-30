@@ -1,14 +1,16 @@
-import { headers } from "next/headers";
 import Image from "next/image";
-import { signInWithMagicLink } from "../actions";
+import { adminEmails } from "@/lib/auth/studio";
+import { signInWithStudioPassword } from "../actions";
+
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ sent?: string; error?: string }>;
+  searchParams: Promise<{ error?: string }>;
 }) {
   const params = await searchParams;
-  const h = await headers();
-  const origin = `${h.get("x-forwarded-proto") ?? "http"}://${h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000"}`;
+  const admins = adminEmails();
+  const showEmail = admins.length > 1;
+
   return (
     <main className="studio-auth">
       <section>
@@ -20,24 +22,30 @@ export default async function LoginPage({
         />
         <h1>Release Engine</h1>
         <p>Private access to the Atlas Irwin release studio.</p>
-        {params.sent ? (
-          <div className="auth-message">Magic link sent. Check your inbox.</div>
-        ) : (
-          <form action={signInWithMagicLink}>
-            <input type="hidden" name="origin" value={origin} />
+        <form action={signInWithStudioPassword}>
+          {showEmail ? (
             <label>
-              Email address
+              Email
               <input
                 name="email"
                 type="email"
-                autoComplete="email"
-                required
-                placeholder="you@example.com"
+                autoComplete="username"
+                placeholder={admins[0]}
               />
             </label>
-            <button className="button primary">Send magic link</button>
-          </form>
-        )}
+          ) : null}
+          <label>
+            Password
+            <input
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              required
+              placeholder="Studio password"
+            />
+          </label>
+          <button className="button primary">Sign in</button>
+        </form>
         {params.error && <p className="form-error">{params.error}</p>}
         <small>Access is restricted to approved Studio administrators.</small>
       </section>

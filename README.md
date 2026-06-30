@@ -13,6 +13,7 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 STUDIO_ADMIN_EMAILS=artist@example.com
+STUDIO_PASSWORD=your-studio-password
 STUDIO_IMPORT_ADMIN_EMAIL=artist@example.com
 SOUNDCLOUD_CLIENT_ID=
 SOUNDCLOUD_CLIENT_SECRET=
@@ -26,8 +27,8 @@ SOUNDCLOUD_REDIRECT_URI=https://atlasirwin.com/studio/soundcloud/callback
 1. Create a Supabase project.
 2. In the SQL Editor, run `supabase/migrations/20260630012751_atlas_release_engine.sql`, or link the Supabase CLI and run `npx supabase db push`.
 3. In Authentication → URL Configuration, set the production site URL and add `http://localhost:3000/studio/auth/callback` plus the production `/studio/auth/callback` URL as redirects.
-4. Enable email magic-link authentication.
-5. Sign in once at `/studio/login`. The migration trigger creates a profile.
+4. Set `STUDIO_PASSWORD` in `.env.local`.
+5. Sign in at `/studio/login` with that password. Email is optional when only one admin is allowlisted. The migration trigger creates a profile on first sign-in.
 6. In the SQL Editor, explicitly approve that profile:
 
 ```sql
@@ -38,7 +39,7 @@ where email = 'artist@example.com';
 
 The email must also appear in `STUDIO_ADMIN_EMAILS`. Both checks are required. Tables and the private `studio-assets` bucket use RLS; anonymous access is revoked. If the Data API is configured as private, expose the `public` schema to `authenticated` only.
 
-Local development bypasses the magic-link step for requests served from `localhost`, `127.0.0.1`, or `::1`: open `http://localhost:3000/studio` directly. With `SUPABASE_SERVICE_ROLE_KEY` set in `.env.local`, local Studio writes use the first `STUDIO_ADMIN_EMAILS` profile, so saves work without an auth session. In production, Studio always requires Supabase auth and the admin allowlist.
+Local development bypasses login for requests served from `localhost`, `127.0.0.1`, or `::1`: open `http://localhost:3000/studio` directly. With `SUPABASE_SERVICE_ROLE_KEY` set in `.env.local`, local Studio writes use the first `STUDIO_ADMIN_EMAILS` profile, so saves work without an auth session. In production, Studio requires the studio password and the admin allowlist.
 
 ### SoundCloud Studio integration
 

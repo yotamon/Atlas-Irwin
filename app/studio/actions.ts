@@ -59,18 +59,20 @@ async function uniqueReleaseSlug(
   return `${base}-${Date.now()}`;
 }
 
-export async function signInWithMagicLink(form: FormData) {
-  const email = z.email().parse(value(form, "email")).toLowerCase();
+export async function signInWithStudioPassword(form: FormData) {
+  const password = z.string().min(1).parse(value(form, "password"));
+  const email = value(form, "email") || undefined;
   const { createClient } = await import("@/lib/supabase/server");
+  const { signInStudioAdmin } = await import("@/lib/auth/studio-login");
   const supabase = await createClient();
-  const origin = value(form, "origin");
-  const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: `${origin}/studio/auth/callback` },
-  });
-  if (error)
-    redirect(`/studio/login?error=${encodeURIComponent(error.message)}`);
-  redirect("/studio/login?sent=1");
+  try {
+    await signInStudioAdmin(supabase, email, password);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unable to sign in.";
+    redirect(`/studio/login?error=${encodeURIComponent(message)}`);
+  }
+  redirect("/studio");
 }
 
 export async function signOut() {
