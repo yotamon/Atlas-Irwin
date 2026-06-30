@@ -258,7 +258,30 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      delete_soundcloud_token: {
+        Args: { p_owner_id: string };
+        Returns: undefined;
+      };
+      get_soundcloud_token: {
+        Args: { p_owner_id: string };
+        Returns: {
+          access_token: string;
+          refresh_token: string;
+          scope: string | null;
+          expires_at: string;
+        }[];
+      };
       is_studio_admin: { Args: Record<string, never>; Returns: boolean };
+      upsert_soundcloud_token: {
+        Args: {
+          p_access_token: string;
+          p_expires_at: string;
+          p_owner_id: string;
+          p_refresh_token: string;
+          p_scope: string | null;
+        };
+        Returns: undefined;
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
