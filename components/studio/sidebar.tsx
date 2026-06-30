@@ -3,15 +3,13 @@ import { studioIcons } from "./icons";
 import { signOut } from "@/app/studio/actions";
 
 const links = [
-  [/studio$/, "Now", "dashboard"],
-  [/studio\/releases/, "Catalog", "releases"],
-  [/studio\/content/, "Content", "content"],
-  [/studio\/calendar/, "Calendar", "calendar"],
-  [/studio\/outreach/, "Outreach", "outreach"],
-  [/studio\/analytics/, "Insights", "analytics"],
-  [/studio\/soundcloud/, "Connections", "soundcloud"],
-  [/studio\/spotify/, "Spotify", "spotify"],
-  [/studio\/brand/, "Brand / Website", "brand"],
+  ["/studio", "Command Center", "dashboard"],
+  ["/studio/releases", "Releases", "releases"],
+  ["/studio/campaigns", "Campaigns", "campaigns"],
+  ["/studio/media", "Media Library", "media"],
+  ["/studio/data-health", "Data Health", "dataHealth"],
+  ["/studio/analytics", "Analytics", "analytics"],
+  ["/studio/brand", "Brand / Creative", "brand"],
 ] as const;
 
 export function StudioSidebar() {
@@ -25,13 +23,12 @@ export function StudioSidebar() {
         </span>
       </Link>
       <nav>
-        {links.map(([, label, key]) => {
+        {links.map(([href, label, key]) => {
           const Icon = studioIcons[key];
-          const href = key === "dashboard" ? "/studio" : `/studio/${key}`;
           return (
             <Link href={href} key={key}>
               <Icon aria-hidden />
-              {label}
+              <span className="studio-nav-text">{label}</span>
             </Link>
           );
         })}

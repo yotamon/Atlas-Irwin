@@ -54,8 +54,8 @@ export default async function ReleasesPage({
   return (
     <>
       <PageHeader
-        title="Catalog"
-        description="Manage releases, publishing state, homepage visibility, and media readiness."
+        title="Releases"
+        description="Choose what moves next, then open its complete release workspace."
         action={
           <Link className="button primary" href="/studio/releases/new">
             New release
