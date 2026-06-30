@@ -1,8 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { getPublicReleases } from "@/lib/public-catalog";
 import { ReleaseCockpit } from "@/components/studio/release-cockpit";
-import { PageHeader, Status } from "@/components/studio/ui";
-import { publishStateLabel } from "@/lib/studio/catalog-labels";
 
 export default async function ReleaseDetail({
   params,
@@ -22,6 +21,10 @@ export default async function ReleaseDetail({
     { count: contentCount },
     { count: contactCount },
     { data: externalLinks },
+    { data: contentItems },
+    { data: metrics },
+    { data: soundCloudPending },
+    { data: spotifyPending },
   ] = await Promise.all([
     supabase.from("releases").select("*").eq("id", id).single(),
     supabase
@@ -45,6 +48,10 @@ export default async function ReleaseDetail({
       .select("id", { count: "exact", head: true })
       .eq("release_id", id),
     supabase.from("release_external_links").select("*").eq("release_id", id),
+    supabase.from("content_items").select("*").eq("release_id", id).order("scheduled_at"),
+    supabase.from("metric_snapshots").select("*").eq("release_id", id).order("date"),
+    supabase.from("soundcloud_tracks").select("*").eq("reconcile_status", "pending"),
+    supabase.from("spotify_tracks").select("*").eq("reconcile_status", "pending"),
   ]);
   if (!release) notFound();
 
@@ -57,13 +64,12 @@ export default async function ReleaseDetail({
     ? await supabase.from("media_assets").select("*").in("id", assetIds)
     : { data: [] };
 
+  const releaseTerms = new Set([release.title, ...(tracks ?? []).map((track) => track.title)].map((value) => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()));
+  const relevantSoundCloud = (soundCloudPending ?? []).filter((item) => releaseTerms.has(item.title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()));
+  const relevantSpotify = (spotifyPending ?? []).filter((item) => releaseTerms.has(item.name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()));
+  const publicReleases = await getPublicReleases();
+
   return (
-    <>
-      <PageHeader
-        title={release.title}
-        description={`${release.release_type} · ${publishStateLabel(release.publish_state)}`}
-        action={<Status>{release.status}</Status>}
-      />
       <ReleaseCockpit
         release={release}
         tracks={tracks ?? []}
@@ -74,8 +80,12 @@ export default async function ReleaseDetail({
         externalTrackIds={externalTrackIds ?? []}
         contentCount={contentCount ?? 0}
         contactCount={contactCount ?? 0}
+        contentItems={contentItems ?? []}
+        metrics={metrics ?? []}
+        unmatchedSoundCloud={relevantSoundCloud}
+        unmatchedSpotify={relevantSpotify}
+        publicReleases={publicReleases}
         tab={tab}
       />
-    </>
   );
 }

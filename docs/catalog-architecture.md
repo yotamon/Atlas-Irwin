@@ -62,6 +62,39 @@ The importer:
 3. Choose default track, placement type, and display order in the release Website tab
 4. Studio mutations call `revalidateTag("public-catalog")` so `/` updates without redeploying
 
+The Studio preview at `/studio/homepage-preview` renders the same `ReleaseWidgetClient`
+and `getPublicReleases()` result as the public homepage. Compact previews in Command
+Center and the Release Workspace are mapped from that same public catalog result and
+expose the current artwork, CTA, default track, and placement order.
+
+## Artist operating system routes
+
+- `/studio` — Command Center for the active release, prioritized attention queue,
+  live catalog preview, seven-day runway, and real-metric pulse
+- `/studio/releases/[id]` — release workspace with Overview, Music, Media, Website,
+  Campaign, and Performance surfaces
+- `/studio/campaigns` — release-centered content and outreach workload in list or
+  calendar form; it composes existing content and outreach records rather than
+  duplicating campaign state
+- `/studio/media` — global asset inventory, usage map, deduplicated upload, and
+  attach-to-release workflow
+- `/studio/data-health` — auditable reconciliation, metadata, media, platform-link,
+  placement, legacy-import, and stale-sync checks
+
+## Deterministic readiness
+
+`lib/studio/readiness.ts` is the single readiness calculation used by Command Center
+and Release Workspace. Each check is explicit, links to its fix location, and is
+classified as either a publishing blocker or a marketing recommendation. Optional
+campaign work never prevents publishing.
+
+## Media upload safety
+
+Media uploads calculate a SHA-256 content hash before writing to Storage. An existing
+asset with the same owner, visibility, and hash is reused instead of uploaded again.
+Public uploads require an explicit confirmation. `master_audio` and `stem` uploads in
+the global library are always rejected when public visibility is requested.
+
 ## SoundCloud and Spotify reconciliation
 
 - Sync updates staging tables only (`soundcloud_tracks`, `spotify_tracks`, `spotify_albums`)

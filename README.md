@@ -82,12 +82,19 @@ that mode; wider public access requires Spotify's applicable quota approval.
 
 ### Studio workflow
 
+The primary Studio navigation is organized around the artist workflow: Command Center,
+Releases, Campaigns, Media Library, Data Health, Analytics, and Brand / Creative.
+Each release opens as a complete workspace instead of a catalog row.
+
 - Create a release under Studio → Releases, fill its story fields, then generate its deterministic release identity.
 - Generate a content pack from the release. Drafts remain editable and nothing is posted automatically.
 - Date content in Content Lab; it appears in Calendar.
 - Add outreach contacts and log copy-ready messages and follow-ups. No email or DM is sent.
 - Add manual metric snapshots and link them to content to rank performance using the documented weights in `lib/studio/performance.ts`.
 - Update reusable creative direction in Brand.
+- Resolve catalog, website, reconciliation, and metadata issues in Data Health.
+- Use the release Website tab for the public catalog state; successful mutations
+  invalidate the `public-catalog` cache tag and update the homepage without redeploying.
 
 ### Import existing public releases
 
