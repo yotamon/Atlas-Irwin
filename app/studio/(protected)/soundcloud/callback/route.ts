@@ -17,6 +17,23 @@ function redirectWithStatus(request: NextRequest, status: string) {
   return NextResponse.redirect(new URL(`/studio/soundcloud?${status}`, request.url));
 }
 
+function soundCloudErrorCode(error: unknown) {
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  if (message.includes("soundcloud client environment")) return "missing_soundcloud_env";
+  if (message.includes("supabase_service_role_key")) return "missing_service_role_key";
+  if (
+    message.includes("upsert_soundcloud_token") ||
+    message.includes("get_soundcloud_token") ||
+    message.includes("delete_soundcloud_token") ||
+    message.includes("could not find the function")
+  ) {
+    return "soundcloud_migration_missing";
+  }
+  if (message.includes("token exchange failed")) return "token_exchange_failed";
+  if (message.includes("profile response")) return "profile_fetch_failed";
+  return "connection_failed";
+}
+
 export async function GET(request: NextRequest) {
   const { user } = await requireStudioAdmin();
   const url = new URL(request.url);
@@ -32,13 +49,22 @@ export async function GET(request: NextRequest) {
     return redirectWithStatus(request, "error=invalid_oauth_state");
   }
 
-  await completeSoundCloudOAuth({
-    code,
-    codeVerifier,
-    origin: requestOrigin(request),
-    ownerId: user.id,
-  });
-  const response = redirectWithStatus(request, "connected=1");
+  let response: NextResponse;
+  try {
+    await completeSoundCloudOAuth({
+      code,
+      codeVerifier,
+      origin: requestOrigin(request),
+      ownerId: user.id,
+    });
+    response = redirectWithStatus(request, "connected=1");
+  } catch (error) {
+    console.error("SoundCloud OAuth callback failed", error);
+    response = redirectWithStatus(
+      request,
+      `error=${soundCloudErrorCode(error)}`,
+    );
+  }
   response.cookies.delete("soundcloud_oauth_state");
   response.cookies.delete("soundcloud_code_verifier");
   return response;
