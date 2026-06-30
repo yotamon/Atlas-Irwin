@@ -1,0 +1,26 @@
+import {
+  FiActivity,
+  FiBarChart2,
+  FiCalendar,
+  FiDisc,
+  FiFeather,
+  FiHome,
+  FiLogOut,
+  FiMusic,
+  FiMail,
+  FiPlus,
+  FiUsers,
+} from "react-icons/fi";
+export const studioIcons = {
+  dashboard: FiHome,
+  releases: FiDisc,
+  content: FiFeather,
+  calendar: FiCalendar,
+  outreach: FiUsers,
+  analytics: FiBarChart2,
+  soundcloud: FiMusic,
+  brand: FiActivity,
+  plus: FiPlus,
+  logout: FiLogOut,
+  mail: FiMail,
+};
