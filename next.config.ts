@@ -13,10 +13,10 @@ const contentSecurityPolicy = [
   "object-src 'none'",
   scriptSrc,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
+  "img-src 'self' data: blob: https:",
   "font-src 'self'",
   "media-src 'self' https://*.sndcdn.com",
-  "connect-src 'self' https://w.soundcloud.com https://api-widget.soundcloud.com https://*.sndcdn.com",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://w.soundcloud.com https://api-widget.soundcloud.com https://*.sndcdn.com",
   "frame-src https://w.soundcloud.com",
   "worker-src 'self' blob:",
   "upgrade-insecure-requests",
@@ -62,6 +62,14 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   async headers() {
     return [
+      {
+        source: "/studio/:path*",
+        headers: [
+          ...securityHeaders,
+          { key: "Cache-Control", value: "private, no-store, max-age=0" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
+        ],
+      },
       {
         source: "/:path*",
         headers: securityHeaders,
