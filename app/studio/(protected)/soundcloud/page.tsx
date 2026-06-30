@@ -66,9 +66,9 @@ export default async function SoundCloudPage({
         description="OAuth, catalog sync, uploads, release imports, and metrics from SoundCloud."
         action={
           configured && !account ? (
-            <Link className="button primary" href="/studio/soundcloud/connect">
+            <a className="button primary" href="/studio/soundcloud/connect">
               Connect SoundCloud
-            </Link>
+            </a>
           ) : null
         }
       />
@@ -289,9 +289,12 @@ export default async function SoundCloudPage({
           <EmptyState
             title="SoundCloud is ready to connect"
             body="Authorize Studio to read your catalog, upload tracks, and turn SoundCloud counts into metric snapshots."
-            href="/studio/soundcloud/connect"
-            label="Connect SoundCloud"
           />
+          <div className="form-actions">
+            <a className="button primary" href="/studio/soundcloud/connect">
+              Connect SoundCloud
+            </a>
+          </div>
         </Panel>
       ) : null}
     </>
