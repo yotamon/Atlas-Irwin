@@ -9,6 +9,7 @@ import {
   FiMusic,
   FiMail,
   FiPlus,
+  FiRadio,
   FiUsers,
 } from "react-icons/fi";
 export const studioIcons = {
@@ -19,6 +20,7 @@ export const studioIcons = {
   outreach: FiUsers,
   analytics: FiBarChart2,
   soundcloud: FiMusic,
+  spotify: FiRadio,
   brand: FiActivity,
   plus: FiPlus,
   logout: FiLogOut,

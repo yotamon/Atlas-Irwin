@@ -47,7 +47,8 @@
 	letter-spacing: 0.05em;
 }
 .studio-mark img {
-	width: 2.4rem;
+  width: 2.4rem;
+  height: auto;
 	filter: invert(1) sepia(0.2);
 }
 .studio-mark span {
@@ -192,6 +193,72 @@
 .soundcloud-profile small,
 .studio-panel code {
 	color: var(--s-muted);
+}
+.spotify-artwork {
+	object-fit: contain !important;
+	background: #080a09;
+}
+.compact-form {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: end;
+	gap: 0.7rem;
+	margin-top: 1rem;
+}
+.spotify-track-picker {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0 1rem;
+	margin-top: 1rem;
+	max-height: 24rem;
+	overflow-y: auto;
+	border: 1px solid var(--s-line);
+	padding: 0 1rem;
+}
+.spotify-track-picker label {
+	display: grid;
+	grid-template-columns: auto 1fr auto;
+	align-items: center;
+	gap: 0.65rem;
+	padding: 0.65rem 0;
+	border-bottom: 1px solid #252824;
+	font-size: 0.8rem;
+}
+.spotify-track-picker input {
+	accent-color: var(--s-accent);
+}
+.spotify-track-picker small,
+.spotify-attribution,
+.spotify-pulse-grid small {
+	color: var(--s-muted);
+}
+.spotify-pulse-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 1rem;
+}
+.spotify-pulse-grid h3 {
+	font-size: 0.7rem;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--s-muted);
+	margin-bottom: 0.5rem;
+}
+.spotify-pulse-grid a {
+	display: grid;
+	grid-template-columns: 1.5rem 1fr;
+	gap: 0.5rem;
+	padding: 0.45rem 0;
+	border-bottom: 1px solid #252824;
+	font-size: 0.78rem;
+}
+.spotify-pulse-grid a > span:last-child {
+	display: flex;
+	flex-direction: column;
+}
+.spotify-attribution {
+	font-size: 0.7rem;
+	margin-top: 1rem;
 }
 .metric-row,
 .timeline-row,
@@ -358,7 +425,8 @@
 	background: #101411;
 }
 .studio-auth img {
-	width: 3rem;
+  width: 3rem;
+  height: auto;
 	filter: invert(1);
 	margin-bottom: 2rem;
 }
@@ -561,7 +629,10 @@
 		flex-direction: column;
 	}
 	.form-grid,
-	.identity-grid {
+	.identity-grid,
+	.spotify-track-picker,
+	.spotify-pulse-grid,
+	.compact-form {
 		grid-template-columns: 1fr;
 	}
 	.field.wide {

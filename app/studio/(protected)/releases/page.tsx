@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { EmptyState, PageHeader, Status } from "@/components/studio/ui";
+import { syncPublicReleaseCatalog } from "@/lib/studio/public-catalog";
 export default async function ReleasesPage({
   searchParams,
 }: {
   searchParams: Promise<{ q?: string; status?: string }>;
 }) {
-  const { supabase } = await requireStudioAdmin();
+  const { supabase, user } = await requireStudioAdmin();
+  await syncPublicReleaseCatalog(supabase, user.id);
   const params = await searchParams;
   let query = supabase
     .from("releases")
@@ -19,7 +21,7 @@ export default async function ReleasesPage({
     <>
       <PageHeader
         title="Releases"
-        description="From approved master to long-tail audience growth."
+        description="Your public and SoundCloud-backed catalog, ready for release workflows."
         action={
           <Link className="button primary" href="/studio/releases/new">
             New release
@@ -45,6 +47,7 @@ export default async function ReleasesPage({
               <th>Status</th>
               <th>Date</th>
               <th>Public sync</th>
+              <th>Source</th>
             </tr>
           </thead>
           <tbody>
@@ -70,6 +73,13 @@ export default async function ReleasesPage({
                   {release.public_release_path
                     ? "Linked · manual sync"
                     : "Studio only"}
+                </td>
+                <td>
+                  {release.soundcloud_url
+                    ? "SoundCloud"
+                    : release.public_release_path
+                      ? "Public catalog"
+                      : "Studio"}
                 </td>
               </tr>
             ))}

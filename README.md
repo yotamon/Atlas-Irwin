@@ -18,9 +18,13 @@ STUDIO_IMPORT_ADMIN_EMAIL=artist@example.com
 SOUNDCLOUD_CLIENT_ID=
 SOUNDCLOUD_CLIENT_SECRET=
 SOUNDCLOUD_REDIRECT_URI=https://atlasirwin.com/studio/soundcloud/callback
+SPOTIFY_CLIENT_ID=
+SPOTIFY_CLIENT_SECRET=
+SPOTIFY_REDIRECT_URI=https://atlasirwin.com/studio/spotify/callback
+SPOTIFY_ARTIST_ID=
 ```
 
-`NEXT_PUBLIC_SUPABASE_ANON_KEY` may contain Supabase's current publishable key or the legacy anon key. Only the URL and publishable/anon key are browser-visible. The service-role/secret key is server-only and is used exclusively by explicit local import/seed scripts.
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` may contain Supabase's current publishable key or the legacy anon key. Only the URL and publishable/anon key are browser-visible. The service-role/secret key remains server-only and is used by local Studio bootstrap, catalog synchronization, token storage, and explicit import/seed scripts.
 
 ### Supabase setup
 
@@ -39,11 +43,33 @@ where email = 'artist@example.com';
 
 The email must also appear in `STUDIO_ADMIN_EMAILS`. Both checks are required. Tables and the private `studio-assets` bucket use RLS; anonymous access is revoked. If the Data API is configured as private, expose the `public` schema to `authenticated` only.
 
-Local development bypasses login for requests served from `localhost`, `127.0.0.1`, or `::1`: open `http://localhost:3000/studio` directly. With `SUPABASE_SERVICE_ROLE_KEY` set in `.env.local`, local Studio writes use the first `STUDIO_ADMIN_EMAILS` profile, so saves work without an auth session. In production, Studio requires the studio password and the admin allowlist.
+Local development bypasses login for requests served from `localhost`, `127.0.0.1`, or `::1`: run `npm run dev` and open `http://localhost:3000/studio` directly. With `SUPABASE_SERVICE_ROLE_KEY` set in `.env.local`, Studio creates/approves the local admin profile when needed, so reads and writes work without entering a password. Production still requires the Studio password and admin allowlist.
 
 ### SoundCloud Studio integration
 
-Create a SoundCloud developer application and add `/studio/soundcloud/callback` as the redirect URL. Set `SOUNDCLOUD_CLIENT_ID`, `SOUNDCLOUD_CLIENT_SECRET`, and optionally `SOUNDCLOUD_REDIRECT_URI`. The Studio SoundCloud hub uses OAuth 2.1 with PKCE, stores access/refresh tokens only in the private database schema, and lets approved Studio admins sync SoundCloud tracks/playlists, import synced tracks as Studio releases, upload audio to SoundCloud, and create SoundCloud metric snapshots from track counts.
+Create a SoundCloud developer application and add `/studio/soundcloud/callback` as the redirect URL. Set `SOUNDCLOUD_CLIENT_ID`, `SOUNDCLOUD_CLIENT_SECRET`, and optionally `SOUNDCLOUD_REDIRECT_URI`. The Studio SoundCloud hub uses OAuth 2.1 with PKCE and stores access/refresh tokens only in the private database schema. Syncing promotes SoundCloud playlists and loose tracks into the shared `releases`/`tracks` model, so they immediately participate in content, calendar, outreach, and analytics workflows. Existing public manifests are also synchronized automatically; already-linked tracks are reused instead of duplicated.
+
+### Spotify Studio integration
+
+Create a Spotify developer app and register the exact production callback URL
+`https://atlasirwin.com/studio/spotify/callback`. For local development, Spotify
+does not allow `localhost`: register
+`http://127.0.0.1:3000/studio/spotify/callback`, set that exact value in
+`SPOTIFY_REDIRECT_URI`, and open Studio through `http://127.0.0.1:3000`.
+Set `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, and optionally
+`SPOTIFY_REDIRECT_URI` and `SPOTIFY_ARTIST_ID`. Run the Spotify migration, then
+connect from Studio → Spotify.
+
+The integration uses authorization code flow with PKCE and state validation,
+stores tokens only in the private schema, syncs artist releases/tracks and the
+connected account's playlists and top-item pulse, imports catalog releases into
+Release Engine, and creates campaign playlists only on explicit submission.
+Spotify Web API does not expose Spotify for Artists stream, listener, save, or
+playlist-add analytics; those remain manual in Studio Analytics.
+
+Spotify Development Mode currently requires the app owner to have Premium and
+limits the app to five allowlisted users. This private Studio integration fits
+that mode; wider public access requires Spotify's applicable quota approval.
 
 ### Studio workflow
 
@@ -56,7 +82,7 @@ Create a SoundCloud developer application and add `/studio/soundcloud/callback` 
 
 ### Import existing public releases
 
-After the approved admin profile exists:
+Public manifests are synchronized automatically whenever Releases opens. The explicit importer remains available for maintenance or deployment workflows:
 
 ```bash
 npm run studio:import

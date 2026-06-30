@@ -10,6 +10,7 @@ const links = [
   [/studio\/outreach/, "Outreach", "outreach"],
   [/studio\/analytics/, "Analytics", "analytics"],
   [/studio\/soundcloud/, "SoundCloud", "soundcloud"],
+  [/studio\/spotify/, "Spotify", "spotify"],
   [/studio\/brand/, "Brand", "brand"],
 ] as const;
 export function StudioSidebar() {
