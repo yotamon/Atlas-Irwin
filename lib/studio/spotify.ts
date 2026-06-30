@@ -173,8 +173,15 @@ async function exchangeToken(body: URLSearchParams) {
     cache: "no-store",
   });
   if (!response.ok) {
+    let detail = "";
+    try {
+      const body = await response.json();
+      detail = body?.error_description ?? body?.error ?? "";
+    } catch {
+      // non-JSON body — ignore
+    }
     throw new SpotifyApiError(
-      `Spotify token exchange failed (${response.status}).`,
+      `Spotify token exchange failed (${response.status})${detail ? `: ${detail}` : ""}.`,
       response.status,
     );
   }
@@ -295,8 +302,15 @@ async function spotifyApiFetch<T>(
     return spotifyApiFetch<T>(ownerId, endpoint, { ...options, retry: false });
   }
   if (!response.ok) {
+    let detail = "";
+    try {
+      const body = await response.clone().json();
+      detail = body?.error?.message ?? (typeof body?.error === "string" ? body.error : "");
+    } catch {
+      // non-JSON body — ignore
+    }
     throw new SpotifyApiError(
-      `Spotify API request failed (${response.status}).`,
+      `Spotify API request failed (${response.status})${detail ? `: ${detail}` : ""}.`,
       response.status,
     );
   }

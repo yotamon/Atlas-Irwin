@@ -49,7 +49,8 @@ export async function GET(request: NextRequest) {
     await completeSpotifyOAuth({ code, codeVerifier, origin: requestOrigin(request), ownerId: user.id });
     response = redirectWithStatus(request, "connected=1");
   } catch (error) {
-    console.error("Spotify OAuth callback failed", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("Spotify OAuth callback failed:", errorMessage, error);
     response = redirectWithStatus(request, `error=${spotifyErrorCode(error)}`);
   }
   response.cookies.delete("spotify_oauth_state");
