@@ -1,9 +1,11 @@
 import type { NextConfig } from "next";
 
+const vercelLiveSrc = "https://vercel.live https://*.vercel.live";
+
 const scriptSrc =
   process.env.NODE_ENV === "development"
-    ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://w.soundcloud.com"
-    : "script-src 'self' 'unsafe-inline' https://w.soundcloud.com";
+    ? `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://w.soundcloud.com ${vercelLiveSrc}`
+    : `script-src 'self' 'unsafe-inline' https://w.soundcloud.com ${vercelLiveSrc}`;
 
 const contentSecurityPolicy = [
   "default-src 'self'",
@@ -16,8 +18,8 @@ const contentSecurityPolicy = [
   "img-src 'self' data: blob: https:",
   "font-src 'self'",
   "media-src 'self' https://*.sndcdn.com",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://secure.soundcloud.com https://w.soundcloud.com https://api-widget.soundcloud.com https://*.sndcdn.com",
-  "frame-src https://w.soundcloud.com",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://secure.soundcloud.com https://w.soundcloud.com https://api-widget.soundcloud.com https://*.sndcdn.com https://vercel.live wss://ws-us3.pusher.com",
+  "frame-src https://w.soundcloud.com https://vercel.live",
   "worker-src 'self' blob:",
   "upgrade-insecure-requests",
 ].join("; ");
