@@ -9,7 +9,7 @@ import {
 } from "@/app/studio/catalog-actions";
 import { MediaUploader } from "@/components/studio/media-uploader";
 import { ConfirmButton } from "@/components/studio/submit-button";
-import { Field, PageHeader, Status, Submit } from "@/components/studio/ui";
+import { Field, PageHeader, Submit } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import {
   compatibleMediaTypes,
@@ -44,7 +44,6 @@ function MediaPreview({ asset, url }: { asset: MediaAsset; url?: string }) {
 type SearchParams = {
   q?: string;
   type?: string;
-  visibility?: string;
   view?: string;
   sort?: string;
   tag?: string;
@@ -73,7 +72,6 @@ export default async function MediaLibraryPage({ searchParams }: { searchParams:
 
   let assets = [...allAssets];
   if (params.type) assets = assets.filter((asset) => asset.asset_type === params.type);
-  if (params.visibility) assets = assets.filter((asset) => asset.visibility === params.visibility);
   if (params.tag) assets = assets.filter((asset) => mediaMetadata(asset).tags.includes(params.tag!));
   if (params.q) {
     const query = params.q.toLowerCase();
@@ -98,8 +96,7 @@ export default async function MediaLibraryPage({ searchParams }: { searchParams:
       <section className="media-overview" aria-label="Library summary">
         <div><strong>{allAssets.length}</strong><span>Total assets</span></div>
         <div><strong>{usedAssets.size}</strong><span>In use</span></div>
-        <div><strong>{allAssets.filter((asset) => asset.visibility === "public").length}</strong><span>Public</span></div>
-        <div><strong>{allAssets.filter((asset) => asset.visibility === "private").length}</strong><span>Private</span></div>
+        <div><strong>{allAssets.length - usedAssets.size}</strong><span>Ready to assign</span></div>
       </section>
 
       <details className="upload-drawer media-upload-drawer" id="upload" open={params.upload === "1" || !allAssets.length}>
@@ -111,10 +108,9 @@ export default async function MediaLibraryPage({ searchParams }: { searchParams:
         <form className="media-search">
           <input name="q" defaultValue={params.q} placeholder="Search name, tag, notes, or format" aria-label="Search media" />
           <select name="type" defaultValue={params.type ?? ""} aria-label="Filter by media type"><option value="">All uses</option>{MEDIA_TYPES.map((type) => <option value={type} key={type}>{mediaTypeLabel(type)}</option>)}</select>
-          <select name="visibility" defaultValue={params.visibility ?? ""} aria-label="Filter by visibility"><option value="">Public + private</option><option value="public">Public</option><option value="private">Private</option></select>
           <select name="sort" defaultValue={params.sort ?? "recent"} aria-label="Sort media"><option value="recent">Recently added</option><option value="oldest">Oldest first</option><option value="used">Most used</option><option value="name">Name</option><option value="type">Media use</option></select>
           <button className="button">Apply</button>
-          {(params.q || params.type || params.visibility || params.tag || params.sort) ? <Link className="text-button media-clear" href="/studio/media">Clear</Link> : null}
+          {(params.q || params.type || params.tag || params.sort) ? <Link className="text-button media-clear" href="/studio/media">Clear</Link> : null}
         </form>
         <div className="view-toggle"><Link className={params.view !== "list" ? "active" : undefined} href={{ query: { ...params, view: "grid" } }}>Grid</Link><Link className={params.view === "list" ? "active" : undefined} href={{ query: { ...params, view: "list" } }}>List</Link></div>
       </section>
@@ -131,7 +127,6 @@ export default async function MediaLibraryPage({ searchParams }: { searchParams:
               <article className="media-card" key={asset.id}>
                 <div className="media-thumb">
                   <MediaPreview asset={asset} url={previewUrls[asset.id]} />
-                  <Status>{asset.visibility}</Status>
                   <span className="media-kind">{mediaKind(asset.mime_type)}</span>
                 </div>
                 <div className="media-card-body">

@@ -12,6 +12,7 @@
     "studio:import": "node --env-file=.env.local scripts/import-legacy-releases.mjs",
     "studio:import:dry-run": "node --env-file=.env.local scripts/import-legacy-releases.mjs --dry-run",
     "studio:seed": "node --env-file=.env.local scripts/seed-studio.mjs",
+    "studio:media:public": "node --env-file=.env.local scripts/migrate-media-to-public.mjs",
     "env:restore": "node scripts/restore-vercel-env.mjs"
   },
   "dependencies": {

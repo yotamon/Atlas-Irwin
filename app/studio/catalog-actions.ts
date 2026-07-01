@@ -407,15 +407,12 @@ export async function uploadReleaseMedia(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
   const releaseId = z.uuid().parse(value(form, "release_id"));
   const role = z.string().parse(value(form, "role"));
-  const visibility = value(form, "visibility") === "public" ? "public" : "private";
+  const visibility = "public" as const;
   const file = form.get("file");
   if (!(file instanceof File) || file.size === 0) {
     throw new Error("Choose a file to upload.");
   }
-  if (visibility === "public" && form.get("confirm_public") !== "on") {
-    throw new Error("Confirm that this asset is intentionally public.");
-  }
-  const bucket = visibility === "public" ? "public-media" : "studio-private";
+  const bucket = "public-media";
   const buffer = Buffer.from(await file.arrayBuffer());
   const contentHash = createHash("sha256").update(buffer).digest("hex");
   const { data: existing, error: lookupError } = await supabase
@@ -433,9 +430,7 @@ export async function uploadReleaseMedia(form: FormData) {
       .from(bucket)
       .upload(storagePath, buffer, { contentType: file.type, upsert: false });
     if (uploadError) throw new Error(uploadError.message);
-    const publicUrl = visibility === "public"
-      ? supabase.storage.from(bucket).getPublicUrl(storagePath).data.publicUrl
-      : null;
+    const publicUrl = supabase.storage.from(bucket).getPublicUrl(storagePath).data.publicUrl;
     const { data: created, error: assetError } = await supabase
       .from("media_assets")
       .insert({
@@ -499,20 +494,13 @@ export async function attachMediaAsset(form: FormData) {
 
 export async function createMediaUploadTarget(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
-  const visibility = z.enum(["public", "private"]).parse(value(form, "visibility"));
   const assetType = mediaTypeSchema.parse(value(form, "asset_type"));
   const mimeType = z.string().min(1).max(200).parse(value(form, "mime_type"));
   if (!isCompatibleMediaType(assetType, mimeType)) throw new Error("That role is not compatible with this file format.");
-  if (["master_audio", "stem"].includes(assetType) && visibility === "public") {
-    throw new Error("Masters and stems must remain private.");
-  }
-  if (visibility === "public" && form.get("confirm_public") !== "on") {
-    throw new Error("Confirm that this media may be served publicly.");
-  }
-  z.coerce.number().int().positive().max(visibility === "public" ? 104857600 : 524288000).parse(value(form, "file_size"));
+  z.coerce.number().int().positive().max(104857600).parse(value(form, "file_size"));
   const originalName = z.string().min(1).max(500).parse(value(form, "original_name"));
   const safeName = originalName.normalize("NFKD").replace(/[^a-zA-Z0-9._-]/g, "-").replace(/-+/g, "-");
-  const bucketName = visibility === "public" ? "public-media" : "studio-private";
+  const bucketName = "public-media";
   const storagePath = `${user.id}/library/${crypto.randomUUID()}-${safeName}`;
   const { data, error } = await supabase.storage.from(bucketName).createSignedUploadUrl(storagePath);
   if (error || !data) throw new Error(error?.message || "Could not prepare the secure upload.");
@@ -521,7 +509,7 @@ export async function createMediaUploadTarget(form: FormData) {
 
 export async function discardMediaUpload(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
-  const bucketName = z.enum(["public-media", "studio-private"]).parse(value(form, "bucket_name"));
+  const bucketName = z.literal("public-media").parse(value(form, "bucket_name"));
   const storagePath = z.string().min(1).max(1000).parse(value(form, "storage_path"));
   if (!storagePath.startsWith(`${user.id}/library/`) || storagePath.includes("..")) return;
   await supabase.storage.from(bucketName).remove([storagePath]);
@@ -529,10 +517,8 @@ export async function discardMediaUpload(form: FormData) {
 
 export async function registerMediaUpload(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
-  const visibility = z.enum(["public", "private"]).parse(value(form, "visibility"));
-  const bucketName = z.enum(["public-media", "studio-private"]).parse(value(form, "bucket_name"));
-  const expectedBucket = visibility === "public" ? "public-media" : "studio-private";
-  if (bucketName !== expectedBucket) throw new Error("The upload destination does not match its visibility.");
+  const visibility = "public" as const;
+  const bucketName = z.literal("public-media").parse(value(form, "bucket_name"));
   const storagePath = z.string().min(1).max(1000).parse(value(form, "storage_path"));
   if (!storagePath.startsWith(`${user.id}/library/`) || storagePath.includes("..")) {
     throw new Error("Invalid media storage path.");
@@ -540,10 +526,7 @@ export async function registerMediaUpload(form: FormData) {
   const assetType = mediaTypeSchema.parse(value(form, "asset_type"));
   const mimeType = z.string().min(1).max(200).parse(value(form, "mime_type"));
   if (!isCompatibleMediaType(assetType, mimeType)) throw new Error("That role is not compatible with this file format.");
-  if (["master_audio", "stem"].includes(assetType) && visibility === "public") {
-    throw new Error("Masters and stems must remain private.");
-  }
-  const fileSize = z.coerce.number().int().positive().max(visibility === "public" ? 104857600 : 524288000).parse(value(form, "file_size"));
+  const fileSize = z.coerce.number().int().positive().max(104857600).parse(value(form, "file_size"));
   const contentHash = value(form, "content_hash") || null;
   if (contentHash && !/^[a-f0-9]{64}$/.test(contentHash)) throw new Error("Invalid media fingerprint.");
   const metadata = {
@@ -606,9 +589,6 @@ export async function updateMediaAsset(form: FormData) {
   if (findError || !asset) throw new Error(findError?.message || "Media asset not found.");
   const assetType = mediaTypeSchema.parse(value(form, "asset_type"));
   if (!isCompatibleMediaType(assetType, asset.mime_type)) throw new Error("That media type is not compatible with the file format.");
-  if (["master_audio", "stem"].includes(assetType) && asset.visibility === "public") {
-    throw new Error("Public files cannot be classified as masters or stems.");
-  }
   const currentMetadata = asset.metadata && typeof asset.metadata === "object" && !Array.isArray(asset.metadata)
     ? asset.metadata as Record<string, Json>
     : {};
@@ -683,13 +663,7 @@ export async function uploadLibraryMedia(form: FormData) {
     "cover", "alternate_artwork", "canvas_video", "visualizer", "audio_preview",
     "master_audio", "stem", "social_image", "press_image", "lyric_video", "content_video",
   ]).parse(value(form, "asset_type"));
-  const visibility = z.enum(["public", "private"]).parse(value(form, "visibility") || "private");
-  if (["master_audio", "stem"].includes(assetType) && visibility === "public") {
-    throw new Error("Masters and stems must remain private.");
-  }
-  if (visibility === "public" && form.get("confirm_public") !== "on") {
-    throw new Error("Confirm that this asset is intentionally public.");
-  }
+  const visibility = "public" as const;
   const file = form.get("file");
   if (!(file instanceof File) || !file.size) throw new Error("Choose a file to upload.");
   const buffer = Buffer.from(await file.arrayBuffer());
@@ -699,11 +673,11 @@ export async function uploadLibraryMedia(form: FormData) {
     .eq("content_hash", contentHash).eq("visibility", visibility).maybeSingle();
   if (lookupError) throw new Error(lookupError.message);
   if (!duplicate) {
-    const bucket = visibility === "public" ? "public-media" : "studio-private";
+    const bucket = "public-media";
     const storagePath = `${user.id}/library/${Date.now()}-${file.name}`;
     const { error: uploadError } = await supabase.storage.from(bucket).upload(storagePath, buffer, { contentType: file.type, upsert: false });
     if (uploadError) throw new Error(uploadError.message);
-    const publicUrl = visibility === "public" ? supabase.storage.from(bucket).getPublicUrl(storagePath).data.publicUrl : null;
+    const publicUrl = supabase.storage.from(bucket).getPublicUrl(storagePath).data.publicUrl;
     const { error } = await supabase.from("media_assets").insert({
       owner_id: user.id, bucket_name: bucket, storage_path: storagePath, public_url: publicUrl,
       asset_type: assetType, mime_type: file.type, file_size: file.size, content_hash: contentHash,
