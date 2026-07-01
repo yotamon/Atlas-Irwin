@@ -8,8 +8,8 @@ export default function manifest(): MetadataRoute.Manifest {
       "Retro-futuristic electronic music rooted in nu-disco, funk, house, and EDM.",
     start_url: "/",
     display: "standalone",
-    background_color: "#101111",
-    theme_color: "#101111",
+    background_color: "#f4eddd",
+    theme_color: "#f4eddd",
     icons: [
       {
         src: "/android-chrome-192x192.png",
