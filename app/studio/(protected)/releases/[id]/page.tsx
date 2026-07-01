@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { createMediaPreviewMap } from "@/lib/studio/media-previews";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { getPublicReleases } from "@/lib/public-catalog";
 import { ReleaseCockpit } from "@/components/studio/release-cockpit";
@@ -63,6 +64,7 @@ export default async function ReleaseDetail({
   const { data: mediaAssets } = assetIds.length
     ? await supabase.from("media_assets").select("*").in("id", assetIds)
     : { data: [] };
+  const mediaPreviewUrls = await createMediaPreviewMap(supabase, mediaAssets ?? []);
 
   const releaseTerms = new Set([release.title, ...(tracks ?? []).map((track) => track.title)].map((value) => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()));
   const relevantSoundCloud = (soundCloudPending ?? []).filter((item) => releaseTerms.has(item.title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()));
@@ -76,6 +78,7 @@ export default async function ReleaseDetail({
         placement={placement}
         mediaLinks={mediaLinks ?? []}
         mediaAssets={mediaAssets ?? []}
+        mediaPreviewUrls={mediaPreviewUrls}
         externalLinks={externalLinks ?? []}
         externalTrackIds={externalTrackIds ?? []}
         contentCount={contentCount ?? 0}

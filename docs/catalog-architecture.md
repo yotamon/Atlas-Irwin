@@ -90,10 +90,32 @@ campaign work never prevents publishing.
 
 ## Media upload safety
 
-Media uploads calculate a SHA-256 content hash before writing to Storage. An existing
-asset with the same owner, visibility, and hash is reused instead of uploaded again.
-Public uploads require an explicit confirmation. `master_audio` and `stem` uploads in
-the global library are always rejected when public visibility is requested.
+Media files upload directly to Storage through short-lived signed upload grants, so
+large video and audio files do not pass through a server-action request body. Files up
+to 128 MB receive a browser-side SHA-256 fingerprint; an existing asset with the same
+owner, visibility, and hash is reused. Larger files retain the same canonical asset
+model without forcing the browser to buffer the full file twice. Public uploads require
+an explicit confirmation. `master_audio` and `stem` uploads are always rejected when
+public visibility is requested.
+
+Private media previews use one-hour signed URLs. Public media uses stable public URLs.
+The Studio CSP explicitly permits both sources while the public catalog continues to
+read only assets whose visibility is `public`.
+
+### Reuse and future AI provenance
+
+`media_assets` represents the stored source file. `media_links` represents each use of
+that file (release, track, or content item), including its role, primary status, alt text,
+and caption. Tags, creative notes, original filename, source kind, and upload provenance
+live in asset metadata. Keeping files separate from their uses means a single asset can
+be release artwork, a campaign reference, and a future model input without duplication.
+
+When AI generation is added, preserve this boundary: add generation-job records and a
+directed source-to-output relation table rather than copying prompt or model history into
+release records. Each output should be a normal `media_assets` row with immutable
+provenance (provider, model, parameters, prompt version, source asset IDs, consent/rights
+state, and generation timestamp). Human-approved role assignments should remain explicit
+`media_links`; a generated output must never silently replace public artwork.
 
 ## SoundCloud and Spotify reconciliation
 

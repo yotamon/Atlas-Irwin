@@ -17,7 +17,7 @@ const contentSecurityPolicy = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self'",
-  "media-src 'self' https://*.sndcdn.com",
+  "media-src 'self' blob: https://*.supabase.co https://*.sndcdn.com",
   "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://secure.soundcloud.com https://w.soundcloud.com https://api-widget.soundcloud.com https://*.sndcdn.com https://vercel.live wss://ws-us3.pusher.com",
   "frame-src https://w.soundcloud.com https://vercel.live",
   "worker-src 'self' blob:",

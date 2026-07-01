@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { SubmitButton } from "./submit-button";
 export function PageHeader({
   title,
   description,
@@ -90,11 +91,7 @@ export function Submit({
 }: {
   children?: ReactNode;
 }) {
-  return (
-    <button className="button primary" type="submit">
-      {children}
-    </button>
-  );
+  return <SubmitButton>{children}</SubmitButton>;
 }
 export function FormatTime({ seconds }: { seconds: number | null }) {
   if (seconds === null) return <>—</>;

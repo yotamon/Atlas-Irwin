@@ -14,7 +14,8 @@ import {
   saveHomepagePlacement,
   saveWebsiteDetails,
   setActiveRelease,
-  uploadReleaseMedia,
+  detachMediaAsset,
+  updateMediaLink,
 } from "@/app/studio/catalog-actions";
 import {
   deleteRelease,
@@ -24,6 +25,8 @@ import {
   saveTrack,
 } from "@/app/studio/actions";
 import { ReleaseForm } from "@/components/studio/release-form";
+import { MediaUploader } from "@/components/studio/media-uploader";
+import { ConfirmButton } from "@/components/studio/submit-button";
 import { EmptyState, Field, Status, Submit } from "@/components/studio/ui";
 import { publishStateLabel } from "@/lib/studio/catalog-labels";
 import { contentPerformanceScore } from "@/lib/studio/performance";
@@ -43,6 +46,7 @@ import type {
   TrackExternalId,
 } from "@/types/database";
 import type { Release as PublicRelease } from "@/lib/releases/types";
+import { compatibleMediaTypes, mediaMetadata, mediaTypeLabel } from "@/lib/studio/media";
 
 const TABS = [
   ["overview", "Overview"],
@@ -88,6 +92,7 @@ export function ReleaseCockpit({
   placement,
   mediaLinks,
   mediaAssets,
+  mediaPreviewUrls,
   externalLinks,
   externalTrackIds,
   contentCount,
@@ -104,6 +109,7 @@ export function ReleaseCockpit({
   placement: HomepagePlacement | null;
   mediaLinks: MediaLink[];
   mediaAssets: MediaAsset[];
+  mediaPreviewUrls: Record<string, string>;
   externalLinks: ReleaseExternalLink[];
   externalTrackIds: TrackExternalId[];
   contentCount: number;
@@ -211,12 +217,16 @@ export function ReleaseCockpit({
           <section className="workspace-section" id="assets">
             <div className="section-head"><div><span className="section-label">Release media</span><h2>Asset coverage and usage</h2></div><Link href="/studio/media">Open global library</Link></div>
             {mediaAssets.length ? <div className="release-media-grid">{mediaAssets.map((asset) => {
-              const link = mediaLinks.find((item) => item.media_asset_id === asset.id);
+              const assetLinks = mediaLinks.filter((item) => item.media_asset_id === asset.id);
+              const link = assetLinks[0];
               const usage = assetUsage(asset, mediaLinks);
-              return <article key={asset.id}><div className="release-media-thumb">{asset.public_url && asset.mime_type?.startsWith("image/") ? <img src={asset.public_url} alt={link?.alt_text || ""} /> : asset.public_url && asset.mime_type?.startsWith("video/") ? <video src={asset.public_url} muted preload="metadata" /> : <span>{asset.asset_type.replaceAll("_", " ")}</span>}<Status>{asset.visibility}</Status></div><div><span className="section-label">{asset.asset_type.replaceAll("_", " ")}</span><h3>{asset.storage_path.split("/").at(-1)}</h3><p>{asset.width && asset.height ? `${asset.width} × ${asset.height}` : "Dimensions unavailable"}{asset.duration_ms ? ` · ${duration(Math.round(asset.duration_ms / 1000))}` : ""}<br />{asset.mime_type || "Unknown format"}</p><div className="usage-map">{usage.length ? usage.map((item) => <span key={item}>{item}</span>) : <span>Attached to release</span>}</div></div></article>;
+              const metadata = mediaMetadata(asset);
+              const previewUrl = mediaPreviewUrls[asset.id];
+              const roleOptions = compatibleMediaTypes(asset.mime_type);
+              return <article key={asset.id}><div className="release-media-thumb">{previewUrl && asset.mime_type?.startsWith("image/") ? <img src={previewUrl} alt={link?.alt_text || ""} /> : previewUrl && asset.mime_type?.startsWith("video/") ? <video src={previewUrl} muted controls playsInline preload="metadata" /> : previewUrl && asset.mime_type?.startsWith("audio/") ? <audio src={previewUrl} controls preload="metadata" /> : <span>{mediaTypeLabel(asset.asset_type)}</span>}<Status>{asset.visibility}</Status></div><div><span className="section-label">{mediaTypeLabel(link?.role || asset.asset_type)}</span><h3>{metadata.title}</h3><p>{asset.width && asset.height ? `${asset.width} × ${asset.height}` : "Dimensions unavailable"}{asset.duration_ms ? ` · ${duration(Math.round(asset.duration_ms / 1000))}` : ""}<br />{asset.mime_type || "Unknown format"}</p><div className="usage-map">{usage.length ? usage.map((item) => <span key={item}>{item}</span>) : <span>Attached to release</span>}</div>{assetLinks.map((mediaLink) => <details className="release-media-settings" key={mediaLink.id}><summary>Assignment settings</summary><form action={updateMediaLink} className="compact-media-form"><input type="hidden" name="media_link_id" value={mediaLink.id} /><Field label="Role"><select name="role" defaultValue={mediaLink.role}>{roleOptions.map((role) => <option key={role} value={role}>{mediaTypeLabel(role)}</option>)}</select></Field><Field label="Alt text"><input name="alt_text" defaultValue={mediaLink.alt_text ?? ""} /></Field><Field label="Caption"><input name="caption" defaultValue={mediaLink.caption ?? ""} /></Field><label className="checkbox-field"><input type="checkbox" name="is_primary" defaultChecked={mediaLink.is_primary} /> Primary for this role</label><Submit>Save assignment</Submit></form><form action={detachMediaAsset}><input type="hidden" name="media_link_id" value={mediaLink.id} /><ConfirmButton message={`Detach ${metadata.title} from this release?`}>Detach from release</ConfirmButton></form></details>)}</div></article>;
             })}</div> : <EmptyState title="No assets attached" body="Upload a release asset here or attach an existing file from the global Media Library." href="/studio/media" label="Browse media library" />}
           </section>
-          <section className="workspace-section" id="upload"><div className="section-head"><div><span className="section-label">Upload</span><h2>Add without duplicating</h2></div></div><p className="section-copy">Files are fingerprinted before upload. Existing identical assets are reused. Masters and stems stay in private storage.</p><form action={uploadReleaseMedia} className="studio-form"><input type="hidden" name="release_id" value={release.id} /><div className="form-grid"><Field label="Asset role"><select name="role" defaultValue="cover">{["cover", "alternate_artwork", "canvas_video", "visualizer", "audio_preview", "social_image", "press_image", "lyric_video", "content_video", "master_audio", "stem"].map((role) => <option key={role} value={role}>{role.replaceAll("_", " ")}</option>)}</select></Field><Field label="Visibility"><select name="visibility" defaultValue="private"><option value="private">Private production</option><option value="public">Intentional public asset</option></select></Field><Field label="Alt text"><input name="alt_text" /></Field><Field label="Primary for role"><span className="checkbox-field"><input type="checkbox" name="is_primary" defaultChecked /> Use first wherever this role appears</span></Field><Field label="File"><input type="file" name="file" required /></Field><Field label="Public confirmation"><span className="checkbox-field"><input type="checkbox" name="confirm_public" /> I confirm this file may be served publicly</span></Field></div><Submit>Upload and attach</Submit></form></section>
+          <section className="workspace-section" id="upload"><div className="section-head"><div><span className="section-label">Upload</span><h2>Add without duplicating</h2></div></div><p className="section-copy">Upload directly to the secure media store, then attach it here. Images, motion, previews, masters, and stems each get compatible roles automatically.</p><MediaUploader releaseId={release.id} /></section>
         </div>
       ) : null}
 
