@@ -6,7 +6,7 @@ Supabase is the canonical source of truth for public releases, tracks, media, pl
 
 - `releases` — publishing fields (`publish_state`, `is_public`, `published_at`, `homepage_eligible`, `active_release`)
 - `tracks` — ordered tracks with preview URLs and platform links
-- `media_assets` — uploaded files in `public-media` or `studio-private`
+- `media_assets` — uploaded files in the public `public-media` library
 - `media_links` — attach assets to releases, tracks, or content items by role
 - `track_external_ids` — stable SoundCloud/Spotify/ISRC/YouTube mappings
 - `release_external_links` — release-level platform URLs
@@ -18,11 +18,10 @@ Legacy filesystem manifests under `public/releases/` are import input only. They
 
 | Bucket | Visibility | Purpose |
 |--------|------------|---------|
-| `public-media` | Public read | Artwork, canvas videos, audio previews, social assets |
-| `studio-private` | Admin only | Masters, stems, unreleased production files |
-| `studio-assets` | Admin only | Existing Studio uploads |
+| `public-media` | Public read | Artwork, canvas videos, audio, social assets, masters, and stems |
+| `studio-assets` | Admin only | Legacy Studio uploads outside the media library |
 
-Public visitors can only read objects in `public-media`. Private buckets remain admin-scoped by owner folder prefix.
+Every media-library upload is intentionally public and receives a stable public URL.
 
 ## Environment variables
 
@@ -90,17 +89,11 @@ campaign work never prevents publishing.
 
 ## Media upload safety
 
-Media files upload directly to Storage through short-lived signed upload grants, so
-large video and audio files do not pass through a server-action request body. Files up
-to 128 MB receive a browser-side SHA-256 fingerprint; an existing asset with the same
-owner, visibility, and hash is reused. Larger files retain the same canonical asset
-model without forcing the browser to buffer the full file twice. Public uploads require
-an explicit confirmation. `master_audio` and `stem` uploads are always rejected when
-public visibility is requested.
-
-Private media previews use one-hour signed URLs. Public media uses stable public URLs.
-The Studio CSP explicitly permits both sources while the public catalog continues to
-read only assets whose visibility is `public`.
+Media files upload directly to `public-media` through short-lived signed upload grants,
+so large video and audio files do not pass through a server-action request body. Files
+up to 128 MB receive a browser-side SHA-256 fingerprint; an existing asset with the same
+owner and hash is reused. Every asset receives a stable public URL, including masters
+and stems, and the application does not expose a private-media state.
 
 ### Reuse and future AI provenance
 

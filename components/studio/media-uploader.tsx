@@ -25,7 +25,6 @@ type UploadItem = {
 };
 
 const PUBLIC_LIMIT = 100 * 1024 * 1024;
-const PRIVATE_LIMIT = 500 * 1024 * 1024;
 const HASH_LIMIT = 128 * 1024 * 1024;
 
 function humanSize(size: number) {
@@ -84,9 +83,7 @@ export function MediaUploader({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState("");
-  const [visibility, setVisibility] = useState<"private" | "public">("private");
   const [primary, setPrimary] = useState(Boolean(releaseId));
-  const [confirmPublic, setConfirmPublic] = useState(false);
   const [busy, setBusy] = useState(false);
 
   function addFiles(files: FileList | File[]) {
@@ -108,15 +105,14 @@ export function MediaUploader({
       setItems((current) => current.map((item) => !isCompatibleMediaType(item.role, item.file.type) ? { ...item, state: "error", message: "Choose a compatible use for this format." } : item));
       return;
     }
-    if (visibility === "public" && !confirmPublic) return;
     setBusy(true);
     const supabase = createClient();
-    const limit = visibility === "public" ? PUBLIC_LIMIT : PRIVATE_LIMIT;
+    const limit = PUBLIC_LIMIT;
     for (let index = 0; index < items.length; index += 1) {
       const item = items[index];
       if (item.state === "done") continue;
       if (item.file.size > limit) {
-        setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, state: "error", message: `This file exceeds the ${humanSize(limit)} ${visibility} limit.` } : entry));
+        setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, state: "error", message: `This file exceeds the ${humanSize(limit)} upload limit.` } : entry));
         continue;
       }
       setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, state: "uploading", message: "Uploading securely…" } : entry));
@@ -124,12 +120,10 @@ export function MediaUploader({
       try {
         const [contentHash, dimensions] = await Promise.all([sha256(item.file), mediaDimensions(item.file).catch(() => ({ width: "", height: "", duration_ms: "" }))]);
         const targetForm = new FormData();
-        targetForm.set("visibility", visibility);
         targetForm.set("asset_type", item.role);
         targetForm.set("mime_type", item.file.type);
         targetForm.set("file_size", String(item.file.size));
         targetForm.set("original_name", item.file.name);
-        if (confirmPublic) targetForm.set("confirm_public", "on");
         uploadTarget = await createMediaUploadTarget(targetForm);
         const { error } = await supabase.storage.from(uploadTarget.bucketName).uploadToSignedUrl(uploadTarget.storagePath, uploadTarget.token, item.file, {
           cacheControl: "31536000",
@@ -140,7 +134,7 @@ export function MediaUploader({
         Object.entries({
           storage_path: uploadTarget.storagePath,
           bucket_name: uploadTarget.bucketName,
-          visibility,
+          visibility: "public",
           asset_type: item.role,
           mime_type: item.file.type,
           file_size: String(item.file.size),
@@ -210,18 +204,16 @@ export function MediaUploader({
       ) : null}
 
       <div className="form-grid media-upload-fields">
-        <label className="field"><span>Visibility</span><select value={visibility} onChange={(event) => { setVisibility(event.target.value as "private" | "public"); setConfirmPublic(false); }}><option value="private">Private production</option><option value="public">Public website asset</option></select></label>
         <label className="field"><span>Display name {items.length > 1 ? "(single uploads only)" : ""}</span><input value={title} onChange={(event) => setTitle(event.target.value)} disabled={items.length > 1} placeholder={items[0]?.file.name || "Shown in the library"} /></label>
         <label className="field"><span>Tags</span><input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="release, artwork, blue-hour" /></label>
         <label className="field wide"><span>Notes</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={2} placeholder="Creative context, rights, source, or intended use" /></label>
         {releaseId ? <label className="checkbox-field"><input type="checkbox" checked={primary} onChange={(event) => setPrimary(event.target.checked)} /> Make primary for this role</label> : null}
-        {visibility === "public" ? <label className="checkbox-field public-confirm"><input type="checkbox" checked={confirmPublic} onChange={(event) => setConfirmPublic(event.target.checked)} /> I confirm these files may be served publicly</label> : null}
       </div>
       <div className="media-upload-actions">
-        <button className="button primary" type="button" disabled={!items.length || busy || !hasPending || (visibility === "public" && !confirmPublic)} onClick={upload}>
+        <button className="button primary" type="button" disabled={!items.length || busy || !hasPending} onClick={upload}>
           {busy ? `Uploading ${completed + 1} of ${items.length}…` : completed === items.length && items.length ? "Upload complete" : releaseId ? "Upload and attach" : `Add ${items.length || ""} to library`}
         </button>
-        {completed ? <span>{completed} of {items.length} ready</span> : <span>Files stay private unless you explicitly make them public.</span>}
+        {completed ? <span>{completed} of {items.length} ready</span> : <span>Media is published to the public asset library.</span>}
       </div>
     </div>
   );
