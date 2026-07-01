@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { HiBars3, HiXMark } from "react-icons/hi2";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -14,6 +14,7 @@ const links = [
 ] as const;
 
 export function Navbar() {
+  const prefersReducedMotion = useReducedMotion();
   const [isScrolled, setIsScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -137,7 +138,7 @@ export function Navbar() {
     >
       {/* Skip-to-content */}
       <a
-        href="#music"
+        href="#main-content"
         className={`sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-60 focus:inline-flex focus:items-center focus:rounded-full focus:border-2 focus:border-teal focus:bg-paper focus:px-4 focus:py-2 focus:text-[0.85rem] focus:font-bold focus:uppercase focus:text-teal focus:shadow-lg ${focusVisible}`}
       >
         Skip to content
@@ -179,9 +180,9 @@ export function Navbar() {
           <AnimatePresence>
             {isScrolled && (
               <motion.div
-                initial={{ opacity: 0, x: 12, scale: 0.94 }}
-                animate={{ opacity: 1, x: 0, scale: 1 }}
-                exit={{ opacity: 0, x: 12, scale: 0.94 }}
+                initial={prefersReducedMotion ? false : { opacity: 0, x: 12, scale: 0.94 }}
+                animate={prefersReducedMotion ? undefined : { opacity: 1, x: 0, scale: 1 }}
+                exit={prefersReducedMotion ? undefined : { opacity: 0, x: 12, scale: 0.94 }}
                 transition={{ duration: 0.2, ease: "easeOut" }}
                 className="hidden md:block"
               >
@@ -212,9 +213,9 @@ export function Navbar() {
         {menuOpen && (
           <motion.div
             key="mobile-menu"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
+            initial={prefersReducedMotion ? false : { height: 0, opacity: 0 }}
+            animate={prefersReducedMotion ? undefined : { height: "auto", opacity: 1 }}
+            exit={prefersReducedMotion ? undefined : { height: 0, opacity: 0 }}
             transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
             className="overflow-hidden border-t border-ink/10 bg-paper/90 backdrop-blur-xl md:hidden"
           >

@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "postinstall": "node scripts/ensure-lightningcss-native.mjs",
     "studio:import": "node --env-file=.env.local scripts/import-legacy-releases.mjs",
     "studio:import:dry-run": "node --env-file=.env.local scripts/import-legacy-releases.mjs --dry-run",
     "studio:seed": "node --env-file=.env.local scripts/seed-studio.mjs",
@@ -41,6 +42,9 @@
     }
   },
   "engines": {
-    "node": "20.x"
+    "node": ">=20"
+  },
+  "optionalDependencies": {
+    "lightningcss-win32-arm64-msvc": "^1.32.0"
   }
 }
