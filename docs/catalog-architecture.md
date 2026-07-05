@@ -135,3 +135,9 @@ state, and generation timestamp). Human-approved role assignments should remain 
 3. Run `npm run studio:import` once after migration (optional if releases already exist in Supabase)
 4. Review unmatched SoundCloud/Spotify items in Connections
 5. Confirm homepage player on `/` after publishing and placement
+
+## Security
+
+- Never commit `.env*` files (except `.env.example`) or `supabase/.temp/`.
+- Keep `SUPABASE_SERVICE_ROLE_KEY`, OAuth secrets, and Studio passwords server-only.
+- See [`SECURITY.md`](../SECURITY.md) for vulnerability reporting.

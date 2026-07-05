@@ -2,7 +2,13 @@ import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
-const recipientEmail = "atlas.irwin.music@gmail.com";
+function contactRecipientEmail() {
+  return (
+    process.env.CONTACT_EMAIL_TO?.trim() ||
+    process.env.CONTACT_SMTP_USER?.trim() ||
+    ""
+  );
+}
 
 type ContactPayload = {
   name?: unknown;
@@ -72,7 +78,9 @@ export async function POST(request: Request) {
   const pass = process.env.CONTACT_SMTP_PASS;
   const from = process.env.CONTACT_EMAIL_FROM || user;
 
-  if (!host || !Number.isFinite(port) || !user || !pass || !from) {
+  const to = contactRecipientEmail();
+
+  if (!host || !Number.isFinite(port) || !user || !pass || !from || !to) {
     return NextResponse.json(
       { message: "Email delivery is not configured yet." },
       { status: 503 },
@@ -100,7 +108,7 @@ export async function POST(request: Request) {
         name: "Atlas Irwin Website",
         address: from,
       },
-      to: recipientEmail,
+      to,
       replyTo: {
         name,
         address: email,
