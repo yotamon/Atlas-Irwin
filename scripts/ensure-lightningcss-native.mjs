@@ -37,7 +37,38 @@ function fetchNativeFromNpm(packageName, version, fileName) {
 
   execSync(`tar -xf ${JSON.stringify(tarball)}`, { cwd: root, stdio: "ignore" });
   const extracted = join(root, "package", fileName);
-  return existsSync(extracted) ? extracted : null;
+  const result = existsSync(extracted) ? extracted : null;
+
+  try {
+    execSync(`rm -rf ${JSON.stringify(join(root, "package"))}`, { cwd: root, stdio: "ignore" });
+  } catch {
+    // Windows fallback
+    try {
+      execSync(`Remove-Item -Recurse -Force ${JSON.stringify(join(root, "package"))}`, {
+        cwd: root,
+        stdio: "ignore",
+        shell: "powershell.exe",
+      });
+    } catch {
+      // best effort cleanup
+    }
+  }
+
+  try {
+    execSync(`rm -f ${JSON.stringify(join(root, tarball))}`, { cwd: root, stdio: "ignore" });
+  } catch {
+    try {
+      execSync(`Remove-Item -Force ${JSON.stringify(join(root, tarball))}`, {
+        cwd: root,
+        stdio: "ignore",
+        shell: "powershell.exe",
+      });
+    } catch {
+      // best effort cleanup
+    }
+  }
+
+  return result;
 }
 
 function resolveNativeSource(packageName, fileName, version) {

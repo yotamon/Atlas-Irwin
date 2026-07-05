@@ -29,10 +29,14 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+.next-dev.log
+.next-dev-error.log
 
-# env files (can opt-in for committing if needed)
+# env files
 .env*
 !.env.example
+.env*.local
+.env.vercel-*
 
 # vercel
 .vercel
@@ -41,5 +45,12 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-.vercel
-.env*.local
+# local tooling / agent artifacts
+.playwright-mcp/
+
+# supabase CLI local state (contains project refs and connection URLs)
+supabase/.temp/
+
+# postinstall npm pack artifacts
+/package/
+*.tgz
