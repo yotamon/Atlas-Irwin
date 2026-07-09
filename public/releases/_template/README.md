@@ -1,10 +1,16 @@
-Copy this folder, rename it to your release slug, and replace the sample files.
+# Release import template
 
-Checklist:
+Copy this folder, rename it to your release slug, then fill in assets and `release.json`.
 
-1. Add a `cover.jpg` or `cover.png`
-2. Add SoundCloud track URLs to `release.json`
-3. Update `release.json`
-4. Keep the tracks array in playback order
+1. Add `cover.jpg` or `cover.png`
+2. Set track metadata and platform URLs in `release.json` (keep tracks in playback order)
+3. Optional: local files in `audio/`, or a 9:16 `canvas.mp4` / `canvas.webm` beside the cover
 
-If you want to use local audio instead, put files inside `audio/` and use `file` in each track. If you remove the `tracks` array from `release.json`, the site will generate titles from local filenames automatically.
+Import into Supabase (does not mutate these files):
+
+```bash
+npm run studio:import:dry-run
+npm run studio:import
+```
+
+After import, publish and place the release from Studio → Releases → Website tab. The public site reads Supabase, not this folder.
