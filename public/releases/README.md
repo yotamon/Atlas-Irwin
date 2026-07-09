@@ -1,16 +1,20 @@
-Drop release folders here.
+# Legacy release manifests (import only)
 
-The site reads every subfolder in `public/releases` except folders that start with `_`.
-
-Quick example:
+Folders here are **import input** for Atlas Release Engine. The live homepage catalog is read from Supabase — these files are not loaded at runtime by the public player.
 
 ```text
-public/releases/night-drive-ep/
-  cover.jpg
-  canvas.mp4
+public/releases/<slug>/
   release.json
+  cover.jpg          # optional; uploaded to public-media on import
+  canvas.mp4         # optional
+  audio/             # optional local masters
 ```
 
-Use `public/releases/_template` as the starter folder for new releases. Add SoundCloud track URLs with `soundcloudUrl` in `release.json`; local audio files in an `audio/` folder still work as a fallback.
+Use `_template/` as a starter, then import:
 
-For Spotify Canvas-style mobile videos, add a 9:16 `canvas.mp4`, `canvas.webm`, or `canvas.mov` beside the cover art. You can also set `"canvasVideo": "your-file.mp4"` in `release.json` when the video uses a custom filename.
+```bash
+npm run studio:import:dry-run
+npm run studio:import
+```
+
+See [`docs/catalog-architecture.md`](../../docs/catalog-architecture.md) for the canonical model and publishing flow.

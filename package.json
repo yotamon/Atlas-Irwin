@@ -2,6 +2,17 @@
   "name": "atlas-irwin-website",
   "version": "0.1.0",
   "private": true,
+  "description": "Atlas Irwin — artist website and Atlas Release Engine studio (Next.js, Supabase, SoundCloud/Spotify OAuth)",
+  "homepage": "https://atlasirwin.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yotamon/Atlas-Irwin.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yotamon/Atlas-Irwin/issues"
+  },
+  "author": "Yotam Faraggi",
+  "license": "MIT",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -17,24 +28,24 @@
   },
   "dependencies": {
     "@supabase/ssr": "0.12.0",
-    "@supabase/supabase-js": "2.108.2",
-    "framer-motion": "^12.38.0",
-    "next": "16.2.9",
-    "nodemailer": "9.0.1",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "react-icons": "^5.6.0",
+    "@supabase/supabase-js": "^2.110.1",
+    "framer-motion": "^12.42.2",
+    "next": "^16.2.10",
+    "nodemailer": "^9.0.3",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-icons": "^5.7.0",
     "zod": "4.4.3"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/nodemailer": "^8.0.0",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
+    "@tailwindcss/postcss": "^4.3.2",
+    "@types/node": "^22",
+    "@types/nodemailer": "^8.0.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
     "eslint": "^9",
-    "eslint-config-next": "16.2.9",
-    "tailwindcss": "^4",
+    "eslint-config-next": "^16.2.10",
+    "tailwindcss": "^4.3.2",
     "typescript": "^5"
   },
   "overrides": {
@@ -46,6 +57,7 @@
     "node": ">=20"
   },
   "optionalDependencies": {
-    "lightningcss-win32-arm64-msvc": "^1.32.0"
+    "lightningcss-win32-arm64-msvc": "^1.32.0",
+    "lightningcss-win32-x64-msvc": "^1.32.0"
   }
 }

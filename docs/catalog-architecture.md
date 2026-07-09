@@ -128,13 +128,12 @@ state, and generation timestamp). Human-approved role assignments should remain 
 3. Re-run legacy import after schema changes if needed
 4. Revert application deploy if required; database migration is additive and non-destructive
 
-## Manual follow-up
+## Ops checklist
 
-1. ~~Apply migration `20260701000000_catalog_publishing_system.sql` to Supabase~~ (applied)
-2. Set `PUBLIC_CATALOG_OWNER_ID` in production
-3. Run `npm run studio:import` once after migration (optional if releases already exist in Supabase)
-4. Review unmatched SoundCloud/Spotify items in Connections
-5. Confirm homepage player on `/` after publishing and placement
+1. Migrations applied (including catalog publishing + media integrity)
+2. `PUBLIC_CATALOG_OWNER_ID` set in production when multiple owners exist
+3. Unmatched SoundCloud/Spotify items reviewed in Connections after each sync
+4. Homepage player on `/` verified after publish + placement changes
 
 ## Security
 

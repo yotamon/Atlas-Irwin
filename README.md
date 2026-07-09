@@ -1,28 +1,115 @@
-# Atlas Irwin Website
+<div align="center">
 
-Official website and release studio for [Atlas Irwin](https://atlasirwin.com) — a Next.js app with a public artist homepage, contact and newsletter forms, and a private Studio at `/studio` backed by Supabase.
+# Atlas Irwin
 
-**Live site:** [https://atlasirwin.com](https://atlasirwin.com)
+**Artist website + private release-operations studio — live in production.**
 
-## Stack
+[![Live site](https://img.shields.io/badge/Live-atlasirwin.com-0d9488?style=for-the-badge&logo=vercel&logoColor=white)](https://atlasirwin.com)
+[![CI](https://img.shields.io/github/actions/workflow/status/yotamon/Atlas-Irwin/ci.yml?branch=main&style=for-the-badge&label=CI)](https://github.com/yotamon/Atlas-Irwin/actions)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=nextdotjs&logoColor=white)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 
-- [Next.js 16](https://nextjs.org/) (App Router, Turbopack)
-- [React 19](https://react.dev/)
-- [Tailwind CSS 4](https://tailwindcss.com/)
-- [Supabase](https://supabase.com/) — catalog, auth, storage
-- Deployed on [Vercel](https://vercel.com/)
+[Live site](https://atlasirwin.com) · [Architecture](docs/catalog-architecture.md) · [Security](SECURITY.md)
+
+</div>
+
+---
+
+<p align="center">
+  <img src="docs/images/hero.jpg" alt="Atlas Irwin homepage hero — dark cosmic brand composition with lime CTA" width="900" />
+</p>
+
+A full-stack product for an independent music project: a public, conversion-minded artist site on one side, and **Atlas Release Engine** — a private Studio for catalog publishing, media, campaigns, analytics, and platform sync — on the other.
+
+Built as a real production system, not a brochure page.
+
+## Why this project exists
+
+Most artist sites are static marketing shells. This one treats releases as an **operating system**:
+
+- Publish catalog changes to the homepage **without redeploying**
+- Plan campaigns, content, and outreach around each release
+- Sync SoundCloud and Spotify with OAuth 2.1 + PKCE, then reconcile unmatched tracks intentionally
+- Keep private Studio assets, tokens, and admin routes isolated from the public surface
+
+## Highlights
+
+| Area | What shipped |
+| --- | --- |
+| **Public site** | Brand-led homepage, multi-release player (local audio + SoundCloud), platforms, about, SMTP contact, MailerLite newsletter, light/dark theme |
+| **Live catalog** | Supabase is the source of truth; Studio mutations call `revalidateTag("public-catalog")` so listeners see updates immediately |
+| **Release Engine** | Command Center, per-release workspace, campaigns, media library (SHA-256 dedupe), data-health audits, weighted analytics, brand guardrails |
+| **Integrations** | SoundCloud + Spotify OAuth with PKCE, private token storage, sync staging tables, reconciliation queue, explicit campaign playlists |
+| **Security** | Supabase RLS, studio route guards, CSP/HSTS headers, honeypot + rate-limited APIs, Studio `noindex` / `no-store` |
+| **Engineering** | Strict TypeScript, Zod-validated server actions, typed DB schema, GitHub Actions CI (typecheck · lint · build) |
+
+<p align="center">
+  <img src="docs/images/release-cover.jpg" alt="Featured release card for Dancing In Color on the Atlas Irwin site" width="420" />
+  &nbsp;
+  <img src="docs/images/player.jpg" alt="Release player with tracklist for Dancing In Color" width="420" />
+</p>
+
+## Architecture at a glance
+
+```mermaid
+flowchart LR
+  subgraph Public["Public surface"]
+    Home["Homepage / player"]
+    API["Contact · Newsletter APIs"]
+  end
+
+  subgraph Studio["Atlas Release Engine /studio"]
+    CC["Command Center"]
+    Rel["Releases · Media · Campaigns"]
+    Conn["SoundCloud · Spotify"]
+  end
+
+  subgraph Data["Supabase"]
+    PG[(PostgreSQL + RLS)]
+    Storage[(public-media · studio-assets)]
+  end
+
+  Home -->|cached catalog| PG
+  Studio -->|admin session| PG
+  Studio --> Storage
+  Conn -->|OAuth PKCE| PG
+  Rel -->|revalidateTag| Home
+  API --> SMTP["SMTP"]
+  API --> ML["MailerLite"]
+```
+
+| Layer | Stack |
+| --- | --- |
+| App | Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · Framer Motion |
+| Data | Supabase (Auth, Postgres, Storage) · Zod · tagged cache revalidation |
+| Ops | Vercel · GitHub Actions · SMTP · MailerLite · SoundCloud / Spotify APIs |
+
+## Atlas Release Engine (Studio)
+
+Private product surface at `/studio` — password auth, admin allowlist, and localhost bypass for development.
+
+| Surface | Job |
+| --- | --- |
+| **Command Center** | Active release, attention queue, homepage preview, 7-day runway, metrics pulse |
+| **Releases** | Full workspace per release: Overview · Music · Media · Website · Campaign · Performance |
+| **Campaigns** | Content + outreach workload in list or calendar form |
+| **Media Library** | Global assets, signed uploads, SHA-256 dedupe, attach-to-release |
+| **Data Health** | Reconciliation, metadata, media, placement, and stale-sync audits |
+| **Analytics** | Manual metric snapshots + weighted content performance scoring |
+| **Connections** | SoundCloud / Spotify hubs — sync, reconcile, never silently invent catalog rows |
+
+Deep dive: [`docs/catalog-architecture.md`](docs/catalog-architecture.md)
 
 ## Quick start
 
 ```bash
 npm install
-cp .env.example .env.local   # then fill in values
+cp .env.example .env.local   # fill in values
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Studio routes at `/studio` bypass login on localhost when `NODE_ENV` is not production.
-
-### Scripts
+Open [http://localhost:3000](http://localhost:3000). Studio at `/studio` bypasses login on localhost when `NODE_ENV` is not production.
 
 | Command | Purpose |
 | --- | --- |
@@ -40,25 +127,23 @@ Open [http://localhost:3000](http://localhost:3000). Studio routes at `/studio` 
 app/              Public pages, API routes, and Studio (protected)
 components/       Shared UI and Studio components
 lib/              Auth, catalog, Supabase clients, integrations
-public/           Static assets, fonts, legacy release manifests
-supabase/         Database migrations
+public/           Static assets, fonts, legacy release manifests (import only)
+supabase/         Database migrations + RLS
 scripts/          Import, seed, and maintenance tooling
-docs/             Architecture and operational docs
+docs/             Architecture docs and README screenshots
 ```
-
-See [`docs/catalog-architecture.md`](docs/catalog-architecture.md) for the catalog model, storage rules, and publishing flow.
 
 ## Environment
 
-Copy `.env.example` to `.env.local` and set values, or pull what Vercel allows locally:
+Copy `.env.example` to `.env.local`, or pull what Vercel allows locally:
 
 ```bash
 npm run env:restore
 ```
 
-That merges variable names from Vercel production + preview into `.env.local`. Vercel only exports non-sensitive values via CLI (Supabase URL/anon keys, Postgres host). **Sensitive secrets** (`STUDIO_PASSWORD`, `SUPABASE_SERVICE_ROLE_KEY`, SMTP, SoundCloud, Spotify, MailerLite, etc.) must be copied manually from your Vercel project → Settings → Environment Variables.
+Vercel CLI only exports non-sensitive values. **Secrets** (`STUDIO_PASSWORD`, `SUPABASE_SERVICE_ROLE_KEY`, SMTP, SoundCloud, Spotify, MailerLite, etc.) must be copied from Vercel → Settings → Environment Variables.
 
-Required variables:
+Required variables (see `.env.example` for the full list):
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=
@@ -66,32 +151,16 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 STUDIO_ADMIN_EMAILS=artist@example.com
 STUDIO_PASSWORD=your-studio-password
-STUDIO_IMPORT_ADMIN_EMAIL=artist@example.com
-PUBLIC_CATALOG_OWNER_ID=
-SOUNDCLOUD_CLIENT_ID=
-SOUNDCLOUD_CLIENT_SECRET=
-SOUNDCLOUD_REDIRECT_URI=https://your-domain.com/studio/soundcloud/callback
-SPOTIFY_CLIENT_ID=
-SPOTIFY_CLIENT_SECRET=
-SPOTIFY_REDIRECT_URI=https://your-domain.com/studio/spotify/callback
-SPOTIFY_ARTIST_ID=
-CONTACT_EMAIL_TO=you@example.com
+NEXT_PUBLIC_SITE_URL=https://atlasirwin.com
 ```
 
-`NEXT_PUBLIC_SUPABASE_ANON_KEY` may contain Supabase's current publishable key or the legacy anon key. Only the URL and publishable/anon key are browser-visible. The service-role/secret key remains server-only and is used by local Studio bootstrap, catalog synchronization, token storage, and explicit import/seed scripts.
-
-## Atlas Release Engine (Studio)
-
-Atlas Release Engine is the private release-management and audience-growth studio at `/studio`. Supabase is the canonical catalog for homepage publishing, media, and platform links. Legacy `public/releases/` folders remain as import input only.
+Only the Supabase URL and publishable/anon key are browser-visible. The service-role key stays server-only.
 
 ### Supabase setup
 
-1. Create a Supabase project.
-2. Apply all migrations in `supabase/migrations/`, or link the Supabase CLI and run `npx supabase db push`.
-3. In Authentication → URL Configuration, set the production site URL and add `http://localhost:3000/studio/auth/callback` plus the production `/studio/auth/callback` URL as redirects.
-4. Set `STUDIO_PASSWORD` in `.env.local`.
-5. Sign in at `/studio/login` with that password. Email is optional when only one admin is allowlisted. The migration trigger creates a profile on first sign-in.
-6. In the SQL Editor, explicitly approve that profile:
+1. Create a Supabase project and apply migrations in `supabase/migrations/` (`npx supabase db push`).
+2. Auth → URL Configuration: set the site URL and add `/studio/auth/callback` redirects for local + production.
+3. Sign in at `/studio/login`, then approve the profile:
 
 ```sql
 update public.profiles
@@ -99,111 +168,46 @@ set is_admin = true
 where email = 'artist@example.com';
 ```
 
-The email must also appear in `STUDIO_ADMIN_EMAILS`. Both checks are required. Tables and the private `studio-assets` bucket use RLS; anonymous access is revoked. If the Data API is configured as private, expose the `public` schema to `authenticated` only.
+The email must also appear in `STUDIO_ADMIN_EMAILS`. Tables and the private `studio-assets` bucket use RLS.
 
-Local development bypasses login for requests served from `localhost`, `127.0.0.1`, or `::1`: run `npm run dev` and open `http://localhost:3000/studio` directly. With `SUPABASE_SERVICE_ROLE_KEY` set in `.env.local`, Studio creates/approves the local admin profile when needed, so reads and writes work without entering a password. Production still requires the Studio password and admin allowlist.
+### Platform OAuth
 
-### SoundCloud Studio integration
+- **SoundCloud** — OAuth 2.1 + PKCE; sync updates staging tables; unmatched tracks go to a reconciliation queue.
+- **Spotify** — authorization code + PKCE; local callbacks must use `127.0.0.1` (not `localhost`). Catalog sync, listener pulse, and campaign playlists are explicit Studio actions.
 
-Create a SoundCloud developer application and add `/studio/soundcloud/callback` as the redirect URL. Set `SOUNDCLOUD_CLIENT_ID`, `SOUNDCLOUD_CLIENT_SECRET`, and optionally `SOUNDCLOUD_REDIRECT_URI`. The Studio SoundCloud hub uses OAuth 2.1 with PKCE. Sync updates staging tables and metrics only; unmatched tracks appear in the reconciliation queue instead of silently creating releases.
+### Studio workflow (short)
 
-### Spotify Studio integration
+1. Create a release → fill story fields → generate release identity.
+2. Generate a content pack (drafts only — nothing auto-posts).
+3. Schedule in Content Lab / Calendar; log outreach copy without sending.
+4. Publish + enable homepage placement → public catalog revalidates.
+5. Resolve mismatches in Data Health / Connections.
 
-Create a Spotify developer app and register the exact production callback URL
-`https://your-domain.com/studio/spotify/callback`. For local development, Spotify
-does not allow `localhost`: register
-`http://127.0.0.1:3000/studio/spotify/callback`, set that exact value in
-`SPOTIFY_REDIRECT_URI`, and open Studio through `http://127.0.0.1:3000`.
-Set `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, and optionally
-`SPOTIFY_REDIRECT_URI` and `SPOTIFY_ARTIST_ID`. Run the Spotify migration, then
-connect from Studio → Spotify.
-
-The integration uses authorization code flow with PKCE and state validation,
-stores tokens only in the private schema, syncs artist releases/tracks and the
-connected account's playlists and top-item pulse, imports catalog releases into
-Release Engine, and creates campaign playlists only on explicit submission.
-
-Spotify Development Mode currently requires the app owner to have Premium and
-limits the app to five allowlisted users. This private Studio integration fits
-that mode; wider public access requires Spotify's applicable quota approval.
-
-### Studio workflow
-
-The primary Studio navigation is organized around the artist workflow: Command Center,
-Releases, Campaigns, Media Library, Data Health, Analytics, and Brand / Creative.
-Each release opens as a complete workspace instead of a catalog row.
-
-- Create a release under Studio → Releases, fill its story fields, then generate its deterministic release identity.
-- Generate a content pack from the release. Drafts remain editable and nothing is posted automatically.
-- Date content in Content Lab; it appears in Calendar.
-- Add outreach contacts and log copy-ready messages and follow-ups. No email or DM is sent.
-- Add manual metric snapshots and link them to content to rank performance using the documented weights in `lib/studio/performance.ts`.
-- Update reusable creative direction in Brand.
-- Resolve catalog, website, reconciliation, and metadata issues in Data Health.
-- Use the release Website tab for the public catalog state; successful mutations
-  invalidate the `public-catalog` cache tag and update the homepage without redeploying.
-
-### Import existing public releases
-
-Public manifests are synchronized automatically whenever Releases opens. The explicit importer remains available for maintenance or deployment workflows:
+Legacy folders under `public/releases/` are **import input only** — the homepage reads Supabase at runtime.
 
 ```bash
 npm run studio:import
 ```
 
-The importer reads `public/releases/*/release.json`, upserts draft Studio releases and tracks by slug/title, records the public path, and never writes, deletes, or mutates public files. It is safe to run repeatedly.
-
-Optional local demo data is guarded and never runs automatically:
-
-```bash
-# Set ALLOW_STUDIO_DEMO_SEED=true in .env.local first
-npm run studio:seed
-```
-
 ## Public homepage catalog
 
-The homepage release player reads live catalog data from Supabase via `getPublicReleases()`.
-Publish releases in Studio, enable homepage placement, and the site updates through cache
-revalidation — no redeploy required. Legacy `public/releases/` folders are import input only;
-see `docs/catalog-architecture.md` and `public/releases/README.md` for the full model.
+`getPublicReleases()` powers the player. Publish in Studio, enable homepage placement, and the site updates through cache revalidation — no redeploy. Set `NEXT_PUBLIC_SITE_URL` to the production HTTPS origin.
 
-Set `NEXT_PUBLIC_SITE_URL` to the production HTTPS origin, for example
-`https://atlasirwin.com`. Production builds force non-local site URLs to HTTPS
-for metadata, robots, and sitemap output.
+## Security
 
-## HTTPS and security headers
+Production enforces HTTPS redirect plus HSTS, CSP, clickjacking, content-sniffing, referrer, and permissions headers. Studio responses are `private, no-store`, carry `X-Robots-Tag: noindex`, and are excluded by `robots.txt`. Private assets use signed/authenticated Storage access.
 
-The app redirects production HTTP requests to HTTPS and sends HSTS, CSP,
-clickjacking, content-sniffing, referrer, and browser permissions headers from
-`next.config.ts`. Keep TLS certificate and HTTP-to-HTTPS support enabled on the
-production host as the outer edge layer.
+See [`SECURITY.md`](SECURITY.md) for vulnerability reporting.
 
-Studio responses are `private, no-store`, carry `X-Robots-Tag: noindex, nofollow, noarchive`, and are excluded by `robots.txt`. The proxy refreshes cookie-based Supabase sessions and rejects unauthenticated or non-allowlisted users before protected Studio routes render. Private assets use signed/authenticated Storage access — do not turn the `studio-assets` bucket public.
+## Contact & newsletter
 
-See [`SECURITY.md`](SECURITY.md) for reporting vulnerabilities.
+- **Contact** — SMTP (`CONTACT_SMTP_*`, `CONTACT_EMAIL_FROM`, `CONTACT_EMAIL_TO`). Gmail needs an app password.
+- **Newsletter** — MailerLite (`MAILERLITE_API_KEY`, optional `MAILERLITE_GROUP_IDS`). Both routes use rate limiting and honeypot fields.
 
-## Contact form email
+## Windows note
 
-The contact form sends messages through SMTP. Configure `CONTACT_SMTP_*`, `CONTACT_EMAIL_FROM`, and `CONTACT_EMAIL_TO` in `.env.local` and in production.
-
-For Gmail, use an app password for `CONTACT_SMTP_PASS`; the regular account
-password will not work.
-
-## Newsletter signup
-
-The newsletter form adds subscribers through the MailerLite API.
-Set `MAILERLITE_API_KEY` in `.env.local` and in production. If subscribers
-should be added to a specific MailerLite group, set `MAILERLITE_GROUP_IDS` to
-one or more comma-separated group IDs.
-
-## Windows ARM64 note
-
-If `next build` fails with missing native CSS binaries such as
-`lightningcss.win32-arm64-msvc.node` or `tailwindcss-oxide.win32-arm64-msvc.node`,
-run `npm run postinstall`. The script downloads the correct native bindings when npm
-and Node report different CPU targets.
+If `next build` fails on missing native CSS binaries (`lightningcss` / `tailwindcss-oxide`), run `npm run postinstall` to fetch the correct bindings for your CPU target.
 
 ## License
 
-Application source code is licensed under the MIT License — see [`LICENSE`](LICENSE).
-Bundled fonts under `public/fonts/` remain subject to their respective license files.
+Application source is MIT — see [`LICENSE`](LICENSE). Fonts under `public/fonts/` keep their own licenses.
