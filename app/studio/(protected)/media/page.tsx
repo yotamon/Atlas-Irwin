@@ -48,6 +48,7 @@ type SearchParams = {
   sort?: string;
   tag?: string;
   upload?: string;
+  asset?: string;
 };
 
 export default async function MediaLibraryPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
@@ -71,6 +72,10 @@ export default async function MediaLibraryPage({ searchParams }: { searchParams:
   const popularTags = [...tagCounts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 12);
 
   let assets = [...allAssets];
+  if (params.asset) {
+    const focused = assets.find((asset) => asset.id === params.asset);
+    if (focused) assets = [focused, ...assets.filter((asset) => asset.id !== params.asset)];
+  }
   if (params.type) assets = assets.filter((asset) => asset.asset_type === params.type);
   if (params.tag) assets = assets.filter((asset) => mediaMetadata(asset).tags.includes(params.tag!));
   if (params.q) {
@@ -124,7 +129,7 @@ export default async function MediaLibraryPage({ searchParams }: { searchParams:
             const usage = links.filter((link) => link.media_asset_id === asset.id);
             const roleOptions = compatibleMediaTypes(asset.mime_type);
             return (
-              <article className="media-card" key={asset.id}>
+              <article className={`media-card ${params.asset === asset.id ? "is-editing" : ""}`} id={`asset-${asset.id}`} key={asset.id}>
                 <div className="media-thumb">
                   <MediaPreview asset={asset} url={previewUrls[asset.id]} />
                   <span className="media-kind">{mediaKind(asset.mime_type)}</span>

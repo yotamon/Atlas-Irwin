@@ -1,14 +1,14 @@
+import Link from "next/link";
 import { CopyButton } from "@/components/studio/copy-button";
+import { ContentForm } from "@/components/studio/content-form";
+import { ContentStatusChips } from "@/components/studio/content-status-chips";
 import {
-  Field,
   EmptyState,
   PageHeader,
   Status,
-  Submit,
 } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import {
-  CONTENT_FORMATS,
   CONTENT_STATUSES,
   GOALS,
   PLATFORMS,
@@ -16,9 +16,9 @@ import {
 import {
   deleteStudioRecord,
   duplicateContent,
-  saveContent,
-  updateContentStatus,
 } from "@/app/studio/actions";
+import type { ContentItem } from "@/types/database";
+
 export default async function ContentPage({
   searchParams,
 }: {
@@ -28,13 +28,15 @@ export default async function ContentPage({
     platform?: string;
     status?: string;
     goal?: string;
+    edit?: string;
   }>;
 }) {
   const params = await searchParams;
-  const { supabase } = await requireStudioAdmin();
+  const { supabase, user } = await requireStudioAdmin();
   let query = supabase
     .from("content_items")
     .select("*")
+    .eq("owner_id", user.id)
     .order("updated_at", { ascending: false });
   for (const key of ["release", "platform", "status", "goal"] as const) {
     if (params[key])
@@ -42,10 +44,22 @@ export default async function ContentPage({
   }
   const [{ data: items }, { data: releases }] = await Promise.all([
     query,
-    supabase.from("releases").select("id,title").order("title"),
+    supabase.from("releases").select("id,title").eq("owner_id", user.id).order("title"),
   ]);
-  const list = items ?? [];
+  const list = (items ?? []) as ContentItem[];
   const view = params.view ?? "kanban";
+  const editing = params.edit
+    ? list.find((item) => item.id === params.edit) ??
+      (
+        await supabase
+          .from("content_items")
+          .select("*")
+          .eq("id", params.edit)
+          .eq("owner_id", user.id)
+          .maybeSingle()
+      ).data
+    : null;
+
   return (
     <>
       <PageHeader
@@ -60,7 +74,7 @@ export default async function ContentPage({
         }
       />
       <form className="studio-tabs">
-        <select name="release">
+        <select name="release" defaultValue={params.release ?? ""}>
           <option value="">All releases</option>
           {releases?.map((r) => (
             <option key={r.id} value={r.id}>
@@ -68,28 +82,41 @@ export default async function ContentPage({
             </option>
           ))}
         </select>
-        <select name="platform">
+        <select name="platform" defaultValue={params.platform ?? ""}>
           <option value="">All platforms</option>
           {PLATFORMS.map((x) => (
             <option key={x}>{x}</option>
           ))}
         </select>
-        <select name="status">
+        <select name="status" defaultValue={params.status ?? ""}>
           <option value="">All statuses</option>
           {CONTENT_STATUSES.map((x) => (
             <option key={x}>{x}</option>
           ))}
         </select>
-        <select name="goal">
+        <select name="goal" defaultValue={params.goal ?? ""}>
           <option value="">All goals</option>
           {GOALS.map((x) => (
             <option key={x}>{x}</option>
           ))}
         </select>
         <button className="button">Filter</button>
-        <a href="?view=kanban">Kanban</a>
-        <a href="?view=list">List</a>
+        <Link href={{ query: { ...params, view: "kanban", edit: undefined } }}>Kanban</Link>
+        <Link href={{ query: { ...params, view: "list", edit: undefined } }}>List</Link>
       </form>
+
+      {editing ? (
+        <section className="studio-panel feature content-edit-panel" id={`edit-${editing.id}`}>
+          <div className="panel-head">
+            <h2>Edit · {editing.title}</h2>
+            <Link className="text-button" href="/studio/content">
+              Close
+            </Link>
+          </div>
+          <ContentForm item={editing} releases={releases ?? []} />
+        </section>
+      ) : null}
+
       {!list.length ? (
         <EmptyState
           title="No content in the lab"
@@ -104,13 +131,14 @@ export default async function ContentPage({
               <th>Format</th>
               <th>Status</th>
               <th>Schedule</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {list.map((item) => (
-              <tr key={item.id}>
+              <tr key={item.id} className={params.edit === item.id ? "is-editing" : undefined}>
                 <td>
-                  {item.title}
+                  <Link href={`/studio/content?edit=${item.id}`}>{item.title}</Link>
                   <br />
                   <CopyButton value={item.hook_text} label="Copy hook" /> ·{" "}
                   <CopyButton value={item.caption} label="caption" /> ·{" "}
@@ -121,11 +149,17 @@ export default async function ContentPage({
                 <td>{item.format}</td>
                 <td>
                   <Status>{item.status}</Status>
+                  <ContentStatusChips id={item.id} status={item.status} />
                 </td>
                 <td>
                   {item.scheduled_at
                     ? new Date(item.scheduled_at).toLocaleString()
                     : "—"}
+                </td>
+                <td>
+                  <Link className="text-button" href={`/studio/content?edit=${item.id}`}>
+                    Edit
+                  </Link>
                 </td>
               </tr>
             ))}
@@ -133,14 +167,7 @@ export default async function ContentPage({
         </table>
       ) : (
         <div className="kanban">
-          {[
-            "Idea",
-            "Draft",
-            "In Production",
-            "Ready",
-            "Scheduled",
-            "Published",
-          ].map((status) => (
+          {CONTENT_STATUSES.filter((status) => status !== "Archived").map((status) => (
             <section className="kanban-column" key={status}>
               <h2>
                 {status} · {list.filter((x) => x.status === status).length}
@@ -148,29 +175,31 @@ export default async function ContentPage({
               {list
                 .filter((x) => x.status === status)
                 .map((item) => (
-                  <article className="kanban-card" key={item.id}>
+                  <article
+                    className={`kanban-card ${params.edit === item.id ? "is-editing" : ""}`}
+                    key={item.id}
+                  >
                     <Status>{item.platform}</Status>
-                    <h3>{item.title}</h3>
+                    <h3>
+                      <Link href={`/studio/content?edit=${item.id}`}>{item.title}</Link>
+                    </h3>
                     <p>{item.hook_text || item.goal}</p>
                     <CopyButton value={item.caption} label="Copy caption" />
-                    <form action={duplicateContent}>
-                      <input type="hidden" name="id" value={item.id} />
-                      <button className="text-button">Duplicate</button>
-                    </form>
-                    <form action={updateContentStatus}>
-                      <input type="hidden" name="id" value={item.id} />
-                      <select name="status" defaultValue={item.status}>
-                        {CONTENT_STATUSES.map((x) => (
-                          <option key={x}>{x}</option>
-                        ))}
-                      </select>
-                      <button className="text-button">Move</button>
-                    </form>
-                    <form action={deleteStudioRecord}>
-                      <input type="hidden" name="id" value={item.id} />
-                      <input type="hidden" name="table" value="content_items" />
-                      <button className="text-button">Delete</button>
-                    </form>
+                    <ContentStatusChips id={item.id} status={item.status} />
+                    <div className="kanban-actions">
+                      <Link className="text-button" href={`/studio/content?edit=${item.id}`}>
+                        Edit
+                      </Link>
+                      <form action={duplicateContent}>
+                        <input type="hidden" name="id" value={item.id} />
+                        <button className="text-button">Duplicate</button>
+                      </form>
+                      <form action={deleteStudioRecord}>
+                        <input type="hidden" name="id" value={item.id} />
+                        <input type="hidden" name="table" value="content_items" />
+                        <button className="text-button">Delete</button>
+                      </form>
+                    </div>
                   </article>
                 ))}
             </section>
@@ -181,85 +210,10 @@ export default async function ContentPage({
         <div className="panel-head">
           <h2>Create content item</h2>
         </div>
-        <form action={saveContent} className="studio-form">
-          <div className="form-grid">
-            <Field label="Title">
-              <input name="title" required />
-            </Field>
-            <Field label="Release">
-              <select name="release_id">
-                <option value="">No release</option>
-                {releases?.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.title}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Platform">
-              <select name="platform">
-                {PLATFORMS.map((x) => (
-                  <option key={x}>{x}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Format">
-              <select name="format">
-                {CONTENT_FORMATS.map((x) => (
-                  <option key={x}>{x}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Status">
-              <select name="status">
-                {CONTENT_STATUSES.map((x) => (
-                  <option key={x}>{x}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Goal">
-              <select name="goal">
-                {GOALS.map((x) => (
-                  <option key={x}>{x}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Scheduled">
-              <input type="datetime-local" name="scheduled_at" />
-            </Field>
-            <Field label="Published">
-              <input type="datetime-local" name="published_at" />
-            </Field>
-            <Field label="Audio start (seconds)">
-              <input type="number" min="0" name="audio_timestamp_start" />
-            </Field>
-            <Field label="Audio end (seconds)">
-              <input type="number" min="0" name="audio_timestamp_end" />
-            </Field>
-            <Field label="Hook" wide>
-              <textarea name="hook_text" />
-            </Field>
-            <Field label="Caption" wide>
-              <textarea name="caption" rows={4} />
-            </Field>
-            <Field label="CTA">
-              <input name="cta" />
-            </Field>
-            <Field label="Asset URL">
-              <input name="asset_url" type="url" />
-            </Field>
-            <Field label="Vertical visual prompt" wide>
-              <textarea name="visual_prompt" rows={4} />
-            </Field>
-            <Field label="Production notes" wide>
-              <textarea name="production_notes" />
-            </Field>
-            <Field label="Performance notes" wide>
-              <textarea name="performance_notes" />
-            </Field>
-          </div>
-          <Submit>Create content</Submit>
-        </form>
+        <ContentForm
+          releases={releases ?? []}
+          defaultReleaseId={params.release}
+        />
       </section>
     </>
   );

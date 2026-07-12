@@ -1,8 +1,10 @@
+import Link from "next/link";
 import {
   deleteStudioRecord,
   saveLearning,
   saveMetric,
 } from "@/app/studio/actions";
+import { Sparkline } from "@/components/studio/sparkline";
 import {
   EmptyState,
   Field,
@@ -11,13 +13,22 @@ import {
   Submit,
 } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { PLATFORMS } from "@/lib/studio/constants";
 import {
   contentPerformanceScore,
+  conversionPercent,
   DEFAULT_PERFORMANCE_WEIGHTS,
+  deltaLabel,
+  metricTotal,
+  PULSE_METRICS,
+  seriesByDate,
 } from "@/lib/studio/performance";
-import { PLATFORMS } from "@/lib/studio/constants";
+
 export default async function AnalyticsPage() {
-  const { supabase } = await requireStudioAdmin();
+  const { supabase, user } = await requireStudioAdmin();
+  const now = new Date();
+  const lookback = new Date(now);
+  lookback.setDate(now.getDate() - 28);
   const [
     { data: metrics },
     { data: releases },
@@ -27,17 +38,36 @@ export default async function AnalyticsPage() {
     supabase
       .from("metric_snapshots")
       .select("*")
+      .eq("owner_id", user.id)
       .order("date", { ascending: false }),
-    supabase.from("releases").select("id,title"),
-    supabase.from("content_items").select("id,title,format,platform"),
+    supabase.from("releases").select("id,title").eq("owner_id", user.id),
+    supabase
+      .from("content_items")
+      .select("id,title,format,platform")
+      .eq("owner_id", user.id),
     supabase
       .from("release_learnings")
       .select("*,releases(title)")
+      .eq("owner_id", user.id)
       .order("created_at", { ascending: false }),
   ]);
+
+  const rows = metrics ?? [];
+  const thisWeekStart = new Date(now);
+  thisWeekStart.setDate(now.getDate() - 7);
+  const previousWeekStart = new Date(now);
+  previousWeekStart.setDate(now.getDate() - 14);
+  const currentMetrics = rows.filter(
+    (row) => new Date(`${row.date}T12:00:00`) >= thisWeekStart,
+  );
+  const previousMetrics = rows.filter((row) => {
+    const date = new Date(`${row.date}T12:00:00`);
+    return date >= previousWeekStart && date < thisWeekStart;
+  });
+
   const ranked = (content ?? [])
     .map((item) => {
-      const agg = (metrics ?? [])
+      const agg = rows
         .filter((m) => m.content_item_id === item.id)
         .reduce(
           (a, m) => {
@@ -52,25 +82,60 @@ export default async function AnalyticsPage() {
       return { ...item, score: contentPerformanceScore(agg), metrics: agg };
     })
     .sort((a, b) => b.score - a.score);
+
   return (
     <>
       <PageHeader
         title="Analytics"
         description="Manual snapshots that turn performance into creative decisions."
       />
-      <div className="studio-grid">
-        <Panel title="Total views">
-          {(metrics ?? []).reduce((s, m) => s + m.views, 0).toLocaleString()}
-        </Panel>
-        <Panel title="Profile visits">
-          {(metrics ?? [])
-            .reduce((s, m) => s + m.profile_visits, 0)
-            .toLocaleString()}
-        </Panel>
-        <Panel title="Follows">
-          {(metrics ?? []).reduce((s, m) => s + m.follows, 0).toLocaleString()}
-        </Panel>
+      <div className="studio-grid analytics-pulse">
+        {PULSE_METRICS.map(([key, label]) => {
+          const current = metricTotal(currentMetrics, key);
+          const previous = metricTotal(previousMetrics, key);
+          const series = seriesByDate(rows, key, 14).map((point) => point.value);
+          return (
+            <Panel title={label} key={key} className="analytics-metric">
+              <strong className="metric-figure">{current.toLocaleString()}</strong>
+              <small className={current >= previous ? "positive" : "negative"}>
+                {deltaLabel(current, previous)}
+              </small>
+              <Sparkline values={series} label={label} />
+            </Panel>
+          );
+        })}
       </div>
+
+      <div className="signal-strip analytics-signals" aria-label="Weekly conversion signals">
+        <div>
+          <span>View → save</span>
+          <strong>
+            {conversionPercent(
+              metricTotal(currentMetrics, "saves"),
+              metricTotal(currentMetrics, "views"),
+            )}
+          </strong>
+        </div>
+        <div>
+          <span>Visit → follow</span>
+          <strong>
+            {conversionPercent(
+              metricTotal(currentMetrics, "follows"),
+              metricTotal(currentMetrics, "profile_visits"),
+            )}
+          </strong>
+        </div>
+        <div>
+          <span>View → click</span>
+          <strong>
+            {conversionPercent(
+              metricTotal(currentMetrics, "link_clicks"),
+              metricTotal(currentMetrics, "views"),
+            )}
+          </strong>
+        </div>
+      </div>
+
       <section className="studio-panel feature">
         <div className="panel-head">
           <h2>Content performance</h2>
@@ -90,7 +155,9 @@ export default async function AnalyticsPage() {
                 .filter((x) => x.score)
                 .map((x) => (
                   <tr key={x.id}>
-                    <td>{x.title}</td>
+                    <td>
+                      <Link href={`/studio/content?edit=${x.id}`}>{x.title}</Link>
+                    </td>
                     <td>{x.format}</td>
                     <td>{x.platform}</td>
                     <td>{x.score}</td>
@@ -214,7 +281,7 @@ export default async function AnalyticsPage() {
           <Submit>Save learning</Submit>
         </form>
       </section>
-      {metrics?.length ? (
+      {rows.length ? (
         <section className="studio-panel feature">
           <div className="panel-head">
             <h2>Snapshot history</h2>
@@ -230,7 +297,7 @@ export default async function AnalyticsPage() {
               </tr>
             </thead>
             <tbody>
-              {metrics.map((m) => (
+              {rows.map((m) => (
                 <tr key={m.id}>
                   <td>{m.date}</td>
                   <td>{m.platform}</td>

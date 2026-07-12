@@ -93,10 +93,14 @@ Private product surface at `/studio` — password auth, admin allowlist, and loc
 | --- | --- |
 | **Command Center** | Active release, attention queue, homepage preview, 7-day runway, metrics pulse |
 | **Releases** | Full workspace per release: Overview · Music · Media · Website · Campaign · Performance |
-| **Campaigns** | Content + outreach workload in list or calendar form |
+| **Campaigns** | Content + outreach workload in list, month, or week calendar form |
+| **Content Lab** | Kanban/list pipeline with edit deep-links and one-click status moves |
+| **Tasks** | Open workload CRUD that feeds Command Center runway counts |
 | **Media Library** | Global assets, signed uploads, SHA-256 dedupe, attach-to-release |
+| **Outreach** | Relationship CRM and follow-up timeline |
 | **Data Health** | Reconciliation, metadata, media, placement, and stale-sync audits |
-| **Analytics** | Manual metric snapshots + weighted content performance scoring |
+| **Analytics** | Shared performance model with weekly pulse, sparklines, and learnings |
+| **Brand** | Creative guardrails with live caption/outreach preview |
 | **Connections** | SoundCloud / Spotify hubs — sync, reconcile, never silently invent catalog rows |
 
 Deep dive: [`docs/catalog-architecture.md`](docs/catalog-architecture.md)

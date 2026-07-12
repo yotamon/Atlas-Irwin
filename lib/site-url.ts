@@ -8,11 +8,23 @@ function isLocalUrl(url: URL) {
   );
 }
 
-export function getSiteUrl() {
-  const configuredUrl = process.env.NEXT_PUBLIC_SITE_URL || DEFAULT_SITE_URL;
+function readConfiguredSiteUrl() {
+  const configuredUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (configuredUrl) return configuredUrl;
 
+  const productionUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+  if (productionUrl) {
+    return productionUrl.startsWith("http")
+      ? productionUrl
+      : `https://${productionUrl}`;
+  }
+
+  return DEFAULT_SITE_URL;
+}
+
+export function getSiteUrl() {
   try {
-    const url = new URL(configuredUrl);
+    const url = new URL(readConfiguredSiteUrl());
 
     if (process.env.NODE_ENV === "production" && !isLocalUrl(url)) {
       url.protocol = "https:";

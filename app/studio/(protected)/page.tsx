@@ -2,9 +2,17 @@ import Link from "next/link";
 import { publishRelease } from "@/app/studio/catalog-actions";
 import { EmptyState, PageHeader, Status } from "@/components/studio/ui";
 import { HomepageCatalogPreview } from "@/components/studio/homepage-catalog-preview";
+import { Sparkline } from "@/components/studio/sparkline";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { getPublicReleases } from "@/lib/public-catalog";
 import { publishStateLabel } from "@/lib/studio/catalog-labels";
+import {
+  conversionPercent,
+  deltaLabel,
+  metricTotal,
+  PULSE_METRICS,
+  seriesByDate,
+} from "@/lib/studio/performance";
 import { calculateReleaseReadiness } from "@/lib/studio/readiness";
 import type {
   ContentItem,
@@ -17,35 +25,11 @@ import type {
   Track,
 } from "@/types/database";
 
-const METRICS = [
-  ["streams", "Plays"],
-  ["saves", "Saves"],
-  ["follows", "Follows"],
-  ["profile_visits", "Profile visits"],
-  ["link_clicks", "Link clicks"],
-  ["views", "Content views"],
-] as const;
-
 function shortDate(value: string | null) {
   if (!value) return "Date not set";
   return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(
     new Date(`${value}T12:00:00`),
   );
-}
-
-function metricTotal(rows: MetricSnapshot[], key: (typeof METRICS)[number][0]) {
-  return rows.reduce((sum, row) => sum + row[key], 0);
-}
-
-function deltaLabel(current: number, previous: number) {
-  if (!previous) return current ? "New this week" : "No change";
-  const delta = Math.round(((current - previous) / previous) * 100);
-  return `${delta > 0 ? "+" : ""}${delta}% vs last week`;
-}
-
-function percent(numerator: number, denominator: number) {
-  if (!denominator) return "—";
-  return `${((numerator / denominator) * 100).toFixed(1)}%`;
 }
 
 function relativeSync(value: string | null | undefined) {
@@ -175,15 +159,15 @@ export default async function CommandCenter() {
     ...upcomingContent.map((item) => ({ date: item.scheduled_at!, title: item.title, meta: `${item.platform} · ${item.status}`, href: `/studio/content?edit=${item.id}` })),
     ...upcomingReleases.map((release) => ({ date: `${release.release_date}T12:00:00`, title: `${release.title} release date`, meta: release.publish_state, href: `/studio/releases/${release.id}` })),
     ...dueFollowups.map((item) => ({ date: item.follow_up_at!, title: `Follow up with ${(item.outreach_contacts as unknown as { name: string } | null)?.name ?? "contact"}`, meta: item.channel, href: `/studio/outreach/${item.contact_id}` })),
-    ...dueTasks.map((item) => ({ date: item.due_at!, title: item.title, meta: `${item.priority} priority`, href: active ? `/studio/releases/${active.id}?tab=campaign` : "/studio/campaigns" })),
+    ...dueTasks.map((item) => ({ date: item.due_at!, title: item.title, meta: `${item.priority} priority`, href: `/studio/tasks#task-${item.id}` })),
   ].sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
 
   const thisWeekStart = new Date(now);
   thisWeekStart.setDate(now.getDate() - 7);
   const currentMetrics = metrics.filter((row) => new Date(`${row.date}T12:00:00`) >= thisWeekStart);
   const previousMetrics = metrics.filter((row) => new Date(`${row.date}T12:00:00`) < thisWeekStart);
-  const currentTotals = Object.fromEntries(METRICS.map(([key]) => [key, metricTotal(currentMetrics, key)])) as Record<(typeof METRICS)[number][0], number>;
-  const previousTotals = Object.fromEntries(METRICS.map(([key]) => [key, metricTotal(previousMetrics, key)])) as Record<(typeof METRICS)[number][0], number>;
+  const currentTotals = Object.fromEntries(PULSE_METRICS.map(([key]) => [key, metricTotal(currentMetrics, key)])) as Record<(typeof PULSE_METRICS)[number][0], number>;
+  const previousTotals = Object.fromEntries(PULSE_METRICS.map(([key]) => [key, metricTotal(previousMetrics, key)])) as Record<(typeof PULSE_METRICS)[number][0], number>;
   const liveReleases = releases.filter((release) => release.publish_state === "live" && release.is_public).length;
   const scheduledCount = content.filter((item) => item.status === "Scheduled").length;
   const openTasks = tasksResult.data?.length ?? 0;
@@ -229,7 +213,7 @@ export default async function CommandCenter() {
           <strong>{currentTotals.streams.toLocaleString()}</strong>
           <small className={currentTotals.streams >= previousTotals.streams ? "positive" : "negative"}>{deltaLabel(currentTotals.streams, previousTotals.streams)}</small>
         </Link>
-        <Link href="/studio/data-health">
+        <Link href="/studio/tasks">
           <span>Open workload</span>
           <strong>{attention.length + openTasks}</strong>
           <small>{attention.length} issue{attention.length === 1 ? "" : "s"} · {openTasks} task{openTasks === 1 ? "" : "s"}</small>
@@ -329,18 +313,26 @@ export default async function CommandCenter() {
           <div className="section-head"><div><span className="section-label">Performance pulse</span><h2>Signals worth watching</h2></div><Link href="/studio/analytics">Details</Link></div>
           {metrics.length ? (
             <div className="pulse-grid">
-              {METRICS.map(([key, label]) => {
+              {PULSE_METRICS.map(([key, label]) => {
                 const current = currentTotals[key];
                 const previous = previousTotals[key];
-                return <div key={key}><span>{label}</span><strong>{current.toLocaleString()}</strong><small className={current > previous ? "positive" : undefined}>{deltaLabel(current, previous)}</small></div>;
+                const series = seriesByDate(metrics, key, 14).map((point) => point.value);
+                return (
+                  <div key={key}>
+                    <span>{label}</span>
+                    <strong>{current.toLocaleString()}</strong>
+                    <small className={current > previous ? "positive" : undefined}>{deltaLabel(current, previous)}</small>
+                    <Sparkline values={series} label={label} />
+                  </div>
+                );
               })}
             </div>
           ) : <EmptyState title="No performance snapshots yet" body="Connect SoundCloud or add a manual snapshot. The Studio will stay quiet until real data exists." href="/studio/analytics#new" label="Add snapshot" />}
           {metrics.length ? (
             <div className="signal-strip" aria-label="Weekly conversion signals">
-              <div><span>View → save</span><strong>{percent(currentTotals.saves, currentTotals.views)}</strong></div>
-              <div><span>Visit → follow</span><strong>{percent(currentTotals.follows, currentTotals.profile_visits)}</strong></div>
-              <div><span>View → click</span><strong>{percent(currentTotals.link_clicks, currentTotals.views)}</strong></div>
+              <div><span>View → save</span><strong>{conversionPercent(currentTotals.saves, currentTotals.views)}</strong></div>
+              <div><span>Visit → follow</span><strong>{conversionPercent(currentTotals.follows, currentTotals.profile_visits)}</strong></div>
+              <div><span>View → click</span><strong>{conversionPercent(currentTotals.link_clicks, currentTotals.views)}</strong></div>
             </div>
           ) : null}
         </section>

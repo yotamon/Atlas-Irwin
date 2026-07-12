@@ -72,13 +72,21 @@ expose the current artwork, CTA, default track, and placement order.
   live catalog preview, seven-day runway, and real-metric pulse
 - `/studio/releases/[id]` — release workspace with Overview, Music, Media, Website,
   Campaign, and Performance surfaces
-- `/studio/campaigns` — release-centered content and outreach workload in list or
-  calendar form; it composes existing content and outreach records rather than
-  duplicating campaign state
+- `/studio/campaigns` — release-centered content and outreach workload in list,
+  month, or week calendar form; it composes existing content and outreach records
+  rather than duplicating campaign state
+- `/studio/content` — Content Lab with kanban/list views and edit deep-links (`?edit=`)
+- `/studio/tasks` — open workload CRUD that feeds Command Center runway counts
 - `/studio/media` — global asset inventory, usage map, deduplicated upload, and
   attach-to-release workflow
+- `/studio/outreach` — relationship CRM and follow-up timeline
+- `/studio/spotify` / `/studio/soundcloud` — platform sync and reconciliation hubs
+- `/studio/analytics` — shared performance model with weekly pulse, sparklines,
+  ranked content, and learnings
+- `/studio/brand` — creative guardrails with live caption/outreach preview
 - `/studio/data-health` — auditable reconciliation, metadata, media, platform-link,
   placement, legacy-import, and stale-sync checks
+- `/studio/calendar` — redirects to `/studio/campaigns?view=calendar` (single calendar SSOT)
 
 ## Deterministic readiness
 

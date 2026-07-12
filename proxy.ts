@@ -32,10 +32,24 @@ function getRequestHost(request: NextRequest) {
   return host.replace(/:\d+$/, "");
 }
 
+const CANONICAL_HOST = "atlasirwin.com";
+
 export async function proxy(request: NextRequest) {
   const host = getRequestHost(request);
   const forwardedProto = getForwardedValue(request, "x-forwarded-proto");
   const protocol = forwardedProto || request.nextUrl.protocol.replace(":", "");
+
+  if (
+    process.env.NODE_ENV === "production" &&
+    !isLocalHost(host) &&
+    (host === `www.${CANONICAL_HOST}` || host.endsWith(".vercel.app"))
+  ) {
+    const canonicalUrl = request.nextUrl.clone();
+    canonicalUrl.protocol = "https:";
+    canonicalUrl.host = CANONICAL_HOST;
+    canonicalUrl.port = "";
+    return NextResponse.redirect(canonicalUrl, 308);
+  }
 
   if (
     process.env.NODE_ENV === "production" &&
@@ -58,7 +72,9 @@ export async function proxy(request: NextRequest) {
     "/studio/access-denied",
   ].some((path) => request.nextUrl.pathname.startsWith(path));
 
-  if (isStudio && isLocalStudioBypassHost(host)) {
+  if (!isStudio) return response;
+
+  if (isLocalStudioBypassHost(host)) {
     if (request.nextUrl.pathname === "/studio/login") {
       return NextResponse.redirect(new URL("/studio", request.url));
     }
@@ -70,7 +86,7 @@ export async function proxy(request: NextRequest) {
     !process.env.NEXT_PUBLIC_SUPABASE_URL ||
     !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   ) {
-    if (isStudio && !isOpenStudioRoute)
+    if (!isOpenStudioRoute)
       return NextResponse.redirect(
         new URL(
           "/studio/login?error=Studio%20is%20not%20configured",
@@ -114,4 +130,6 @@ export async function proxy(request: NextRequest) {
   return response;
 }
 
-export const config = { matcher: ["/studio/:path*"] };
+export const config = {
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\..*).*)"],
+};
