@@ -3,11 +3,21 @@
 import { useFormStatus } from "react-dom";
 import type { ReactNode } from "react";
 
-export function SubmitButton({ children }: { children: ReactNode }) {
+export function SubmitButton({
+  children,
+  pendingLabel = "Saving...",
+  className = "button primary",
+  disabled = false,
+}: {
+  children: ReactNode;
+  pendingLabel?: ReactNode;
+  className?: string;
+  disabled?: boolean;
+}) {
   const { pending } = useFormStatus();
   return (
-    <button className="button primary" type="submit" disabled={pending} aria-disabled={pending}>
-      {pending ? "Saving…" : children}
+    <button className={className} type="submit" disabled={disabled || pending} aria-disabled={disabled || pending}>
+      {pending ? pendingLabel : children}
     </button>
   );
 }
@@ -31,8 +41,7 @@ export function ConfirmButton({
         if (!window.confirm(message)) event.preventDefault();
       }}
     >
-      {pending ? "Working…" : children}
+      {pending ? "Working..." : children}
     </button>
   );
 }
-
