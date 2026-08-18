@@ -86,9 +86,9 @@ export async function generateVideoThumbnailCandidates(form: FormData) {
     .single();
   if (sourceError || !source?.public_url) throw new Error(sourceError?.message || "Master video URL is unavailable.");
 
-  const durationMs = source.duration_ms || Math.round((project.music_map && typeof project.music_map === "object" ? 0 : 0));
   const map = parseMusicMap(project.music_map);
-  const timestamps = candidateTimestamps(project.music_map, map?.duration_ms || durationMs);
+  const timestamps = candidateTimestamps(project.music_map, source.duration_ms || map?.duration_ms || 0);
+  if (!timestamps.length) throw new Error("Atlas could not choose safe thumbnail timestamps.");
   const jobs = [];
 
   for (const timestampMs of timestamps) {
@@ -125,10 +125,11 @@ export async function selectVideoThumbnail(form: FormData) {
   const db = createServiceClient();
 
   const [{ data: project, error: projectError }, { data: asset, error: assetError }] = await Promise.all([
-    db.from("music_video_projects").select("id,release_id,owner_id").eq("id", projectId).eq("owner_id", user.id).single(),
+    db.from("music_video_projects").select("id,release_id,owner_id,status").eq("id", projectId).eq("owner_id", user.id).single(),
     db.from("media_assets").select("*").eq("id", assetId).eq("owner_id", user.id).single(),
   ]);
   if (projectError || !project) throw new Error(projectError?.message || "Video project not found.");
+  if (project.status !== "complete") throw new Error("Thumbnail selection is available after the master completes.");
   if (assetError || !asset) throw new Error(assetError?.message || "Thumbnail asset not found.");
   if (asset.asset_type !== "thumbnail" || metadata(asset.metadata).project_id !== project.id) {
     throw new Error("Thumbnail candidate does not belong to this video project.");
