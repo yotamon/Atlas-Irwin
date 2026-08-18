@@ -3,6 +3,7 @@ import { createMediaPreviewMap } from "@/lib/studio/media-previews";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { getPublicReleases } from "@/lib/public-catalog";
 import { ReleaseCockpit } from "@/components/studio/release-cockpit";
+import type { MusicVideoProject } from "@/types/database";
 
 export default async function ReleaseDetail({
   params,
@@ -66,6 +67,17 @@ export default async function ReleaseDetail({
     : { data: [] };
   const mediaPreviewUrls = await createMediaPreviewMap(supabase, mediaAssets ?? []);
 
+  let videoProjects: MusicVideoProject[] = [];
+  if (tab === "video") {
+    const { data, error } = await supabase
+      .from("music_video_projects")
+      .select("*")
+      .eq("release_id", id)
+      .order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    videoProjects = data ?? [];
+  }
+
   const releaseTerms = new Set([release.title, ...(tracks ?? []).map((track) => track.title)].map((value) => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()));
   const relevantSoundCloud = (soundCloudPending ?? []).filter((item) => releaseTerms.has(item.title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()));
   const relevantSpotify = (spotifyPending ?? []).filter((item) => releaseTerms.has(item.name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()));
@@ -88,6 +100,7 @@ export default async function ReleaseDetail({
         unmatchedSoundCloud={relevantSoundCloud}
         unmatchedSpotify={relevantSpotify}
         publicReleases={publicReleases}
+        videoProjects={videoProjects}
         tab={tab}
       />
   );
