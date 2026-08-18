@@ -1,6 +1,7 @@
 import { ProjectHeader } from "./project-header";
 import { StageRail } from "./stage-rail";
 import { BriefPanel } from "./brief-panel";
+import { RecoveryPanel } from "./recovery-panel";
 import {
   ConceptsPanel,
   GenerationPanel,
@@ -21,6 +22,7 @@ export function VideoProjectWorkspace({ data }: { data: VideoWorkspaceData }) {
     <div className="video-project-workspace">
       <ProjectHeader project={project} release={release} track={track} />
       <StageRail status={project.status} />
+      <RecoveryPanel data={data} />
       <NextActionCard data={data} />
 
       <div className="video-production-layout">
