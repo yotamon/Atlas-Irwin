@@ -21,6 +21,22 @@ type HiggsfieldResponse = {
   [key: string]: unknown;
 };
 
+export class HiggsfieldRequestError extends Error {
+  readonly definitelyNotSubmitted: boolean;
+  readonly statusCode: number | null;
+
+  constructor(message: string, options: { definitelyNotSubmitted: boolean; statusCode?: number | null }) {
+    super(message);
+    this.name = "HiggsfieldRequestError";
+    this.definitelyNotSubmitted = options.definitelyNotSubmitted;
+    this.statusCode = options.statusCode ?? null;
+  }
+}
+
+export function isHiggsfieldDefiniteRejection(error: unknown): error is HiggsfieldRequestError {
+  return error instanceof HiggsfieldRequestError && error.definitelyNotSubmitted;
+}
+
 function credentials() {
   const raw = process.env.HF_CREDENTIALS?.trim();
   if (raw && raw.includes(":")) return raw;
@@ -86,7 +102,6 @@ function mapInput(request: VideoGenerationRequest) {
       input.resolution = request.resolution;
       input.generate_audio = false;
     } else {
-      // Kling 3.0 uses mode=std|pro|4k and sound=off|on rather than a resolution field.
       delete input.resolution;
       delete input.generate_audio;
       if (typeof input.sound !== "string") input.sound = "off";
@@ -108,7 +123,7 @@ function normalizedStatus(status?: string): ProviderSubmission["status"] {
 
 function parseResponse(payload: HiggsfieldResponse): ProviderSubmission {
   const requestId = typeof payload.request_id === "string" ? payload.request_id : "";
-  if (!requestId) throw new Error("Higgsfield response did not contain request_id.");
+  if (!requestId) throw new Error("Higgsfield returned success without request_id; submission state is ambiguous and must be reconciled before retrying.");
   const resultUrl = payload.video?.url || payload.images?.find((image) => image.url)?.url;
   return {
     requestId,
@@ -119,22 +134,38 @@ function parseResponse(payload: HiggsfieldResponse): ProviderSubmission {
 }
 
 async function providerFetch(path: string, init?: RequestInit) {
-  const response = await fetch(`${baseUrl()}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Key ${credentials()}`,
-      "Content-Type": "application/json",
-      "User-Agent": "atlas-irwin-video-director/1.0",
-      ...(init?.headers ?? {}),
-    },
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl()}${path}`, {
+      ...init,
+      headers: {
+        Authorization: `Key ${credentials()}`,
+        "Content-Type": "application/json",
+        "User-Agent": "atlas-irwin-video-director/1.0",
+        ...(init?.headers ?? {}),
+      },
+      cache: "no-store",
+    });
+  } catch (error) {
+    throw new HiggsfieldRequestError(
+      `Higgsfield network request failed before Atlas received a response: ${error instanceof Error ? error.message : "network error"}. Submission state is ambiguous.`,
+      { definitelyNotSubmitted: false },
+    );
+  }
+
   const payload = await response.json().catch(() => ({})) as HiggsfieldResponse;
   if (!response.ok) {
     const detail = typeof payload.detail === "string" ? payload.detail : JSON.stringify(payload.detail ?? payload);
-    if (response.status === 401) throw new Error("Higgsfield authentication failed.");
-    if (response.status === 403) throw new Error("Higgsfield rejected the request because credits or workspace access are insufficient.");
-    throw new Error(`Higgsfield request failed (${response.status}): ${detail.slice(0, 800)}`);
+    const definite = response.status >= 400 && response.status < 500;
+    const message = response.status === 401
+      ? "Higgsfield authentication failed."
+      : response.status === 403
+        ? "Higgsfield rejected the request because credits or workspace access are insufficient."
+        : `Higgsfield request failed (${response.status}): ${detail.slice(0, 800)}`;
+    throw new HiggsfieldRequestError(message, {
+      definitelyNotSubmitted: definite,
+      statusCode: response.status,
+    });
   }
   return payload;
 }
@@ -161,9 +192,6 @@ function configuredQuote(request: VideoGenerationRequest): number | null {
   return null;
 }
 
-// Read-only anchors captured 2026-08-18. They are a planning fallback only. We reserve
-// a safety buffer and surface the quote source in the UI. Production can override these
-// with HIGGSFIELD_CREDIT_RATES_JSON without code changes.
 function staticAnchorQuote(request: VideoGenerationRequest): number {
   const seconds = Math.max(1, request.durationSeconds ?? 5);
   if (request.operation === "look_image") return 2;
@@ -205,11 +233,18 @@ export class HiggsfieldProvider implements VideoGenerationProvider {
 
   async submit(request: VideoGenerationRequest, webhookUrl?: string): Promise<ProviderSubmission> {
     const model = higgsfieldModel(request.model);
-    if (!model) throw new Error(`Unsupported Higgsfield model: ${request.model}`);
-    if (request.operation === "look_image" && model.output !== "image") throw new Error("Image operation requires an image model.");
-    if (request.operation !== "look_image" && model.output !== "video") throw new Error("Video operation requires a video model.");
+    if (!model) throw new HiggsfieldRequestError(`Unsupported Higgsfield model: ${request.model}`, { definitelyNotSubmitted: true });
+    if (request.operation === "look_image" && model.output !== "image") {
+      throw new HiggsfieldRequestError("Image operation requires an image model.", { definitelyNotSubmitted: true });
+    }
+    if (request.operation !== "look_image" && model.output !== "video") {
+      throw new HiggsfieldRequestError("Video operation requires a video model.", { definitelyNotSubmitted: true });
+    }
     if (!model.supportedResolutions.includes(request.resolution)) {
-      throw new Error(`${model.label} does not support ${request.resolution}; Atlas will not rely on a paid provider fallback.`);
+      throw new HiggsfieldRequestError(
+        `${model.label} does not support ${request.resolution}; Atlas will not rely on a paid provider fallback.`,
+        { definitelyNotSubmitted: true },
+      );
     }
 
     let endpoint = resolveHiggsfieldEndpoint(request.model);
