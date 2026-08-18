@@ -5,7 +5,7 @@ import { openAIDirectorReadiness } from "@/lib/video-director/openai-director";
 import { mediaWorkerReadiness } from "@/lib/video-director/worker";
 import { higgsfieldReadiness } from "@/lib/video-providers/higgsfield/client";
 import { VideoProjectWorkspace } from "@/components/studio/video-director/project-workspace";
-import type { Json } from "@/types/database";
+import type { Json, MediaAsset } from "@/types/database";
 
 function hasStructuredValue(value: unknown) {
   if (!value) return false;
@@ -16,6 +16,10 @@ function hasStructuredValue(value: unknown) {
 
 function strings(value: Json) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function uniqueAssets(assets: MediaAsset[]) {
+  return [...new Map(assets.map((asset) => [asset.id, asset])).values()];
 }
 
 export default async function VideoProjectPage({
@@ -43,6 +47,7 @@ export default async function VideoProjectPage({
     rendersResult,
     workerJobsResult,
     mediaLinksResult,
+    thumbnailAssetsResult,
   ] = await Promise.all([
     db.from("releases").select("*").eq("id", project.release_id).eq("owner_id", user.id).maybeSingle(),
     db.from("tracks").select("*").eq("id", project.track_id).eq("owner_id", user.id).maybeSingle(),
@@ -53,9 +58,14 @@ export default async function VideoProjectPage({
     db.from("music_video_generations").select("*").eq("project_id", project.id).eq("owner_id", user.id).order("created_at"),
     db.from("music_video_approvals").select("*").eq("project_id", project.id).eq("owner_id", user.id).order("created_at", { ascending: false }),
     db.from("music_video_renders").select("*").eq("project_id", project.id).eq("owner_id", user.id).order("created_at", { ascending: false }),
-    db.from("music_video_worker_jobs").select("*").eq("project_id", project.id).eq("owner_id", user.id).order("created_at", { ascending: false }).limit(20),
+    db.from("music_video_worker_jobs").select("*").eq("project_id", project.id).eq("owner_id", user.id).order("created_at", { ascending: false }).limit(50),
     db.from("media_links").select("id,media_asset_id,role,release_id,track_id")
       .eq("owner_id", user.id).or(`release_id.eq.${project.release_id},track_id.eq.${project.track_id}`),
+    db.from("media_assets").select("*")
+      .eq("owner_id", user.id)
+      .eq("asset_type", "thumbnail")
+      .contains("metadata", { project_id: project.id })
+      .order("created_at"),
   ]);
 
   const firstError = [
@@ -69,6 +79,7 @@ export default async function VideoProjectPage({
     rendersResult.error,
     workerJobsResult.error,
     mediaLinksResult.error,
+    thumbnailAssetsResult.error,
   ].find(Boolean);
   if (firstError) throw new Error(firstError.message);
   const release = releaseResult.data;
@@ -90,10 +101,11 @@ export default async function VideoProjectPage({
       ...strings(shot.reference_asset_ids),
     ].filter((assetId): assetId is string => Boolean(assetId))),
   ])];
-  const { data: assets, error: assetsError } = assetIds.length
+  const { data: referencedAssets, error: assetsError } = assetIds.length
     ? await db.from("media_assets").select("*").eq("owner_id", user.id).in("id", assetIds)
-    : { data: [], error: null };
+    : { data: [] as MediaAsset[], error: null };
   if (assetsError) throw new Error(assetsError.message);
+  const assets = uniqueAssets([...(referencedAssets ?? []), ...(thumbnailAssetsResult.data ?? [])]);
 
   const roles = new Set((mediaLinksResult.data ?? []).map((link) => link.role));
   const hasAudio = Boolean(track.audio_url) || roles.has("master_audio") || roles.has("audio_preview");
@@ -112,7 +124,7 @@ export default async function VideoProjectPage({
         approvals: approvalsResult.data ?? [],
         renders,
         workerJobs: workerJobsResult.data ?? [],
-        assets: assets ?? [],
+        assets,
         services: {
           director: openAIDirectorReadiness(),
           higgsfield: higgsfieldReadiness(),

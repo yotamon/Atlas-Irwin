@@ -68,11 +68,8 @@ export type StoryboardShot = {
   camera: string;
   transition_in: string;
   transition_out: string;
-  // New plans always include crop metadata through the strict AI schema. These
-  // remain optional in the domain type because older persisted shots can be
-  // revised before that metadata has been backfilled into generation_params.
-  vertical_safe?: boolean;
-  vertical_focus?: "left" | "center" | "right";
+  vertical_safe: boolean;
+  vertical_focus: "left" | "center" | "right";
   generation_priority: "cost" | "balanced" | "quality" | "consistency" | "capability";
   reuse_strategy: "unique" | "reuse_source" | "continuation" | "reframe" | "hold" | "loop";
   capability_profile: {
@@ -82,6 +79,11 @@ export type StoryboardShot = {
     requires_audio_reference: boolean;
     requires_video_reference: boolean;
   };
+};
+
+export type StoryboardShotRevisionInput = Omit<StoryboardShot, "vertical_safe" | "vertical_focus"> & {
+  vertical_safe?: boolean;
+  vertical_focus?: "left" | "center" | "right";
 };
 
 export type StoryboardScene = {
@@ -129,7 +131,7 @@ export interface MusicVideoCreativeDirector {
     context: VideoProjectContext;
     concept: VideoConcept;
     visualBible: VisualBible;
-    currentShot: StoryboardShot;
+    currentShot: StoryboardShotRevisionInput;
     instruction: string;
   }): Promise<StoryboardShot>;
 }

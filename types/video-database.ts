@@ -121,6 +121,14 @@ export type VideoDatabase = Omit<Database, "public"> & {
         };
         Returns: ExtendedMusicVideoGeneration;
       };
+      select_music_video_thumbnail: {
+        Args: {
+          p_owner_id: string;
+          p_project_id: string;
+          p_asset_id: string;
+        };
+        Returns: undefined;
+      };
     };
   };
 };
