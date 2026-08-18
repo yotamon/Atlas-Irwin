@@ -30,6 +30,10 @@ begin
   return new;
 end $$;
 
+create unique index if not exists media_links_primary_thumbnail_idx
+  on public.media_links(release_id, role)
+  where is_primary and release_id is not null and role = 'thumbnail';
+
 create or replace function public.select_music_video_thumbnail(
   p_project_id uuid,
   p_asset_id uuid
