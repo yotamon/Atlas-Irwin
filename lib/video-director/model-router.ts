@@ -22,9 +22,12 @@ function record(value: unknown): Record<string, unknown> {
     : {};
 }
 
+function genericReferenceCount(input: RouterInput) {
+  return Array.isArray(input.reference_asset_ids) ? input.reference_asset_ids.length : 0;
+}
+
 function hasReferences(input: RouterInput) {
-  return Boolean(input.start_asset_id || input.end_asset_id) ||
-    (Array.isArray(input.reference_asset_ids) && input.reference_asset_ids.length > 0);
+  return Boolean(input.start_asset_id || input.end_asset_id || genericReferenceCount(input));
 }
 
 function scoreModel(model: HiggsfieldModelCapability, input: RouterInput) {
@@ -32,6 +35,7 @@ function scoreModel(model: HiggsfieldModelCapability, input: RouterInput) {
   if (!model.supportedResolutions.includes(input.targetResolution)) return -Infinity;
   if (input.end_asset_id && !model.supportsEndImage) return -Infinity;
   if (input.start_asset_id && !model.supportsStartImage) return -Infinity;
+  if (genericReferenceCount(input) > 0 && !model.supportsImageReferences) return -Infinity;
 
   const profile = record(input.capability_profile);
   const music = record(input.music_context);
@@ -75,7 +79,7 @@ export function routeVideoShot(input: RouterInput): ShotRoutingDecision {
     .filter((entry) => Number.isFinite(entry.score))
     .sort((a, b) => b.score - a.score);
   const winner = ranked[0];
-  if (!winner) throw new Error("No video model satisfies the shot requirements at the requested resolution.");
+  if (!winner) throw new Error("No video model satisfies the shot requirements, references, and requested resolution.");
 
   const params: Record<string, unknown> = { generate_audio: false };
   if (winner.model.id === "seedance_2_0") {
