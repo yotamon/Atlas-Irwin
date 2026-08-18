@@ -134,6 +134,8 @@ Creative requirements:
 - Human subjects are optional and must respect people_mode.
 - Prompts must describe a shot that a video model can execute: subject, environment, action, camera, light, material behavior, continuity anchors. Do not include prose about feelings that has no visible manifestation.
 - Compose hero material so useful 9:16 social reframes are possible whenever it does not hurt the 16:9 master. Mark vertical_safe only when a vertical crop can preserve the essential subject/action, and set vertical_focus to the subject's horizontal position.
+- The first timeline shot must create its own source with reuse_strategy=unique. Later editorial reuse may only refer backward to an established source.
+- test_shot_indexes must refer only to unique or continuation source shots that can actually be generated and reviewed.
 - The final result must feel intentional, premium, strange enough to be memorable, and recognizably part of one Atlas Irwin world.`;
 
 export class OpenAIMusicVideoDirector implements MusicVideoCreativeDirector {
@@ -165,10 +167,42 @@ export class OpenAIMusicVideoDirector implements MusicVideoCreativeDirector {
 
 function validatePlanTimeline(plan: ProductionPlan, context: VideoProjectContext) {
   const durationMs = context.musicMap?.duration_ms || Math.round((context.track.duration ?? 0) * 1000);
-  const shots = plan.scenes.flatMap((scene) => scene.shots).sort((a, b) => a.start_ms - b.start_ms);
+  const shots = plan.scenes.flatMap((scene) => scene.shots);
   if (!shots.length) throw new Error("Creative Director returned an empty storyboard.");
-  for (const shot of shots) if (shot.end_ms <= shot.start_ms) throw new Error("Creative Director returned an invalid shot duration.");
-  if (durationMs > 0) { const tolerance = 1500; if (shots[0].start_ms > tolerance || Math.abs(shots.at(-1)!.end_ms - durationMs) > tolerance) throw new Error("Creative Director storyboard does not cover the track duration closely enough. Regenerate the plan."); }
+  if (shots[0].reuse_strategy !== "unique") throw new Error("Creative Director first shot must create a unique source.");
+
+  const boundaryToleranceMs = 50;
+  for (let index = 0; index < shots.length; index += 1) {
+    const shot = shots[index];
+    if (shot.end_ms <= shot.start_ms) throw new Error(`Creative Director returned an invalid duration for shot ${index + 1}.`);
+    if (index > 0) {
+      const delta = shot.start_ms - shots[index - 1].end_ms;
+      if (Math.abs(delta) > boundaryToleranceMs) {
+        throw new Error(`Creative Director storyboard has a ${delta > 0 ? "gap" : "overlap"} before shot ${index + 1}. Regenerate the plan.`);
+      }
+    }
+  }
+
+  if (durationMs > 0) {
+    if (shots[0].start_ms > boundaryToleranceMs || Math.abs(shots.at(-1)!.end_ms - durationMs) > boundaryToleranceMs) {
+      throw new Error("Creative Director storyboard does not cover the full track duration closely enough. Regenerate the plan.");
+    }
+    if (shots.some((shot) => shot.start_ms > durationMs + boundaryToleranceMs || shot.end_ms > durationMs + boundaryToleranceMs)) {
+      throw new Error("Creative Director storyboard extends beyond the track duration.");
+    }
+  }
+
+  const testIndexes = plan.test_shot_indexes;
+  if (!testIndexes.length || new Set(testIndexes).size !== testIndexes.length) {
+    throw new Error("Creative Director must return unique representative test-shot indexes.");
+  }
+  for (const index of testIndexes) {
+    const shot = shots[index];
+    if (!shot) throw new Error(`Creative Director test shot index ${index} is outside the storyboard.`);
+    if (!["unique", "continuation"].includes(shot.reuse_strategy)) {
+      throw new Error(`Creative Director test shot ${index + 1} is editorial-only and cannot be generated as a representative test.`);
+    }
+  }
 }
 
 export function openAIDirectorReadiness() {
