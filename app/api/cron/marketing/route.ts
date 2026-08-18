@@ -1,4 +1,5 @@
 import { runMarketingAutomationCycle } from "@/lib/marketing/automation";
+import { processDueOutreachEnrollments } from "@/lib/marketing/outreach";
 import { processDuePublicationJobs } from "@/lib/marketing/publications";
 
 export const runtime = "nodejs";
@@ -16,8 +17,9 @@ export async function GET(request: Request) {
 
   try {
     const publications = await processDuePublicationJobs();
+    const outreach = await processDueOutreachEnrollments();
     const automation = await runMarketingAutomationCycle();
-    return Response.json({ ok: true, publications, automation });
+    return Response.json({ ok: true, publications, outreach, automation });
   } catch (error) {
     return Response.json(
       { ok: false, error: error instanceof Error ? error.message : "Marketing automation failed." },
