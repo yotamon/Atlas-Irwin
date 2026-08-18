@@ -1,0 +1,47 @@
+name: Refresh dependency lockfile
+
+on:
+  push:
+    branches: [feature/atlas-studio-intelligence]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-atlas-lockfile
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/atlas-studio-intelligence
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Refresh lockfile within declared semver ranges
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Apply compatible audit fixes
+        run: npm audit fix --package-lock-only --ignore-scripts
+
+      - name: Verify production audit
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Commit lockfile
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            echo "Lockfile already current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "fix(deps): refresh audited lockfile"
+          git push origin HEAD:feature/atlas-studio-intelligence
