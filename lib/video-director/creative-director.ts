@@ -81,6 +81,11 @@ export type StoryboardShot = {
   };
 };
 
+export type StoryboardShotRevisionInput = Omit<StoryboardShot, "vertical_safe" | "vertical_focus"> & {
+  vertical_safe?: boolean;
+  vertical_focus?: "left" | "center" | "right";
+};
+
 export type StoryboardScene = {
   title: string;
   start_ms: number;
@@ -126,7 +131,7 @@ export interface MusicVideoCreativeDirector {
     context: VideoProjectContext;
     concept: VideoConcept;
     visualBible: VisualBible;
-    currentShot: StoryboardShot;
+    currentShot: StoryboardShotRevisionInput;
     instruction: string;
   }): Promise<StoryboardShot>;
 }
