@@ -34,19 +34,30 @@ create unique index if not exists media_links_primary_thumbnail_idx
   on public.media_links(release_id, role)
   where is_primary and release_id is not null and role = 'thumbnail';
 
+-- The Studio normally calls this as an authenticated user, but the local Studio bypass uses
+-- a service-role client after requireStudioAdmin() has resolved the concrete admin profile.
+-- Accept the owner explicitly so both execution modes can use the same atomic transaction.
+drop function if exists public.select_music_video_thumbnail(uuid, uuid);
+
 create or replace function public.select_music_video_thumbnail(
+  p_owner_id uuid,
   p_project_id uuid,
   p_asset_id uuid
 ) returns void
 language plpgsql security invoker set search_path = '' as $$
 declare
+  caller_id uuid := auth.uid();
   p public.music_video_projects;
   a public.media_assets;
   current_metadata jsonb;
 begin
+  if current_user <> 'service_role' and (caller_id is null or caller_id <> p_owner_id) then
+    raise exception 'Not authorized to select a thumbnail for this owner';
+  end if;
+
   select * into p
   from public.music_video_projects
-  where id = p_project_id and owner_id = auth.uid()
+  where id = p_project_id and owner_id = p_owner_id
   for update;
 
   if p.id is null then raise exception 'Video project not found'; end if;
@@ -54,7 +65,7 @@ begin
 
   select * into a
   from public.media_assets
-  where id = p_asset_id and owner_id = auth.uid()
+  where id = p_asset_id and owner_id = p_owner_id
   for update;
 
   if a.id is null then raise exception 'Thumbnail asset not found'; end if;
@@ -68,7 +79,7 @@ begin
   set metadata = coalesce(m.metadata, '{}'::jsonb) || jsonb_build_object(
     'selected_thumbnail', false
   )
-  where m.owner_id = auth.uid()
+  where m.owner_id = p_owner_id
     and m.asset_type::text = 'thumbnail'
     and m.metadata->>'project_id' = p.id::text;
 
@@ -78,18 +89,18 @@ begin
   );
   update public.media_assets
   set metadata = current_metadata
-  where id = a.id and owner_id = auth.uid();
+  where id = a.id and owner_id = p_owner_id;
 
   update public.media_links
   set is_primary = false
-  where owner_id = auth.uid()
+  where owner_id = p_owner_id
     and release_id = p.release_id
     and role::text = 'thumbnail'
     and is_primary = true;
 
   if exists (
     select 1 from public.media_links
-    where owner_id = auth.uid()
+    where owner_id = p_owner_id
       and release_id = p.release_id
       and media_asset_id = a.id
       and role::text = 'thumbnail'
@@ -97,7 +108,7 @@ begin
     update public.media_links
     set is_primary = true,
         caption = 'Selected Atlas Video Director thumbnail'
-    where owner_id = auth.uid()
+    where owner_id = p_owner_id
       and release_id = p.release_id
       and media_asset_id = a.id
       and role::text = 'thumbnail';
@@ -113,7 +124,7 @@ begin
       caption,
       alt_text
     ) values (
-      auth.uid(),
+      p_owner_id,
       a.id,
       p.release_id,
       null,
@@ -126,4 +137,4 @@ begin
   end if;
 end $$;
 
-grant execute on function public.select_music_video_thumbnail(uuid, uuid) to authenticated;
+grant execute on function public.select_music_video_thumbnail(uuid, uuid, uuid) to authenticated, service_role;
