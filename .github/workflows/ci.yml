@@ -54,5 +54,5 @@ jobs:
       - name: Lint Postgres functions
         run: supabase db lint --local --level error --fail-on error
 
-      - name: Verify Marketing Engine database behavior
-        run: supabase test db supabase/tests/marketing_engine_test.sql --local
+      - name: Verify database behavior
+        run: supabase test db --local
