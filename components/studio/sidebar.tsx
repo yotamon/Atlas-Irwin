@@ -6,10 +6,12 @@ const links = [
   ["/studio", "Command Center", "dashboard"],
   ["/studio/releases", "Releases", "releases"],
   ["/studio/music", "Music Lab", "musicLab"],
-  ["/studio/campaigns", "Campaigns", "campaigns"],
+  ["/studio/campaigns", "Campaign Brain", "campaigns"],
+  ["/studio/content", "Content Lab", "content"],
+  ["/studio/outreach", "Outreach", "outreach"],
   ["/studio/media", "Media Library", "media"],
-  ["/studio/data-health", "Data Health", "dataHealth"],
   ["/studio/analytics", "Analytics", "analytics"],
+  ["/studio/data-health", "Data Health", "dataHealth"],
   ["/studio/brand", "Brand / Creative", "brand"],
 ] as const;
 
