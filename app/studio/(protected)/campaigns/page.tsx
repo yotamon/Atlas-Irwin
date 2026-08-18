@@ -47,11 +47,12 @@ export default async function CampaignsPage() {
   const activeCampaigns = campaigns.filter((campaign) => ["planned", "active", "paused"].includes(campaign.status));
   const runningExperiments = experiments.filter((experiment) => ["running", "evaluating"].includes(experiment.status)).length;
   const pendingApprovals = variants.filter((variant) => variant.approval_status === "pending" && variant.status !== "rejected").length;
-  const sevenDays = Date.now() + 7 * 24 * 60 * 60 * 1000;
+  const now = new Date().getTime();
+  const sevenDays = now + 7 * 24 * 60 * 60 * 1000;
   const dueSoon = content.filter((item) => {
     if (!item.scheduled_at || item.status === "Published" || item.status === "Archived") return false;
     const time = new Date(item.scheduled_at).getTime();
-    return time >= Date.now() && time <= sevenDays;
+    return time >= now && time <= sevenDays;
   }).length;
 
   return (
