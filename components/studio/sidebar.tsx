@@ -5,6 +5,7 @@ import { signOut } from "@/app/studio/actions";
 const links = [
   ["/studio", "Command Center", "dashboard"],
   ["/studio/releases", "Releases", "releases"],
+  ["/studio/music", "Music Lab", "musicLab"],
   ["/studio/campaigns", "Campaigns", "campaigns"],
   ["/studio/media", "Media Library", "media"],
   ["/studio/data-health", "Data Health", "dataHealth"],
