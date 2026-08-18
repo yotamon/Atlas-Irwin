@@ -3,7 +3,7 @@ import "server-only";
 import type {
   MusicVideoCreativeDirector,
   ProductionPlan,
-  StoryboardScene,
+  StoryboardShot,
   VideoConcept,
   VideoProjectContext,
   VisualBible,
@@ -15,7 +15,8 @@ const SHOT_SCHEMA = {
   additionalProperties: false,
   required: [
     "start_ms", "end_ms", "description", "prompt", "negative_prompt", "camera",
-    "transition_in", "transition_out", "generation_priority", "reuse_strategy", "capability_profile",
+    "transition_in", "transition_out", "vertical_safe", "vertical_focus",
+    "generation_priority", "reuse_strategy", "capability_profile",
   ],
   properties: {
     start_ms: { type: "integer", minimum: 0 },
@@ -26,6 +27,8 @@ const SHOT_SCHEMA = {
     camera: { type: "string" },
     transition_in: { type: "string" },
     transition_out: { type: "string" },
+    vertical_safe: { type: "boolean" },
+    vertical_focus: { type: "string", enum: ["left", "center", "right"] },
     generation_priority: { type: "string", enum: ["cost", "balanced", "quality", "consistency", "capability"] },
     reuse_strategy: { type: "string", enum: ["unique", "reuse_source", "continuation", "reframe", "hold", "loop"] },
     capability_profile: {
@@ -212,6 +215,7 @@ Creative requirements:
 - Design for production efficiency. A full track should normally need roughly 12-18 unique generated source sequences, not a new expensive generation every few seconds. Use editorial reuse, continuation, holds, loops and reframes deliberately.
 - Human subjects are optional and must respect people_mode.
 - Prompts must describe a shot that a video model can execute: subject, environment, action, camera, light, material behavior, continuity anchors. Do not include prose about feelings that has no visible manifestation.
+- Compose hero material so useful 9:16 social reframes are possible whenever it does not hurt the 16:9 master. Mark vertical_safe only when a vertical crop can preserve the essential subject/action, and set vertical_focus to the subject's horizontal position.
 - The final result must feel intentional, premium, strange enough to be memorable, and recognizably part of one Atlas Irwin world.`;
 
 export class OpenAIMusicVideoDirector implements MusicVideoCreativeDirector {
@@ -290,10 +294,10 @@ export class OpenAIMusicVideoDirector implements MusicVideoCreativeDirector {
     context: VideoProjectContext;
     concept: VideoConcept;
     visualBible: VisualBible;
-    currentShot: StoryboardScene["shots"][number];
+    currentShot: StoryboardShot;
     instruction: string;
-  }): Promise<StoryboardScene["shots"][number]> {
-    return structuredResponse<StoryboardScene["shots"][number]>({
+  }): Promise<StoryboardShot> {
+    return structuredResponse<StoryboardShot>({
       name: "atlas_video_shot_revision",
       instructions: `${DIRECTOR_INSTRUCTIONS}\nRevise only the requested shot. Preserve its exact start_ms and end_ms unless the instruction explicitly requires a timing change. Preserve continuity with the visual bible.`,
       prompt: JSON.stringify({
