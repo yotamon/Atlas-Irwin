@@ -24,7 +24,6 @@ import type { Json } from "@/types/database";
 import type {
   CampaignExperiment,
   ContentVariant,
-  MarketingContentItem,
 } from "@/types/marketing-database";
 
 const uuid = z.uuid();

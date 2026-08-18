@@ -19,7 +19,7 @@ import { recordDirectorPreference } from "@/lib/video-director/preferences";
 import { routeVideoShot } from "@/lib/video-director/model-router";
 import { queueVideoRender, type VideoRenderType } from "@/lib/video-director/render";
 import type { Json } from "@/types/database";
-import type { ExtendedMusicVideoProject, VideoDatabase } from "@/types/video-database";
+import type { VideoDatabase } from "@/types/video-database";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 function value(form: FormData, key: string) {
