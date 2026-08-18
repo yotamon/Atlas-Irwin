@@ -5,7 +5,12 @@ import { getSiteUrl } from "@/lib/site-url";
 import type { Json, MusicVideoGeneration } from "@/types/database";
 import type { ExtendedMusicVideoGeneration, ExtendedMusicVideoProject, ExtendedMusicVideoShot, VideoDatabase } from "@/types/video-database";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { HiggsfieldProvider, higgsfieldReadiness, resolveHiggsfieldEndpoint } from "@/lib/video-providers/higgsfield/client";
+import {
+  HiggsfieldProvider,
+  higgsfieldReadiness,
+  isHiggsfieldDefiniteRejection,
+  resolveHiggsfieldEndpoint,
+} from "@/lib/video-providers/higgsfield/client";
 import type { GenerationOperation, ProviderStatus, VideoGenerationRequest, VideoProviderMedia } from "@/lib/video-providers/types";
 import { routeLookDevelopmentModel } from "./model-router";
 import { storeRemoteGeneratedAsset } from "./assets";
@@ -211,6 +216,14 @@ export async function createApprovalEnvelope(input: {
   if ((generations ?? []).some((generation) => generation.status !== "planned" || generation.approval_id)) {
     throw new Error("This batch contains a request that is no longer waiting for approval.");
   }
+
+  const readiness = higgsfieldReadiness();
+  if (!readiness.hasCredentials) throw new Error("Higgsfield credentials are not configured.");
+  for (const generation of generations ?? []) {
+    resolveHiggsfieldEndpoint(generation.model);
+    generationRequest(generation.request_payload);
+  }
+
   const maxCredits = (generations ?? []).reduce((sum, generation) => sum + Number(generation.estimated_credits), 0);
   const available = Number(input.project.hard_budget_credits) - Number(input.project.spent_credits) - Number(input.project.reserved_credits);
   if (maxCredits > available + 0.0001) throw new Error(`This batch reserves ${maxCredits.toFixed(2)} credits but only ${available.toFixed(2)} remain in the project budget.`);
@@ -289,7 +302,12 @@ export async function applyProviderStatus(input: {
       error: null,
     }).eq("id", generation.id);
     if (generationError) throw new Error(generationError.message);
-    if (generation.shot_id) await input.db.from("music_video_shots").update({ status: "review" }).eq("id", generation.shot_id);
+    if (generation.shot_id) {
+      const { error: shotError } = await input.db.from("music_video_shots").update({ status: "review" })
+        .eq("id", generation.shot_id)
+        .neq("status", "locked");
+      if (shotError) throw new Error(shotError.message);
+    }
     await advanceAfterProviderCompletion(input.db, generation.project_id, generation.operation_type);
     return;
   }
@@ -303,7 +321,7 @@ export async function applyProviderStatus(input: {
       });
       if (settleError) throw new Error(settleError.message);
     }
-    await input.db.from("music_video_generations").update({
+    const { error: generationError } = await input.db.from("music_video_generations").update({
       status: input.status.status === "nsfw" ? "rejected_by_provider" : "failed",
       billing_status: "refunded",
       actual_credits: 0,
@@ -311,14 +329,15 @@ export async function applyProviderStatus(input: {
       provider_metadata: json({ ...record(generation.provider_metadata), response: input.status.raw }),
       error: input.status.status === "nsfw" ? "Provider safety rejection" : "Provider generation failed",
     }).eq("id", generation.id);
-    if (generation.shot_id) await input.db.from("music_video_shots").update({ status: "failed" }).eq("id", generation.shot_id);
+    if (generationError) throw new Error(generationError.message);
     return;
   }
 
-  await input.db.from("music_video_generations").update({
+  const { error } = await input.db.from("music_video_generations").update({
     status: input.status.status === "in_progress" ? "in_progress" : "queued",
     provider_metadata: json({ ...record(generation.provider_metadata), response: input.status.raw }),
   }).eq("id", generation.id);
+  if (error) throw new Error(error.message);
 }
 
 async function advanceAfterProviderCompletion(
@@ -326,48 +345,86 @@ async function advanceAfterProviderCompletion(
   projectId: string,
   operation: MusicVideoGeneration["operation_type"],
 ) {
-  const { data: project } = await db.from("music_video_projects").select("status").eq("id", projectId).single();
+  const { data: project, error: projectLookupError } = await db.from("music_video_projects").select("status").eq("id", projectId).single();
+  if (projectLookupError) throw new Error(projectLookupError.message);
   if (!project) return;
   if (operation === "look_image" && project.status === "look_dev") {
-    const { data: pending } = await db.from("music_video_generations").select("id")
+    const { data: pending, error } = await db.from("music_video_generations").select("id")
       .eq("project_id", projectId).eq("operation_type", "look_image")
       .in("status", ["approved", "submitted", "queued", "in_progress"]).limit(1);
-    if (!pending?.length) await db.from("music_video_projects").update({ status: "look_review" }).eq("id", projectId);
+    if (error) throw new Error(error.message);
+    if (!pending?.length) {
+      const { error: updateError } = await db.from("music_video_projects").update({ status: "look_review" }).eq("id", projectId);
+      if (updateError) throw new Error(updateError.message);
+    }
   }
   if (operation === "test_video" && project.status === "test_generation") {
-    const { data: pending } = await db.from("music_video_generations").select("id")
+    const { data: pending, error } = await db.from("music_video_generations").select("id")
       .eq("project_id", projectId).eq("operation_type", "test_video")
       .in("status", ["approved", "submitted", "queued", "in_progress"]).limit(1);
-    if (!pending?.length) await db.from("music_video_projects").update({ status: "test_review" }).eq("id", projectId);
+    if (error) throw new Error(error.message);
+    if (!pending?.length) {
+      const { error: updateError } = await db.from("music_video_projects").update({ status: "test_review" }).eq("id", projectId);
+      if (updateError) throw new Error(updateError.message);
+    }
   }
   if (operation === "shot_video" && project.status === "production") {
-    const { data: pending } = await db.from("music_video_generations").select("id")
+    const { data: pending, error } = await db.from("music_video_generations").select("id")
       .eq("project_id", projectId).eq("operation_type", "shot_video")
       .in("status", ["planned", "approved", "submitted", "queued", "in_progress"]).limit(1);
-    if (!pending?.length) await db.from("music_video_projects").update({ status: "shot_review" }).eq("id", projectId);
+    if (error) throw new Error(error.message);
+    if (!pending?.length) {
+      const { error: updateError } = await db.from("music_video_projects").update({ status: "shot_review" }).eq("id", projectId);
+      if (updateError) throw new Error(updateError.message);
+    }
   }
 }
 
-async function settleNotBilledAfterSubmitFailure(
+async function resetAfterDefiniteSubmitRejection(
   db: SupabaseClient<VideoDatabase>,
   generation: ExtendedMusicVideoGeneration,
   error: unknown,
 ) {
-  try {
-    await db.rpc("settle_music_video_generation", {
-      p_generation_id: generation.id,
-      p_actual_credits: 0,
-      p_billing_status: "not_billed",
-    });
-  } catch {
-    // If settlement itself fails, keeping the reserve is safer than pretending the budget is available.
-  }
-  await db.from("music_video_generations").update({
-    status: "failed",
-    billing_status: "not_billed",
-    error: error instanceof Error ? error.message : "Higgsfield submission failed",
-    completed_at: new Date().toISOString(),
+  const message = error instanceof Error ? error.message : "Higgsfield rejected the submission before accepting a job.";
+  const { error: settleError } = await db.rpc("settle_music_video_generation", {
+    p_generation_id: generation.id,
+    p_actual_credits: 0,
+    p_billing_status: "not_billed",
+  });
+  if (settleError) throw new Error(`Provider rejected the request, but Atlas could not release its reserve: ${settleError.message}`);
+  const { error: resetError } = await db.from("music_video_generations").update({
+    status: "planned",
+    billing_status: "unconfirmed",
+    approval_id: null,
+    actual_credits: null,
+    completed_at: null,
+    error: message,
+    provider_metadata: json({
+      ...record(generation.provider_metadata),
+      last_submit_rejection: message,
+      last_submit_rejected_at: new Date().toISOString(),
+    }),
   }).eq("id", generation.id);
+  if (resetError) throw new Error(`Provider rejected the request and the reserve was released, but Atlas could not return it to retryable state: ${resetError.message}`);
+}
+
+async function markAmbiguousSubmit(
+  db: SupabaseClient<VideoDatabase>,
+  generation: ExtendedMusicVideoGeneration,
+  error: unknown,
+) {
+  const message = error instanceof Error ? error.message : "Higgsfield submission state is ambiguous.";
+  const { error: updateError } = await db.from("music_video_generations").update({
+    error: message,
+    provider_metadata: json({
+      ...record(generation.provider_metadata),
+      ambiguous_submit_error: message,
+      ambiguous_submit_at: new Date().toISOString(),
+    }),
+  }).eq("id", generation.id);
+  if (updateError) {
+    throw new Error(`${message} Atlas also failed to persist the ambiguity marker: ${updateError.message}`);
+  }
 }
 
 async function persistProviderSubmission(
@@ -388,10 +445,18 @@ async function persistProviderSubmission(
     if (!error && data) return data;
     lastError = error?.message || "Could not persist Higgsfield request id.";
   }
-  throw new Error(
+  const message =
     `Higgsfield accepted request ${submission.requestId}, but Atlas could not persist the provider request id after retries: ${lastError}. ` +
-    "The credit reserve is intentionally still locked. Do not resubmit this generation until the provider request is reconciled.",
-  );
+    "The credit reserve is intentionally still locked. Do not resubmit this generation until the provider request is reconciled.";
+  await db.from("music_video_generations").update({
+    error: message,
+    provider_metadata: json({
+      ...record(generation.provider_metadata),
+      ambiguous_provider_request_id: submission.requestId,
+      ambiguous_provider_response: submission.raw,
+    }),
+  }).eq("id", generation.id);
+  throw new Error(message);
 }
 
 export async function submitGeneration(input: {
@@ -414,7 +479,11 @@ export async function submitGeneration(input: {
   try {
     submission = await provider.submit(request, webhookUrl());
   } catch (error) {
-    await settleNotBilledAfterSubmitFailure(input.db, generation, error);
+    if (isHiggsfieldDefiniteRejection(error)) {
+      await resetAfterDefiniteSubmitRejection(input.db, generation, error);
+    } else {
+      await markAmbiguousSubmit(input.db, generation, error);
+    }
     throw error;
   }
 
@@ -436,7 +505,19 @@ export async function submitApprovalEnvelope(input: {
     .eq("owner_id", input.ownerId).eq("approval_id", input.approvalId).eq("status", "planned").order("created_at");
   if (error) throw new Error(error.message);
   const submitted: ExtendedMusicVideoGeneration[] = [];
-  for (const generation of generations ?? []) submitted.push(await submitGeneration({ db: input.db, generation }));
+  const failures: string[] = [];
+  for (const generation of generations ?? []) {
+    try {
+      submitted.push(await submitGeneration({ db: input.db, generation }));
+    } catch (submitError) {
+      failures.push(`${generation.id}: ${submitError instanceof Error ? submitError.message : "submission failed"}`);
+    }
+  }
+  if (failures.length && generations?.[0]?.project_id) {
+    await input.db.from("music_video_projects").update({
+      last_error: `${failures.length} generation request${failures.length === 1 ? " needs" : "s need"} attention. Other requests in the approved batch continued safely.`,
+    }).eq("id", generations[0].project_id).eq("owner_id", input.ownerId);
+  }
   return submitted;
 }
 
