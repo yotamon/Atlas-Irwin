@@ -1,4 +1,4 @@
-import type { MusicVideoShot } from "@/types/database";
+import type { ExtendedMusicVideoShot } from "@/types/video-database";
 import { HIGGSFIELD_MODELS, type HiggsfieldModelCapability } from "@/lib/video-providers/higgsfield/catalog";
 import type { VideoResolution } from "./domain";
 
@@ -9,7 +9,7 @@ export type ShotRoutingDecision = {
   params: Record<string, unknown>;
 };
 
-type RouterInput = Pick<MusicVideoShot,
+type RouterInput = Pick<ExtendedMusicVideoShot,
   "generation_priority" | "capability_profile" | "start_asset_id" | "end_asset_id" | "reference_asset_ids" | "music_context"
 > & {
   targetResolution: VideoResolution;
