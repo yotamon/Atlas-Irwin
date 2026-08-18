@@ -1,44 +1,27 @@
-import {
-  VIDEO_PROJECT_STATUSES,
-  type VideoProjectStage,
-  type VideoProjectStatus,
-} from "./domain";
-
-const LINEAR_TRANSITIONS: Partial<Record<VideoProjectStatus, VideoProjectStatus>> = {
-  draft: "analyzing_audio",
-  analyzing_audio: "concept_review",
-  concept_review: "treatment_review",
-  treatment_review: "production_plan_review",
-  production_plan_review: "look_dev",
-  look_dev: "look_review",
-  look_review: "test_generation",
-  test_generation: "test_review",
-  test_review: "production",
-  production: "shot_review",
-  shot_review: "ready_to_render",
-  ready_to_render: "rendering",
-  rendering: "complete",
-};
-
-const ACTIVE_STATUSES = VIDEO_PROJECT_STATUSES.filter(
-  (status) => !["complete", "blocked", "failed", "archived"].includes(status),
-);
+import type { VideoProjectStage, VideoProjectStatus } from "./domain";
 
 export const PROJECT_TRANSITIONS: Record<
   VideoProjectStatus,
   readonly VideoProjectStatus[]
-> = Object.fromEntries(
-  VIDEO_PROJECT_STATUSES.map((status) => {
-    if (status === "archived") return [status, []];
-    if (status === "complete") return [status, ["archived"]];
-    if (status === "blocked" || status === "failed") return [status, ["archived"]];
-    const next = LINEAR_TRANSITIONS[status];
-    const exceptional: VideoProjectStatus[] = ACTIVE_STATUSES.includes(status)
-      ? ["blocked", "failed", "archived"]
-      : [];
-    return [status, next ? [next, ...exceptional] : exceptional];
-  }),
-) as Record<VideoProjectStatus, readonly VideoProjectStatus[]>;
+> = {
+  draft: ["analyzing_audio", "blocked", "failed", "archived"],
+  analyzing_audio: ["concept_review", "blocked", "failed", "archived"],
+  concept_review: ["treatment_review", "blocked", "failed", "archived"],
+  treatment_review: ["production_plan_review", "blocked", "failed", "archived"],
+  production_plan_review: ["look_dev", "blocked", "failed", "archived"],
+  look_dev: ["look_review", "blocked", "failed", "archived"],
+  look_review: ["test_generation", "blocked", "failed", "archived"],
+  test_generation: ["test_review", "blocked", "failed", "archived"],
+  test_review: ["production", "blocked", "failed", "archived"],
+  production: ["shot_review", "blocked", "failed", "archived"],
+  shot_review: ["ready_to_render", "blocked", "failed", "archived"],
+  ready_to_render: ["rendering", "blocked", "failed", "archived"],
+  rendering: ["complete", "blocked", "failed", "archived"],
+  complete: ["archived"],
+  blocked: ["archived"],
+  failed: ["archived"],
+  archived: [],
+};
 
 export function canTransitionProject(
   from: VideoProjectStatus,
