@@ -6,10 +6,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 const MAX_REMOTE_ASSET_BYTES = 150 * 1024 * 1024;
 
+type LineageKey = "generation_id" | "render_id" | "thumbnail_candidate_id";
+
 async function findLineageAsset(
   db: SupabaseClient<VideoDatabase>,
   ownerId: string,
-  key: "generation_id" | "render_id",
+  key: LineageKey,
   value: string,
 ) {
   const result = await db.from("media_assets")
@@ -140,5 +142,58 @@ export async function registerWorkerRenderAsset(input: {
     throw new Error(error.message);
   }
   if (!data) throw new Error("Could not register rendered media asset.");
+  return data;
+}
+
+export async function registerWorkerThumbnailAsset(input: {
+  db: SupabaseClient<VideoDatabase>;
+  ownerId: string;
+  projectId: string;
+  candidateId: string;
+  bucket: string;
+  path: string;
+  publicUrl: string;
+  timestampMs: number;
+  sourceAssetId: string;
+  result: Record<string, unknown>;
+}) {
+  const existing = await findLineageAsset(input.db, input.ownerId, "thumbnail_candidate_id", input.candidateId);
+  if (existing) return existing;
+  const number = (key: string) => typeof input.result[key] === "number" ? input.result[key] as number : null;
+  const { data, error } = await input.db.from("media_assets").insert({
+    owner_id: input.ownerId,
+    bucket_name: input.bucket,
+    storage_path: input.path,
+    public_url: input.publicUrl,
+    asset_type: "thumbnail",
+    mime_type: "image/jpeg",
+    file_size: number("file_size"),
+    content_hash: null,
+    width: number("width"),
+    height: number("height"),
+    duration_ms: null,
+    visibility: "public",
+    metadata: {
+      original_name: `thumbnail-${input.candidateId}.jpg`,
+      title: `Thumbnail candidate ${Math.round(input.timestampMs / 1000)}s`,
+      description: "Still extracted from the final Atlas Video Director master",
+      tags: ["video-director", "thumbnail", "still"],
+      upload_source: "atlas_media_worker",
+      source_kind: "extracted_frame",
+      project_id: input.projectId,
+      thumbnail_candidate_id: input.candidateId,
+      source_master_asset_id: input.sourceAssetId,
+      timestamp_ms: input.timestampMs,
+      selected_thumbnail: false,
+    },
+  }).select("*").single();
+  if (error) {
+    if (error.code === "23505") {
+      const raced = await findLineageAsset(input.db, input.ownerId, "thumbnail_candidate_id", input.candidateId);
+      if (raced) return raced;
+    }
+    throw new Error(error.message);
+  }
+  if (!data) throw new Error("Could not register thumbnail candidate.");
   return data;
 }
