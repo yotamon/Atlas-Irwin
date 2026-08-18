@@ -17,6 +17,7 @@ import {
 export const studioIcons = {
   dashboard: FiHome,
   releases: FiDisc,
+  musicLab: FiMusic,
   content: FiFeather,
   calendar: FiCalendar,
   outreach: FiUsers,
