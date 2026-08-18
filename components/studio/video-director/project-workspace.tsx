@@ -1,88 +1,62 @@
-import type { MusicVideoProject, Release, Track } from "@/types/database";
 import { ProjectHeader } from "./project-header";
 import { StageRail } from "./stage-rail";
 import { BriefPanel } from "./brief-panel";
+import {
+  ConceptsPanel,
+  GenerationPanel,
+  LookDevelopmentPanel,
+  MusicMapPanel,
+  NextActionCard,
+  ProductionPlanPanel,
+  RenderPanel,
+  ServiceReadinessPanel,
+  ShotReviewPanel,
+  StoryboardPanel,
+} from "./production-panels";
+import type { VideoWorkspaceData } from "./workspace-types";
 
-const FUTURE_STAGES = [
-  ["Music map", "Audio structure, BPM, energy, sections, and edit points will appear here after Slice 2."],
-  ["Concepts", "Three materially different creative directions will be reviewed here before any paid video generation."],
-  ["Treatment and storyboard", "The approved concept will become a visual bible, scene plan, and timed shot list."],
-  ["Look development", "Low-cost still references will establish the world before expensive video generation."],
-  ["Production", "Approved generation batches, shot continuity, and provider jobs will live here."],
-  ["Review and render", "Locked shots, final timeline assembly, and delivery formats will close the production."],
-] as const;
-
-export function VideoProjectWorkspace({
-  project,
-  release,
-  track,
-  hasAudio,
-  hasArtwork,
-  hasReleaseIdentity,
-  conceptCount,
-  sceneCount,
-  shotCount,
-}: {
-  project: MusicVideoProject;
-  release: Release;
-  track: Track;
-  hasAudio: boolean;
-  hasArtwork: boolean;
-  hasReleaseIdentity: boolean;
-  conceptCount: number;
-  sceneCount: number;
-  shotCount: number;
-}) {
+export function VideoProjectWorkspace({ data }: { data: VideoWorkspaceData }) {
+  const { project, release, track, contextSignals } = data;
   return (
     <div className="video-project-workspace">
       <ProjectHeader project={project} release={release} track={track} />
       <StageRail status={project.status} />
+      <NextActionCard data={data} />
 
-      <div className="video-workspace-grid">
+      <div className="video-production-layout">
         <main className="workspace-stack">
           <BriefPanel
             project={project}
             release={release}
             track={track}
-            hasAudio={hasAudio}
-            hasArtwork={hasArtwork}
-            hasReleaseIdentity={hasReleaseIdentity}
+            hasAudio={contextSignals.hasAudio}
+            hasArtwork={contextSignals.hasArtwork}
+            hasReleaseIdentity={contextSignals.hasReleaseIdentity}
           />
-
-          <section className="workspace-section video-foundation-summary">
-            <div className="section-head">
-              <div>
-                <span className="section-label">Foundation</span>
-                <h2>Production data</h2>
-              </div>
-              <span>Persisted</span>
-            </div>
-            <div className="video-foundation-stats">
-              <span><strong>{conceptCount}</strong><small>Concepts</small></span>
-              <span><strong>{sceneCount}</strong><small>Scenes</small></span>
-              <span><strong>{shotCount}</strong><small>Shots</small></span>
-            </div>
-          </section>
+          <MusicMapPanel data={data} />
+          <ConceptsPanel data={data} />
+          <ProductionPlanPanel data={data} />
+          <StoryboardPanel data={data} />
+          <LookDevelopmentPanel data={data} />
+          <GenerationPanel data={data} />
+          <ShotReviewPanel data={data} />
+          <RenderPanel data={data} />
         </main>
 
-        <aside className="video-future-panel">
-          <div className="section-head">
-            <div>
-              <span className="section-label">Production pipeline</span>
-              <h2>Coming next</h2>
-            </div>
-          </div>
-          <div className="video-future-list">
-            {FUTURE_STAGES.map(([title, body], index) => (
-              <article key={title}>
-                <span>{String(index + 2).padStart(2, "0")}</span>
-                <div>
-                  <strong>{title}</strong>
-                  <p>{body}</p>
-                </div>
-              </article>
-            ))}
-          </div>
+        <aside className="video-production-sidebar">
+          <ServiceReadinessPanel data={data} />
+          <section className="workspace-section video-production-summary">
+            <div className="section-head"><div><span className="section-label">Production memory</span><h2>Durable state</h2></div></div>
+            <dl>
+              <div><dt>Concepts</dt><dd>{data.concepts.length}</dd></div>
+              <div><dt>Scenes</dt><dd>{data.scenes.length}</dd></div>
+              <div><dt>Shots</dt><dd>{data.shots.length}</dd></div>
+              <div><dt>Generations</dt><dd>{data.generations.length}</dd></div>
+              <div><dt>Approvals</dt><dd>{data.approvals.length}</dd></div>
+              <div><dt>Renders</dt><dd>{data.renders.length}</dd></div>
+            </dl>
+            <p>Every provider request, approval and accepted asset remains auditable after refresh or deploy.</p>
+          </section>
         </aside>
       </div>
     </div>
