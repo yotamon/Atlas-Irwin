@@ -348,6 +348,52 @@ async function advanceAfterProviderCompletion(
   }
 }
 
+async function settleNotBilledAfterSubmitFailure(
+  db: SupabaseClient<VideoDatabase>,
+  generation: ExtendedMusicVideoGeneration,
+  error: unknown,
+) {
+  try {
+    await db.rpc("settle_music_video_generation", {
+      p_generation_id: generation.id,
+      p_actual_credits: 0,
+      p_billing_status: "not_billed",
+    });
+  } catch {
+    // If settlement itself fails, keeping the reserve is safer than pretending the budget is available.
+  }
+  await db.from("music_video_generations").update({
+    status: "failed",
+    billing_status: "not_billed",
+    error: error instanceof Error ? error.message : "Higgsfield submission failed",
+    completed_at: new Date().toISOString(),
+  }).eq("id", generation.id);
+}
+
+async function persistProviderSubmission(
+  db: SupabaseClient<VideoDatabase>,
+  generation: ExtendedMusicVideoGeneration,
+  submission: Awaited<ReturnType<HiggsfieldProvider["submit"]>>,
+) {
+  let lastError: string | null = null;
+  for (const delayMs of [0, 160, 480]) {
+    if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
+    const { data, error } = await db.from("music_video_generations").update({
+      provider_request_id: submission.requestId,
+      status: submission.status === "in_progress" ? "in_progress" : submission.status === "completed" ? "submitted" : "queued",
+      submitted_at: new Date().toISOString(),
+      provider_metadata: json({ ...record(generation.provider_metadata), initial_response: submission.raw }),
+      error: null,
+    }).eq("id", generation.id).select("*").single();
+    if (!error && data) return data;
+    lastError = error?.message || "Could not persist Higgsfield request id.";
+  }
+  throw new Error(
+    `Higgsfield accepted request ${submission.requestId}, but Atlas could not persist the provider request id after retries: ${lastError}. ` +
+    "The credit reserve is intentionally still locked. Do not resubmit this generation until the provider request is reconciled.",
+  );
+}
+
 export async function submitGeneration(input: {
   db: SupabaseClient<VideoDatabase>;
   generation: ExtendedMusicVideoGeneration;
@@ -363,37 +409,22 @@ export async function submitGeneration(input: {
   });
   if (reserveError || !reserved) throw new Error(reserveError?.message || "Could not reserve generation budget.");
 
+  const provider = new HiggsfieldProvider();
+  let submission: Awaited<ReturnType<HiggsfieldProvider["submit"]>>;
   try {
-    const provider = new HiggsfieldProvider();
-    const submission = await provider.submit(request, webhookUrl());
-    const { data: updated, error } = await input.db.from("music_video_generations").update({
-      provider_request_id: submission.requestId,
-      status: submission.status === "in_progress" ? "in_progress" : submission.status === "completed" ? "submitted" : "queued",
-      submitted_at: new Date().toISOString(),
-      provider_metadata: json({ ...record(generation.provider_metadata), initial_response: submission.raw }),
-      error: null,
-    }).eq("id", generation.id).select("*").single();
-    if (error || !updated) throw new Error(error?.message || "Could not persist Higgsfield request id.");
-    if (submission.status === "completed") await applyProviderStatus({ db: input.db, generation: updated, status: submission });
-    return updated;
+    submission = await provider.submit(request, webhookUrl());
   } catch (error) {
-    try {
-      await input.db.rpc("settle_music_video_generation", {
-        p_generation_id: generation.id,
-        p_actual_credits: 0,
-        p_billing_status: "not_billed",
-      });
-    } catch {
-      // The database record keeps its reserve for manual reconciliation if settlement itself fails.
-    }
-    await input.db.from("music_video_generations").update({
-      status: "failed",
-      billing_status: "not_billed",
-      error: error instanceof Error ? error.message : "Higgsfield submission failed",
-      completed_at: new Date().toISOString(),
-    }).eq("id", generation.id);
+    await settleNotBilledAfterSubmitFailure(input.db, generation, error);
     throw error;
   }
+
+  // From this point on the provider has acknowledged the request. Never release the reserve merely
+  // because our own persistence fails. An ambiguous provider submission must be reconciled first.
+  const updated = await persistProviderSubmission(input.db, generation, submission);
+  if (submission.status === "completed") {
+    await applyProviderStatus({ db: input.db, generation: updated, status: submission });
+  }
+  return updated;
 }
 
 export async function submitApprovalEnvelope(input: {
