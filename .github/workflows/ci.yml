@@ -26,6 +26,9 @@ jobs:
 
       - run: npm run lint
 
+      - name: Validate media worker Python
+        run: python -m py_compile services/media-worker/app/main.py
+
       - name: Build
         run: npm run build
         env:
