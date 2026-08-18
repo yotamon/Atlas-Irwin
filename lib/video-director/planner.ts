@@ -45,7 +45,10 @@ export async function persistProductionPlan(input: { db: SupabaseClient<VideoDat
   for (let index = 0; index < flattened.length; index += 1) {
     const entry = flattened[index];
     const musicContext = shotMusicContext(input.context, entry.shot.start_ms, entry.shot.end_ms);
-    const provisional = { generation_priority: entry.shot.generation_priority, capability_profile: json(entry.shot.capability_profile), start_asset_id: null, end_asset_id: null, reference_asset_ids: json([]), music_context: json(musicContext) };
+    // Every paid source shot receives at least one approved look-development frame before
+    // generation. Route with that future requirement now so planning can never choose a
+    // model that will later reject the canonical image references.
+    const provisional = { generation_priority: entry.shot.generation_priority, capability_profile: json(entry.shot.capability_profile), start_asset_id: null, end_asset_id: null, reference_asset_ids: json(["planned-look-reference"]), music_context: json(musicContext) };
     const testIndexes = new Set(input.plan.test_shot_indexes);
     const routing = routeVideoShot({ ...provisional, targetResolution: input.context.project.target_resolution, isTest: testIndexes.has(index) });
     const seconds = Math.max(0.1, (entry.shot.end_ms - entry.shot.start_ms) / 1000);
