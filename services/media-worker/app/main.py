@@ -5,10 +5,11 @@ import ipaddress
 import math
 import os
 import secrets
+import socket
 import tempfile
 from pathlib import Path
 from typing import Any, Literal
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import httpx
 import librosa
@@ -49,36 +50,72 @@ def authenticate(authorization: str | None) -> None:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
+def _reject_private_address(address: str) -> None:
+    ip = ipaddress.ip_address(address)
+    if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+        raise ValueError("Private network URLs are not allowed")
+
+
 def validate_remote_url(value: str) -> str:
     parsed = urlparse(value)
     if parsed.scheme not in {"https", "http"} or not parsed.hostname:
         raise ValueError("Only HTTP(S) media URLs are supported")
-    hostname = parsed.hostname.lower()
-    if hostname in {"localhost", "metadata.google.internal"}:
+    hostname = parsed.hostname.lower().rstrip(".")
+    if hostname in {"localhost", "metadata.google.internal"} or hostname.endswith(".internal"):
         raise ValueError("Local or metadata URLs are not allowed")
     try:
-        address = ipaddress.ip_address(hostname)
-        if address.is_private or address.is_loopback or address.is_link_local or address.is_reserved:
-            raise ValueError("Private network URLs are not allowed")
+        _reject_private_address(hostname)
     except ValueError as exc:
         if "Private network" in str(exc):
             raise
+        # Hostname rather than a literal IP. Resolve every address and reject the URL if any
+        # result points at a private/local range.
+        try:
+            for info in socket.getaddrinfo(hostname, parsed.port or (443 if parsed.scheme == "https" else 80), type=socket.SOCK_STREAM):
+                _reject_private_address(info[4][0])
+        except socket.gaierror as dns_error:
+            raise ValueError(f"Could not resolve remote media host: {hostname}") from dns_error
     return value
 
 
 async def download(url: str, target: Path, limit_bytes: int = 600 * 1024 * 1024) -> None:
-    validate_remote_url(url)
     timeout = httpx.Timeout(120.0, connect=20.0)
+    current = validate_remote_url(url)
     total = 0
-    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-        async with client.stream("GET", url) as response:
-            response.raise_for_status()
-            with target.open("wb") as handle:
-                async for chunk in response.aiter_bytes():
-                    total += len(chunk)
-                    if total > limit_bytes:
-                        raise ValueError("Remote media exceeds worker download limit")
-                    handle.write(chunk)
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
+        for _ in range(6):
+            async with client.stream("GET", current) as response:
+                if response.status_code in {301, 302, 303, 307, 308}:
+                    location = response.headers.get("location")
+                    if not location:
+                        raise ValueError("Remote media redirect did not include a location")
+                    current = validate_remote_url(urljoin(current, location))
+                    continue
+                response.raise_for_status()
+                with target.open("wb") as handle:
+                    async for chunk in response.aiter_bytes():
+                        total += len(chunk)
+                        if total > limit_bytes:
+                            raise ValueError("Remote media exceeds worker download limit")
+                        handle.write(chunk)
+                return
+        raise ValueError("Remote media exceeded redirect limit")
+
+
+async def upload_file(upload_url: str, path: Path, content_type: str) -> None:
+    validate_remote_url(upload_url)
+    async with httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=20.0)) as client:
+        with path.open("rb") as handle:
+            response = await client.put(
+                upload_url,
+                content=handle.read(),
+                headers={
+                    "content-type": content_type,
+                    "cache-control": "max-age=31536000",
+                    "x-upsert": "false",
+                },
+            )
+        response.raise_for_status()
 
 
 async def ffmpeg(*args: str) -> None:
@@ -267,11 +304,39 @@ async def render_job(payload: dict[str, Any], workdir: Path) -> dict[str, Any]:
     target_duration_ms = int(payload.get("duration_ms") or sum(int(clip.get("duration_ms") or 0) for clip in clips))
     await ffmpeg("-i", str(picture), "-ss", f"{start_ms / 1000:.3f}", "-i", str(audio), "-t", f"{target_duration_ms / 1000:.3f}", "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "320k", "-shortest", "-movflags", "+faststart", str(output))
 
-    async with httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=20.0)) as client:
-        with output.open("rb") as handle:
-            response = await client.put(upload_url, content=handle.read(), headers={"content-type": "video/mp4", "cache-control": "max-age=31536000", "x-upsert": "false"})
-        response.raise_for_status()
+    await upload_file(upload_url, output, "video/mp4")
     return {"uploaded": True, "file_size": output.stat().st_size, "mime_type": "video/mp4", "duration_ms": target_duration_ms, "width": width, "height": height}
+
+
+async def extract_frame_job(payload: dict[str, Any], workdir: Path) -> dict[str, Any]:
+    source_url = str(payload.get("source_url") or "")
+    upload_url = str(payload.get("upload_url") or "")
+    timestamp_ms = max(0, int(payload.get("timestamp_ms") or 0))
+    max_width = max(640, min(2560, int(payload.get("max_width") or 1600)))
+    if not source_url or not upload_url:
+        raise ValueError("source_url and upload_url are required")
+
+    source = workdir / "thumbnail-source"
+    output = workdir / "thumbnail.jpg"
+    await download(source_url, source)
+    await ffmpeg(
+        "-ss", f"{timestamp_ms / 1000:.3f}",
+        "-i", str(source),
+        "-frames:v", "1",
+        "-vf", f"scale=w='min({max_width},iw)':h=-2",
+        "-q:v", "2",
+        str(output),
+    )
+    if not output.exists() or output.stat().st_size <= 0:
+        raise RuntimeError("FFmpeg did not produce a thumbnail frame")
+    await upload_file(upload_url, output, "image/jpeg")
+    return {
+        "uploaded": True,
+        "file_size": output.stat().st_size,
+        "mime_type": "image/jpeg",
+        "timestamp_ms": timestamp_ms,
+        "width": max_width,
+    }
 
 
 async def callback(request: WorkerRequest, status: str, result: dict[str, Any] | None = None, error: str | None = None) -> None:
@@ -288,6 +353,8 @@ async def execute(request: WorkerRequest) -> None:
             workdir = Path(directory)
             if request.job_type == "analyze_audio":
                 result = await analyze_job(request.payload, workdir)
+            elif request.job_type == "extract_frame":
+                result = await extract_frame_job(request.payload, workdir)
             elif request.job_type in {"render_master", "render_social", "render_promo", "render_hook"}:
                 result = await render_job(request.payload, workdir)
             else:
