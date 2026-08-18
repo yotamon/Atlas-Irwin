@@ -1,8 +1,18 @@
 import { MusicGenerator } from "@/components/studio/music-generator";
 import { PageHeader } from "@/components/studio/ui";
 import { miniMaxGenerationCost } from "@/lib/music/atlas-generator";
+import { requireStudioAdmin } from "@/lib/auth/studio";
 
-export default function MusicLabPage() {
+export default async function MusicLabPage() {
+  const { supabase } = await requireStudioAdmin();
+  const { data: brandRows } = await supabase
+    .from("brand_settings")
+    .select("section,content")
+    .in("section", ["Brand essence", "Music world"]);
+  const brandContext = (brandRows ?? [])
+    .map((row) => `${row.section}: ${(row.content as { text?: string } | null)?.text ?? ""}`)
+    .filter((value) => !value.endsWith(": "))
+    .join(" ");
   const miniMaxModel = process.env.MINIMAX_MUSIC_MODEL?.trim() || "music-2.6";
   const providers = [
     {
@@ -29,7 +39,7 @@ export default function MusicLabPage() {
         title="Music Lab"
         description="Generate Atlas Irwin drafts inside the Studio. The prompt architecture keeps the project DNA, pushes one signature idea per track, and makes provider cost visible before you spend."
       />
-      <MusicGenerator providers={providers} />
+      <MusicGenerator providers={providers} brandContext={brandContext} />
     </>
   );
 }
