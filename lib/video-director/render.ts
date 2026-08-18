@@ -16,14 +16,24 @@ function json(value: unknown): Json {
   return value as Json;
 }
 
+// `master_16_9` is retained as the persisted legacy render-type key. The actual master
+// dimensions now follow project.primary_aspect_ratio so existing rows/migrations stay compatible.
 export type VideoRenderType = "master_16_9" | "social_9_16" | "promo_30" | "hook_15";
 
-function outputSpec(type: VideoRenderType) {
+function primaryMasterDimensions(project: ExtendedMusicVideoProject) {
+  switch (project.primary_aspect_ratio) {
+    case "9:16": return { width: 1080, height: 1920 };
+    case "1:1": return { width: 1080, height: 1080 };
+    default: return { width: 1920, height: 1080 };
+  }
+}
+
+function outputSpec(type: VideoRenderType, project: ExtendedMusicVideoProject) {
   switch (type) {
     case "social_9_16": return { width: 1080, height: 1920, durationMs: null, workerType: "render_social" as const };
     case "promo_30": return { width: 1920, height: 1080, durationMs: 30000, workerType: "render_promo" as const };
     case "hook_15": return { width: 1080, height: 1920, durationMs: 15000, workerType: "render_hook" as const };
-    default: return { width: 1920, height: 1080, durationMs: null, workerType: "render_master" as const };
+    default: return { ...primaryMasterDimensions(project), durationMs: null, workerType: "render_master" as const };
   }
 }
 
@@ -89,9 +99,11 @@ export async function buildRenderManifest(input: {
   allowUnsafeVertical?: boolean;
 }) {
   const sources = await timelineSources(input.db, input.ownerId, input.project);
-  const spec = outputSpec(input.type);
-  const isVertical = spec.height > spec.width;
-  const unsafeShotIds = isVertical
+  const spec = outputSpec(input.type, input.project);
+  const outputIsVertical = spec.height > spec.width;
+  const sourceIsAlreadyVertical = input.project.primary_aspect_ratio === "9:16";
+  const requiresVerticalReframe = outputIsVertical && !sourceIsAlreadyVertical;
+  const unsafeShotIds = requiresVerticalReframe
     ? sources.filter(({ shot }) => !isVerticalSafe(shot)).map(({ shot }) => shot.id)
     : [];
   if (unsafeShotIds.length && !input.allowUnsafeVertical) {
@@ -114,12 +126,13 @@ export async function buildRenderManifest(input: {
       duration_ms: overlapEnd - overlapStart,
       source_offset_ms: Math.max(0, overlapStart - shot.start_ms),
       focus_x: focusX(shot),
-      vertical_safe: isVerticalSafe(shot),
+      vertical_safe: sourceIsAlreadyVertical || isVerticalSafe(shot),
     }];
   });
   return {
     version: 1,
     type: input.type,
+    primary_aspect_ratio: input.project.primary_aspect_ratio,
     width: spec.width,
     height: spec.height,
     fps: 30,
@@ -153,7 +166,7 @@ export async function queueVideoRender(input: {
   }).select("*").single();
   if (renderError || !render) throw new Error(renderError?.message || "Could not create render job.");
   const upload = await createWorkerRenderUploadTarget(input.db, input.ownerId, input.project.id, render.id);
-  const spec = outputSpec(input.type);
+  const spec = outputSpec(input.type, input.project);
   const workerPayload = {
     render_id: render.id,
     clips: manifest.clips,
@@ -176,10 +189,17 @@ export async function queueVideoRender(input: {
     payload: workerPayload,
     idempotencyKey: `render:${render.id}`,
   });
-  await input.db.from("music_video_renders").update({ status: "queued", worker_job_id: worker.id }).eq("id", render.id);
+  const { error: renderQueueError } = await input.db.from("music_video_renders")
+    .update({ status: "queued", worker_job_id: worker.id })
+    .eq("id", render.id);
+  if (renderQueueError) throw new Error(renderQueueError.message);
   const projectUpdate: Partial<ExtendedMusicVideoProject> = input.type === "master_16_9"
     ? { status: "rendering", render_manifest: json(manifest), last_error: null }
     : { render_manifest: json(manifest), last_error: null };
-  await input.db.from("music_video_projects").update(projectUpdate).eq("id", input.project.id).eq("owner_id", input.ownerId);
+  const { error: projectError } = await input.db.from("music_video_projects")
+    .update(projectUpdate)
+    .eq("id", input.project.id)
+    .eq("owner_id", input.ownerId);
+  if (projectError) throw new Error(projectError.message);
   return { render, worker, manifest };
 }
