@@ -76,7 +76,7 @@ function responseMessage(value: unknown) {
   return "Music generation failed.";
 }
 
-export function MusicGenerator({ providers }: { providers: ProviderOption[] }) {
+export function MusicGenerator({ providers, brandContext }: { providers: ProviderOption[]; brandContext: string }) {
   const router = useRouter();
   const firstEnabled = providers.find((provider) => provider.enabled)?.id ?? "minimax";
   const [provider, setProvider] = useState<MusicProviderId>(firstEnabled);
@@ -106,8 +106,9 @@ export function MusicGenerator({ providers }: { providers: ProviderOption[] }) {
     instrumental,
     lyrics,
     signatureIdea,
+    brandContext,
     useAtlasDna,
-  }), [provider, title, idea, vibe, bpm, durationSeconds, instrumental, lyrics, signatureIdea, useAtlasDna]);
+  }), [provider, title, idea, vibe, bpm, durationSeconds, instrumental, lyrics, signatureIdea, brandContext, useAtlasDna]);
   const prompt = useMemo(() => buildAtlasMusicPrompt(input), [input]);
   const estimatedCost = estimateMusicCost(provider, durationSeconds, variants, selectedProvider?.model);
 
@@ -194,7 +195,7 @@ export function MusicGenerator({ providers }: { providers: ProviderOption[] }) {
       const description = [
         `Generated in Atlas Music Lab with ${generation.provider} / ${generation.model}.`,
         `Estimated generation cost: $${generation.cost.toFixed(2)}.`,
-        `Prompt: ${generation.prompt}`,
+        `Prompt: ${generation.prompt.slice(0, 1500)}`,
       ].join("\n\n");
       Object.entries({
         storage_path: target.storagePath,
@@ -282,7 +283,7 @@ export function MusicGenerator({ providers }: { providers: ProviderOption[] }) {
               <input type="number" min={80} max={150} value={bpm} onChange={(event) => setBpm(Number(event.target.value))} />
             </label>
             <label className="field">
-              <span>Target duration</span>
+              <span>{provider === "eleven" ? "Duration" : "Target duration hint"}</span>
               <select value={durationSeconds} onChange={(event) => setDurationSeconds(Number(event.target.value))}>
                 <option value={180}>3:00</option>
                 <option value={210}>3:30</option>
