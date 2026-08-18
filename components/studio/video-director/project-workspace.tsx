@@ -2,6 +2,7 @@ import { ProjectHeader } from "./project-header";
 import { StageRail } from "./stage-rail";
 import { BriefPanel } from "./brief-panel";
 import { RecoveryPanel } from "./recovery-panel";
+import { DeliveryPanel } from "./delivery-panel";
 import {
   ConceptsPanel,
   GenerationPanel,
@@ -9,7 +10,6 @@ import {
   MusicMapPanel,
   NextActionCard,
   ProductionPlanPanel,
-  RenderPanel,
   ServiceReadinessPanel,
   ShotReviewPanel,
   StoryboardPanel,
@@ -42,7 +42,7 @@ export function VideoProjectWorkspace({ data }: { data: VideoWorkspaceData }) {
           <LookDevelopmentPanel data={data} />
           <GenerationPanel data={data} />
           <ShotReviewPanel data={data} />
-          <RenderPanel data={data} />
+          <DeliveryPanel data={data} />
         </main>
 
         <aside className="video-production-sidebar">
@@ -57,7 +57,7 @@ export function VideoProjectWorkspace({ data }: { data: VideoWorkspaceData }) {
               <div><dt>Approvals</dt><dd>{data.approvals.length}</dd></div>
               <div><dt>Renders</dt><dd>{data.renders.length}</dd></div>
             </dl>
-            <p>Every provider request, approval and accepted asset remains auditable after refresh or deploy.</p>
+            <p>Every provider request, approval, render and selected asset remains auditable after refresh or deploy.</p>
           </section>
         </aside>
       </div>
