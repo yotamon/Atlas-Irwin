@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSiteUrl } from "@/lib/site-url";
+import type { Json } from "@/types/database";
 import type { MusicMap } from "./creative-director";
 import type { ExtendedMusicVideoProject, VideoDatabase } from "@/types/video-database";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -11,6 +12,10 @@ function workerUrl() {
 
 function workerSecret() {
   return process.env.MEDIA_WORKER_SECRET?.trim() || null;
+}
+
+function json(value: unknown): Json {
+  return value as Json;
 }
 
 export function mediaWorkerReadiness() {
@@ -91,7 +96,7 @@ export async function queueMediaWorkerJob(input: {
       job_type: input.jobType,
       status: "planned",
       idempotency_key: input.idempotencyKey,
-      request_payload: input.payload,
+      request_payload: json(input.payload),
       result_payload: {},
       error: null,
     }, { onConflict: "idempotency_key" })
