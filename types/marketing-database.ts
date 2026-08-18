@@ -97,6 +97,10 @@ export type MarketingContentItem = ContentItem & {
   generated_from_run_id: string | null;
   content_angle: string | null;
   audience_segment: string | null;
+  relative_day: number | null;
+  schedule_locked: boolean;
+  schedule_local_time: string;
+  schedule_timezone: string;
 };
 
 export type ContentVariant = {
@@ -313,7 +317,21 @@ export type MarketingDatabase = {
       outreach_messages: Table<MarketingOutreachMessage>;
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      record_attribution_click: {
+        Args: {
+          p_code: string;
+          p_visitor_hash: string;
+          p_referrer?: string | null;
+          p_user_agent?: string | null;
+        };
+        Returns: Array<{
+          destination_url: string;
+          link_id: string;
+          is_unique: boolean;
+        }>;
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };
