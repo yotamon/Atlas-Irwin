@@ -52,49 +52,55 @@ export async function POST(request: Request) {
   }
 
   if (status === "running") {
-    await db.from("music_video_worker_jobs")
+    const { error } = await db.from("music_video_worker_jobs")
       .update({ status: "running", started_at: job.started_at || new Date().toISOString(), error: null })
       .eq("id", job.id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true });
   }
 
   if (status === "failed") {
     if (job.job_type === "analyze_audio") {
-      await db.from("music_video_projects").update({
+      const { error } = await db.from("music_video_projects").update({
         previous_status: "analyzing_audio",
         status: "blocked",
         last_error: callbackError || "Audio analysis failed",
       }).eq("id", job.project_id);
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     } else {
       const renderId = typeof record(job.request_payload).render_id === "string"
         ? record(job.request_payload).render_id as string
         : null;
-      if (renderId) {
-        const { data: render } = await db.from("music_video_renders")
-          .select("render_type")
-          .eq("id", renderId)
-          .eq("project_id", job.project_id)
-          .maybeSingle();
-        await db.from("music_video_renders")
-          .update({ status: "failed", error: callbackError || "Render failed" })
-          .eq("id", renderId);
-        if (render?.render_type === "master_16_9") {
-          await db.from("music_video_projects").update({
-            previous_status: "rendering",
-            status: "ready_to_render",
-            last_error: callbackError || "Master render failed",
-          }).eq("id", job.project_id);
-        } else {
-          // A failed derived cut must never demote a project whose master is already complete.
-          await db.from("music_video_projects")
-            .update({ last_error: callbackError || "Derived render failed" })
-            .eq("id", job.project_id);
-        }
+      if (!renderId) return NextResponse.json({ error: "Render job has no render_id" }, { status: 422 });
+      const { data: render, error: renderLookupError } = await db.from("music_video_renders")
+        .select("render_type")
+        .eq("id", renderId)
+        .eq("project_id", job.project_id)
+        .maybeSingle();
+      if (renderLookupError || !render) return NextResponse.json({ error: renderLookupError?.message || "Render not found" }, { status: 404 });
+      const { error: renderUpdateError } = await db.from("music_video_renders")
+        .update({ status: "failed", error: callbackError || "Render failed" })
+        .eq("id", renderId);
+      if (renderUpdateError) return NextResponse.json({ error: renderUpdateError.message }, { status: 500 });
+      if (render.render_type === "master_16_9") {
+        const { error } = await db.from("music_video_projects").update({
+          previous_status: "rendering",
+          status: "ready_to_render",
+          last_error: callbackError || "Master render failed",
+        }).eq("id", job.project_id);
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      } else {
+        // A failed derived cut must never demote a project whose master is already complete.
+        const { error } = await db.from("music_video_projects")
+          .update({ last_error: callbackError || "Derived render failed" })
+          .eq("id", job.project_id);
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       }
     }
-    await db.from("music_video_worker_jobs")
+    const { error: terminalError } = await db.from("music_video_worker_jobs")
       .update({ status: "failed", error: callbackError || "Worker job failed", completed_at: new Date().toISOString() })
       .eq("id", job.id);
+    if (terminalError) return NextResponse.json({ error: terminalError.message }, { status: 500 });
     return NextResponse.json({ ok: true });
   }
 
@@ -109,12 +115,13 @@ export async function POST(request: Request) {
       analysis_completed_at: new Date().toISOString(),
     }).eq("id", job.project_id);
     if (projectError) return NextResponse.json({ error: projectError.message }, { status: 500 });
-    await db.from("music_video_worker_jobs").update({
+    const { error: terminalError } = await db.from("music_video_worker_jobs").update({
       status: "completed",
       result_payload: json(result),
       error: null,
       completed_at: new Date().toISOString(),
     }).eq("id", job.id);
+    if (terminalError) return NextResponse.json({ error: terminalError.message }, { status: 500 });
     return NextResponse.json({ ok: true });
   }
 
@@ -158,16 +165,20 @@ export async function POST(request: Request) {
     }).eq("id", job.project_id);
     if (projectError) return NextResponse.json({ error: projectError.message }, { status: 500 });
   } else {
-    await db.from("music_video_projects").update({ last_error: null }).eq("id", job.project_id);
+    const { error: projectError } = await db.from("music_video_projects")
+      .update({ last_error: null })
+      .eq("id", job.project_id);
+    if (projectError) return NextResponse.json({ error: projectError.message }, { status: 500 });
   }
 
   // Terminal worker state is the commit marker and is intentionally written last. If any
   // reconciliation above fails, a repeated callback can safely finish the same operation.
-  await db.from("music_video_worker_jobs").update({
+  const { error: terminalError } = await db.from("music_video_worker_jobs").update({
     status: "completed",
     result_payload: json(result),
     error: null,
     completed_at: new Date().toISOString(),
   }).eq("id", job.id);
+  if (terminalError) return NextResponse.json({ error: terminalError.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
