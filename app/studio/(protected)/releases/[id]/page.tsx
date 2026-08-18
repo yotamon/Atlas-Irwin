@@ -2,7 +2,9 @@ import { notFound } from "next/navigation";
 import { createMediaPreviewMap } from "@/lib/studio/media-previews";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { getPublicReleases } from "@/lib/public-catalog";
+import { asMarketingClient } from "@/lib/marketing/db";
 import { ReleaseCockpit } from "@/components/studio/release-cockpit";
+import { ReleaseCampaignBridge } from "@/components/studio/release-campaign-bridge";
 import type { MusicVideoProject } from "@/types/database";
 
 export default async function ReleaseDetail({
@@ -14,7 +16,7 @@ export default async function ReleaseDetail({
 }) {
   const { id } = await params;
   const { tab = "overview" } = await searchParams;
-  const { supabase } = await requireStudioAdmin();
+  const { supabase, user } = await requireStudioAdmin();
   const [
     { data: release },
     { data: tracks },
@@ -28,7 +30,7 @@ export default async function ReleaseDetail({
     { data: soundCloudPending },
     { data: spotifyPending },
   ] = await Promise.all([
-    supabase.from("releases").select("*").eq("id", id).single(),
+    supabase.from("releases").select("*").eq("id", id).eq("owner_id", user.id).single(),
     supabase
       .from("tracks")
       .select("*")
@@ -78,12 +80,37 @@ export default async function ReleaseDetail({
     videoProjects = data ?? [];
   }
 
+  let campaignBridge: {
+    id: string;
+    name: string;
+    status: string;
+    mode: string;
+    objective: string;
+    primary_kpi: string;
+  } | null = null;
+  if (tab === "campaign") {
+    const marketing = asMarketingClient(supabase);
+    const { data, error } = await marketing
+      .from("campaigns")
+      .select("id,name,status,mode,objective,primary_kpi")
+      .eq("owner_id", user.id)
+      .eq("release_id", id)
+      .not("status", "in", '("archived")')
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    campaignBridge = data;
+  }
+
   const releaseTerms = new Set([release.title, ...(tracks ?? []).map((track) => track.title)].map((value) => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()));
   const relevantSoundCloud = (soundCloudPending ?? []).filter((item) => releaseTerms.has(item.title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()));
   const relevantSpotify = (spotifyPending ?? []).filter((item) => releaseTerms.has(item.name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()));
   const publicReleases = await getPublicReleases();
 
   return (
+    <>
+      {tab === "campaign" ? <ReleaseCampaignBridge campaign={campaignBridge} /> : null}
       <ReleaseCockpit
         release={release}
         tracks={tracks ?? []}
@@ -103,5 +130,6 @@ export default async function ReleaseDetail({
         videoProjects={videoProjects}
         tab={tab}
       />
+    </>
   );
 }
