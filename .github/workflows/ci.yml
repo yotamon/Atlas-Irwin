@@ -34,7 +34,7 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: your-publishable-or-legacy-anon-key
 
   database:
-    name: database migrations
+    name: database migrations and behavior
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -50,3 +50,9 @@ jobs:
 
       - name: Replay every migration on a clean database
         run: supabase db start
+
+      - name: Lint Postgres functions
+        run: supabase db lint --local --level error --fail-on error
+
+      - name: Verify Marketing Engine database behavior
+        run: supabase test db supabase/tests/marketing_engine_test.sql --local
