@@ -100,12 +100,12 @@ export async function persistProductionPlan(input: {
     const musicContext = shotMusicContext(input.context, entry.shot.start_ms, entry.shot.end_ms);
     const provisional = {
       generation_priority: entry.shot.generation_priority,
-      capability_profile: entry.shot.capability_profile,
+      capability_profile: json(entry.shot.capability_profile),
       start_asset_id: null,
       end_asset_id: null,
-      reference_asset_ids: [],
-      music_context: musicContext,
-    } as const;
+      reference_asset_ids: json([]),
+      music_context: json(musicContext),
+    };
     const testIndexes = new Set(input.plan.test_shot_indexes);
     const routing = routeVideoShot({
       ...provisional,
