@@ -32,3 +32,21 @@ jobs:
           NEXT_PUBLIC_SITE_URL: https://example.com
           NEXT_PUBLIC_SUPABASE_URL: https://your-project.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: your-publishable-or-legacy-anon-key
+
+  database:
+    name: database migrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v2
+        with:
+          version: 2.111.0
+          github-token: ${{ github.token }}
+
+      - name: Initialize local Supabase config
+        run: test -f supabase/config.toml || supabase init
+
+      - name: Replay every migration on a clean database
+        run: supabase db start
