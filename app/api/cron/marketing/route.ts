@@ -1,4 +1,5 @@
 import { runMarketingAutomationCycle } from "@/lib/marketing/automation";
+import { processDuePublicationJobs } from "@/lib/marketing/publications";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,8 +15,9 @@ export async function GET(request: Request) {
   }
 
   try {
-    const result = await runMarketingAutomationCycle();
-    return Response.json({ ok: true, ...result });
+    const publications = await processDuePublicationJobs();
+    const automation = await runMarketingAutomationCycle();
+    return Response.json({ ok: true, publications, automation });
   } catch (error) {
     return Response.json(
       { ok: false, error: error instanceof Error ? error.message : "Marketing automation failed." },
