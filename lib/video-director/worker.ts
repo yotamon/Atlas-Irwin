@@ -65,6 +65,7 @@ export function fallbackMusicMap(durationSeconds: number): MusicMap {
 
 type WorkerJobType =
   | "analyze_audio"
+  | "extract_frame"
   | "render_master"
   | "render_social"
   | "render_promo"
@@ -136,16 +137,16 @@ export async function queueMediaWorkerJob(input: {
   return queued;
 }
 
-export async function createWorkerRenderUploadTarget(
+async function createWorkerUploadTarget(
   db: SupabaseClient<VideoDatabase>,
   ownerId: string,
   projectId: string,
-  renderId: string,
+  fileName: string,
 ) {
   const bucket = "public-media";
-  const path = `${ownerId}/library/video-director/${projectId}/${renderId}.mp4`;
+  const path = `${ownerId}/library/video-director/${projectId}/${fileName}`;
   const { data, error } = await db.storage.from(bucket).createSignedUploadUrl(path);
-  if (error || !data) throw new Error(error?.message || "Could not prepare render upload target.");
+  if (error || !data) throw new Error(error?.message || "Could not prepare worker upload target.");
   return {
     bucket,
     path: data.path,
@@ -153,4 +154,22 @@ export async function createWorkerRenderUploadTarget(
     signedUrl: data.signedUrl,
     publicUrl: db.storage.from(bucket).getPublicUrl(data.path).data.publicUrl,
   };
+}
+
+export function createWorkerRenderUploadTarget(
+  db: SupabaseClient<VideoDatabase>,
+  ownerId: string,
+  projectId: string,
+  renderId: string,
+) {
+  return createWorkerUploadTarget(db, ownerId, projectId, `${renderId}.mp4`);
+}
+
+export function createWorkerThumbnailUploadTarget(
+  db: SupabaseClient<VideoDatabase>,
+  ownerId: string,
+  projectId: string,
+  candidateId: string,
+) {
+  return createWorkerUploadTarget(db, ownerId, projectId, `thumbnail-${candidateId}.jpg`);
 }
