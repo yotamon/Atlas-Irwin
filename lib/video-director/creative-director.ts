@@ -59,31 +59,35 @@ export type VisualBible = {
   avoid: string[];
 };
 
+export type StoryboardShot = {
+  start_ms: number;
+  end_ms: number;
+  description: string;
+  prompt: string;
+  negative_prompt: string;
+  camera: string;
+  transition_in: string;
+  transition_out: string;
+  vertical_safe: boolean;
+  vertical_focus: "left" | "center" | "right";
+  generation_priority: "cost" | "balanced" | "quality" | "consistency" | "capability";
+  reuse_strategy: "unique" | "reuse_source" | "continuation" | "reframe" | "hold" | "loop";
+  capability_profile: {
+    hero: boolean;
+    continuity_critical: boolean;
+    complex_motion: boolean;
+    requires_audio_reference: boolean;
+    requires_video_reference: boolean;
+  };
+};
+
 export type StoryboardScene = {
   title: string;
   start_ms: number;
   end_ms: number;
   description: string;
   visual_intent: string;
-  shots: Array<{
-    start_ms: number;
-    end_ms: number;
-    description: string;
-    prompt: string;
-    negative_prompt: string;
-    camera: string;
-    transition_in: string;
-    transition_out: string;
-    generation_priority: "cost" | "balanced" | "quality" | "consistency" | "capability";
-    reuse_strategy: "unique" | "reuse_source" | "continuation" | "reframe" | "hold" | "loop";
-    capability_profile: {
-      hero: boolean;
-      continuity_critical: boolean;
-      complex_motion: boolean;
-      requires_audio_reference: boolean;
-      requires_video_reference: boolean;
-    };
-  }>;
+  shots: StoryboardShot[];
 };
 
 export type ProductionPlan = {
@@ -122,9 +126,9 @@ export interface MusicVideoCreativeDirector {
     context: VideoProjectContext;
     concept: VideoConcept;
     visualBible: VisualBible;
-    currentShot: StoryboardScene["shots"][number];
+    currentShot: StoryboardShot;
     instruction: string;
-  }): Promise<StoryboardScene["shots"][number]>;
+  }): Promise<StoryboardShot>;
 }
 
 export function parseMusicMap(value: unknown): MusicMap | null {
