@@ -92,7 +92,8 @@ export function BriefPanel({
               max="100000"
               step="0.01"
               defaultValue={project.hard_budget_credits}
-              disabled={archived || project.spent_credits > 0}
+              disabled={archived}
+              readOnly={project.spent_credits > 0}
             />
           </Field>
           <Field label="Story mode">
