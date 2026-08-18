@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { runMarketingAutomationCycle } from "@/lib/marketing/automation";
 import { asMarketingClient } from "@/lib/marketing/db";
+import { processDueOutreachEnrollments } from "@/lib/marketing/outreach";
 import { processDuePublicationJobs } from "@/lib/marketing/publications";
 
 function value(form: FormData, key: string) {
@@ -24,10 +25,12 @@ export async function runMarketingAutomationNow(form: FormData) {
   await requireStudioAdmin();
   const campaignId = optionalUuid(form, "campaign_id");
   await processDuePublicationJobs();
+  await processDueOutreachEnrollments();
   await runMarketingAutomationCycle();
   revalidatePath("/studio/campaigns");
   revalidatePath("/studio/analytics");
   revalidatePath("/studio/content");
+  revalidatePath("/studio/outreach");
   if (campaignId) revalidatePath(`/studio/campaigns/${campaignId}`);
 }
 
