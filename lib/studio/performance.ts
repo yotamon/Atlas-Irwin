@@ -1,3 +1,6 @@
+import { objectivePerformanceScore } from "@/lib/marketing/domain";
+
+// Retained for legacy release-cockpit views that do not yet provide a content goal.
 export const DEFAULT_PERFORMANCE_WEIGHTS = {
   profile_visits: 8,
   follows: 10,
@@ -8,6 +11,7 @@ export const DEFAULT_PERFORMANCE_WEIGHTS = {
   likes: 1,
   views: 0.05,
 } as const;
+
 export function contentPerformanceScore(
   metric: Record<string, number>,
   weights: Record<string, number> = DEFAULT_PERFORMANCE_WEIGHTS,
@@ -18,4 +22,8 @@ export function contentPerformanceScore(
       0,
     ),
   );
+}
+
+export function goalPerformanceScore(goal: string, metric: Record<string, number>) {
+  return objectivePerformanceScore(goal, metric);
 }

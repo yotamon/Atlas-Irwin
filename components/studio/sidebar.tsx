@@ -5,10 +5,13 @@ import { signOut } from "@/app/studio/actions";
 const links = [
   ["/studio", "Command Center", "dashboard"],
   ["/studio/releases", "Releases", "releases"],
-  ["/studio/campaigns", "Campaigns", "campaigns"],
+  ["/studio/music", "Music Lab", "musicLab"],
+  ["/studio/campaigns", "Campaign Brain", "campaigns"],
+  ["/studio/content", "Content Lab", "content"],
+  ["/studio/outreach", "Outreach", "outreach"],
   ["/studio/media", "Media Library", "media"],
-  ["/studio/data-health", "Data Health", "dataHealth"],
   ["/studio/analytics", "Analytics", "analytics"],
+  ["/studio/data-health", "Data Health", "dataHealth"],
   ["/studio/brand", "Brand / Creative", "brand"],
 ] as const;
 

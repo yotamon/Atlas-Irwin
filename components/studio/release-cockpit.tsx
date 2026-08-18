@@ -1,6 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
 import { HomepageCatalogPreview } from "@/components/studio/homepage-catalog-preview";
+import { ReleaseVideoPanel } from "@/components/studio/video-director/release-video-panel";
 import {
   createTrackFromSoundCloud,
   createTrackFromSpotify,
@@ -38,6 +39,7 @@ import type {
   MediaAsset,
   MediaLink,
   MetricSnapshot,
+  MusicVideoProject,
   Release,
   ReleaseExternalLink,
   SoundCloudTrack,
@@ -52,6 +54,7 @@ const TABS = [
   ["overview", "Overview"],
   ["music", "Music"],
   ["media", "Media"],
+  ["video", "Video"],
   ["website", "Website"],
   ["campaign", "Campaign"],
   ["performance", "Performance"],
@@ -102,6 +105,7 @@ export function ReleaseCockpit({
   unmatchedSoundCloud,
   unmatchedSpotify,
   publicReleases,
+  videoProjects,
   tab,
 }: {
   release: Release;
@@ -119,6 +123,7 @@ export function ReleaseCockpit({
   unmatchedSoundCloud: SoundCloudTrack[];
   unmatchedSpotify: SpotifyTrack[];
   publicReleases: PublicRelease[];
+  videoProjects: MusicVideoProject[];
   tab: string;
 }) {
   const currentTab = tab === "tracks" || tab === "distribution" ? "music" : tab === "analytics" ? "performance" : TABS.some(([key]) => key === tab) ? tab : "overview";
@@ -159,7 +164,7 @@ export function ReleaseCockpit({
       </header>
 
       <nav className="studio-tabs release-tabs" aria-label="Release workspace">
-        {TABS.map(([key, label]) => <Link key={key} href={`/studio/releases/${release.id}?tab=${key}`} className={currentTab === key ? "active" : undefined}>{label}{key === "media" && mediaAssets.length ? <small>{mediaAssets.length}</small> : null}{key === "campaign" && contentCount ? <small>{contentCount}</small> : null}</Link>)}
+        {TABS.map(([key, label]) => <Link key={key} href={`/studio/releases/${release.id}?tab=${key}`} className={currentTab === key ? "active" : undefined}>{label}{key === "media" && mediaAssets.length ? <small>{mediaAssets.length}</small> : null}{key === "video" && videoProjects.length ? <small>{videoProjects.length}</small> : null}{key === "campaign" && contentCount ? <small>{contentCount}</small> : null}</Link>)}
       </nav>
 
       {currentTab === "overview" ? (
@@ -229,6 +234,8 @@ export function ReleaseCockpit({
           <section className="workspace-section" id="upload"><div className="section-head"><div><span className="section-label">Upload</span><h2>Add without duplicating</h2></div></div><p className="section-copy">Upload directly to the secure media store, then attach it here. Images, motion, previews, masters, and stems each get compatible roles automatically.</p><MediaUploader releaseId={release.id} /></section>
         </div>
       ) : null}
+
+      {currentTab === "video" ? <ReleaseVideoPanel release={release} tracks={tracks} projects={videoProjects} /> : null}
 
       {currentTab === "website" ? (
         <div className="website-workspace">

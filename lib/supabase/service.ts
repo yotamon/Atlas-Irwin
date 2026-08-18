@@ -2,6 +2,7 @@ import "server-only";
 
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
+import type { VideoDatabase } from "@/types/video-database";
 import { getSupabaseEnv } from "./config";
 
 export function createServiceClient() {
@@ -12,7 +13,7 @@ export function createServiceClient() {
       "SUPABASE_SERVICE_ROLE_KEY is required for server catalog operations.",
     );
   }
-  return createClient<Database>(url, serviceRoleKey, {
+  return createClient<VideoDatabase>(url, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 }
