@@ -77,7 +77,22 @@ const VISUAL_BIBLE_SCHEMA = {
 
 type ResponsePayload = { output_text?: string; output?: Array<{ type?: string; content?: Array<{ type?: string; text?: string; refusal?: string }> }>; error?: { message?: string } };
 
-function apiKey() { const key = process.env.OPENAI_API_KEY?.trim(); if (!key) throw new Error("Creative Director is not configured. Set OPENAI_API_KEY."); return key; }
+function apiKey() {
+  const key = process.env.OPENAI_API_KEY?.trim();
+  if (!key) throw new Error("Creative Director is not configured. Set OPENAI_API_KEY.");
+  return key;
+}
+
+function directorModel() {
+  const model = process.env.VIDEO_DIRECTOR_LLM_MODEL?.trim();
+  if (!model) {
+    throw new Error(
+      "Creative Director model is not configured. Set VIDEO_DIRECTOR_LLM_MODEL to a Responses API model available to this OpenAI account.",
+    );
+  }
+  return model;
+}
+
 function outputText(payload: ResponsePayload) {
   if (payload.output_text) return payload.output_text;
   for (const item of payload.output ?? []) for (const content of item.content ?? []) { if (content.type === "refusal" && content.refusal) throw new Error(`Creative Director refused: ${content.refusal}`); if (content.text) return content.text; }
@@ -87,7 +102,7 @@ function outputText(payload: ResponsePayload) {
 async function structuredResponse<T>(input: { name: string; schema: Record<string, unknown>; instructions: string; prompt: string }): Promise<T> {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST", headers: { Authorization: `Bearer ${apiKey()}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model: process.env.VIDEO_DIRECTOR_LLM_MODEL?.trim() || "gpt-5.6", store: false, instructions: input.instructions, input: input.prompt, text: { verbosity: "medium", format: { type: "json_schema", name: input.name, strict: true, schema: input.schema } } }),
+    body: JSON.stringify({ model: directorModel(), store: false, instructions: input.instructions, input: input.prompt, text: { verbosity: "medium", format: { type: "json_schema", name: input.name, strict: true, schema: input.schema } } }),
   });
   const payload = await response.json().catch(() => ({})) as ResponsePayload;
   if (!response.ok) throw new Error(payload.error?.message || `Creative Director failed (${response.status}).`);
@@ -136,7 +151,7 @@ export class OpenAIMusicVideoDirector implements MusicVideoCreativeDirector {
         visual_bible: VISUAL_BIBLE_SCHEMA,
         scenes: { type: "array", minItems: 1, items: { type: "object", additionalProperties: false, required: ["title", "start_ms", "end_ms", "description", "visual_intent", "shots"], properties: { title: { type: "string" }, start_ms: { type: "integer", minimum: 0 }, end_ms: { type: "integer", minimum: 1 }, description: { type: "string" }, visual_intent: { type: "string" }, shots: { type: "array", minItems: 1, items: SHOT_SCHEMA } } } },
         look_dev_prompts: { type: "array", minItems: 3, maxItems: 10, items: { type: "object", additionalProperties: false, required: ["label", "prompt", "purpose"], properties: { label: { type: "string" }, prompt: { type: "string" }, purpose: { type: "string" } } } },
-        test_shot_indexes: { type: "array", items: { type: "integer", minimum: 0 }, maxItems: 4 }, editing_strategy: { type: "string" }, reuse_strategy: { type: "string" }, production_notes: { type: "array", items: { type: "string" } },
+        test_shot_indexes: { type: "array", minItems: 1, items: { type: "integer", minimum: 0 }, maxItems: 4 }, editing_strategy: { type: "string" }, reuse_strategy: { type: "string" }, production_notes: { type: "array", items: { type: "string" } },
       } },
     });
     validatePlanTimeline(result, context);
@@ -156,4 +171,10 @@ function validatePlanTimeline(plan: ProductionPlan, context: VideoProjectContext
   if (durationMs > 0) { const tolerance = 1500; if (shots[0].start_ms > tolerance || Math.abs(shots.at(-1)!.end_ms - durationMs) > tolerance) throw new Error("Creative Director storyboard does not cover the track duration closely enough. Regenerate the plan."); }
 }
 
-export function openAIDirectorReadiness() { return { configured: Boolean(process.env.OPENAI_API_KEY?.trim()), model: process.env.VIDEO_DIRECTOR_LLM_MODEL?.trim() || "gpt-5.6" }; }
+export function openAIDirectorReadiness() {
+  const model = process.env.VIDEO_DIRECTOR_LLM_MODEL?.trim() || "";
+  return {
+    configured: Boolean(process.env.OPENAI_API_KEY?.trim() && model),
+    model: model || "Not configured",
+  };
+}
