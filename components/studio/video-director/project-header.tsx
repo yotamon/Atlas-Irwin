@@ -40,7 +40,7 @@ export function ProjectHeader({
         {project.status !== "archived" ? (
           <form action={archiveMusicVideoProject}>
             <input type="hidden" name="id" value={project.id} />
-            <ConfirmButton confirmMessage="Archive this music video project? You can still view its production history later.">
+            <ConfirmButton message="Archive this music video project? You can still view its production history later.">
               Archive project
             </ConfirmButton>
           </form>
