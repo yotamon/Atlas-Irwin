@@ -27,7 +27,6 @@ function renderLabel(render: MusicVideoRender, primaryAspect: string) {
     case "social_9_16": return "9:16 social cut";
     case "promo_30": return `30s promo ${primaryAspect}`;
     case "hook_15": return "15s vertical hook";
-    default: return render.render_type.replaceAll("_", " ");
   }
 }
 
