@@ -4,6 +4,7 @@ import { BriefPanel } from "./brief-panel";
 import { RecoveryPanel } from "./recovery-panel";
 import { DeliveryPanel } from "./delivery-panel";
 import { LookDevelopmentPanel } from "./look-development-panel";
+import { ConceptRefinementPanel } from "./concept-refinement-panel";
 import {
   ConceptsPanel,
   GenerationPanel,
@@ -37,6 +38,7 @@ export function VideoProjectWorkspace({ data }: { data: VideoWorkspaceData }) {
           />
           <MusicMapPanel data={data} />
           <ConceptsPanel data={data} />
+          <ConceptRefinementPanel data={data} />
           <ProductionPlanPanel data={data} />
           <StoryboardPanel data={data} />
           <LookDevelopmentPanel data={data} />
