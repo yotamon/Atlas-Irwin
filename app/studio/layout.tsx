@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./studio.css";
+import "./video-director.css";
 export const metadata: Metadata = {
   title: {
     default: "Atlas Release Engine",
