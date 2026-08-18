@@ -6,7 +6,7 @@ import type { Json, MusicVideoGeneration } from "@/types/database";
 import type { ExtendedMusicVideoGeneration, ExtendedMusicVideoProject, ExtendedMusicVideoShot, VideoDatabase } from "@/types/video-database";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { HiggsfieldProvider, higgsfieldReadiness, resolveHiggsfieldEndpoint } from "@/lib/video-providers/higgsfield/client";
-import type { GenerationOperation, ProviderStatus, VideoGenerationRequest } from "@/lib/video-providers/types";
+import type { GenerationOperation, ProviderStatus, VideoGenerationRequest, VideoProviderMedia } from "@/lib/video-providers/types";
 import { routeLookDevelopmentModel } from "./model-router";
 import { storeRemoteGeneratedAsset } from "./assets";
 
@@ -26,20 +26,18 @@ function hash(value: unknown) {
 
 function generationRequest(value: Json): VideoGenerationRequest {
   const request = record(value);
-  const operation = request.operation;
-  const model = request.model;
-  const prompt = request.prompt;
-  const aspectRatio = request.aspectRatio;
-  const resolution = request.resolution;
-  if (typeof operation !== "string" || typeof model !== "string" || typeof prompt !== "string" || typeof aspectRatio !== "string" || typeof resolution !== "string") {
-    throw new Error("Stored generation request is incomplete.");
-  }
+  if (
+    typeof request.operation !== "string" ||
+    typeof request.model !== "string" ||
+    typeof request.prompt !== "string" ||
+    typeof request.aspectRatio !== "string" ||
+    typeof request.resolution !== "string"
+  ) throw new Error("Stored generation request is incomplete.");
   return request as unknown as VideoGenerationRequest;
 }
 
 function lookPrompts(project: ExtendedMusicVideoProject) {
-  const plan = record(project.production_plan);
-  const prompts = plan.look_dev_prompts;
+  const prompts = record(project.production_plan).look_dev_prompts;
   if (!Array.isArray(prompts)) return [];
   return prompts.flatMap((item, index) => {
     const row = record(item);
@@ -55,6 +53,37 @@ function lookPrompts(project: ExtendedMusicVideoProject) {
 function testShotIndexes(project: ExtendedMusicVideoProject) {
   const value = record(project.production_plan).test_shot_indexes;
   return new Set(Array.isArray(value) ? value.filter((item): item is number => Number.isInteger(item)) : []);
+}
+
+function paidShot(strategy: ExtendedMusicVideoShot["reuse_strategy"]) {
+  return strategy === "unique" || strategy === "continuation";
+}
+
+function referenceIds(shot: ExtendedMusicVideoShot) {
+  const general = Array.isArray(shot.reference_asset_ids)
+    ? shot.reference_asset_ids.filter((value): value is string => typeof value === "string")
+    : [];
+  return [...new Set([shot.start_asset_id, shot.end_asset_id, ...general].filter((value): value is string => Boolean(value)))];
+}
+
+async function mediaForShot(
+  db: SupabaseClient<VideoDatabase>,
+  shot: ExtendedMusicVideoShot,
+): Promise<VideoProviderMedia[]> {
+  const ids = referenceIds(shot);
+  if (!ids.length) return [];
+  const { data, error } = await db.from("media_assets").select("id,public_url").in("id", ids).eq("owner_id", shot.owner_id);
+  if (error) throw new Error(error.message);
+  const byId = new Map((data ?? []).map((asset) => [asset.id, asset.public_url]));
+  const medias: VideoProviderMedia[] = [];
+  if (shot.start_asset_id && byId.get(shot.start_asset_id)) medias.push({ role: "start_image", url: byId.get(shot.start_asset_id)! });
+  if (shot.end_asset_id && byId.get(shot.end_asset_id)) medias.push({ role: "end_image", url: byId.get(shot.end_asset_id)! });
+  for (const id of ids) {
+    if (id === shot.start_asset_id || id === shot.end_asset_id) continue;
+    const url = byId.get(id);
+    if (url) medias.push({ role: "image", url });
+  }
+  return medias;
 }
 
 export async function prepareLookGenerationRecords(input: {
@@ -78,10 +107,7 @@ export async function prepareLookGenerationRecords(input: {
     const { data: existing, error: existingError } = await input.db.from("music_video_generations")
       .select("*").eq("idempotency_key", key).maybeSingle();
     if (existingError) throw new Error(existingError.message);
-    if (existing) {
-      result.push(existing);
-      continue;
-    }
+    if (existing) { result.push(existing); continue; }
     const quote = await provider.quote(request);
     const { data, error } = await input.db.from("music_video_generations").insert({
       owner_id: input.ownerId,
@@ -111,10 +137,6 @@ export async function prepareLookGenerationRecords(input: {
   return result;
 }
 
-function paidShot(strategy: ExtendedMusicVideoShot["reuse_strategy"]) {
-  return strategy === "unique" || strategy === "continuation";
-}
-
 export async function prepareShotGenerationRecords(input: {
   db: SupabaseClient<VideoDatabase>;
   ownerId: string;
@@ -139,16 +161,14 @@ export async function prepareShotGenerationRecords(input: {
       durationSeconds: duration,
       aspectRatio: input.project.primary_aspect_ratio,
       resolution: input.project.target_resolution,
+      medias: await mediaForShot(input.db, shot),
       params,
     };
     const key = `${operation}:${shot.id}:v${shot.prompt_version}:${hash(request).slice(0, 24)}`;
     const { data: existing, error: existingError } = await input.db.from("music_video_generations")
       .select("*").eq("idempotency_key", key).maybeSingle();
     if (existingError) throw new Error(existingError.message);
-    if (existing) {
-      result.push(existing);
-      continue;
-    }
+    if (existing) { result.push(existing); continue; }
     const quote = await provider.quote(request);
     const { data, error } = await input.db.from("music_video_generations").insert({
       owner_id: input.ownerId,
@@ -185,10 +205,7 @@ export async function createApprovalEnvelope(input: {
 }) {
   if (!input.generationIds.length) throw new Error("Choose at least one generation for this batch.");
   const { data: generations, error } = await input.db.from("music_video_generations")
-    .select("*")
-    .eq("owner_id", input.ownerId)
-    .eq("project_id", input.project.id)
-    .in("id", input.generationIds);
+    .select("*").eq("owner_id", input.ownerId).eq("project_id", input.project.id).in("id", input.generationIds);
   if (error) throw new Error(error.message);
   if ((generations ?? []).length !== input.generationIds.length) throw new Error("One or more generation requests are unavailable.");
   if ((generations ?? []).some((generation) => generation.status !== "planned" || generation.approval_id)) {
@@ -215,9 +232,7 @@ export async function createApprovalEnvelope(input: {
   }).select("*").single();
   if (approvalError || !approval) throw new Error(approvalError?.message || "Could not create approval envelope.");
   const { error: updateError } = await input.db.from("music_video_generations")
-    .update({ approval_id: approval.id })
-    .in("id", input.generationIds)
-    .eq("owner_id", input.ownerId);
+    .update({ approval_id: approval.id }).in("id", input.generationIds).eq("owner_id", input.ownerId);
   if (updateError) throw new Error(updateError.message);
   return approval;
 }
@@ -228,9 +243,11 @@ function webhookUrl() {
   return `${getSiteUrl()}/api/video-director/higgsfield/webhook?token=${encodeURIComponent(token)}`;
 }
 
-async function quoteCredits(generation: ExtendedMusicVideoGeneration) {
+function quoteCredits(generation: ExtendedMusicVideoGeneration) {
   const metadata = record(generation.provider_metadata);
-  return typeof metadata.quote_credits === "number" ? metadata.quote_credits : Math.min(generation.estimated_credits, generation.estimated_credits / 1.25);
+  return typeof metadata.quote_credits === "number"
+    ? metadata.quote_credits
+    : Math.min(generation.estimated_credits, generation.estimated_credits / 1.25);
 }
 
 export async function applyProviderStatus(input: {
@@ -240,6 +257,7 @@ export async function applyProviderStatus(input: {
 }) {
   const generation = input.generation;
   if (input.status.status === "completed") {
+    if (generation.status === "completed" && generation.result_asset_id && generation.billing_status === "charged") return;
     if (!input.status.resultUrl) throw new Error("Higgsfield completed without a result URL.");
     const asset = await storeRemoteGeneratedAsset({
       db: input.db,
@@ -252,38 +270,43 @@ export async function applyProviderStatus(input: {
       remoteUrl: input.status.resultUrl,
       assetType: generation.operation_type === "look_image" ? "storyboard_frame" : "shot_preview",
     });
-    const credits = await quoteCredits(generation);
-    const { error: settleError } = await input.db.rpc("settle_music_video_generation", {
-      p_generation_id: generation.id,
-      p_actual_credits: credits,
-      p_billing_status: "charged",
-    });
-    if (settleError) throw new Error(settleError.message);
+    const credits = quoteCredits(generation);
+    if (generation.billing_status === "reserved") {
+      const { error: settleError } = await input.db.rpc("settle_music_video_generation", {
+        p_generation_id: generation.id,
+        p_actual_credits: credits,
+        p_billing_status: "charged",
+      });
+      if (settleError) throw new Error(settleError.message);
+    }
     const { error: generationError } = await input.db.from("music_video_generations").update({
       status: "completed",
+      actual_credits: credits,
+      billing_status: "charged",
       result_asset_id: asset.id,
       completed_at: new Date().toISOString(),
       provider_metadata: json({ ...record(generation.provider_metadata), response: input.status.raw }),
       error: null,
     }).eq("id", generation.id);
     if (generationError) throw new Error(generationError.message);
-    if (generation.shot_id) {
-      await input.db.from("music_video_shots").update({ status: "review" }).eq("id", generation.shot_id);
-    }
+    if (generation.shot_id) await input.db.from("music_video_shots").update({ status: "review" }).eq("id", generation.shot_id);
     await advanceAfterProviderCompletion(input.db, generation.project_id, generation.operation_type);
     return;
   }
 
   if (input.status.status === "failed" || input.status.status === "nsfw") {
-    const { error: settleError } = await input.db.rpc("settle_music_video_generation", {
-      p_generation_id: generation.id,
-      p_actual_credits: 0,
-      p_billing_status: "refunded",
-    });
-    if (settleError) throw new Error(settleError.message);
+    if (generation.billing_status === "reserved") {
+      const { error: settleError } = await input.db.rpc("settle_music_video_generation", {
+        p_generation_id: generation.id,
+        p_actual_credits: 0,
+        p_billing_status: "refunded",
+      });
+      if (settleError) throw new Error(settleError.message);
+    }
     await input.db.from("music_video_generations").update({
       status: input.status.status === "nsfw" ? "rejected_by_provider" : "failed",
       billing_status: "refunded",
+      actual_credits: 0,
       completed_at: new Date().toISOString(),
       provider_metadata: json({ ...record(generation.provider_metadata), response: input.status.raw }),
       error: input.status.status === "nsfw" ? "Provider safety rejection" : "Provider generation failed",
@@ -306,19 +329,22 @@ async function advanceAfterProviderCompletion(
   const { data: project } = await db.from("music_video_projects").select("status").eq("id", projectId).single();
   if (!project) return;
   if (operation === "look_image" && project.status === "look_dev") {
-    const { data: pending } = await db.from("music_video_generations")
-      .select("id")
-      .eq("project_id", projectId)
-      .eq("operation_type", "look_image")
-      .in("status", ["approved", "submitted", "queued", "in_progress"])
-      .limit(1);
+    const { data: pending } = await db.from("music_video_generations").select("id")
+      .eq("project_id", projectId).eq("operation_type", "look_image")
+      .in("status", ["approved", "submitted", "queued", "in_progress"]).limit(1);
     if (!pending?.length) await db.from("music_video_projects").update({ status: "look_review" }).eq("id", projectId);
   }
   if (operation === "test_video" && project.status === "test_generation") {
-    const { data: pending } = await db.from("music_video_generations")
-      .select("id").eq("project_id", projectId).eq("operation_type", "test_video")
+    const { data: pending } = await db.from("music_video_generations").select("id")
+      .eq("project_id", projectId).eq("operation_type", "test_video")
       .in("status", ["approved", "submitted", "queued", "in_progress"]).limit(1);
     if (!pending?.length) await db.from("music_video_projects").update({ status: "test_review" }).eq("id", projectId);
+  }
+  if (operation === "shot_video" && project.status === "production") {
+    const { data: pending } = await db.from("music_video_generations").select("id")
+      .eq("project_id", projectId).eq("operation_type", "shot_video")
+      .in("status", ["planned", "approved", "submitted", "queued", "in_progress"]).limit(1);
+    if (!pending?.length) await db.from("music_video_projects").update({ status: "shot_review" }).eq("id", projectId);
   }
 }
 
@@ -332,7 +358,6 @@ export async function submitGeneration(input: {
   if (!readiness.hasCredentials) throw new Error("Higgsfield credentials are not configured.");
   resolveHiggsfieldEndpoint(generation.model);
   const request = generationRequest(generation.request_payload);
-
   const { data: reserved, error: reserveError } = await input.db.rpc("reserve_music_video_generation", {
     p_generation_id: generation.id,
   });
@@ -349,16 +374,18 @@ export async function submitGeneration(input: {
       error: null,
     }).eq("id", generation.id).select("*").single();
     if (error || !updated) throw new Error(error?.message || "Could not persist Higgsfield request id.");
-    if (submission.status === "completed") {
-      await applyProviderStatus({ db: input.db, generation: updated, status: submission });
-    }
+    if (submission.status === "completed") await applyProviderStatus({ db: input.db, generation: updated, status: submission });
     return updated;
   } catch (error) {
-    await input.db.rpc("settle_music_video_generation", {
-      p_generation_id: generation.id,
-      p_actual_credits: 0,
-      p_billing_status: "not_billed",
-    }).catch(() => undefined);
+    try {
+      await input.db.rpc("settle_music_video_generation", {
+        p_generation_id: generation.id,
+        p_actual_credits: 0,
+        p_billing_status: "not_billed",
+      });
+    } catch {
+      // The database record keeps its reserve for manual reconciliation if settlement itself fails.
+    }
     await input.db.from("music_video_generations").update({
       status: "failed",
       billing_status: "not_billed",
@@ -374,17 +401,11 @@ export async function submitApprovalEnvelope(input: {
   ownerId: string;
   approvalId: string;
 }) {
-  const { data: generations, error } = await input.db.from("music_video_generations")
-    .select("*")
-    .eq("owner_id", input.ownerId)
-    .eq("approval_id", input.approvalId)
-    .eq("status", "planned")
-    .order("created_at");
+  const { data: generations, error } = await input.db.from("music_video_generations").select("*")
+    .eq("owner_id", input.ownerId).eq("approval_id", input.approvalId).eq("status", "planned").order("created_at");
   if (error) throw new Error(error.message);
   const submitted: ExtendedMusicVideoGeneration[] = [];
-  for (const generation of generations ?? []) {
-    submitted.push(await submitGeneration({ db: input.db, generation }));
-  }
+  for (const generation of generations ?? []) submitted.push(await submitGeneration({ db: input.db, generation }));
   return submitted;
 }
 
