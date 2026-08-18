@@ -170,8 +170,12 @@ export async function generateEleven(input: AtlasMusicInput, prompt: string): Pr
       force_instrumental: true,
     };
   } else {
+    const lyrics = input.lyrics?.trim() || "";
+    const instruction = "Use this lyric structure and text faithfully:";
+    const styleBudget = Math.max(350, 4050 - lyrics.length - instruction.length);
+    const planPrompt = `${prompt.slice(0, styleBudget)}\n\n${instruction}\n${lyrics}`.slice(0, 4100);
     const planResponse = await elevenRequest("/v1/music/plan", {
-      prompt: `${prompt}\n\nUse this lyric structure and text faithfully:\n${input.lyrics?.trim() || ""}`,
+      prompt: planPrompt,
       music_length_ms: durationMs,
       model_id: model,
     });
