@@ -6,6 +6,8 @@ export type HiggsfieldModelId =
   | "seedance_2_0_mini"
   | "kling3_0";
 
+export type HiggsfieldResolution = "480p" | "720p" | "1080p" | "4k";
+
 export type HiggsfieldModelCapability = {
   id: HiggsfieldModelId;
   label: string;
@@ -19,17 +21,19 @@ export type HiggsfieldModelCapability = {
   supportsVideoReferences: boolean;
   supportsAudioReferences: boolean;
   supports4k: boolean;
+  supportedResolutions: readonly HiggsfieldResolution[];
   minDuration?: number;
   maxDuration?: number;
   recommendedFor: string[];
 };
 
-// Deliberately small, curated set for music-video production. The provider adapter
-// remains model-agnostic so this list can evolve without changing domain code.
+// Deliberately small, curated set for music-video production. Capability values are
+// synchronized with the Higgsfield model catalog and kept explicit so the router never
+// relies on a provider-side resolution fallback for paid generations.
 export const HIGGSFIELD_MODELS: readonly HiggsfieldModelCapability[] = [
   {
     id: "nano_banana_2",
-    label: "Nano Banana Pro",
+    label: "Nano Banana 2",
     output: "image",
     quality: 9,
     costEfficiency: 9,
@@ -40,6 +44,7 @@ export const HIGGSFIELD_MODELS: readonly HiggsfieldModelCapability[] = [
     supportsVideoReferences: false,
     supportsAudioReferences: false,
     supports4k: true,
+    supportedResolutions: ["720p", "1080p", "4k"],
     recommendedFor: ["look_dev", "storyboard", "reference_frame"],
   },
   {
@@ -55,6 +60,7 @@ export const HIGGSFIELD_MODELS: readonly HiggsfieldModelCapability[] = [
     supportsVideoReferences: false,
     supportsAudioReferences: false,
     supports4k: true,
+    supportedResolutions: ["720p", "1080p", "4k"],
     minDuration: 4,
     maxDuration: 15,
     recommendedFor: ["hero", "cinematic", "climax", "precision_camera"],
@@ -72,6 +78,7 @@ export const HIGGSFIELD_MODELS: readonly HiggsfieldModelCapability[] = [
     supportsVideoReferences: true,
     supportsAudioReferences: true,
     supports4k: false,
+    supportedResolutions: ["720p", "1080p"],
     minDuration: 4,
     maxDuration: 30,
     recommendedFor: ["reference_heavy", "continuity", "multimodal", "extension"],
@@ -89,6 +96,7 @@ export const HIGGSFIELD_MODELS: readonly HiggsfieldModelCapability[] = [
     supportsVideoReferences: true,
     supportsAudioReferences: true,
     supports4k: true,
+    supportedResolutions: ["720p", "1080p", "4k"],
     minDuration: 4,
     maxDuration: 15,
     recommendedFor: ["continuity", "reference_heavy", "music_context", "general"],
@@ -106,6 +114,7 @@ export const HIGGSFIELD_MODELS: readonly HiggsfieldModelCapability[] = [
     supportsVideoReferences: true,
     supportsAudioReferences: true,
     supports4k: false,
+    supportedResolutions: ["720p"],
     minDuration: 4,
     maxDuration: 15,
     recommendedFor: ["test", "simple_motion", "budget", "alternative"],
@@ -123,6 +132,7 @@ export const HIGGSFIELD_MODELS: readonly HiggsfieldModelCapability[] = [
     supportsVideoReferences: false,
     supportsAudioReferences: false,
     supports4k: true,
+    supportedResolutions: ["720p", "1080p", "4k"],
     minDuration: 3,
     maxDuration: 15,
     recommendedFor: ["physics", "movement", "multi_shot", "alternative"],
