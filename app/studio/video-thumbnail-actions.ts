@@ -16,12 +16,6 @@ function value(form: FormData, key: string) {
   return String(form.get(key) ?? "").trim();
 }
 
-function metadata(value: Json): Record<string, Json | undefined> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, Json | undefined>
-    : {};
-}
-
 function candidateTimestamps(musicMap: Json, durationMs: number) {
   const map = parseMusicMap(musicMap);
   const duration = map?.duration_ms || durationMs;
@@ -89,12 +83,11 @@ export async function generateVideoThumbnailCandidates(form: FormData) {
   const map = parseMusicMap(project.music_map);
   const timestamps = candidateTimestamps(project.music_map, source.duration_ms || map?.duration_ms || 0);
   if (!timestamps.length) throw new Error("Atlas could not choose safe thumbnail timestamps.");
-  const jobs = [];
 
   for (const timestampMs of timestamps) {
     const candidateId = `${project.id}-${timestampMs}`;
     const upload = await createWorkerThumbnailUploadTarget(db, user.id, project.id, candidateId);
-    jobs.push(await queueMediaWorkerJob({
+    await queueMediaWorkerJob({
       db,
       project,
       ownerId: user.id,
@@ -111,11 +104,10 @@ export async function generateVideoThumbnailCandidates(form: FormData) {
         public_url: upload.publicUrl,
       },
       idempotencyKey: `thumbnail:${candidateId}`,
-    }));
+    });
   }
 
   revalidatePath(`/studio/video/${project.id}`);
-  return { queued: jobs.length };
 }
 
 export async function selectVideoThumbnail(form: FormData) {
@@ -124,61 +116,21 @@ export async function selectVideoThumbnail(form: FormData) {
   const { user } = await requireStudioAdmin();
   const db = createServiceClient();
 
-  const [{ data: project, error: projectError }, { data: asset, error: assetError }] = await Promise.all([
-    db.from("music_video_projects").select("id,release_id,owner_id,status").eq("id", projectId).eq("owner_id", user.id).single(),
-    db.from("media_assets").select("*").eq("id", assetId).eq("owner_id", user.id).single(),
-  ]);
-  if (projectError || !project) throw new Error(projectError?.message || "Video project not found.");
-  if (project.status !== "complete") throw new Error("Thumbnail selection is available after the master completes.");
-  if (assetError || !asset) throw new Error(assetError?.message || "Thumbnail asset not found.");
-  if (asset.asset_type !== "thumbnail" || metadata(asset.metadata).project_id !== project.id) {
-    throw new Error("Thumbnail candidate does not belong to this video project.");
-  }
+  const { error } = await db.rpc("select_music_video_thumbnail", {
+    p_owner_id: user.id,
+    p_project_id: projectId,
+    p_asset_id: assetId,
+  });
+  if (error) throw new Error(error.message);
 
-  const { data: projectThumbnails, error: thumbnailError } = await db.from("media_assets")
-    .select("id,metadata")
+  const { data: project, error: projectError } = await db.from("music_video_projects")
+    .select("release_id")
+    .eq("id", projectId)
     .eq("owner_id", user.id)
-    .eq("asset_type", "thumbnail")
-    .contains("metadata", { project_id: project.id });
-  if (thumbnailError) throw new Error(thumbnailError.message);
-  for (const item of projectThumbnails ?? []) {
-    const next = { ...metadata(item.metadata), selected_thumbnail: item.id === asset.id } as Json;
-    const { error } = await db.from("media_assets").update({ metadata: next }).eq("id", item.id).eq("owner_id", user.id);
-    if (error) throw new Error(error.message);
-  }
+    .single();
+  if (projectError || !project) throw new Error(projectError?.message || "Video project not found after thumbnail selection.");
 
-  const { error: clearError } = await db.from("media_links")
-    .update({ is_primary: false })
-    .eq("owner_id", user.id)
-    .eq("release_id", project.release_id)
-    .eq("role", "thumbnail");
-  if (clearError) throw new Error(clearError.message);
-
-  const { data: existing, error: linkLookupError } = await db.from("media_links")
-    .select("id")
-    .eq("owner_id", user.id)
-    .eq("release_id", project.release_id)
-    .eq("media_asset_id", asset.id)
-    .eq("role", "thumbnail")
-    .maybeSingle();
-  if (linkLookupError) throw new Error(linkLookupError.message);
-  const linkValues = {
-    owner_id: user.id,
-    media_asset_id: asset.id,
-    release_id: project.release_id,
-    track_id: null,
-    content_item_id: null,
-    role: "thumbnail",
-    is_primary: true,
-    caption: "Selected Atlas Video Director thumbnail",
-    alt_text: null,
-  };
-  const { error: linkError } = existing
-    ? await db.from("media_links").update(linkValues).eq("id", existing.id)
-    : await db.from("media_links").insert(linkValues);
-  if (linkError) throw new Error(linkError.message);
-
-  revalidatePath(`/studio/video/${project.id}`);
+  revalidatePath(`/studio/video/${projectId}`);
   revalidatePath(`/studio/releases/${project.release_id}`);
   revalidatePath("/studio/media");
 }
