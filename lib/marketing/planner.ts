@@ -146,6 +146,7 @@ Rules:
 - Every creative idea must come from the supplied release identity, sonic hook, emotion, visual world, or story.
 - Treat historical learnings as evidence only when they are explicitly supplied. Never invent performance claims.
 - Each experiment tests one clear hypothesis and has 2 or 3 meaningfully different variants.
+- Every experiment must be attached to exactly one content moment. Do not reuse the same experimentTitle across multiple platforms or posting times. Cross-platform repurposing happens only after a winner is found.
 - Variants should differ in the first-second hook, framing, or audience promise, not just punctuation.
 - Keep captions concise, human, specific, and compatible with an artist voice. Avoid marketing jargon, fake urgency, generic AI language, and repetitive "out now" posts.
 - Use platform-native formats but keep one coherent campaign world.
@@ -158,6 +159,49 @@ function firstNonEmpty(...values: Array<string | null | undefined>) {
   return values.find((value) => value?.trim())?.trim() ?? "";
 }
 
+function normalizeCampaignPlan(plan: CampaignPlan): CampaignPlan {
+  const uniqueExperiments = Array.from(
+    new Map(
+      plan.experiments
+        .filter((experiment) => experiment.title.trim())
+        .map((experiment) => [experiment.title.trim(), experiment]),
+    ).values(),
+  ).map((experiment) => ({
+    ...experiment,
+    title: experiment.title.trim(),
+    primaryMetric: OBJECTIVE_KPIS[experiment.goal].primary,
+    variants: experiment.variants.slice(0, 3).map((variant, index) => ({
+      ...variant,
+      label: String.fromCharCode(65 + index),
+    })),
+  }));
+
+  const experimentByTitle = new Map(uniqueExperiments.map((experiment) => [experiment.title, experiment]));
+  const claimed = new Set<string>();
+  const contentMoments = plan.contentMoments.map((moment) => {
+    const requestedTitle = moment.experimentTitle.trim();
+    const experiment = requestedTitle ? experimentByTitle.get(requestedTitle) : undefined;
+    if (!experiment || claimed.has(experiment.title)) {
+      return { ...moment, experimentTitle: "" };
+    }
+    claimed.add(experiment.title);
+    return {
+      ...moment,
+      experimentTitle: experiment.title,
+      goal: experiment.goal,
+      phaseCode: experiment.phaseCode,
+      contentAngle: experiment.contentAngle,
+      audienceSegment: experiment.audienceSegment,
+    };
+  });
+
+  return {
+    ...plan,
+    experiments: uniqueExperiments.filter((experiment) => claimed.has(experiment.title)),
+    contentMoments,
+  };
+}
+
 function fallbackPlan(context: CampaignPlanningContext): CampaignPlan {
   const release = context.release;
   const title = release.title;
@@ -168,7 +212,7 @@ function fallbackPlan(context: CampaignPlanningContext): CampaignPlan {
   const primaryKpi = OBJECTIVE_KPIS[context.objective].primary;
   const learned = context.approvedLearnings.slice(0, 4);
 
-  return {
+  return normalizeCampaignPlan({
     strategySummary: `${title} should be marketed through the tension between ${emotion} and ${sonicHook}. Test the musical payoff before scaling reach, then move winning framing into release-day conversion and post-release discovery.`,
     audienceSegments: [audience, "DJs and selectors who program warm electronic music", "listeners who discover music through visual mood and short-form hooks"],
     contentPillars: ["musical payoff", "world and mood", "selector utility", "human process"],
@@ -240,13 +284,13 @@ function fallbackPlan(context: CampaignPlanningContext): CampaignPlan {
     contentMoments: [
       { title: `${title}: world signal`, platform: "Instagram", format: "Reel", goal: "Reach", phaseCode: "discovery", relativeDay: -14, audienceSegment: audience, contentAngle: "world and mood", experimentTitle: "" },
       { title: `${title}: hook test`, platform: "Instagram", format: "Reel", goal: context.objective, phaseCode: "hook-test", relativeDay: -7, audienceSegment: audience, contentAngle: "musical payoff", experimentTitle: "Sonic payoff framing" },
-      { title: `${title}: hook test cross-platform`, platform: "TikTok", format: "TikTok video", goal: context.objective, phaseCode: "hook-test", relativeDay: -5, audienceSegment: audience, contentAngle: "musical payoff", experimentTitle: "Sonic payoff framing" },
+      { title: `${title}: hook winner replication slot`, platform: "TikTok", format: "TikTok video", goal: context.objective, phaseCode: "hook-test", relativeDay: -5, audienceSegment: audience, contentAngle: "reserved for a proven framing or a non-experimental platform-native cut", experimentTitle: "" },
       { title: `${title}: release-day conversion`, platform: "Instagram", format: "Reel", goal: "Streams", phaseCode: "launch", relativeDay: 0, audienceSegment: audience, contentAngle: "winning hook plus full-track promise", experimentTitle: "" },
       { title: `${title}: selector clip`, platform: "Instagram", format: "DJ clip", goal: "DJ Discovery", phaseCode: "momentum", relativeDay: 5, audienceSegment: "DJs and selectors who program warm electronic music", contentAngle: "selector utility", experimentTitle: "Selector utility" },
       { title: `${title}: process detail`, platform: "YouTube Shorts", format: "Short", goal: "Follows", phaseCode: "momentum", relativeDay: 9, audienceSegment: audience, contentAngle: "human process", experimentTitle: "" },
       { title: `${title}: catalog re-entry`, platform: "Instagram", format: "Reel", goal: "Streams", phaseCode: "revival", relativeDay: 28, audienceSegment: audience, contentAngle: "rediscovery through a different musical detail", experimentTitle: "" },
     ],
-  };
+  });
 }
 
 export async function planCampaign(context: CampaignPlanningContext) {
@@ -271,7 +315,7 @@ export async function planCampaign(context: CampaignPlanningContext) {
       instructions: PLANNER_INSTRUCTIONS,
       input,
     });
-    return { plan: generated.value, generation: generated } as const;
+    return { plan: normalizeCampaignPlan(generated.value), generation: generated } as const;
   } catch (error) {
     return {
       plan: fallbackPlan(context),
