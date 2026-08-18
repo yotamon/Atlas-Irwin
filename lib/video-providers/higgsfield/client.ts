@@ -80,11 +80,17 @@ function mapInput(request: VideoGenerationRequest) {
 
   if (request.operation === "look_image") {
     input.resolution = request.resolution === "4k" ? "4k" : request.resolution === "1080p" ? "2k" : "1k";
-    input.batch_size = 1;
   } else {
     input.duration = Math.max(1, Math.round(request.durationSeconds ?? 5));
-    input.resolution = request.resolution;
-    input.generate_audio = false;
+    if (request.model !== "kling3_0") {
+      input.resolution = request.resolution;
+      input.generate_audio = false;
+    } else {
+      // Kling 3.0 uses mode=std|pro|4k and sound=off|on rather than a resolution field.
+      delete input.resolution;
+      delete input.generate_audio;
+      if (typeof input.sound !== "string") input.sound = "off";
+    }
   }
 
   if (start) input.start_image = imageInput(start);
@@ -161,6 +167,13 @@ function configuredQuote(request: VideoGenerationRequest): number | null {
 function staticAnchorQuote(request: VideoGenerationRequest): number {
   const seconds = Math.max(1, request.durationSeconds ?? 5);
   if (request.operation === "look_image") return 2;
+
+  if (request.model === "kling3_0") {
+    const mode = request.params?.mode;
+    const perSecond = mode === "4k" ? 6 : mode === "pro" ? 1.75 : 1.5;
+    return perSecond * seconds;
+  }
+
   const perSecond720 = request.model === "cinematic_studio_3_0"
     ? 5
     : request.model === "seedance_2_5"
@@ -168,7 +181,7 @@ function staticAnchorQuote(request: VideoGenerationRequest): number {
       : request.model === "seedance_2_0"
         ? 4.5
         : request.model === "seedance_2_0_mini"
-          ? 3
+          ? 2.5
           : 5;
   const resolutionMultiplier = request.resolution === "4k" ? 4 : request.resolution === "1080p" ? 2 : 1;
   return perSecond720 * seconds * resolutionMultiplier;
@@ -195,6 +208,9 @@ export class HiggsfieldProvider implements VideoGenerationProvider {
     if (!model) throw new Error(`Unsupported Higgsfield model: ${request.model}`);
     if (request.operation === "look_image" && model.output !== "image") throw new Error("Image operation requires an image model.");
     if (request.operation !== "look_image" && model.output !== "video") throw new Error("Video operation requires a video model.");
+    if (!model.supportedResolutions.includes(request.resolution)) {
+      throw new Error(`${model.label} does not support ${request.resolution}; Atlas will not rely on a paid provider fallback.`);
+    }
 
     let endpoint = resolveHiggsfieldEndpoint(request.model);
     if (webhookUrl) {
