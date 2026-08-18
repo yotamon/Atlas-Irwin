@@ -3,10 +3,10 @@ import { StageRail } from "./stage-rail";
 import { BriefPanel } from "./brief-panel";
 import { RecoveryPanel } from "./recovery-panel";
 import { DeliveryPanel } from "./delivery-panel";
+import { LookDevelopmentPanel } from "./look-development-panel";
 import {
   ConceptsPanel,
   GenerationPanel,
-  LookDevelopmentPanel,
   MusicMapPanel,
   NextActionCard,
   ProductionPlanPanel,
