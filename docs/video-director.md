@@ -41,9 +41,9 @@ The database atomically checks the generation immediately before provider submit
 6. project spent + reserved + new reserve stays under the project hard cap
 7. the generation has not already moved past the reservable state
 
-The reserve is written before the provider request is sent.
+The reserve is written before the provider request is sent. Reserve and settlement RPCs are idempotent, so duplicate server calls or repeated callbacks cannot reserve or charge the same generation twice.
 
-Creative failures never retry automatically. Technical provider failures settle the reservation as not billed or refunded when known. A new creative alternative always creates a new request that needs a new or still-valid spend envelope.
+Creative failures never retry automatically. A provider rejection/failure releases or refunds the reservation only when Atlas knows the provider did not charge it. If the provider acknowledges a request but Atlas cannot persist the provider request ID, the reserve intentionally remains locked for reconciliation rather than pretending the credits are available. A new creative alternative always creates a new request that needs an approval envelope.
 
 ## Production efficiency
 
@@ -68,8 +68,10 @@ Configuration:
 
 ```bash
 OPENAI_API_KEY=...
-VIDEO_DIRECTOR_LLM_MODEL=gpt-5.6
+VIDEO_DIRECTOR_LLM_MODEL=<Responses API model available to this account>
 ```
+
+Both variables are required for Creative Director readiness. Atlas deliberately does not guess a paid API model ID because availability can vary by account and over time.
 
 The output is validated structured data, not prose that the UI later tries to parse.
 
@@ -97,7 +99,7 @@ HIGGSFIELD_ENDPOINT_MAP_JSON={...}
 HIGGSFIELD_CREDIT_RATES_JSON={...}
 ```
 
-The public Higgsfield SDK currently exposes V2 request transport, but the canonical short-model-ID to public endpoint mapping is not treated as a stable public contract by Atlas. The app therefore requires a verified endpoint map and refuses to guess a paid endpoint by default.
+The canonical short-model-ID to public endpoint mapping is not treated as a stable public contract by Atlas. The app therefore requires a verified endpoint map and refuses to guess a paid endpoint by default.
 
 `HIGGSFIELD_ALLOW_INFERRED_ENDPOINTS=true` exists only as an explicit escape hatch and should stay false in production.
 
@@ -106,8 +108,10 @@ The current curated router can choose among:
 - Nano Banana 2 for look/reference frames
 - Cinema Studio 3.0 for premium cinematic hero shots
 - Seedance 2.0 / 2.5 for reference-heavy continuity and multimodal needs
-- Seedance 2.0 Mini for economical tests/simple movement
+- Seedance 2.0 Mini for economical 720p tests/simple movement
 - Kling 3.0 for movement/physics-oriented alternatives
+
+Atlas validates the requested output resolution and reference capabilities before a paid submission instead of relying on provider-side coercion. Model-specific request fields are also isolated in the provider adapter, for example Kling 3.0 uses `mode` and `sound`, while Seedance uses explicit resolution/audio fields.
 
 The catalog is deliberately isolated in `lib/video-providers/higgsfield/catalog.ts` so replacing a model does not change project/shot schemas.
 
@@ -150,7 +154,7 @@ Provider output is imported into Atlas Media Library and tagged with:
 - model
 - source URL metadata
 
-Final worker renders are also registered in Media Library with render ID and output type.
+Final worker renders are also registered in Media Library with render ID and output type. Unique lineage indexes plus race-aware inserts make repeated or concurrent callbacks resolve to one Media Library asset per generation/render.
 
 Rejected source generations are retained. They may be useful for alternate social edits later and preserve an audit trail of what was paid for.
 
@@ -166,6 +170,16 @@ Accept/reject review can record a concise signal such as:
 - feels like AI fashion
 
 Signals are stored in `music_video_director_preferences` and sent back into later creative-direction context. This lets Atlas become an Atlas Irwin-specific Director over time instead of starting from zero on every track.
+
+## Database stage guards
+
+The UI guides the workflow, but PostgreSQL enforces the important gates too:
+
+- all representative test shots from `test_shot_indexes` must have a locked result before the project can enter production
+- all paid unique/continuation source shots must be locked before the project can become ready to render
+- shot references, generation approvals/results, render jobs and assets must belong to the same owner/project
+
+This keeps the workflow valid even if a server action is called directly.
 
 ## Operational principle
 
