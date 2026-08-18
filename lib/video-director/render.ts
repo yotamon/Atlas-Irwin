@@ -31,7 +31,7 @@ function primaryMasterDimensions(project: ExtendedMusicVideoProject) {
 function outputSpec(type: VideoRenderType, project: ExtendedMusicVideoProject) {
   switch (type) {
     case "social_9_16": return { width: 1080, height: 1920, durationMs: null, workerType: "render_social" as const };
-    case "promo_30": return { width: 1920, height: 1080, durationMs: 30000, workerType: "render_promo" as const };
+    case "promo_30": return { ...primaryMasterDimensions(project), durationMs: 30000, workerType: "render_promo" as const };
     case "hook_15": return { width: 1080, height: 1920, durationMs: 15000, workerType: "render_hook" as const };
     default: return { ...primaryMasterDimensions(project), durationMs: null, workerType: "render_master" as const };
   }
