@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { registerWorkerRenderAsset } from "@/lib/video-director/assets";
+import type { Json } from "@/types/database";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +20,10 @@ function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
+}
+
+function json(value: unknown): Json {
+  return value as Json;
 }
 
 export async function POST(request: Request) {
@@ -67,7 +72,7 @@ export async function POST(request: Request) {
 
   await db.from("music_video_worker_jobs").update({
     status: "completed",
-    result_payload: result,
+    result_payload: json(result),
     error: null,
     completed_at: new Date().toISOString(),
   }).eq("id", job.id);
@@ -76,7 +81,7 @@ export async function POST(request: Request) {
     const musicMap = record(result.music_map);
     if (!Object.keys(musicMap).length) return NextResponse.json({ error: "Worker returned no music map" }, { status: 422 });
     await db.from("music_video_projects").update({
-      music_map: musicMap,
+      music_map: json(musicMap),
       status: "concept_review",
       previous_status: null,
       last_error: null,
