@@ -26,6 +26,7 @@ const inputSchema = z.object({
   instrumental: z.boolean(),
   lyrics: z.string().max(3500).optional().default(""),
   signatureIdea: z.string().max(500).optional().default(""),
+  brandContext: z.string().max(2000).optional().default(""),
   useAtlasDna: z.boolean().default(true),
 }).superRefine((value, ctx) => {
   if (!value.instrumental && !value.lyrics.trim()) {
