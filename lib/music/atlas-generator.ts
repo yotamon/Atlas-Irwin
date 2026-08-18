@@ -22,6 +22,7 @@ export type AtlasMusicInput = {
   instrumental: boolean;
   lyrics?: string;
   signatureIdea?: string;
+  brandContext?: string;
   useAtlasDna: boolean;
 };
 
@@ -50,8 +51,9 @@ function clip(value: string | undefined, max: number) {
 export function buildAtlasMusicPrompt(input: AtlasMusicInput) {
   const idea = clip(input.idea, input.provider === "minimax" ? 420 : 900);
   const signatureIdea = clip(input.signatureIdea, input.provider === "minimax" ? 160 : 400);
+  const liveAtlasDna = clip(input.brandContext, input.provider === "minimax" ? 620 : 1400);
   const sections = [
-    input.useAtlasDna ? ATLAS_DNA : "Create a distinctive, production-ready electronic dance track with a coherent sonic identity.",
+    input.useAtlasDna ? `Atlas project DNA: ${liveAtlasDna || ATLAS_DNA}` : "Create a distinctive, production-ready electronic dance track with a coherent sonic identity.",
     `Creative direction: ${idea}.`,
     `Vibe: ${vibeDetail(input.vibe)}.`,
     `Tempo: ${Math.round(input.bpm)} BPM.`,
