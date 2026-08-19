@@ -6,7 +6,7 @@ const links = [
   ["/studio", "Today", "dashboard"],
   ["/studio/releases", "Releases", "releases"],
   ["/studio/create", "Create", "musicLab"],
-  ["/studio/media", "Library", "media"],
+  ["/studio/library", "Library", "media"],
   ["/studio/settings", "Settings", "brand"],
 ] as const;
 
@@ -16,9 +16,7 @@ export function StudioSidebar() {
   return (
     <aside className="studio-sidebar studio-sidebar-v2">
       <Link href="/studio" className="studio-mark">
-        <span>
-          ATLAS<small>STUDIO</small>
-        </span>
+        <span>ATLAS<small>STUDIO</small></span>
       </Link>
       <nav aria-label="Studio">
         {links.map(([href, label, key]) => {
@@ -37,10 +35,7 @@ export function StudioSidebar() {
           New release
         </Link>
         <form action={signOut}>
-          <button>
-            <Logout aria-hidden />
-            Sign out
-          </button>
+          <button><Logout aria-hidden />Sign out</button>
         </form>
       </div>
     </aside>
