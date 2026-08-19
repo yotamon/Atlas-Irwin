@@ -9,6 +9,7 @@ import {
   registerMediaUpload,
 } from "@/app/studio/catalog-actions";
 import { attachContentMediaV2 } from "@/app/studio/content-actions-v2";
+import { createVaultTrackFromMedia } from "@/app/studio/growth-media-actions";
 import { createClient } from "@/lib/supabase/client";
 import {
   compatibleMediaTypes,
@@ -32,6 +33,10 @@ function humanSize(size: number) {
   return size >= 1024 * 1024
     ? `${(size / 1024 / 1024).toFixed(size >= 10 * 1024 * 1024 ? 0 : 1)} MB`
     : `${Math.max(1, Math.round(size / 1024))} KB`;
+}
+
+function cleanAudioTitle(name: string) {
+  return name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
 async function sha256(file: File) {
@@ -74,10 +79,12 @@ export function MediaUploader({
   releaseId,
   contentItemId,
   defaultRole = "cover",
+  vaultMode = false,
 }: {
   releaseId?: string;
   contentItemId?: string;
   defaultRole?: MediaType;
+  vaultMode?: boolean;
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -86,11 +93,11 @@ export function MediaUploader({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState("");
-  const [primary, setPrimary] = useState(Boolean(releaseId && !contentItemId));
+  const [primary, setPrimary] = useState(Boolean(releaseId && !contentItemId && !vaultMode));
   const [busy, setBusy] = useState(false);
 
   function addFiles(files: FileList | File[]) {
-    const next = Array.from(files).filter((file) => file.size > 0);
+    const next = Array.from(files).filter((file) => file.size > 0 && (!vaultMode || file.type.startsWith("audio/")));
     if (!next.length) return;
     setItems((current) => {
       const signatures = new Set(current.map((item) => `${item.file.name}:${item.file.size}:${item.file.lastModified}`));
@@ -118,7 +125,7 @@ export function MediaUploader({
         setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, state: "error", message: `This file exceeds the ${humanSize(limit)} upload limit.` } : entry));
         continue;
       }
-      setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, state: "uploading", message: "Uploading securely…" } : entry));
+      setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, state: "uploading", message: vaultMode ? "Uploading master…" : "Uploading securely…" } : entry));
       let uploadTarget: Awaited<ReturnType<typeof createMediaUploadTarget>> | null = null;
       try {
         const [contentHash, dimensions] = await Promise.all([sha256(item.file), mediaDimensions(item.file).catch(() => ({ width: "", height: "", duration_ms: "" }))]);
@@ -145,8 +152,8 @@ export function MediaUploader({
           original_name: item.file.name,
           title: items.length === 1 ? title : "",
           description,
-          tags,
-          release_id: contentItemId ? "" : releaseId ?? "",
+          tags: vaultMode ? [tags, "unreleased", "vault"].filter(Boolean).join(",") : tags,
+          release_id: contentItemId || vaultMode ? "" : releaseId ?? "",
           is_primary: primary ? "on" : "",
           ...dimensions,
         }).forEach(([key, value]) => form.set(key, value));
@@ -158,10 +165,22 @@ export function MediaUploader({
           attachForm.set("role", item.role);
           await attachContentMediaV2(attachForm);
         }
+        if (vaultMode) {
+          const vaultForm = new FormData();
+          vaultForm.set("media_asset_id", result.id);
+          vaultForm.set("title", items.length === 1 && title.trim() ? title.trim() : cleanAudioTitle(item.file.name));
+          await createVaultTrackFromMedia(vaultForm);
+        }
         setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? {
           ...entry,
           state: "done",
-          message: result.deduplicated ? "Already in the library, existing file reused and attached." : contentItemId ? "Uploaded and attached to this content item." : "Added to the library.",
+          message: vaultMode
+            ? "Master is in the Vault. Free audio analysis was queued when the media worker is available."
+            : result.deduplicated
+              ? "Already in the library, existing file reused and attached."
+              : contentItemId
+                ? "Uploaded and attached to this content item."
+                : "Added to the library.",
         } : entry));
       } catch (error) {
         if (uploadTarget) {
@@ -183,10 +202,10 @@ export function MediaUploader({
 
   const completed = items.filter((item) => item.state === "done").length;
   const hasPending = items.some((item) => item.state === "ready" || item.state === "error");
-  const contextualAttach = Boolean(releaseId || contentItemId);
+  const contextualAttach = Boolean(releaseId || contentItemId || vaultMode);
 
   return (
-    <div className="media-uploader">
+    <div className={`media-uploader${vaultMode ? " vault-media-uploader" : ""}`}>
       <div
         className={`media-dropzone${dragging ? " dragging" : ""}`}
         onDragEnter={(event) => { event.preventDefault(); setDragging(true); }}
@@ -195,10 +214,10 @@ export function MediaUploader({
         onDrop={(event) => { event.preventDefault(); setDragging(false); addFiles(event.dataTransfer.files); }}
       >
         <FiUploadCloud aria-hidden />
-        <strong>Drop media here</strong>
-        <span>Images, video, audio, masters, stems, or ZIP files</span>
-        <button type="button" className="button" onClick={() => inputRef.current?.click()}>Choose files</button>
-        <input ref={inputRef} hidden multiple type="file" accept="image/*,video/*,audio/*,.zip" onChange={(event) => event.target.files && addFiles(event.target.files)} />
+        <strong>{vaultMode ? "Drop unreleased masters here" : "Drop media here"}</strong>
+        <span>{vaultMode ? "Audio masters only. Each file becomes an independent Vault track." : "Images, video, audio, masters, stems, or ZIP files"}</span>
+        <button type="button" className="button" onClick={() => inputRef.current?.click()}>{vaultMode ? "Choose masters" : "Choose files"}</button>
+        <input ref={inputRef} hidden multiple type="file" accept={vaultMode ? "audio/*" : "image/*,video/*,audio/*,.zip"} onChange={(event) => event.target.files && addFiles(event.target.files)} />
       </div>
 
       {items.length ? (
@@ -207,7 +226,7 @@ export function MediaUploader({
             <div className={`upload-item ${item.state}`} key={`${item.file.name}-${item.file.lastModified}`}>
               <span className="upload-file-icon">{item.state === "done" ? <FiCheck /> : <FiFile />}</span>
               <span><strong>{item.file.name}</strong><small>{humanSize(item.file.size)} · {item.file.type || "Unknown format"}{item.message ? ` · ${item.message}` : ""}</small></span>
-              <select aria-label={`Use for ${item.file.name}`} value={item.role} disabled={busy || item.state === "done"} onChange={(event) => setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, role: event.target.value as MediaType, state: entry.state === "error" ? "ready" : entry.state, message: undefined } : entry))}>{compatibleMediaTypes(item.file.type).map((type) => <option value={type} key={type}>{MEDIA_TYPE_LABELS[type]}</option>)}</select>
+              <select aria-label={`Use for ${item.file.name}`} value={item.role} disabled={vaultMode || busy || item.state === "done"} onChange={(event) => setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, role: event.target.value as MediaType, state: entry.state === "error" ? "ready" : entry.state, message: undefined } : entry))}>{compatibleMediaTypes(item.file.type).map((type) => <option value={type} key={type}>{MEDIA_TYPE_LABELS[type]}</option>)}</select>
               {!busy && item.state !== "done" ? <button type="button" aria-label={`Remove ${item.file.name}`} onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}><FiX /></button> : null}
             </div>
           ))}
@@ -215,16 +234,16 @@ export function MediaUploader({
       ) : null}
 
       <div className="form-grid media-upload-fields">
-        <label className="field"><span>Display name {items.length > 1 ? "(single uploads only)" : ""}</span><input value={title} onChange={(event) => setTitle(event.target.value)} disabled={items.length > 1} placeholder={items[0]?.file.name || "Shown in the library"} /></label>
-        <label className="field"><span>Tags</span><input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="release, artwork, blue-hour" /></label>
-        <label className="field wide"><span>Notes</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={2} placeholder="Creative context, rights, source, or intended use" /></label>
-        {releaseId && !contentItemId ? <label className="checkbox-field"><input type="checkbox" checked={primary} onChange={(event) => setPrimary(event.target.checked)} /> Make primary for this role</label> : null}
+        <label className="field"><span>Display name {items.length > 1 ? "(file names are used for bulk imports)" : ""}</span><input value={title} onChange={(event) => setTitle(event.target.value)} disabled={items.length > 1} placeholder={items[0] ? cleanAudioTitle(items[0].file.name) : "Shown in the library"} /></label>
+        <label className="field"><span>Tags</span><input value={tags} onChange={(event) => setTags(event.target.value)} placeholder={vaultMode ? "mastered, nu-disco, priority" : "release, artwork, blue-hour"} /></label>
+        <label className="field wide"><span>Notes</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={2} placeholder={vaultMode ? "Optional source/rights notes. Track-specific creative notes can be refined in the Vault." : "Creative context, rights, source, or intended use"} /></label>
+        {releaseId && !contentItemId && !vaultMode ? <label className="checkbox-field"><input type="checkbox" checked={primary} onChange={(event) => setPrimary(event.target.checked)} /> Make primary for this role</label> : null}
       </div>
       <div className="media-upload-actions">
         <button className="button primary" type="button" disabled={!items.length || busy || !hasPending} onClick={upload}>
-          {busy ? `Uploading ${completed + 1} of ${items.length}…` : completed === items.length && items.length ? "Upload complete" : contextualAttach ? "Upload and attach" : `Add ${items.length || ""} to library`}
+          {busy ? `Uploading ${completed + 1} of ${items.length}…` : completed === items.length && items.length ? "Upload complete" : vaultMode ? `Import ${items.length || ""} to Vault` : contextualAttach ? "Upload and attach" : `Add ${items.length || ""} to library`}
         </button>
-        {completed ? <span>{completed} of {items.length} ready</span> : <span>{contentItemId ? "Media will be attached to this content item." : "Media is published to the public asset library."}</span>}
+        {completed ? <span>{completed} of {items.length} ready</span> : <span>{vaultMode ? "Upload is reusable in Media Library; audio analysis does not spend an AI call." : contentItemId ? "Media will be attached to this content item." : "Media is published to the public asset library."}</span>}
       </div>
     </div>
   );
