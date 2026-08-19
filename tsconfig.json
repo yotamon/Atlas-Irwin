@@ -19,6 +19,7 @@
       }
     ],
     "paths": {
+      "@/app/studio/catalog-actions": ["./app/studio/catalog-actions-safe.ts"],
       "@/*": ["./*"]
     }
   },
