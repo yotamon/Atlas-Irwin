@@ -11,18 +11,16 @@ import {
   CREATIVE_QUALITY_PROFILES,
   routeMarketingCreative,
 } from "@/lib/marketing/creative-router";
+import { creativeProvider, isCreativeDefiniteRejection } from "@/lib/marketing/creative-providers";
+import { CREATIVE_PROVIDER_IDS, type CreativeGenerationRequest, type CreativeProviderId } from "@/lib/marketing/creative-provider-types";
 import { getSiteUrl } from "@/lib/site-url";
 import { createServiceClient } from "@/lib/supabase/service";
-import {
-  HiggsfieldProvider,
-  isHiggsfieldDefiniteRejection,
-} from "@/lib/video-providers/higgsfield/client";
-import type { VideoGenerationRequest } from "@/lib/video-providers/types";
 import type { Json } from "@/types/database";
 
 const uuid = z.uuid();
 const qualitySchema = z.enum(CREATIVE_QUALITY_PROFILES);
 const mediaKindSchema = z.enum(CREATIVE_MEDIA_KINDS);
+const providerSchema = z.enum(CREATIVE_PROVIDER_IDS);
 
 function value(form: FormData, key: string) {
   return String(form.get(key) ?? "").trim();
@@ -54,7 +52,8 @@ function revalidateCreativePaths(content: { id: string; release_id: string | nul
   if (content.campaign_id) revalidatePath(`/studio/campaigns/${content.campaign_id}`);
 }
 
-function webhookUrl(runId: string) {
+function webhookUrl(provider: CreativeProviderId, runId: string) {
+  if (provider !== "higgsfield") return undefined;
   const secret = process.env.HIGGSFIELD_WEBHOOK_SECRET?.trim();
   if (!secret) return undefined;
   const url = new URL("/api/studio/marketing/higgsfield/webhook", getSiteUrl());
@@ -108,7 +107,7 @@ export async function prepareContentCreativeGeneration(form: FormData) {
     audioEnd: content.audio_timestamp_end,
     context: referenceContext,
   });
-  const provider = new HiggsfieldProvider();
+  const provider = creativeProvider(route.request.provider);
   const quote = await provider.quote(route.request);
 
   const { data: generation, error: generationError } = await marketing.from("generation_runs").insert({
@@ -116,9 +115,9 @@ export async function prepareContentCreativeGeneration(form: FormData) {
     campaign_id: content.campaign_id,
     release_id: content.release_id,
     purpose: `content_asset:${content.id}`,
-    provider: "higgsfield",
+    provider: route.request.provider,
     model: route.request.model,
-    prompt_version: "creative-lineage-v1",
+    prompt_version: "creative-lineage-v2-provider-router",
     input_context: json({
       contentItemId: content.id,
       outputKind: route.outputKind,
@@ -127,6 +126,9 @@ export async function prepareContentCreativeGeneration(form: FormData) {
       mediaKind,
       request: route.request,
       referenceContext,
+      fallbackUsed: route.fallbackUsed,
+      preferredProvider: route.preferredProvider,
+      priceLabel: route.priceLabel,
     }),
     output: json({
       stage: "prepared",
@@ -135,9 +137,10 @@ export async function prepareContentCreativeGeneration(form: FormData) {
       cohesionScore: referenceContext.cohesionScore,
       referenceSummary: referenceContext.referenceSummary,
       approvalRequiredBeforeSpend: true,
+      pricingAsOf: "2026-08-19",
     }),
     status: "queued",
-    estimated_cost_usd: null,
+    estimated_cost_usd: quote.usdEstimate,
     provider_request_id: null,
     error: null,
   }).select("id").single();
@@ -149,7 +152,15 @@ export async function prepareContentCreativeGeneration(form: FormData) {
     event_type: "content.ai_asset_prepared",
     entity_type: "content_item",
     entity_id: content.id,
-    payload: json({ generationRunId: generation.id, model: route.request.model, quote, cohesionScore: referenceContext.cohesionScore }),
+    payload: json({
+      generationRunId: generation.id,
+      provider: route.request.provider,
+      model: route.request.model,
+      quality,
+      quote,
+      cohesionScore: referenceContext.cohesionScore,
+      fallbackUsed: route.fallbackUsed,
+    }),
   });
   if (eventError) throw new Error(eventError.message);
   revalidateCreativePaths(content);
@@ -175,16 +186,19 @@ export async function approvePreparedCreativeGeneration(form: FormData) {
   if (!requestValue || typeof requestValue !== "object" || Array.isArray(requestValue)) {
     throw new Error("Prepared provider request is missing.");
   }
-  const request = requestValue as unknown as VideoGenerationRequest;
-  if (!request.model || !request.prompt || !request.operation) throw new Error("Prepared provider request is invalid.");
+  const request = requestValue as unknown as CreativeGenerationRequest;
+  const providerId = providerSchema.parse(run.provider);
+  if (request.provider !== providerId || !request.model || !request.prompt || !request.operation) {
+    throw new Error("Prepared provider request is invalid or no longer matches the stored provider.");
+  }
 
-  const provider = new HiggsfieldProvider();
+  const provider = creativeProvider(providerId);
   try {
-    const submission = await provider.submit(request, webhookUrl(run.id));
+    const submission = await provider.submit(request, webhookUrl(providerId, run.id));
     await applyMarketingCreativeProviderStatus({ runId: run.id, status: submission });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Creative generation submission failed.";
-    if (isHiggsfieldDefiniteRejection(error)) {
+    if (isCreativeDefiniteRejection(error)) {
       await marketing.from("generation_runs").update({ status: "failed", error: message, output: json({ ...output, stage: "failed_before_submission" }) }).eq("id", run.id);
     } else {
       await marketing.from("generation_runs").update({
@@ -217,8 +231,14 @@ export async function refreshCreativeGeneration(form: FormData) {
   if (runError || !run) throw new Error(runError?.message || "Generation run not found.");
   if (run.status === "completed" || run.status === "failed") return;
   if (!run.provider_request_id) throw new Error("This generation has no provider request id yet. Atlas will not retry an ambiguous paid submission automatically.");
-  const provider = new HiggsfieldProvider();
-  const status = await provider.status(run.provider_request_id);
+  const inputContext = record(run.input_context);
+  const requestValue = inputContext.request;
+  if (!requestValue || typeof requestValue !== "object" || Array.isArray(requestValue)) throw new Error("Stored provider request is missing.");
+  const request = requestValue as unknown as CreativeGenerationRequest;
+  const providerId = providerSchema.parse(run.provider);
+  if (request.provider !== providerId) throw new Error("Stored provider request does not match the generation provider.");
+  const provider = creativeProvider(providerId);
+  const status = await provider.status(run.provider_request_id, request);
   await applyMarketingCreativeProviderStatus({ runId: run.id, status });
   const contentItemId = uuid.parse(run.purpose.slice("content_asset:".length));
   const { data: content } = await marketing.from("content_items").select("id,release_id,campaign_id").eq("id", contentItemId).eq("owner_id", user.id).maybeSingle();
