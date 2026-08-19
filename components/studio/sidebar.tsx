@@ -31,9 +31,9 @@ export function StudioSidebar() {
         })}
       </nav>
       <div className="studio-sidebar-foot">
-        <Link href="/studio/growth#vault" className="studio-quick">
+        <Link href="/studio/growth/import" className="studio-quick">
           <Plus aria-hidden />
-          Add unreleased track
+          Add unreleased tracks
         </Link>
         <form action={signOut}>
           <button><Logout aria-hidden />Sign out</button>
