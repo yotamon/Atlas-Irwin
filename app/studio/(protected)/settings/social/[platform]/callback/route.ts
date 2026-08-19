@@ -16,6 +16,16 @@ function redirectToPlatform(request: NextRequest, platform: string, query: strin
   );
 }
 
+function clearStateCookie(response: NextResponse, platform: string) {
+  response.cookies.set(`atlas_social_${platform}_state`, "", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 0,
+    path: `/studio/settings/social/${platform}`,
+  });
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ platform: string }> },
@@ -29,11 +39,13 @@ export async function GET(
   const url = new URL(request.url);
   const providerError = url.searchParams.get("error");
   if (providerError) {
-    return redirectToPlatform(
+    const response = redirectToPlatform(
       request,
       platform,
       `error=${encodeURIComponent(url.searchParams.get("error_description") || providerError)}`,
     );
+    clearStateCookie(response, platform);
+    return response;
   }
 
   const code = url.searchParams.get("code");
@@ -41,7 +53,9 @@ export async function GET(
   const cookieName = `atlas_social_${platform}_state`;
   const expectedState = request.cookies.get(cookieName)?.value;
   if (!code || !state || !expectedState || state !== expectedState) {
-    return redirectToPlatform(request, platform, "error=invalid_oauth_state");
+    const response = redirectToPlatform(request, platform, "error=invalid_oauth_state");
+    clearStateCookie(response, platform);
+    return response;
   }
 
   let response: NextResponse;
@@ -58,6 +72,6 @@ export async function GET(
     console.error(`${platform} OAuth callback failed:`, message, error);
     response = redirectToPlatform(request, platform, `error=${encodeURIComponent(message)}`);
   }
-  response.cookies.delete(cookieName);
+  clearStateCookie(response, platform);
   return response;
 }
