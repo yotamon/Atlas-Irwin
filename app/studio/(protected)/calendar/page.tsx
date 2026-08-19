@@ -7,7 +7,6 @@ function startOfDay(date: Date) {
   copy.setHours(0, 0, 0, 0);
   return copy;
 }
-
 function startOfWeek(date: Date) {
   const copy = startOfDay(date);
   const day = copy.getDay();
@@ -15,20 +14,14 @@ function startOfWeek(date: Date) {
   copy.setDate(copy.getDate() + offset);
   return copy;
 }
-
 function addDays(date: Date, days: number) {
   const copy = new Date(date);
   copy.setDate(copy.getDate() + days);
   return copy;
 }
-
 function sameDay(value: string, day: Date) {
   const date = new Date(value);
-  return (
-    date.getFullYear() === day.getFullYear() &&
-    date.getMonth() === day.getMonth() &&
-    date.getDate() === day.getDate()
-  );
+  return date.getFullYear() === day.getFullYear() && date.getMonth() === day.getMonth() && date.getDate() === day.getDate();
 }
 
 export default async function CalendarPage({
@@ -71,11 +64,7 @@ export default async function CalendarPage({
       <PageHeader
         title="Timeline"
         description="Release-relative schedule. Atlas moves unlocked work when a release date changes; external publishing still follows approval rules."
-        action={
-          <Link className="button primary" href="/studio/create">
-            Create
-          </Link>
-        }
+        action={<Link className="button primary" href="/studio/create">Create</Link>}
       />
 
       <div className="studio-tabs">
@@ -86,49 +75,23 @@ export default async function CalendarPage({
 
       {view === "list" ? (
         <div className="v2-section v2-compact-section">
-          {data?.length ? (
-            data.map((item) => (
-              <Link className="timeline-row" href={`/studio/content?edit=${item.id}`} key={item.id}>
-                <span>
-                  {item.title}
-                  <br />
-                  <small>{item.platform}</small>
-                </span>
-                <span>
-                  <Status>{item.status}</Status>{" "}
-                  {new Date(item.scheduled_at!).toLocaleString()}
-                </span>
-              </Link>
-            ))
-          ) : (
-            <EmptyState
-              title="Nothing scheduled"
-              body="Atlas will place release-relative content here as release plans are created."
-            />
-          )}
+          {data?.length ? data.map((item) => (
+            <Link className="timeline-row" href={`/studio/production?edit=${item.id}`} key={item.id}>
+              <span>{item.title}<br /><small>{item.platform}</small></span>
+              <span><Status>{item.status}</Status>{" "}{new Date(item.scheduled_at!).toLocaleString()}</span>
+            </Link>
+          )) : <EmptyState title="Nothing scheduled" body="Atlas will place release-relative content here as release plans are created." />}
         </div>
       ) : (
         <div className={`calendar-grid ${view === "week" ? "v2-week-grid" : ""}`}>
           {days.map((day) => (
             <div className="calendar-day" key={day.toISOString()}>
-              <span>
-                {view === "week"
-                  ? new Intl.DateTimeFormat("en", { weekday: "short", month: "short", day: "numeric" }).format(day)
-                  : day.getDate()}
-              </span>
-              {data
-                ?.filter((item) => item.scheduled_at && sameDay(item.scheduled_at, day))
-                .map((item) => (
-                  <Link
-                    className="calendar-event"
-                    href={`/studio/content?edit=${item.id}`}
-                    key={item.id}
-                  >
-                    {item.title}
-                    <br />
-                    {item.platform}
-                  </Link>
-                ))}
+              <span>{view === "week" ? new Intl.DateTimeFormat("en", { weekday: "short", month: "short", day: "numeric" }).format(day) : day.getDate()}</span>
+              {data?.filter((item) => item.scheduled_at && sameDay(item.scheduled_at, day)).map((item) => (
+                <Link className="calendar-event" href={`/studio/production?edit=${item.id}`} key={item.id}>
+                  {item.title}<br />{item.platform}
+                </Link>
+              ))}
             </div>
           ))}
         </div>
