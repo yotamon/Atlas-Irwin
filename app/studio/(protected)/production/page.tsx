@@ -15,6 +15,8 @@ import { Field, PageHeader, Status, Submit } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { loadCreativeReferenceContext } from "@/lib/marketing/creative-context";
 import { asMarketingClient } from "@/lib/marketing/db";
+import { AI_PRICING_AS_OF, CREATIVE_PRESETS } from "@/lib/marketing/creative-provider-catalog";
+import { creativeProviderReadiness } from "@/lib/marketing/creative-providers";
 import { CONTENT_FORMATS, GOALS, PLATFORMS } from "@/lib/studio/constants";
 import { higgsfieldReadiness } from "@/lib/video-providers/higgsfield/client";
 import type { Json } from "@/types/database";
@@ -52,6 +54,21 @@ function stringValue(value: unknown) {
 
 function numberValue(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function boolValue(value: unknown) {
+  return value === true;
+}
+
+function quoteLabel(quote: Record<string, unknown>) {
+  const amount = numberValue(quote.amount);
+  const reserve = numberValue(quote.reserveAmount);
+  const usd = numberValue(quote.usdEstimate);
+  const currency = stringValue(quote.currency);
+  const exact = boolValue(quote.exact);
+  if (currency === "USD" && amount !== null) return `${exact ? "Estimated provider cost" : "Estimated from"} $${amount.toFixed(amount < 0.1 ? 4 : 2)}${reserve !== null && reserve > amount ? ` · max reserve $${reserve.toFixed(2)}` : ""}`;
+  if (currency === "CREDITS" && amount !== null) return `${exact ? "Provider quote" : "Planning estimate"} ${amount.toFixed(2)} credits${reserve !== null ? ` · reserve ${reserve.toFixed(2)}` : ""}${usd !== null ? ` · about $${usd.toFixed(2)}` : ""}`;
+  return "Price unavailable";
 }
 
 export default async function ProductionPage({
@@ -114,21 +131,23 @@ export default async function ProductionPage({
   const generationOutput = objectValue(latestGeneration?.output);
   const generationInput = objectValue(latestGeneration?.input_context);
   const quote = objectValue(generationOutput.quote);
-  const quoteCredits = numberValue(quote.credits);
-  const reserveCredits = numberValue(quote.reserveCredits);
   const routeReason = stringValue(generationOutput.routeReason);
   const generationStage = stringValue(generationOutput.stage);
   const generatedOutputKind = stringValue(generationInput.outputKind);
-  const providerReadiness = higgsfieldReadiness();
+  const selectedQuality = stringValue(generationInput.quality);
+  const actualCostUsd = numberValue(generationOutput.actualCostUsd);
+  const providerConnections = creativeProviderReadiness();
+  const activeProvider = latestGeneration ? providerConnections.find((provider) => provider.id === latestGeneration.provider) : null;
+  const hfReadiness = higgsfieldReadiness();
   const modelReady = latestGeneration
-    ? providerReadiness.hasCredentials && (providerReadiness.inferredEndpointsEnabled || providerReadiness.configuredModels.includes(latestGeneration.model))
-    : providerReadiness.hasCredentials;
+    ? Boolean(activeProvider?.configured) && (latestGeneration.provider !== "higgsfield" || hfReadiness.inferredEndpointsEnabled || hfReadiness.configuredModels.includes(latestGeneration.model))
+    : true;
 
   return (
     <div className="studio-v2-page">
       <PageHeader
         title="Production"
-        description="Atlas can now make the creative itself. Every AI asset inherits the release artwork, Atlas Irwin brand references and approved visual language before it reaches you for review."
+        description="Atlas makes the creative with a transparent quality preset, a visible provider/model route and a price estimate before any paid generation."
         action={<Link className="button" href="/studio/content">Advanced Content Lab</Link>}
       />
 
@@ -180,7 +199,7 @@ export default async function ProductionPage({
                 <div>
                   <span className="section-label">Atlas Creative Engine</span>
                   <h2>Generate cohesive media</h2>
-                  <p>Atlas resolves visual lineage before choosing a model. No paid request is made until you approve the prepared generation.</p>
+                  <p>Choose the outcome-level quality preset. Atlas handles the provider and model routing, but shows the exact route and expected spend before you approve it.</p>
                 </div>
                 <Status>{creativeContext.cohesionScore}/100 context cohesion</Status>
               </div>
@@ -188,6 +207,12 @@ export default async function ProductionPage({
               <div className="studio-smart-defaults">
                 <strong>{creativeContext.release.artworkUrl ? "Release artwork is locked as the primary anchor" : "Brand references are the primary anchor"}</strong>
                 <span>{creativeContext.referenceSummary}. New media is instructed to extend this world rather than invent a fresh AI aesthetic.</span>
+              </div>
+
+              <div className="media-tags" aria-label="AI provider connections">
+                {providerConnections.map((provider) => (
+                  <span key={provider.id}>{provider.configured ? "●" : "○"} {provider.label} · {provider.configured ? "connected" : "not connected"}</span>
+                ))}
               </div>
 
               {creativeContext.imageReferences.length ? (
@@ -207,8 +232,9 @@ export default async function ProductionPage({
 
               {latestGeneration ? (
                 <div className="studio-smart-defaults">
-                  <strong>{latestGeneration.model} · {latestGeneration.status}</strong>
-                  <span>{routeReason || generationStage.replaceAll("_", " ")}{reserveCredits !== null ? ` · estimated maximum ${reserveCredits.toFixed(2)} credits` : quoteCredits !== null ? ` · estimated ${quoteCredits.toFixed(2)} credits` : ""}</span>
+                  <strong>{selectedQuality ? `${selectedQuality[0].toUpperCase()}${selectedQuality.slice(1)} · ` : ""}{latestGeneration.provider} / {latestGeneration.model} · {latestGeneration.status}</strong>
+                  <span>{quoteLabel(quote)}{actualCostUsd !== null ? ` · recorded cost $${actualCostUsd.toFixed(2)}` : ""}. {routeReason || generationStage.replaceAll("_", " ")}</span>
+                  {stringValue(quote.note) ? <small>{stringValue(quote.note)}</small> : null}
                 </div>
               ) : null}
 
@@ -216,19 +242,19 @@ export default async function ProductionPage({
                 <div className="form-actions">
                   <form action={approvePreparedCreativeGeneration}>
                     <input type="hidden" name="generation_run_id" value={latestGeneration.id} />
-                    <button className="button primary" type="submit" disabled={!modelReady}>Approve cost and generate</button>
+                    <button className="button primary" type="submit" disabled={!modelReady}>Approve {quoteLabel(quote)} and generate</button>
                   </form>
                   <form action={discardPreparedCreativeGeneration}>
                     <input type="hidden" name="generation_run_id" value={latestGeneration.id} />
                     <button className="button" type="submit">Discard prepared run</button>
                   </form>
-                  {!modelReady ? <small>Higgsfield credentials or a verified endpoint mapping for this model are missing. Atlas will not guess a paid endpoint.</small> : null}
+                  {!modelReady ? <small>{activeProvider?.label || latestGeneration.provider} is not fully connected for this model. Atlas will not guess credentials or paid endpoints.</small> : null}
                 </div>
               ) : null}
 
               {latestGeneration?.status === "running" ? (
                 <div className="form-actions">
-                  <span>Generation is in progress. The Higgsfield webhook will attach the result automatically when it completes.</span>
+                  <span>Generation is in progress at {activeProvider?.label || latestGeneration.provider}. Completed assets are imported into Media Library with full cost and visual lineage.</span>
                   {latestGeneration.provider_request_id ? (
                     <form action={refreshCreativeGeneration}>
                       <input type="hidden" name="generation_run_id" value={latestGeneration.id} />
@@ -250,7 +276,7 @@ export default async function ProductionPage({
                   <div className="media-card-body">
                     <span className="section-label">AI creative review</span>
                     <h3>{editing.approval_status === "approved" ? "Approved creative" : editing.approval_status === "rejected" ? "Rejected creative" : "Review before publishing"}</h3>
-                    <p>This asset is stored in the Media Library with its release artwork, brand references, model and generation lineage.</p>
+                    <p>This asset is stored in the Media Library with its release artwork, brand references, provider, model, cost and generation lineage.</p>
                     {editing.approval_status === "pending" ? (
                       <div className="form-actions">
                         <form action={approveGeneratedCreative}><input type="hidden" name="content_item_id" value={editing.id} /><button className="button primary" type="submit">Approve creative</button></form>
@@ -264,12 +290,27 @@ export default async function ProductionPage({
               {(!latestGeneration || latestGeneration.status === "completed" || latestGeneration.status === "failed") ? (
                 <form action={prepareContentCreativeGeneration} className="studio-form">
                   <input type="hidden" name="content_item_id" value={editing.id} />
+                  <fieldset>
+                    <legend><strong>Generation quality</strong></legend>
+                    <div className="v2-status-grid">
+                      {(Object.entries(CREATIVE_PRESETS) as Array<[keyof typeof CREATIVE_PRESETS, (typeof CREATIVE_PRESETS)[keyof typeof CREATIVE_PRESETS]]>).map(([id, preset]) => (
+                        <label key={id}>
+                          <input type="radio" name="quality" value={id} defaultChecked={id === "balanced"} />
+                          <strong>{preset.label}</strong>
+                          <span>{preset.shortLabel}</span>
+                          <small>{preset.description}</small>
+                          <small>Image: {preset.imagePrice}</small>
+                          <small>Video: {preset.videoPrice}</small>
+                          <small>Planning: {preset.textStack}</small>
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
                   <div className="form-grid">
-                    <Field label="Quality"><select name="quality" defaultValue="balanced"><option value="economy">Economy · cheap iteration</option><option value="balanced">Balanced · recommended</option><option value="premium">Premium · strongest available route</option></select></Field>
-                    <Field label="Media type"><select name="media_kind" defaultValue="auto"><option value="auto">Auto from format</option><option value="image">Image</option><option value="video">Video</option></select></Field>
+                    <Field label="Media type"><select name="media_kind" defaultValue="auto"><option value="auto">Auto from content format</option><option value="image">Image</option><option value="video">Video</option></select></Field>
                   </div>
-                  <div className="form-actions"><button className="button primary" type="submit">{editing.asset_url && editing.source === "ai" ? "Prepare another option" : "Prepare AI creative"}</button></div>
-                  <small>Preparing is free. Atlas only calculates the creative package, references, model choice and credit estimate. The paid provider call requires a second explicit approval.</small>
+                  <div className="form-actions"><button className="button primary" type="submit">{editing.asset_url && editing.source === "ai" ? "Price another option" : "Show exact route and price"}</button></div>
+                  <small>Price check is free. Atlas chooses the first connected model inside the preset, shows any fallback, and requires a second explicit approval before the paid call. Pricing anchors last verified {AI_PRICING_AS_OF}.</small>
                 </form>
               ) : null}
             </section>
