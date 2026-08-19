@@ -1,10 +1,17 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import {
+  SOCIAL_PLATFORM_DEFINITIONS,
+  SOCIAL_PLATFORM_KEYS,
+} from "@/lib/marketing/social-platforms";
+import { asSocialClient } from "@/lib/studio/social-db";
+import { hasSocialPlatformEnv } from "@/lib/studio/social-connections";
 
 export default async function SettingsPage() {
   const { supabase, user } = await requireStudioAdmin();
-  const [spotifyResult, soundCloudResult] = await Promise.all([
+  const social = asSocialClient(supabase);
+  const [spotifyResult, soundCloudResult, socialResult] = await Promise.all([
     supabase
       .from("spotify_accounts")
       .select("last_synced_at")
@@ -15,9 +22,13 @@ export default async function SettingsPage() {
       .select("last_synced_at")
       .eq("owner_id", user.id)
       .maybeSingle(),
+    social
+      .from("social_channel_accounts")
+      .select("platform,status,display_name,username,can_publish")
+      .eq("owner_id", user.id),
   ]);
 
-  const connections = [
+  const dataConnections = [
     {
       href: "/studio/spotify",
       title: "Spotify",
@@ -31,6 +42,26 @@ export default async function SettingsPage() {
       detail: soundCloudResult.data?.last_synced_at ? "Connected and previously synced" : "Connect or review sync",
     },
   ];
+  const socialAccounts = new Map(
+    (socialResult.data ?? []).map((account) => [account.platform, account]),
+  );
+  const socialConnections = SOCIAL_PLATFORM_KEYS.map((platform) => {
+    const definition = SOCIAL_PLATFORM_DEFINITIONS[platform];
+    const account = socialAccounts.get(platform);
+    const connected = account?.status === "connected";
+    const configured = hasSocialPlatformEnv(platform);
+    return {
+      href: `/studio/settings/social/${platform}`,
+      title: definition.label,
+      connected,
+      detail: connected
+        ? `${account?.display_name || account?.username || "Account connected"} · campaign planning enabled`
+        : configured
+          ? "Ready to connect · excluded from campaign plans until connected"
+          : "OAuth app setup required · excluded from campaign plans",
+      publishing: Boolean(account?.can_publish),
+    };
+  });
 
   return (
     <div className="studio-v2-page">
@@ -42,12 +73,12 @@ export default async function SettingsPage() {
       <section className="v2-section">
         <div className="v2-section-heading">
           <div>
-            <span className="section-label">Connections</span>
-            <h2>Where Atlas gets data</h2>
+            <span className="section-label">Data connections</span>
+            <h2>Where Atlas gets music data</h2>
           </div>
         </div>
         <div className="v2-settings-grid">
-          {connections.map((connection) => (
+          {dataConnections.map((connection) => (
             <Link href={connection.href} key={connection.href}>
               <div>
                 <span className={`v2-dot ${connection.connected ? "connected" : ""}`} aria-hidden />
@@ -55,6 +86,36 @@ export default async function SettingsPage() {
               </div>
               <p>{connection.detail}</p>
               <small>{connection.connected ? "Manage connection" : "Set up connection"} →</small>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section className="v2-section">
+        <div className="v2-section-heading">
+          <div>
+            <span className="section-label">Social channels</span>
+            <h2>Campaign Brain only plans for connected platforms</h2>
+          </div>
+        </div>
+        <p className="v2-muted-copy">
+          Connect the accounts Atlas should actively include in campaign plans. A disconnected channel is deterministically excluded, even if an AI model tries to suggest it.
+        </p>
+        <div className="v2-settings-grid">
+          {socialConnections.map((connection) => (
+            <Link href={connection.href} key={connection.href}>
+              <div>
+                <span className={`v2-dot ${connection.connected ? "connected" : ""}`} aria-hidden />
+                <strong>{connection.title}</strong>
+              </div>
+              <p>{connection.detail}</p>
+              <small>
+                {connection.connected
+                  ? connection.publishing
+                    ? "Planning + publishing permission"
+                    : "Planning connected · manage permissions"
+                  : "Connect channel"} →
+              </small>
             </Link>
           ))}
         </div>
