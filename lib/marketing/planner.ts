@@ -3,6 +3,7 @@ import "server-only";
 import type { Release } from "@/types/database";
 import { generateStructured, marketingAiConfigured } from "./ai";
 import { OBJECTIVE_KPIS, type MarketingObjective } from "./domain";
+import type { CampaignSocialPlatform } from "./social-platforms";
 
 export type CampaignPlanVariant = {
   label: string;
@@ -26,7 +27,7 @@ export type CampaignPlanExperiment = {
 
 export type CampaignContentMoment = {
   title: string;
-  platform: string;
+  platform: CampaignSocialPlatform;
   format: string;
   goal: MarketingObjective;
   phaseCode: string;
@@ -63,6 +64,7 @@ export type CampaignPlanningContext = {
   objective: MarketingObjective;
   brandContext: string[];
   approvedLearnings: string[];
+  connectedPlatforms: CampaignSocialPlatform[];
   performanceSummary: Array<{
     title: string;
     platform: string;
@@ -73,80 +75,96 @@ export type CampaignPlanningContext = {
   }>;
 };
 
-const planSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["strategySummary", "audienceSegments", "contentPillars", "experiments", "contentMoments", "learningsApplied"],
-  properties: {
-    strategySummary: { type: "string" },
-    audienceSegments: { type: "array", items: { type: "string" } },
-    contentPillars: { type: "array", items: { type: "string" } },
-    experiments: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["title", "hypothesis", "goal", "primaryMetric", "phaseCode", "contentAngle", "audienceSegment", "variants"],
-        properties: {
-          title: { type: "string" },
-          hypothesis: { type: "string" },
-          goal: { type: "string", enum: ["Reach", "Profile Visits", "Saves", "Follows", "Streams", "Community", "DJ Discovery", "Curator Discovery"] },
-          primaryMetric: { type: "string" },
-          phaseCode: { type: "string", enum: ["discovery", "hook-test", "anticipation", "launch", "momentum", "revival"] },
-          contentAngle: { type: "string" },
-          audienceSegment: { type: "string" },
-          variants: {
-            type: "array",
-            minItems: 2,
-            maxItems: 3,
-            items: {
-              type: "object",
-              additionalProperties: false,
-              required: ["label", "hookText", "caption", "cta", "visualPrompt", "productionNotes"],
-              properties: {
-                label: { type: "string" },
-                hookText: { type: "string" },
-                caption: { type: "string" },
-                cta: { type: "string" },
-                visualPrompt: { type: "string" },
-                productionNotes: { type: "string" },
+const OBJECTIVES = [
+  "Reach",
+  "Profile Visits",
+  "Saves",
+  "Follows",
+  "Streams",
+  "Community",
+  "DJ Discovery",
+  "Curator Discovery",
+] as const;
+const PHASES = ["discovery", "hook-test", "anticipation", "launch", "momentum", "revival"] as const;
+
+function campaignPlanSchema(connectedPlatforms: CampaignSocialPlatform[]) {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["strategySummary", "audienceSegments", "contentPillars", "experiments", "contentMoments", "learningsApplied"],
+    properties: {
+      strategySummary: { type: "string" },
+      audienceSegments: { type: "array", items: { type: "string" } },
+      contentPillars: { type: "array", items: { type: "string" } },
+      experiments: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["title", "hypothesis", "goal", "primaryMetric", "phaseCode", "contentAngle", "audienceSegment", "variants"],
+          properties: {
+            title: { type: "string" },
+            hypothesis: { type: "string" },
+            goal: { type: "string", enum: OBJECTIVES },
+            primaryMetric: { type: "string" },
+            phaseCode: { type: "string", enum: PHASES },
+            contentAngle: { type: "string" },
+            audienceSegment: { type: "string" },
+            variants: {
+              type: "array",
+              minItems: 2,
+              maxItems: 3,
+              items: {
+                type: "object",
+                additionalProperties: false,
+                required: ["label", "hookText", "caption", "cta", "visualPrompt", "productionNotes"],
+                properties: {
+                  label: { type: "string" },
+                  hookText: { type: "string" },
+                  caption: { type: "string" },
+                  cta: { type: "string" },
+                  visualPrompt: { type: "string" },
+                  productionNotes: { type: "string" },
+                },
               },
             },
           },
         },
       },
-    },
-    contentMoments: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["title", "platform", "format", "goal", "phaseCode", "relativeDay", "audienceSegment", "contentAngle", "experimentTitle"],
-        properties: {
-          title: { type: "string" },
-          platform: { type: "string", enum: ["Instagram", "TikTok", "YouTube Shorts", "Newsletter"] },
-          format: { type: "string" },
-          goal: { type: "string", enum: ["Reach", "Profile Visits", "Saves", "Follows", "Streams", "Community", "DJ Discovery", "Curator Discovery"] },
-          phaseCode: { type: "string", enum: ["discovery", "hook-test", "anticipation", "launch", "momentum", "revival"] },
-          relativeDay: { type: "integer", minimum: -21, maximum: 45 },
-          audienceSegment: { type: "string" },
-          contentAngle: { type: "string" },
-          experimentTitle: { type: "string" },
+      contentMoments: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["title", "platform", "format", "goal", "phaseCode", "relativeDay", "audienceSegment", "contentAngle", "experimentTitle"],
+          properties: {
+            title: { type: "string" },
+            platform: { type: "string", enum: connectedPlatforms },
+            format: { type: "string" },
+            goal: { type: "string", enum: OBJECTIVES },
+            phaseCode: { type: "string", enum: PHASES },
+            relativeDay: { type: "integer", minimum: -21, maximum: 45 },
+            audienceSegment: { type: "string" },
+            contentAngle: { type: "string" },
+            experimentTitle: { type: "string" },
+          },
         },
       },
+      learningsApplied: { type: "array", items: { type: "string" } },
     },
-    learningsApplied: { type: "array", items: { type: "string" } },
-  },
-} as const;
+  };
+}
 
 const PLANNER_INSTRUCTIONS = `You are the campaign strategist inside Atlas Irwin Studio.
 Atlas Irwin is an independent electronic artist. Build a testable, artist-specific campaign, not a generic social media checklist.
 
 Rules:
+- The input contains connectedSocialChannels. These are a hard capability boundary. Create content moments ONLY for those exact platforms. Never suggest, reserve, repurpose to, or mention posting on an unavailable social channel.
+- If only one social channel is connected, create a coherent campaign for that one channel instead of inventing channel diversity.
 - Every creative idea must come from the supplied release identity, sonic hook, emotion, visual world, or story.
 - Treat historical learnings as evidence only when they are explicitly supplied. Never invent performance claims.
 - Each experiment tests one clear hypothesis and has 2 or 3 meaningfully different variants.
-- Every experiment must be attached to exactly one content moment. Do not reuse the same experimentTitle across multiple platforms or posting times. Cross-platform repurposing happens only after a winner is found.
+- Every experiment must be attached to exactly one content moment. Do not reuse the same experimentTitle across multiple platforms or posting times. Cross-platform repurposing happens only after a winner is found and only when that destination platform is connected.
 - Variants should differ in the first-second hook, framing, or audience promise, not just punctuation.
 - Keep captions concise, human, specific, and compatible with an artist voice. Avoid marketing jargon, fake urgency, generic AI language, and repetitive "out now" posts.
 - Use platform-native formats but keep one coherent campaign world.
@@ -159,7 +177,17 @@ function firstNonEmpty(...values: Array<string | null | undefined>) {
   return values.find((value) => value?.trim())?.trim() ?? "";
 }
 
-function normalizeCampaignPlan(plan: CampaignPlan): CampaignPlan {
+function nativeFormat(platform: CampaignSocialPlatform) {
+  if (platform === "Instagram") return "Reel";
+  if (platform === "TikTok") return "TikTok video";
+  return "Short";
+}
+
+function normalizeCampaignPlan(
+  plan: CampaignPlan,
+  connectedPlatforms: CampaignSocialPlatform[],
+): CampaignPlan {
+  const allowedPlatforms = new Set<string>(connectedPlatforms);
   const uniqueExperiments = Array.from(
     new Map(
       plan.experiments
@@ -178,22 +206,24 @@ function normalizeCampaignPlan(plan: CampaignPlan): CampaignPlan {
 
   const experimentByTitle = new Map(uniqueExperiments.map((experiment) => [experiment.title, experiment]));
   const claimed = new Set<string>();
-  const contentMoments = plan.contentMoments.map((moment) => {
-    const requestedTitle = moment.experimentTitle.trim();
-    const experiment = requestedTitle ? experimentByTitle.get(requestedTitle) : undefined;
-    if (!experiment || claimed.has(experiment.title)) {
-      return { ...moment, experimentTitle: "" };
-    }
-    claimed.add(experiment.title);
-    return {
-      ...moment,
-      experimentTitle: experiment.title,
-      goal: experiment.goal,
-      phaseCode: experiment.phaseCode,
-      contentAngle: experiment.contentAngle,
-      audienceSegment: experiment.audienceSegment,
-    };
-  });
+  const contentMoments = plan.contentMoments
+    .filter((moment) => allowedPlatforms.has(moment.platform))
+    .map((moment) => {
+      const requestedTitle = moment.experimentTitle.trim();
+      const experiment = requestedTitle ? experimentByTitle.get(requestedTitle) : undefined;
+      if (!experiment || claimed.has(experiment.title)) {
+        return { ...moment, experimentTitle: "" };
+      }
+      claimed.add(experiment.title);
+      return {
+        ...moment,
+        experimentTitle: experiment.title,
+        goal: experiment.goal,
+        phaseCode: experiment.phaseCode,
+        contentAngle: experiment.contentAngle,
+        audienceSegment: experiment.audienceSegment,
+      };
+    });
 
   return {
     ...plan,
@@ -211,9 +241,21 @@ function fallbackPlan(context: CampaignPlanningContext): CampaignPlan {
   const audience = firstNonEmpty(release.audience, "independent electronic and nu-disco listeners");
   const primaryKpi = OBJECTIVE_KPIS[context.objective].primary;
   const learned = context.approvedLearnings.slice(0, 4);
+  const [primary, second = primary, third = second] = context.connectedPlatforms;
+
+  if (!primary) {
+    return {
+      strategySummary: `${title} has a campaign strategy ready, but no social posting moments were created because no social channels are connected in Studio Settings.`,
+      audienceSegments: [audience, "DJs and selectors who program warm electronic music"],
+      contentPillars: ["musical payoff", "world and mood", "selector utility", "human process"],
+      learningsApplied: learned,
+      experiments: [],
+      contentMoments: [],
+    };
+  }
 
   return normalizeCampaignPlan({
-    strategySummary: `${title} should be marketed through the tension between ${emotion} and ${sonicHook}. Test the musical payoff before scaling reach, then move winning framing into release-day conversion and post-release discovery.`,
+    strategySummary: `${title} should be marketed through the tension between ${emotion} and ${sonicHook}. Test the musical payoff before scaling reach, then move winning framing into release-day conversion and post-release discovery across the connected channel set.`,
     audienceSegments: [audience, "DJs and selectors who program warm electronic music", "listeners who discover music through visual mood and short-form hooks"],
     contentPillars: ["musical payoff", "world and mood", "selector utility", "human process"],
     learningsApplied: learned,
@@ -233,11 +275,11 @@ function fallbackPlan(context: CampaignPlanningContext): CampaignPlan {
             caption: `${title}. Built around ${sonicHook}.`,
             cta: context.objective === "Streams" ? "Hear the full track through the link." : "Save this if this is your kind of second wind.",
             visualPrompt: `Vertical 9:16 visual tied to ${visual}. Start with immediate motion and make the strongest musical moment feel physically synchronized to the image. No generic cyberpunk imagery, no stock characters.`,
-            productionNotes: "Open on the payoff within the first 0.5 seconds. 8 to 12 seconds. No intro card.",
+            productionNotes: `Open on the payoff within the first 0.5 seconds. Adapt the cut natively for ${primary}.`,
           },
           {
             label: "B",
-            hookText: `Berlin, late enough that the bass becomes the plan.`,
+            hookText: "Berlin, late enough that the bass becomes the plan.",
             caption: `${title} lives somewhere between ${emotion} and a room that does not want to go home yet.`,
             cta: "Keep it for later tonight.",
             visualPrompt: `Vertical 9:16 after-hours scene derived from ${visual}, tactile and warm rather than neon-cyberpunk. Build a visual reveal around ${sonicHook}.`,
@@ -257,7 +299,7 @@ function fallbackPlan(context: CampaignPlanningContext): CampaignPlan {
         title: "Selector utility",
         hypothesis: `Framing ${title} as a useful DJ moment will generate higher-quality saves and shares among selectors than a general listener message.`,
         goal: "DJ Discovery",
-        primaryMetric: "selector_action_rate",
+        primaryMetric: OBJECTIVE_KPIS["DJ Discovery"].primary,
         phaseCode: "momentum",
         contentAngle: "selector utility",
         audienceSegment: "DJs and selectors who program warm electronic music",
@@ -282,19 +324,19 @@ function fallbackPlan(context: CampaignPlanningContext): CampaignPlan {
       },
     ],
     contentMoments: [
-      { title: `${title}: world signal`, platform: "Instagram", format: "Reel", goal: "Reach", phaseCode: "discovery", relativeDay: -14, audienceSegment: audience, contentAngle: "world and mood", experimentTitle: "" },
-      { title: `${title}: hook test`, platform: "Instagram", format: "Reel", goal: context.objective, phaseCode: "hook-test", relativeDay: -7, audienceSegment: audience, contentAngle: "musical payoff", experimentTitle: "Sonic payoff framing" },
-      { title: `${title}: hook winner replication slot`, platform: "TikTok", format: "TikTok video", goal: context.objective, phaseCode: "hook-test", relativeDay: -5, audienceSegment: audience, contentAngle: "reserved for a proven framing or a non-experimental platform-native cut", experimentTitle: "" },
-      { title: `${title}: release-day conversion`, platform: "Instagram", format: "Reel", goal: "Streams", phaseCode: "launch", relativeDay: 0, audienceSegment: audience, contentAngle: "winning hook plus full-track promise", experimentTitle: "" },
-      { title: `${title}: selector clip`, platform: "Instagram", format: "DJ clip", goal: "DJ Discovery", phaseCode: "momentum", relativeDay: 5, audienceSegment: "DJs and selectors who program warm electronic music", contentAngle: "selector utility", experimentTitle: "Selector utility" },
-      { title: `${title}: process detail`, platform: "YouTube Shorts", format: "Short", goal: "Follows", phaseCode: "momentum", relativeDay: 9, audienceSegment: audience, contentAngle: "human process", experimentTitle: "" },
-      { title: `${title}: catalog re-entry`, platform: "Instagram", format: "Reel", goal: "Streams", phaseCode: "revival", relativeDay: 28, audienceSegment: audience, contentAngle: "rediscovery through a different musical detail", experimentTitle: "" },
+      { title: `${title}: world signal`, platform: primary, format: nativeFormat(primary), goal: "Reach", phaseCode: "discovery", relativeDay: -14, audienceSegment: audience, contentAngle: "world and mood", experimentTitle: "" },
+      { title: `${title}: hook test`, platform: primary, format: nativeFormat(primary), goal: context.objective, phaseCode: "hook-test", relativeDay: -7, audienceSegment: audience, contentAngle: "musical payoff", experimentTitle: "Sonic payoff framing" },
+      { title: `${title}: hook winner replication slot`, platform: second, format: nativeFormat(second), goal: context.objective, phaseCode: "hook-test", relativeDay: -5, audienceSegment: audience, contentAngle: "reserved for a proven framing or a non-experimental platform-native cut", experimentTitle: "" },
+      { title: `${title}: release-day conversion`, platform: primary, format: nativeFormat(primary), goal: "Streams", phaseCode: "launch", relativeDay: 0, audienceSegment: audience, contentAngle: "winning hook plus full-track promise", experimentTitle: "" },
+      { title: `${title}: selector clip`, platform: primary, format: nativeFormat(primary), goal: "DJ Discovery", phaseCode: "momentum", relativeDay: 5, audienceSegment: "DJs and selectors who program warm electronic music", contentAngle: "selector utility", experimentTitle: "Selector utility" },
+      { title: `${title}: process detail`, platform: third, format: nativeFormat(third), goal: "Follows", phaseCode: "momentum", relativeDay: 9, audienceSegment: audience, contentAngle: "human process", experimentTitle: "" },
+      { title: `${title}: catalog re-entry`, platform: second, format: nativeFormat(second), goal: "Streams", phaseCode: "revival", relativeDay: 28, audienceSegment: audience, contentAngle: "rediscovery through a different musical detail", experimentTitle: "" },
     ],
-  });
+  }, context.connectedPlatforms);
 }
 
 export async function planCampaign(context: CampaignPlanningContext) {
-  if (!marketingAiConfigured()) {
+  if (!context.connectedPlatforms.length || !marketingAiConfigured()) {
     return {
       plan: fallbackPlan(context),
       generation: { provider: "template", model: "adaptive-fallback", requestId: null },
@@ -304,6 +346,7 @@ export async function planCampaign(context: CampaignPlanningContext) {
   const input = JSON.stringify({
     release: context.release,
     objective: context.objective,
+    connectedSocialChannels: context.connectedPlatforms,
     brandContext: context.brandContext,
     approvedLearnings: context.approvedLearnings,
     performanceSummary: context.performanceSummary,
@@ -311,11 +354,14 @@ export async function planCampaign(context: CampaignPlanningContext) {
   try {
     const generated = await generateStructured<CampaignPlan>({
       name: "atlas_campaign_plan",
-      schema: planSchema as unknown as Record<string, unknown>,
+      schema: campaignPlanSchema(context.connectedPlatforms) as unknown as Record<string, unknown>,
       instructions: PLANNER_INSTRUCTIONS,
       input,
     });
-    return { plan: normalizeCampaignPlan(generated.value), generation: generated } as const;
+    return {
+      plan: normalizeCampaignPlan(generated.value, context.connectedPlatforms),
+      generation: generated,
+    } as const;
   } catch (error) {
     return {
       plan: fallbackPlan(context),
