@@ -4,6 +4,7 @@ import "./studio-v2.css";
 import "./studio-v2-workflows.css";
 import "./studio-v2-safety.css";
 import "./release-workspace-v2.css";
+import "./release-growth.css";
 import "./growth-os.css";
 import "./video-director.css";
 import "./video-director-states.css";
