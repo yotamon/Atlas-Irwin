@@ -1,65 +1,68 @@
 import Link from "next/link";
-import { PageHeader } from "@/components/studio/ui";
+import { PageHeader, Panel } from "@/components/studio/ui";
 
-const primary = [
+const createOptions = [
   {
-    href: "/studio/releases/new",
+    title: "New Release",
     eyebrow: "Start here",
-    title: "New release",
-    body: "Create the release workspace from just a title, format and date. Atlas builds the operational plan around it.",
-    action: "Create workspace",
+    description:
+      "Give Atlas the minimum viable brief. The Studio will build the workspace around it.",
+    href: "/studio/releases/new",
+    cta: "Start a release",
   },
   {
-    href: "/studio/music",
-    eyebrow: "Generate",
     title: "Music",
-    body: "Develop track ideas with provider and cost controls kept explicit before any paid generation.",
-    action: "Open Music Lab",
+    eyebrow: "Specialist tool",
+    description:
+      "Write or generate new material in Music Lab when the job is musical creation.",
+    href: "/studio/music",
+    cta: "Open Music Lab",
   },
   {
-    href: "/studio/content",
-    eyebrow: "Produce",
     title: "Content",
-    body: "Open the production queue when you want to refine a specific social asset or creative draft.",
-    action: "Open content queue",
+    eyebrow: "Production",
+    description:
+      "Finish the content moments Atlas planned for your releases without managing status fields manually.",
+    href: "/studio/production",
+    cta: "Open Production",
   },
-] as const;
+  {
+    title: "Video",
+    eyebrow: "Video Director",
+    description:
+      "Plan and build a complete music video from an Atlas track, with creative approvals and cost gates before paid generation.",
+    href: "/studio/video",
+    cta: "Open Video Director",
+  },
+];
 
 export default function CreatePage() {
   return (
-    <div className="studio-v2-page">
+    <>
       <PageHeader
         title="Create"
-        description="Choose an outcome. The detailed machinery stays out of the way until you need it."
+        description="Choose the outcome. Atlas keeps the machinery behind the scenes until you actually need it."
       />
-
-      <section className="v2-create-grid">
-        {primary.map((item) => (
-          <Link className="v2-create-card" href={item.href} key={item.href}>
+      <div className="v2-create-grid">
+        {createOptions.map((item) => (
+          <Link className="v2-create-card" href={item.href} key={item.title}>
             <span className="section-label">{item.eyebrow}</span>
             <h2>{item.title}</h2>
-            <p>{item.body}</p>
-            <strong>{item.action} <span aria-hidden>→</span></strong>
+            <p>{item.description}</p>
+            <strong>{item.cta} →</strong>
           </Link>
         ))}
-      </section>
-
-      <section className="v2-section v2-compact-section">
-        <div className="v2-section-heading">
-          <div>
-            <span className="section-label">Advanced</span>
-            <h2>Build the machinery manually</h2>
+      </div>
+      <details className="v2-advanced-disclosure">
+        <summary>Advanced creation tools</summary>
+        <Panel title="Open specialist workspaces only when the normal flow is not enough.">
+          <div className="v2-secondary-links">
+            <Link href="/studio/campaigns">Campaign Brain</Link>
+            <Link href="/studio/outreach">Outreach</Link>
+            <Link href="/studio/content">Legacy Content Lab</Link>
           </div>
-        </div>
-        <p className="v2-muted-copy">
-          Campaign Brain and the legacy content tools remain available for exceptional cases, debugging and migrations.
-          They are no longer the normal way to operate Atlas.
-        </p>
-        <div className="actions">
-          <Link className="button" href="/studio/campaigns">Campaign Brain</Link>
-          <Link className="button" href="/studio/outreach">Outreach workspace</Link>
-        </div>
-      </section>
-    </div>
+        </Panel>
+      </details>
+    </>
   );
 }

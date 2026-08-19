@@ -11,6 +11,8 @@ const requiredRoutes = [
   "app/studio/(protected)/production/page.tsx",
   "app/studio/(protected)/learn/page.tsx",
   "app/studio/(protected)/inbox/page.tsx",
+  "app/studio/(protected)/video/page.tsx",
+  "app/studio/(protected)/video/[id]/page.tsx",
 ];
 
 test("Studio V2 keeps every daily outcome route present", async () => {
@@ -32,6 +34,14 @@ test("release workspace exposes outcome stages and preserves an advanced escape 
   for (const stage of ["Overview", "Plan", "Create", "Publish", "Learn"]) assert.ok(workspace.includes(stage));
   assert.ok(workspace.includes("Advanced view"));
   assert.ok(workspace.includes("/studio/production"));
+  assert.ok(workspace.includes("/studio/video?release="));
+});
+
+test("Create keeps specialist creation outcomes discoverable", async () => {
+  const create = await readFile("app/studio/(protected)/create/page.tsx", "utf8");
+  assert.ok(create.includes('href: "/studio/music"'));
+  assert.ok(create.includes('href: "/studio/production"'));
+  assert.ok(create.includes('href: "/studio/video"'));
 });
 
 test("normal Studio V2 routes do not link daily work back to Content Lab", async () => {

@@ -59,7 +59,7 @@ export function ReleaseWorkspaceV2({ release, tracks, mediaLinks, mediaAssets, c
 
     {activeStage === "create" ? <section className="v2-section"><div className="v2-section-heading"><div><span className="section-label">Create</span><h2>Make only what this release needs</h2></div></div><div className="v2-create-grid">
       <Link className="v2-create-card" href="/studio/music"><span className="section-label">Audio</span><h2>Music Lab</h2><p>Generate or develop track ideas with explicit cost approval before paid calls.</p><strong>Open Music Lab →</strong></Link>
-      <Link className="v2-create-card" href={`/studio/releases/${release.id}?view=advanced&tab=video`}><span className="section-label">Motion</span><h2>Video Director</h2><p>Plan and produce the music video in release context, with cost checkpoints before Higgsfield calls.</p><strong>Open Video Director →</strong></Link>
+      <Link className="v2-create-card" href={`/studio/video?release=${release.id}`}><span className="section-label">Motion</span><h2>Video Director</h2><p>Plan and produce the music video in release context, with cost checkpoints before Higgsfield calls.</p><strong>Open Video Director →</strong></Link>
       <Link className="v2-create-card" href={`/studio/production?release=${release.id}`}><span className="section-label">Social</span><h2>Production queue</h2><p>Refine starter moments and campaign drafts that actually need human creative input.</p><strong>Open production →</strong></Link>
     </div></section> : null}
 
