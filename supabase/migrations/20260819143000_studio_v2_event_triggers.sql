@@ -119,7 +119,7 @@ begin
   if exists (select 1 from public.content_items where campaign_id = new.campaign_id limit 1) then return new; end if;
 
   insert into public.content_items (owner_id,release_id,campaign_id,phase_id,title,platform,format,status,goal,scheduled_at,approval_status,source,content_angle,audience_segment,relative_day,schedule_locked,production_notes)
-  select new.owner_id,v_release_id,new.campaign_id,phase.id,v_release_title || moment.title_suffix,moment.platform,moment.format,'Draft',moment.goal,
+  select new.owner_id,v_release_id,new.campaign_id,phase.id,v_release_title || moment.title_suffix,moment.platform::public.content_platform,moment.format,'Draft',moment.goal,
     case when v_anchor is null then null else ((v_anchor + moment.relative_day)::date + time '18:00') at time zone 'Europe/Berlin' end,
     'not_required','automation',moment.content_angle,moment.audience_segment,moment.relative_day,false,
     'Starter moment created automatically by Studio V2. Replace the generic angle with the release-specific creative when ready.'
