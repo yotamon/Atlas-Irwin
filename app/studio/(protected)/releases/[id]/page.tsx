@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createMediaPreviewMap } from "@/lib/studio/media-previews";
 import { requireStudioAdmin } from "@/lib/auth/studio";
@@ -130,7 +131,7 @@ export default async function ReleaseDetail({
           <strong>Advanced workspace</strong>
           <span>Legacy controls for exceptional cases, migrations and debugging.</span>
         </div>
-        <a className="button" href={`/studio/releases/${release.id}`}>Back to simple view</a>
+        <Link className="button" href={`/studio/releases/${release.id}`}>Back to simple view</Link>
       </div>
       {tab === "campaign" ? <ReleaseCampaignBridge campaign={campaignResult.data} /> : null}
       <ReleaseCockpit
