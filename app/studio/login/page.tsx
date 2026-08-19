@@ -1,6 +1,6 @@
 import Image from "next/image";
 import { adminEmails } from "@/lib/auth/studio";
-import { signInWithStudioPassword } from "../actions";
+import { signInStudio } from "../login-actions";
 
 export default async function LoginPage({
   searchParams,
@@ -9,7 +9,7 @@ export default async function LoginPage({
 }) {
   const params = await searchParams;
   const admins = adminEmails();
-  const showEmail = admins.length > 1;
+  const defaultEmail = admins.length === 1 ? admins[0] : undefined;
 
   return (
     <main className="studio-auth">
@@ -22,18 +22,18 @@ export default async function LoginPage({
         />
         <h1>Release Engine</h1>
         <p>Private access to the Atlas Irwin release studio.</p>
-        <form action={signInWithStudioPassword}>
-          {showEmail ? (
-            <label>
-              Email
-              <input
-                name="email"
-                type="email"
-                autoComplete="username"
-                placeholder={admins[0]}
-              />
-            </label>
-          ) : null}
+        <form action={signInStudio}>
+          <label>
+            Email
+            <input
+              name="email"
+              type="email"
+              autoComplete="username"
+              defaultValue={defaultEmail}
+              placeholder="Studio administrator email"
+              required
+            />
+          </label>
           <label>
             Password
             <input
