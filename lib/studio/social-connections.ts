@@ -7,7 +7,8 @@ import {
   SOCIAL_PLATFORM_DEFINITIONS,
   type SocialPlatformKey,
 } from "@/lib/marketing/social-platforms";
-import type { Database, Json } from "@/types/database";
+import type { Json } from "@/types/database";
+import type { SocialDatabase } from "@/types/social-database";
 
 const INSTAGRAM_AUTHORIZE_URL = "https://www.instagram.com/oauth/authorize";
 const INSTAGRAM_TOKEN_URL = "https://api.instagram.com/oauth/access_token";
@@ -80,7 +81,7 @@ function serviceSupabase() {
   if (!key) {
     throw new Error("SUPABASE_SERVICE_ROLE_KEY is required for social connection token storage.");
   }
-  return createSupabaseClient<Database>(url, key, {
+  return createSupabaseClient<SocialDatabase>(url, key, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 }
