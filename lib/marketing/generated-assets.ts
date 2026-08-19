@@ -29,6 +29,31 @@ async function findGeneratedAsset(db: SupabaseClient<VideoDatabase>, ownerId: st
   return data;
 }
 
+async function generatedBytes(input: {
+  remoteUrl?: string;
+  dataBase64?: string;
+  mimeType?: string;
+  fetchHeaders?: Record<string, string>;
+  outputKind: "image" | "video";
+}) {
+  if (input.dataBase64) {
+    const buffer = Buffer.from(input.dataBase64, "base64");
+    if (!buffer.length || buffer.length > MAX_REMOTE_ASSET_BYTES) throw new Error("Generated inline asset is empty or too large.");
+    return { buffer, contentType: input.mimeType || (input.outputKind === "image" ? "image/png" : "video/mp4") };
+  }
+  if (!input.remoteUrl) throw new Error("Generated provider result has no media payload.");
+  const response = await fetch(input.remoteUrl, { headers: input.fetchHeaders, cache: "no-store" });
+  if (!response.ok) throw new Error(`Could not download generated marketing asset (${response.status}).`);
+  const length = Number(response.headers.get("content-length") || 0);
+  if (length > MAX_REMOTE_ASSET_BYTES) throw new Error("Generated marketing asset exceeds the Media Library import limit.");
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (!buffer.length || buffer.length > MAX_REMOTE_ASSET_BYTES) throw new Error("Generated marketing asset is empty or too large.");
+  return {
+    buffer,
+    contentType: response.headers.get("content-type")?.split(";")[0] || input.mimeType || (input.outputKind === "image" ? "image/png" : "video/mp4"),
+  };
+}
+
 export async function storeRemoteMarketingAsset(input: {
   db: SupabaseClient<VideoDatabase>;
   ownerId: string;
@@ -38,21 +63,24 @@ export async function storeRemoteMarketingAsset(input: {
   contentItemId: string;
   provider: string;
   model: string;
-  remoteUrl: string;
+  remoteUrl?: string;
+  dataBase64?: string;
+  mimeType?: string;
+  fetchHeaders?: Record<string, string>;
+  actualCostUsd?: number | null;
   outputKind: "image" | "video";
   assetType: "social_image" | "content_video";
   context: CreativeReferenceContext;
 }) {
   let asset = await findGeneratedAsset(input.db, input.ownerId, input.generationRunId);
   if (!asset) {
-    const response = await fetch(input.remoteUrl, { cache: "no-store" });
-    if (!response.ok) throw new Error(`Could not download generated marketing asset (${response.status}).`);
-    const length = Number(response.headers.get("content-length") || 0);
-    if (length > MAX_REMOTE_ASSET_BYTES) throw new Error("Generated marketing asset exceeds the Media Library import limit.");
-    const buffer = Buffer.from(await response.arrayBuffer());
-    if (!buffer.length || buffer.length > MAX_REMOTE_ASSET_BYTES) throw new Error("Generated marketing asset is empty or too large.");
-
-    const contentType = response.headers.get("content-type")?.split(";")[0] || (input.outputKind === "image" ? "image/png" : "video/mp4");
+    const { buffer, contentType } = await generatedBytes({
+      remoteUrl: input.remoteUrl,
+      dataBase64: input.dataBase64,
+      mimeType: input.mimeType,
+      fetchHeaders: input.fetchHeaders,
+      outputKind: input.outputKind,
+    });
     const extension = extensionFor(contentType, input.outputKind);
     const bucket = "public-media";
     const path = `${input.ownerId}/library/marketing/${input.generationRunId}.${extension}`;
@@ -92,7 +120,7 @@ export async function storeRemoteMarketingAsset(input: {
         source_kind: "generated",
         provider: input.provider,
         model: input.model,
-        provider_source_url: input.remoteUrl,
+        provider_source_url: input.remoteUrl ?? null,
         marketing_generation_run_id: input.generationRunId,
         campaign_id: input.campaignId,
         release_id: input.releaseId,
@@ -102,6 +130,7 @@ export async function storeRemoteMarketingAsset(input: {
         release_artwork_url: input.context.release.artworkUrl,
         cohesion_context_score: input.context.cohesionScore,
         reference_summary: input.context.referenceSummary,
+        actual_cost_usd: input.actualCostUsd ?? null,
       },
     }).select("*").single();
     if (error) {

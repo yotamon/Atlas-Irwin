@@ -2,9 +2,9 @@ import "server-only";
 
 import { createMarketingServiceClient } from "@/lib/marketing/db";
 import { createServiceClient } from "@/lib/supabase/service";
-import type { ProviderStatus } from "@/lib/video-providers/types";
 import type { Json } from "@/types/database";
 import type { CreativeReferenceContext } from "./creative-context";
+import type { CreativeProviderStatus } from "./creative-provider-types";
 import { storeRemoteMarketingAsset } from "./generated-assets";
 
 function record(value: Json | unknown): Record<string, unknown> {
@@ -24,10 +24,10 @@ function json(value: unknown) {
 export async function applyMarketingCreativeProviderStatus(input: {
   runId?: string;
   providerRequestId?: string;
-  status: ProviderStatus;
+  status: CreativeProviderStatus;
 }) {
   const marketing = createMarketingServiceClient();
-  let query = marketing.from("generation_runs").select("*").eq("provider", "higgsfield");
+  let query = marketing.from("generation_runs").select("*");
   if (input.runId) query = query.eq("id", input.runId);
   else if (input.providerRequestId) query = query.eq("provider_request_id", input.providerRequestId);
   else throw new Error("A generation run id or provider request id is required.");
@@ -53,8 +53,8 @@ export async function applyMarketingCreativeProviderStatus(input: {
 
   if (input.status.status === "failed" || input.status.status === "nsfw") {
     const message = input.status.status === "nsfw"
-      ? "The provider rejected this generation during safety review."
-      : "The provider reported that the creative generation failed.";
+      ? `${run.provider} rejected this generation during safety review.`
+      : `${run.provider} reported that the creative generation failed.`;
     const { error } = await marketing.from("generation_runs").update({
       status: "failed",
       provider_request_id: providerRequestId,
@@ -65,7 +65,7 @@ export async function applyMarketingCreativeProviderStatus(input: {
     return { completed: false as const, status: input.status.status };
   }
 
-  if (!input.status.resultUrl) throw new Error("Higgsfield reported completion without a result URL.");
+  if (!input.status.resultUrl && !input.status.resultBase64) throw new Error(`${run.provider} reported completion without a media result.`);
   const contentItemId = stringValue(inputContext.contentItemId);
   const outputKind = stringValue(inputContext.outputKind);
   const assetType = stringValue(inputContext.assetType);
@@ -77,6 +77,7 @@ export async function applyMarketingCreativeProviderStatus(input: {
     throw new Error("Stored creative reference context is missing.");
   }
 
+  const actualCostUsd = input.status.actualCostUsd ?? run.estimated_cost_usd ?? null;
   const db = createServiceClient();
   const stored = await storeRemoteMarketingAsset({
     db,
@@ -88,6 +89,10 @@ export async function applyMarketingCreativeProviderStatus(input: {
     provider: run.provider,
     model: run.model,
     remoteUrl: input.status.resultUrl,
+    dataBase64: input.status.resultBase64,
+    mimeType: input.status.resultMimeType,
+    fetchHeaders: input.status.resultFetchHeaders,
+    actualCostUsd,
     outputKind: outputKind as "image" | "video",
     assetType: assetType as "social_image" | "content_video",
     context: storedContext as unknown as CreativeReferenceContext,
@@ -102,6 +107,7 @@ export async function applyMarketingCreativeProviderStatus(input: {
     mediaAssetId: stored.asset.id,
     contentStatus: stored.status,
     approvalRequired: true,
+    actualCostUsd,
   };
   const { error: updateError } = await marketing.from("generation_runs").update({
     status: "completed",
@@ -121,6 +127,7 @@ export async function applyMarketingCreativeProviderStatus(input: {
       mediaAssetId: stored.asset.id,
       provider: run.provider,
       model: run.model,
+      actualCostUsd,
       cohesionScore: (storedContext as unknown as CreativeReferenceContext).cohesionScore,
     }),
   });

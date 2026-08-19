@@ -1,8 +1,11 @@
 import "server-only";
 
 import { higgsfieldModel, type HiggsfieldModelId } from "@/lib/video-providers/higgsfield/catalog";
-import type { VideoGenerationRequest, VideoProviderMedia } from "@/lib/video-providers/types";
+import type { VideoProviderMedia } from "@/lib/video-providers/types";
 import type { CreativeReferenceContext } from "./creative-context";
+import { creativeCandidates, type CreativePreset } from "./creative-provider-catalog";
+import { creativeProviderReadiness } from "./creative-providers";
+import type { CreativeGenerationRequest, CreativeProviderId } from "./creative-provider-types";
 
 export const CREATIVE_QUALITY_PROFILES = ["economy", "balanced", "premium"] as const;
 export type CreativeQualityProfile = (typeof CREATIVE_QUALITY_PROFILES)[number];
@@ -24,8 +27,11 @@ export type CreativeRouteInput = {
 export type CreativeRoute = {
   outputKind: "image" | "video";
   assetType: "social_image" | "content_video";
-  request: VideoGenerationRequest;
+  request: CreativeGenerationRequest;
   reason: string;
+  fallbackUsed: boolean;
+  preferredProvider: CreativeProviderId;
+  priceLabel: string;
 };
 
 function autoOutputKind(format: string): "image" | "video" {
@@ -40,105 +46,134 @@ function aspectRatio(platform: string, format: string): "9:16" | "1:1" {
   return "9:16";
 }
 
-function videoDuration(input: CreativeRouteInput) {
-  const selected = input.audioStart !== null && input.audioStart !== undefined && input.audioEnd !== null && input.audioEnd !== undefined
-    ? Math.max(4, input.audioEnd - input.audioStart)
-    : input.quality === "premium" ? 12 : input.quality === "economy" ? 8 : 10;
-  return Math.min(15, Math.max(4, Math.round(selected)));
+function providerAvailability() {
+  return new Map(creativeProviderReadiness().map((provider) => [provider.id, provider.configured]));
 }
 
-function chooseVideoModel(input: CreativeRouteInput): HiggsfieldModelId {
+function chooseCandidate(quality: CreativePreset, outputKind: "image" | "video") {
+  const candidates = creativeCandidates(quality, outputKind);
+  const availability = providerAvailability();
+  const configured = candidates.find((candidate) => availability.get(candidate.provider));
+  return {
+    candidate: configured ?? candidates[0],
+    preferred: candidates[0],
+    fallbackUsed: Boolean(configured && configured !== candidates[0]),
+    configured: Boolean(configured),
+  };
+}
+
+function higgsfieldPremiumModel(input: CreativeRouteInput): HiggsfieldModelId {
   const hasMultimodalReference = Boolean(input.context.videoReferences.length || input.context.audioReferenceUrl);
-  if (input.quality === "economy") return "seedance_2_0_mini";
-  if (hasMultimodalReference) return "seedance_2_5";
-  if (input.quality === "premium") return "cinematic_studio_3_0";
-  return "seedance_2_0";
+  return hasMultimodalReference ? "seedance_2_5" : "cinematic_studio_3_0";
 }
 
 function imageResolution(quality: CreativeQualityProfile) {
-  return quality === "premium" ? "4k" as const : quality === "economy" ? "720p" as const : "1080p" as const;
-}
-
-function videoResolution(quality: CreativeQualityProfile) {
   return quality === "economy" ? "720p" as const : "1080p" as const;
 }
 
-function mediasFor(input: CreativeRouteInput, modelId: HiggsfieldModelId, outputKind: "image" | "video") {
-  const model = higgsfieldModel(modelId);
-  if (!model) return [];
+function requestedVideoDuration(input: CreativeRouteInput, provider: CreativeProviderId, model: string) {
+  if (provider === "zai" && model.startsWith("vidu2-")) return 4;
+  if (provider === "google" && model.startsWith("veo-3.1-")) return 8;
+  const selected = input.audioStart !== null && input.audioStart !== undefined && input.audioEnd !== null && input.audioEnd !== undefined
+    ? Math.max(4, input.audioEnd - input.audioStart)
+    : input.quality === "premium" ? 12 : input.quality === "economy" ? 6 : 8;
+  return Math.min(15, Math.max(4, Math.round(selected)));
+}
+
+function videoResolution(quality: CreativeQualityProfile, provider: CreativeProviderId) {
+  if (provider === "zai") return "720p" as const;
+  return quality === "economy" ? "720p" as const : "1080p" as const;
+}
+
+function referenceMedias(input: CreativeRouteInput, provider: CreativeProviderId, model: string, outputKind: "image" | "video") {
   const medias: VideoProviderMedia[] = [];
-  if (model.supportsImageReferences) {
-    for (const reference of input.context.imageReferences.slice(0, 4)) {
-      medias.push({ role: "image", url: reference.url });
-    }
+  const images = input.context.imageReferences;
+
+  if (provider === "higgsfield") {
+    const info = higgsfieldModel(model as HiggsfieldModelId);
+    if (info?.supportsImageReferences) images.slice(0, 4).forEach((reference) => medias.push({ role: "image", url: reference.url }));
+    if (outputKind === "video" && info?.supportsVideoReferences && input.context.videoReferences[0]) medias.push({ role: "video_reference", url: input.context.videoReferences[0].url });
+    if (outputKind === "video" && info?.supportsAudioReferences && input.context.audioReferenceUrl) medias.push({ role: "audio_reference", url: input.context.audioReferenceUrl });
+    return medias;
   }
-  if (outputKind === "video" && model.supportsVideoReferences) {
-    const motion = input.context.videoReferences[0];
-    if (motion) medias.push({ role: "video_reference", url: motion.url });
-  }
-  if (outputKind === "video" && model.supportsAudioReferences && input.context.audioReferenceUrl) {
-    medias.push({ role: "audio_reference", url: input.context.audioReferenceUrl });
-  }
+
+  const maxImages = provider === "google" && outputKind === "image" && model === "gemini-3.1-flash-image"
+    ? 10
+    : provider === "bfl" && model !== "flux-2-klein-4b"
+      ? 8
+      : provider === "bfl"
+        ? 4
+        : provider === "fal"
+          ? 1
+          : outputKind === "video"
+            ? 1
+            : 3;
+  images.slice(0, maxImages).forEach((reference) => medias.push({ role: "image", url: reference.url }));
   return medias;
 }
 
-function videoParams(model: HiggsfieldModelId, input: CreativeRouteInput) {
-  if (model === "seedance_2_5") {
-    return {
-      mode: input.context.imageReferences.length || input.context.videoReferences.length ? "omni_reference" : "t2v",
-      bitrate_mode: input.quality === "economy" ? "standard" : "high",
-      generate_audio: false,
-    };
-  }
-  if (model === "seedance_2_0") {
-    return { mode: "std", bitrate_mode: "high", generate_audio: false };
-  }
-  if (model === "seedance_2_0_mini") {
-    return { bitrate_mode: "standard", generate_audio: false };
-  }
+function higgsfieldParams(model: string, input: CreativeRouteInput) {
+  if (model === "seedance_2_5") return {
+    mode: input.context.imageReferences.length || input.context.videoReferences.length ? "omni_reference" : "t2v",
+    bitrate_mode: "high",
+    generate_audio: false,
+  };
+  if (model === "seedance_2_0") return { mode: "std", bitrate_mode: "high", generate_audio: false };
+  if (model === "seedance_2_0_mini") return { bitrate_mode: "standard", generate_audio: false };
   return { generate_audio: false };
 }
 
 export function routeMarketingCreative(input: CreativeRouteInput): CreativeRoute {
   const outputKind = input.mediaKind === "auto" ? autoOutputKind(input.format) : input.mediaKind;
   const ratio = aspectRatio(input.platform, input.format);
+  const selected = chooseCandidate(input.quality, outputKind);
+  let model = selected.candidate.model;
+  if (selected.candidate.provider === "higgsfield" && model === "auto_premium") model = higgsfieldPremiumModel(input);
+  const provider = selected.candidate.provider;
+  const fallbackPrefix = selected.fallbackUsed
+    ? `${selected.preferred.label} is not connected, so Atlas selected the next ${input.quality} route: `
+    : selected.configured
+      ? ""
+      : `${selected.preferred.label} is the preferred route but is not connected yet. `;
+  const reason = `${fallbackPrefix}${selected.candidate.label}. ${selected.candidate.reason} ${input.context.imageReferences.length} ranked image reference${input.context.imageReferences.length === 1 ? "" : "s"} are available from visual lineage.`;
+
   if (outputKind === "image") {
-    const model: HiggsfieldModelId = "nano_banana_2";
     return {
       outputKind,
       assetType: "social_image",
-      reason: `Nano Banana 2 is the curated image model for Atlas look development. ${input.context.imageReferences.length} ranked visual references will be supplied directly to the model.`,
+      reason,
+      fallbackUsed: selected.fallbackUsed,
+      preferredProvider: selected.preferred.provider,
+      priceLabel: selected.candidate.priceLabel,
       request: {
+        provider,
         operation: "look_image",
         model,
         prompt: input.prompt,
         aspectRatio: ratio,
         resolution: imageResolution(input.quality),
-        medias: mediasFor(input, model, outputKind),
+        medias: referenceMedias(input, provider, model, outputKind),
       },
     };
   }
 
-  const model = chooseVideoModel(input);
-  const modelInfo = higgsfieldModel(model);
-  const hasAudio = Boolean(input.context.audioReferenceUrl && modelInfo?.supportsAudioReferences);
-  const hasMotion = Boolean(input.context.videoReferences.length && modelInfo?.supportsVideoReferences);
-  const reason = hasAudio || hasMotion
-    ? `${modelInfo?.label || model} was selected because this creative has ${hasAudio ? "track audio" : ""}${hasAudio && hasMotion ? " and " : ""}${hasMotion ? "approved motion" : ""} references, so continuity is more valuable than choosing a model from headline quality alone.`
-    : `${modelInfo?.label || model} best matches the ${input.quality} quality profile for this social video.`;
   return {
     outputKind,
     assetType: "content_video",
     reason,
+    fallbackUsed: selected.fallbackUsed,
+    preferredProvider: selected.preferred.provider,
+    priceLabel: selected.candidate.priceLabel,
     request: {
+      provider,
       operation: "shot_video",
       model,
       prompt: input.prompt,
-      durationSeconds: videoDuration(input),
+      durationSeconds: requestedVideoDuration(input, provider, model),
       aspectRatio: ratio,
-      resolution: videoResolution(input.quality),
-      medias: mediasFor(input, model, outputKind),
-      params: videoParams(model, input),
+      resolution: videoResolution(input.quality, provider),
+      medias: referenceMedias(input, provider, model, outputKind),
+      params: provider === "higgsfield" ? higgsfieldParams(model, input) : undefined,
     },
   };
 }
