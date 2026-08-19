@@ -273,7 +273,7 @@ function fallbackPlan(context: ResolvedCampaignPlanningContext): CampaignPlan {
   const audience = firstNonEmpty(release.audience, "independent electronic and nu-disco listeners");
   const primaryKpi = OBJECTIVE_KPIS[context.objective].primary;
   const learned = context.approvedLearnings.slice(0, 4);
-  const [primary, second = primary, third = second] = context.connectedPlatforms;
+  const primary = context.connectedPlatforms[0];
 
   if (!primary) {
     return {
@@ -286,6 +286,8 @@ function fallbackPlan(context: ResolvedCampaignPlanningContext): CampaignPlan {
     };
   }
 
+  const second = context.connectedPlatforms[1] ?? primary;
+  const third = context.connectedPlatforms[2] ?? second;
   return normalizeCampaignPlan({
     strategySummary: `${title} should be marketed through the tension between ${emotion} and ${sonicHook}. Test the musical payoff before scaling reach, then move winning framing into release-day conversion and post-release discovery across the connected channel set.`,
     audienceSegments: [audience, "DJs and selectors who program warm electronic music", "listeners who discover music through visual mood and short-form hooks"],
