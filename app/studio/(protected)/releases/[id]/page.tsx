@@ -6,7 +6,7 @@ import { getPublicReleases } from "@/lib/public-catalog";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { ReleaseCockpit } from "@/components/studio/release-cockpit";
 import { ReleaseCampaignBridge } from "@/components/studio/release-campaign-bridge";
-import { ReleaseWorkspaceV2Final } from "@/components/studio/release-workspace-v2-final";
+import { ReleaseWorkspaceV2 } from "@/components/studio/release-workspace-v2";
 import type { MusicVideoProject } from "@/types/database";
 
 export default async function ReleaseDetail({
@@ -63,7 +63,7 @@ export default async function ReleaseDetail({
   if (providerScheduleError) throw new Error(providerScheduleError.message);
 
   if (!advanced) {
-    return <ReleaseWorkspaceV2Final release={release} tracks={tracks ?? []} mediaLinks={mediaLinks ?? []} mediaAssets={mediaAssets ?? []} contentItems={contentItems ?? []} metrics={metrics ?? []} campaign={campaignResult.data} stage={stage} providerScheduledCount={providerScheduledCount ?? 0} />;
+    return <ReleaseWorkspaceV2 release={release} tracks={tracks ?? []} mediaLinks={mediaLinks ?? []} mediaAssets={mediaAssets ?? []} contentItems={contentItems ?? []} metrics={metrics ?? []} campaign={campaignResult.data} stage={stage} providerScheduledCount={providerScheduledCount ?? 0} />;
   }
 
   const mediaPreviewUrls = await createMediaPreviewMap(supabase, mediaAssets ?? []);
