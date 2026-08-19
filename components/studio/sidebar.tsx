@@ -4,6 +4,7 @@ import { signOut } from "@/app/studio/actions";
 
 const links = [
   ["/studio", "Today", "dashboard"],
+  ["/studio/growth", "Growth", "analytics"],
   ["/studio/releases", "Releases", "releases"],
   ["/studio/create", "Create", "musicLab"],
   ["/studio/library", "Library", "media"],
@@ -30,9 +31,9 @@ export function StudioSidebar() {
         })}
       </nav>
       <div className="studio-sidebar-foot">
-        <Link href="/studio/releases/new" className="studio-quick">
+        <Link href="/studio/growth/import" className="studio-quick">
           <Plus aria-hidden />
-          New release
+          Add unreleased tracks
         </Link>
         <form action={signOut}>
           <button><Logout aria-hidden />Sign out</button>

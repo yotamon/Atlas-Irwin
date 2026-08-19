@@ -21,8 +21,13 @@ import {
   metricSignals,
   primarySignalValue,
 } from "@/lib/marketing/domain";
+import { buildGrowthFunnel, diagnoseGrowthFunnel } from "@/lib/studio/growth";
 import { goalPerformanceScore } from "@/lib/studio/performance";
 import { PLATFORMS } from "@/lib/studio/constants";
+
+function percent(value: number) {
+  return `${Math.round(value * 1000) / 10}%`;
+}
 
 export default async function AnalyticsPage() {
   const { supabase, user } = await requireStudioAdmin();
@@ -52,6 +57,8 @@ export default async function AnalyticsPage() {
   const marketingLearnings = marketingLearningsResult.data ?? [];
   const totals = aggregateMetrics(metrics as unknown as Array<Record<string, unknown>>);
   const totalSignals = metricSignals(totals);
+  const funnel = buildGrowthFunnel(metrics);
+  const diagnosis = diagnoseGrowthFunnel(funnel);
   const ranked = content
     .map((item) => {
       const rows = metrics.filter((metric) => metric.content_item_id === item.id);
@@ -70,20 +77,36 @@ export default async function AnalyticsPage() {
   return (
     <>
       <PageHeader
-        title="Analytics"
-        description="Judge every content item against the job it was designed to do, then turn reliable experiment signals into reusable marketing memory."
-        action={<Link className="button primary" href="/studio/campaigns">Open Campaign Brain</Link>}
+        title="Growth Analytics"
+        description="Find where attention stops becoming fandom, then use content-level experiments to explain why. Streams remain an outcome, not the north star."
+        action={<Link className="button primary" href="/studio/growth">Open Growth OS</Link>}
       />
 
       <div className="studio-grid">
-        <Panel title="Qualified reach">{(totals.reach || totals.views || 0).toLocaleString()}</Panel>
-        <Panel title="Save rate">{formatRate(totalSignals.saveRate)}</Panel>
-        <Panel title="Profile visit rate">{formatRate(totalSignals.profileVisitRate)}</Panel>
-        <Panel title="Link click rate">{formatRate(totalSignals.linkClickRate)}</Panel>
+        <Panel title="Active fan signal">{funnel.fanSignalScore.toLocaleString()}</Panel>
+        <Panel title="Listeners">{funnel.listeners.toLocaleString()}</Panel>
+        <Panel title="Save rate">{formatRate(funnel.saveRate)}</Panel>
+        <Panel title="Follow rate">{formatRate(funnel.followRate)}</Panel>
       </div>
 
+      <section className="studio-panel feature growth-analytics-funnel">
+        <div className="panel-head"><div><span className="section-label">Audience conversion</span><h2>Discovery → fandom</h2></div></div>
+        <div className="growth-funnel">
+          <article><span>Discovery</span><strong>{funnel.reach.toLocaleString()}</strong><small>qualified reach / views</small></article>
+          <i>→</i>
+          <article><span>Curiosity</span><strong>{funnel.profileVisits.toLocaleString()}</strong><small>{percent(funnel.profileVisitRate)} reach → profile</small></article>
+          <i>→</i>
+          <article><span>Music intent</span><strong>{funnel.linkClicks.toLocaleString()}</strong><small>{percent(funnel.linkClickRate)} profile → click</small></article>
+          <i>→</i>
+          <article><span>Listening</span><strong>{funnel.listeners.toLocaleString()}</strong><small>{percent(funnel.listenerConversionRate)} click → listener</small></article>
+          <i>→</i>
+          <article><span>Fandom</span><strong>{(funnel.saves + funnel.follows + funnel.playlistAdds).toLocaleString()}</strong><small>{percent(funnel.saveRate)} save · {percent(funnel.followRate)} follow</small></article>
+        </div>
+        {diagnosis ? <div className="growth-action-note"><strong>Current bottleneck: {diagnosis.label}</strong><span>{diagnosis.diagnosis} {diagnosis.action}</span></div> : <div className="v2-calm-state compact"><strong>No reliable bottleneck yet.</strong><p>Add more linked performance data before Atlas declares where the funnel is weak.</p></div>}
+      </section>
+
       <section className="studio-panel feature">
-        <div className="panel-head"><div><span className="section-label">Objective-aware ranking</span><h2>Content performance</h2></div></div>
+        <div className="panel-head"><div><span className="section-label">Objective-aware ranking</span><h2>Which creative actually did its job?</h2></div></div>
         {ranked.length ? (
           <table className="studio-table">
             <thead><tr><th>Content</th><th>Goal</th><th>Platform</th><th>Primary signal</th><th>Goal score</th></tr></thead>
@@ -96,7 +119,7 @@ export default async function AnalyticsPage() {
             </tr>)}</tbody>
           </table>
         ) : <EmptyState title="No ranked content yet" body="Link metric snapshots to content or campaign variants. Atlas will not invent a winner from missing data." />}
-        <p><small>Scores are goal-specific. A Streams post is rewarded for click and streaming intent; a Saves post is judged by save quality; a Reach post is judged by qualified distribution and retention signals.</small></p>
+        <p><small>Scores remain job-specific. Growth diagnosis above asks a different question: where the entire listener journey is leaking.</small></p>
       </section>
 
       <section className="studio-panel feature">
