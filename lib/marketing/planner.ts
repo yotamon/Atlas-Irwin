@@ -1,9 +1,14 @@
 import "server-only";
 
+import { requireStudioAdmin } from "@/lib/auth/studio";
+import { asSocialClient } from "@/lib/studio/social-db";
 import type { Release } from "@/types/database";
 import { generateStructured, marketingAiConfigured } from "./ai";
 import { OBJECTIVE_KPIS, type MarketingObjective } from "./domain";
-import type { CampaignSocialPlatform } from "./social-platforms";
+import {
+  plannerPlatformsFromConnections,
+  type CampaignSocialPlatform,
+} from "./social-platforms";
 
 export type CampaignPlanVariant = {
   label: string;
@@ -64,7 +69,7 @@ export type CampaignPlanningContext = {
   objective: MarketingObjective;
   brandContext: string[];
   approvedLearnings: string[];
-  connectedPlatforms: CampaignSocialPlatform[];
+  connectedPlatforms?: CampaignSocialPlatform[];
   performanceSummary: Array<{
     title: string;
     platform: string;
@@ -73,6 +78,10 @@ export type CampaignPlanningContext = {
     score: number;
     signal: string;
   }>;
+};
+
+type ResolvedCampaignPlanningContext = Omit<CampaignPlanningContext, "connectedPlatforms"> & {
+  connectedPlatforms: CampaignSocialPlatform[];
 };
 
 const OBJECTIVES = [
@@ -183,6 +192,29 @@ function nativeFormat(platform: CampaignSocialPlatform) {
   return "Short";
 }
 
+async function resolvePlanningContext(
+  context: CampaignPlanningContext,
+): Promise<ResolvedCampaignPlanningContext> {
+  if (context.connectedPlatforms !== undefined) {
+    return { ...context, connectedPlatforms: context.connectedPlatforms };
+  }
+
+  const { supabase, user } = await requireStudioAdmin();
+  const { data, error } = await asSocialClient(supabase)
+    .from("social_channel_accounts")
+    .select("platform,status")
+    .eq("owner_id", user.id)
+    .eq("status", "connected");
+  if (error) {
+    console.error("Unable to resolve connected campaign channels:", error.message);
+    return { ...context, connectedPlatforms: [] };
+  }
+  return {
+    ...context,
+    connectedPlatforms: plannerPlatformsFromConnections(data ?? []),
+  };
+}
+
 function normalizeCampaignPlan(
   plan: CampaignPlan,
   connectedPlatforms: CampaignSocialPlatform[],
@@ -232,7 +264,7 @@ function normalizeCampaignPlan(
   };
 }
 
-function fallbackPlan(context: CampaignPlanningContext): CampaignPlan {
+function fallbackPlan(context: ResolvedCampaignPlanningContext): CampaignPlan {
   const release = context.release;
   const title = release.title;
   const emotion = firstNonEmpty(release.core_emotion, "late-night connection");
@@ -335,7 +367,8 @@ function fallbackPlan(context: CampaignPlanningContext): CampaignPlan {
   }, context.connectedPlatforms);
 }
 
-export async function planCampaign(context: CampaignPlanningContext) {
+export async function planCampaign(inputContext: CampaignPlanningContext) {
+  const context = await resolvePlanningContext(inputContext);
   if (!context.connectedPlatforms.length || !marketingAiConfigured()) {
     return {
       plan: fallbackPlan(context),
