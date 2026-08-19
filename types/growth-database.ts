@@ -34,6 +34,7 @@ export type VaultTrack = {
   id: string;
   owner_id: string;
   linked_release_id: string | null;
+  media_asset_id: string | null;
   title: string;
   version: string | null;
   status: VaultTrackStatus;
