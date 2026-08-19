@@ -1,10 +1,24 @@
+/* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { MediaUploader } from "@/components/studio/media-uploader";
 import { saveContentV2 } from "@/app/studio/content-actions-v2";
+import {
+  approveGeneratedCreative,
+  approvePreparedCreativeGeneration,
+  discardPreparedCreativeGeneration,
+  prepareContentCreativeGeneration,
+  refreshCreativeGeneration,
+  rejectGeneratedCreative,
+} from "@/app/studio/marketing-creative-actions";
 import { Field, PageHeader, Status, Submit } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { loadCreativeReferenceContext } from "@/lib/marketing/creative-context";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { CONTENT_FORMATS, GOALS, PLATFORMS } from "@/lib/studio/constants";
+import { higgsfieldReadiness } from "@/lib/video-providers/higgsfield/client";
+import type { Json } from "@/types/database";
+import type { VideoDatabase } from "@/types/video-database";
 
 function shortDate(value: string | null | undefined) {
   if (!value) return "No date";
@@ -24,6 +38,20 @@ function berlinDateTimeLocal(value: string | null | undefined) {
   }).formatToParts(new Date(value));
   const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return `${map.year}-${map.month}-${map.day}T${map.hour}:${map.minute}`;
+}
+
+function objectValue(value: Json | unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" ? value : "";
+}
+
+function numberValue(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 export default async function ProductionPage({
@@ -51,25 +79,56 @@ export default async function ProductionPage({
   const scheduled = items.filter((item) => item.status === "Scheduled");
   const recentlyPublished = items.filter((item) => item.status === "Published").slice(0, 8);
 
-  const { data: providerSchedule, error: providerError } = editing
-    ? await marketing
-        .from("publication_jobs")
-        .select("id,platform,scheduled_at,external_url,external_post_id")
-        .eq("owner_id", user.id)
-        .eq("content_item_id", editing.id)
-        .eq("status", "provider_scheduled" as never)
-        .order("updated_at", { ascending: false })
-        .limit(1)
-        .maybeSingle()
-    : { data: null, error: null };
-  if (providerError) throw new Error(providerError.message);
+  const [providerScheduleResult, generationRunsResult, creativeContext] = editing
+    ? await Promise.all([
+        marketing
+          .from("publication_jobs")
+          .select("id,platform,scheduled_at,external_url,external_post_id")
+          .eq("owner_id", user.id)
+          .eq("content_item_id", editing.id)
+          .eq("status", "provider_scheduled" as never)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        marketing
+          .from("generation_runs")
+          .select("*")
+          .eq("owner_id", user.id)
+          .eq("purpose", `content_asset:${editing.id}`)
+          .order("created_at", { ascending: false })
+          .limit(8),
+        loadCreativeReferenceContext({
+          db: supabase as unknown as SupabaseClient<VideoDatabase>,
+          ownerId: user.id,
+          releaseId: editing.release_id,
+          contentItemId: editing.id,
+        }),
+      ])
+    : [{ data: null, error: null }, { data: [], error: null }, null] as const;
+  if (providerScheduleResult.error) throw new Error(providerScheduleResult.error.message);
+  if (generationRunsResult.error) throw new Error(generationRunsResult.error.message);
+  const providerSchedule = providerScheduleResult.data;
   const locked = Boolean(providerSchedule);
+  const generationRuns = generationRunsResult.data ?? [];
+  const latestGeneration = generationRuns[0] ?? null;
+  const generationOutput = objectValue(latestGeneration?.output);
+  const generationInput = objectValue(latestGeneration?.input_context);
+  const quote = objectValue(generationOutput.quote);
+  const quoteCredits = numberValue(quote.credits);
+  const reserveCredits = numberValue(quote.reserveCredits);
+  const routeReason = stringValue(generationOutput.routeReason);
+  const generationStage = stringValue(generationOutput.stage);
+  const generatedOutputKind = stringValue(generationInput.outputKind);
+  const providerReadiness = higgsfieldReadiness();
+  const modelReady = latestGeneration
+    ? providerReadiness.hasCredentials && (providerReadiness.inferredEndpointsEnabled || providerReadiness.configuredModels.includes(latestGeneration.model))
+    : providerReadiness.hasCredentials;
 
   return (
     <div className="studio-v2-page">
       <PageHeader
         title="Production"
-        description="Work on creative decisions. Atlas derives workflow state from the actual asset, copy, schedule and publication evidence."
+        description="Atlas can now make the creative itself. Every AI asset inherits the release artwork, Atlas Irwin brand references and approved visual language before it reaches you for review."
         action={<Link className="button" href="/studio/content">Advanced Content Lab</Link>}
       />
 
@@ -95,7 +154,7 @@ export default async function ProductionPage({
                 </Link>
               ))}
             </div>
-          ) : <div className="v2-calm-state compact"><strong>No production queue yet.</strong><p>Create one item or let a release workspace create the starter timeline.</p></div>}
+          ) : <div className="v2-calm-state compact"><strong>No production queue yet.</strong><p>Create one item or let a release campaign create the starter timeline.</p></div>}
         </section>
 
         <section className="v2-section v2-production-editor">
@@ -115,9 +174,110 @@ export default async function ProductionPage({
             </div>
           ) : null}
 
+          {editing && !locked && creativeContext ? (
+            <section className="studio-panel feature">
+              <div className="panel-head">
+                <div>
+                  <span className="section-label">Atlas Creative Engine</span>
+                  <h2>Generate cohesive media</h2>
+                  <p>Atlas resolves visual lineage before choosing a model. No paid request is made until you approve the prepared generation.</p>
+                </div>
+                <Status>{creativeContext.cohesionScore}/100 context cohesion</Status>
+              </div>
+
+              <div className="studio-smart-defaults">
+                <strong>{creativeContext.release.artworkUrl ? "Release artwork is locked as the primary anchor" : "Brand references are the primary anchor"}</strong>
+                <span>{creativeContext.referenceSummary}. New media is instructed to extend this world rather than invent a fresh AI aesthetic.</span>
+              </div>
+
+              {creativeContext.imageReferences.length ? (
+                <div className="media-grid" aria-label="AI creative image references">
+                  {creativeContext.imageReferences.map((reference) => (
+                    <article className="media-card" key={`${reference.assetId || reference.url}-${reference.role}`}>
+                      <div className="media-thumb"><img src={reference.url} alt="" /></div>
+                      <div className="media-card-body">
+                        <span className="section-label">{reference.source} · {reference.role.replaceAll("_", " ")}</span>
+                        <h3>{reference.title}</h3>
+                        <p>{reference.reason}</p>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : <div className="v2-calm-state compact"><strong>No reusable image reference found.</strong><p>Add Atlas Irwin reference media in Brand or attach artwork to this release before spending on generation.</p></div>}
+
+              {latestGeneration ? (
+                <div className="studio-smart-defaults">
+                  <strong>{latestGeneration.model} · {latestGeneration.status}</strong>
+                  <span>{routeReason || generationStage.replaceAll("_", " ")}{reserveCredits !== null ? ` · estimated maximum ${reserveCredits.toFixed(2)} credits` : quoteCredits !== null ? ` · estimated ${quoteCredits.toFixed(2)} credits` : ""}</span>
+                </div>
+              ) : null}
+
+              {latestGeneration?.status === "queued" && generationStage === "prepared" ? (
+                <div className="form-actions">
+                  <form action={approvePreparedCreativeGeneration}>
+                    <input type="hidden" name="generation_run_id" value={latestGeneration.id} />
+                    <button className="button primary" type="submit" disabled={!modelReady}>Approve cost and generate</button>
+                  </form>
+                  <form action={discardPreparedCreativeGeneration}>
+                    <input type="hidden" name="generation_run_id" value={latestGeneration.id} />
+                    <button className="button" type="submit">Discard prepared run</button>
+                  </form>
+                  {!modelReady ? <small>Higgsfield credentials or a verified endpoint mapping for this model are missing. Atlas will not guess a paid endpoint.</small> : null}
+                </div>
+              ) : null}
+
+              {latestGeneration?.status === "running" ? (
+                <div className="form-actions">
+                  <span>Generation is in progress. The Higgsfield webhook will attach the result automatically when it completes.</span>
+                  {latestGeneration.provider_request_id ? (
+                    <form action={refreshCreativeGeneration}>
+                      <input type="hidden" name="generation_run_id" value={latestGeneration.id} />
+                      <button className="button" type="submit">Check provider now</button>
+                    </form>
+                  ) : <small>Submission state is ambiguous, so Atlas will not retry and risk a duplicate paid generation.</small>}
+                </div>
+              ) : null}
+
+              {latestGeneration?.status === "failed" ? (
+                <div className="v2-provider-lock" role="status"><strong>Generation failed</strong><span>{latestGeneration.error || "The provider could not complete this creative."}</span></div>
+              ) : null}
+
+              {editing.asset_url && editing.source === "ai" ? (
+                <div className="media-card">
+                  <div className="media-thumb">
+                    {generatedOutputKind === "video" ? <video src={editing.asset_url} controls playsInline preload="metadata" /> : <img src={editing.asset_url} alt="Generated Atlas Irwin campaign creative" />}
+                  </div>
+                  <div className="media-card-body">
+                    <span className="section-label">AI creative review</span>
+                    <h3>{editing.approval_status === "approved" ? "Approved creative" : editing.approval_status === "rejected" ? "Rejected creative" : "Review before publishing"}</h3>
+                    <p>This asset is stored in the Media Library with its release artwork, brand references, model and generation lineage.</p>
+                    {editing.approval_status === "pending" ? (
+                      <div className="form-actions">
+                        <form action={approveGeneratedCreative}><input type="hidden" name="content_item_id" value={editing.id} /><button className="button primary" type="submit">Approve creative</button></form>
+                        <form action={rejectGeneratedCreative}><input type="hidden" name="content_item_id" value={editing.id} /><button className="button" type="submit">Reject</button></form>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+
+              {(!latestGeneration || latestGeneration.status === "completed" || latestGeneration.status === "failed") ? (
+                <form action={prepareContentCreativeGeneration} className="studio-form">
+                  <input type="hidden" name="content_item_id" value={editing.id} />
+                  <div className="form-grid">
+                    <Field label="Quality"><select name="quality" defaultValue="balanced"><option value="economy">Economy · cheap iteration</option><option value="balanced">Balanced · recommended</option><option value="premium">Premium · strongest available route</option></select></Field>
+                    <Field label="Media type"><select name="media_kind" defaultValue="auto"><option value="auto">Auto from format</option><option value="image">Image</option><option value="video">Video</option></select></Field>
+                  </div>
+                  <div className="form-actions"><button className="button primary" type="submit">{editing.asset_url && editing.source === "ai" ? "Prepare another option" : "Prepare AI creative"}</button></div>
+                  <small>Preparing is free. Atlas only calculates the creative package, references, model choice and credit estimate. The paid provider call requires a second explicit approval.</small>
+                </form>
+              ) : null}
+            </section>
+          ) : null}
+
           {editing && !locked ? (
             <div className="v2-contextual-upload">
-              <div><strong>{editing.asset_url ? "Replace or add creative media" : "Add the creative asset"}</strong><small>Uploading here attaches the asset to this content item and updates its workflow state automatically.</small></div>
+              <div><strong>{editing.asset_url ? "Replace or add creative media manually" : "Or upload the creative asset yourself"}</strong><small>Manual media remains a fallback. Uploading here attaches it to this content item and updates workflow state automatically.</small></div>
               <MediaUploader contentItemId={editing.id} releaseId={editing.release_id ?? undefined} defaultRole="social_image" />
             </div>
           ) : null}
@@ -142,8 +302,8 @@ export default async function ProductionPage({
                 <Field label="CTA" wide><input name="cta" defaultValue={editing?.cta ?? ""} /></Field>
               </div>
 
-              {!editing ? <div className="studio-smart-defaults"><strong>Save once to attach media</strong><span>Atlas needs the content record first. After creation the editor becomes a contextual upload target.</span></div> : null}
-              <div className="studio-smart-defaults" role="note"><strong>Status is automatic</strong><span>Draft, In Production, Ready, Scheduled and Published follow the work itself. Uploading an asset can move the item forward without a manual card move.</span></div>
+              {!editing ? <div className="studio-smart-defaults"><strong>Save once to enable generation or upload</strong><span>Atlas needs the content record first. After creation the editor becomes both an AI generation target and a contextual upload target.</span></div> : null}
+              <div className="studio-smart-defaults" role="note"><strong>Status is automatic</strong><span>Draft, In Production, Ready, Scheduled and Published follow the work itself. AI-generated media stays approval-gated even after the asset arrives.</span></div>
 
               <details className="studio-advanced-details">
                 <summary><span>Creative details</span><small>Prompts, production notes and external asset overrides when you need precise control.</small></summary>

@@ -1,0 +1,129 @@
+import "server-only";
+
+import { createMarketingServiceClient } from "@/lib/marketing/db";
+import { createServiceClient } from "@/lib/supabase/service";
+import type { ProviderStatus } from "@/lib/video-providers/types";
+import type { Json } from "@/types/database";
+import type { CreativeReferenceContext } from "./creative-context";
+import { storeRemoteMarketingAsset } from "./generated-assets";
+
+function record(value: Json | unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" ? value : "";
+}
+
+function json(value: unknown) {
+  return value as Json;
+}
+
+export async function applyMarketingCreativeProviderStatus(input: {
+  runId?: string;
+  providerRequestId?: string;
+  status: ProviderStatus;
+}) {
+  const marketing = createMarketingServiceClient();
+  let query = marketing.from("generation_runs").select("*").eq("provider", "higgsfield");
+  if (input.runId) query = query.eq("id", input.runId);
+  else if (input.providerRequestId) query = query.eq("provider_request_id", input.providerRequestId);
+  else throw new Error("A generation run id or provider request id is required.");
+  const { data: run, error: runError } = await query.limit(1).maybeSingle();
+  if (runError) throw new Error(runError.message);
+  if (!run) return { ignored: true as const, reason: "unknown_generation" };
+  if (!run.purpose.startsWith("content_asset:")) return { ignored: true as const, reason: "not_marketing_creative" };
+  if (run.status === "completed") return { completed: true as const, duplicate: true as const, output: run.output };
+
+  const inputContext = record(run.input_context);
+  const output = record(run.output);
+  const providerRequestId = input.status.requestId || run.provider_request_id;
+  if (input.status.status === "queued" || input.status.status === "in_progress") {
+    const { error } = await marketing.from("generation_runs").update({
+      status: "running",
+      provider_request_id: providerRequestId,
+      output: json({ ...output, stage: "generating", providerStatus: input.status.status, providerRaw: input.status.raw }),
+      error: null,
+    }).eq("id", run.id);
+    if (error) throw new Error(error.message);
+    return { completed: false as const, status: input.status.status };
+  }
+
+  if (input.status.status === "failed" || input.status.status === "nsfw") {
+    const message = input.status.status === "nsfw"
+      ? "The provider rejected this generation during safety review."
+      : "The provider reported that the creative generation failed.";
+    const { error } = await marketing.from("generation_runs").update({
+      status: "failed",
+      provider_request_id: providerRequestId,
+      output: json({ ...output, stage: "failed", providerStatus: input.status.status, providerRaw: input.status.raw }),
+      error: message,
+    }).eq("id", run.id);
+    if (error) throw new Error(error.message);
+    return { completed: false as const, status: input.status.status };
+  }
+
+  if (!input.status.resultUrl) throw new Error("Higgsfield reported completion without a result URL.");
+  const contentItemId = stringValue(inputContext.contentItemId);
+  const outputKind = stringValue(inputContext.outputKind);
+  const assetType = stringValue(inputContext.assetType);
+  const storedContext = inputContext.referenceContext;
+  if (!contentItemId || !["image", "video"].includes(outputKind) || !["social_image", "content_video"].includes(assetType)) {
+    throw new Error("Stored marketing generation context is incomplete.");
+  }
+  if (!storedContext || typeof storedContext !== "object" || Array.isArray(storedContext)) {
+    throw new Error("Stored creative reference context is missing.");
+  }
+
+  const db = createServiceClient();
+  const stored = await storeRemoteMarketingAsset({
+    db,
+    ownerId: run.owner_id,
+    generationRunId: run.id,
+    campaignId: run.campaign_id,
+    releaseId: run.release_id,
+    contentItemId,
+    provider: run.provider,
+    model: run.model,
+    remoteUrl: input.status.resultUrl,
+    outputKind: outputKind as "image" | "video",
+    assetType: assetType as "social_image" | "content_video",
+    context: storedContext as unknown as CreativeReferenceContext,
+  });
+
+  const completedOutput = {
+    ...output,
+    stage: "creative_review",
+    providerStatus: "completed",
+    providerRaw: input.status.raw,
+    resultUrl: stored.asset.public_url,
+    mediaAssetId: stored.asset.id,
+    contentStatus: stored.status,
+    approvalRequired: true,
+  };
+  const { error: updateError } = await marketing.from("generation_runs").update({
+    status: "completed",
+    provider_request_id: providerRequestId,
+    output: json(completedOutput),
+    error: null,
+  }).eq("id", run.id);
+  if (updateError) throw new Error(updateError.message);
+  const { error: eventError } = await marketing.from("marketing_events").insert({
+    owner_id: run.owner_id,
+    campaign_id: run.campaign_id,
+    event_type: "content.ai_asset_ready_for_review",
+    entity_type: "content_item",
+    entity_id: contentItemId,
+    payload: json({
+      generationRunId: run.id,
+      mediaAssetId: stored.asset.id,
+      provider: run.provider,
+      model: run.model,
+      cohesionScore: (storedContext as unknown as CreativeReferenceContext).cohesionScore,
+    }),
+  });
+  if (eventError) throw new Error(eventError.message);
+  return { completed: true as const, mediaAssetId: stored.asset.id, assetUrl: stored.asset.public_url };
+}
