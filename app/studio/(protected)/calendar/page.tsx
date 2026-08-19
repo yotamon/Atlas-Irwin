@@ -1,51 +1,94 @@
+import Link from "next/link";
 import { EmptyState, PageHeader, Status } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+
+function startOfDay(date: Date) {
+  const copy = new Date(date);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
+}
+
+function startOfWeek(date: Date) {
+  const copy = startOfDay(date);
+  const day = copy.getDay();
+  const offset = day === 0 ? -6 : 1 - day;
+  copy.setDate(copy.getDate() + offset);
+  return copy;
+}
+
+function addDays(date: Date, days: number) {
+  const copy = new Date(date);
+  copy.setDate(copy.getDate() + days);
+  return copy;
+}
+
+function sameDay(value: string, day: Date) {
+  const date = new Date(value);
+  return (
+    date.getFullYear() === day.getFullYear() &&
+    date.getMonth() === day.getMonth() &&
+    date.getDate() === day.getDate()
+  );
+}
+
 export default async function CalendarPage({
   searchParams,
 }: {
   searchParams: Promise<{ view?: string; month?: string }>;
 }) {
   const params = await searchParams;
-  const { supabase } = await requireStudioAdmin();
-  const start = new Date(params.month ? `${params.month}-01` : new Date());
-  start.setDate(1);
-  const end = new Date(start);
-  end.setMonth(end.getMonth() + 1);
+  const view = params.view === "week" || params.view === "list" ? params.view : "month";
+  const { supabase, user } = await requireStudioAdmin();
+  const anchor = params.month ? new Date(`${params.month}-01T12:00:00`) : new Date();
+
+  let start: Date;
+  let end: Date;
+  let days: Date[] = [];
+  if (view === "week") {
+    start = startOfWeek(anchor);
+    end = addDays(start, 7);
+    days = Array.from({ length: 7 }, (_, index) => addDays(start, index));
+  } else if (view === "list") {
+    start = startOfDay(new Date());
+    end = addDays(start, 30);
+  } else {
+    start = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+    end = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 1);
+    const count = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0).getDate();
+    days = Array.from({ length: count }, (_, index) => new Date(anchor.getFullYear(), anchor.getMonth(), index + 1));
+  }
+
   const { data } = await supabase
     .from("content_items")
     .select("*")
+    .eq("owner_id", user.id)
     .gte("scheduled_at", start.toISOString())
     .lt("scheduled_at", end.toISOString())
     .order("scheduled_at");
-  const days = Array.from(
-    {
-      length: new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate(),
-    },
-    (_, i) => i + 1,
-  );
+
   return (
-    <>
+    <div className="studio-v2-page">
       <PageHeader
-        title="Publishing calendar"
-        description="A manual-first schedule. Nothing is auto-published."
+        title="Timeline"
+        description="Release-relative schedule. Atlas moves unlocked work when a release date changes; external publishing still follows approval rules."
         action={
-          <div className="actions">
-            <a className="button primary" href="/studio/content#new">
-              Create content
-            </a>
-          </div>
+          <Link className="button primary" href="/studio/create">
+            Create
+          </Link>
         }
       />
+
       <div className="studio-tabs">
-        <a href="?view=month">Month</a>
-        <a href="?view=week">Week</a>
-        <a href="?view=list">Upcoming</a>
+        <Link className={view === "month" ? "active" : ""} href="?view=month">Month</Link>
+        <Link className={view === "week" ? "active" : ""} href="?view=week">Week</Link>
+        <Link className={view === "list" ? "active" : ""} href="?view=list">Next 30 days</Link>
       </div>
-      {params.view === "list" ? (
-        <div>
+
+      {view === "list" ? (
+        <div className="v2-section v2-compact-section">
           {data?.length ? (
             data.map((item) => (
-              <div className="timeline-row" key={item.id}>
+              <Link className="timeline-row" href={`/studio/content?edit=${item.id}`} key={item.id}>
                 <span>
                   {item.title}
                   <br />
@@ -55,59 +98,41 @@ export default async function CalendarPage({
                   <Status>{item.status}</Status>{" "}
                   {new Date(item.scheduled_at!).toLocaleString()}
                 </span>
-              </div>
+              </Link>
             ))
           ) : (
             <EmptyState
-              title="Open calendar"
-              body="Date content items in the Content Lab or generate a release schedule."
+              title="Nothing scheduled"
+              body="Atlas will place release-relative content here as release plans are created."
             />
           )}
         </div>
       ) : (
-        <div className="calendar-grid">
+        <div className={`calendar-grid ${view === "week" ? "v2-week-grid" : ""}`}>
           {days.map((day) => (
-            <div className="calendar-day" key={day}>
-              <span>{day}</span>
+            <div className="calendar-day" key={day.toISOString()}>
+              <span>
+                {view === "week"
+                  ? new Intl.DateTimeFormat("en", { weekday: "short", month: "short", day: "numeric" }).format(day)
+                  : day.getDate()}
+              </span>
               {data
-                ?.filter(
-                  (item) => new Date(item.scheduled_at!).getDate() === day,
-                )
+                ?.filter((item) => item.scheduled_at && sameDay(item.scheduled_at, day))
                 .map((item) => (
-                  <a
+                  <Link
                     className="calendar-event"
-                    href={`/studio/content?release=${item.release_id ?? ""}`}
+                    href={`/studio/content?edit=${item.id}`}
                     key={item.id}
                   >
                     {item.title}
                     <br />
                     {item.platform}
-                  </a>
+                  </Link>
                 ))}
             </div>
           ))}
         </div>
       )}
-      <section className="studio-panel feature">
-        <div className="panel-head">
-          <h2>Release schedule framework</h2>
-        </div>
-        <div className="identity-grid">
-          {[
-            ["−14 days", "Teaser and mood content"],
-            ["−7 days", "Hook-testing content"],
-            ["Release week", "Hero content and direct outreach"],
-            ["+1 week", "Emotional context, lyrics, alternate angles"],
-            ["+2 weeks", "DJ and community content"],
-            ["+1 month", "Alternate edit, long-tail content, recap"],
-          ].map(([date, copy]) => (
-            <article key={date}>
-              <h3>{date}</h3>
-              <p>{copy}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-    </>
+    </div>
   );
 }
