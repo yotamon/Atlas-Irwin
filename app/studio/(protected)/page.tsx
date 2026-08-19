@@ -2,6 +2,8 @@ import Link from "next/link";
 import { PageHeader } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMarketingClient } from "@/lib/marketing/db";
+import { asGrowthClient } from "@/lib/studio/growth-db";
+import { buildGrowthFunnel, diagnoseGrowthFunnel, rankVaultTracks } from "@/lib/studio/growth";
 
 function shortDate(value: string | null | undefined) {
   if (!value) return "No date";
@@ -24,6 +26,7 @@ function dateDistance(value: string | null | undefined) {
 export default async function TodayPage() {
   const { supabase, user } = await requireStudioAdmin();
   const marketing = asMarketingClient(supabase);
+  const growth = asGrowthClient(supabase);
   const now = new Date();
   const sevenDays = new Date(now);
   sevenDays.setDate(sevenDays.getDate() + 7);
@@ -40,6 +43,9 @@ export default async function TodayPage() {
     learningsResult,
     followupsResult,
     outreachDraftsResult,
+    opportunityResult,
+    vaultResult,
+    metricsResult,
   ] = await Promise.all([
     supabase.from("releases").select("id,title,release_date,artwork_url,cover_alt,status,active_release").eq("owner_id", user.id).order("updated_at", { ascending: false }),
     supabase.from("tasks").select("id,title,due_at,priority,status").eq("owner_id", user.id).neq("status", "Done").order("due_at", { ascending: true }).limit(20),
@@ -52,9 +58,12 @@ export default async function TodayPage() {
     marketing.from("marketing_learnings").select("id,finding,status,confidence,created_at").eq("owner_id", user.id).in("status", ["proposed", "approved"]).order("created_at", { ascending: false }).limit(20),
     supabase.from("outreach_messages").select("id,contact_id,channel,follow_up_at").eq("owner_id", user.id).not("follow_up_at", "is", null).lte("follow_up_at", sevenDays.toISOString()).order("follow_up_at", { ascending: true }).limit(12),
     marketing.from("outreach_messages").select("id").eq("owner_id", user.id).is("sent_at", null).eq("response_status", "Draft"),
+    growth.from("growth_opportunities").select("*").eq("owner_id", user.id).in("status", ["new","accepted"]).order("priority", { ascending: false }).limit(12),
+    growth.from("track_vault").select("*").eq("owner_id", user.id).neq("status", "archived"),
+    supabase.from("metric_snapshots").select("*").eq("owner_id", user.id),
   ]);
 
-  const firstError = [releasesResult,tasksResult,soundCloudResult,spotifyResult,campaignsResult,automationResult,publicationResult,contentResult,learningsResult,followupsResult,outreachDraftsResult].find((result) => result.error)?.error;
+  const firstError = [releasesResult,tasksResult,soundCloudResult,spotifyResult,campaignsResult,automationResult,publicationResult,contentResult,learningsResult,followupsResult,outreachDraftsResult,opportunityResult,vaultResult,metricsResult].find((result) => result.error)?.error;
   if (firstError) throw new Error(firstError.message);
 
   const followups = followupsResult.data ?? [];
@@ -70,8 +79,15 @@ export default async function TodayPage() {
   const automation = automationResult.data ?? [];
   const publications = publicationResult.data ?? [];
   const learnings = learningsResult.data ?? [];
+  const opportunities = opportunityResult.data ?? [];
   const outreachDraftCount = outreachDraftsResult.data?.length ?? 0;
   const activeRelease = releases.find((release) => release.active_release) ?? releases.find((release) => release.release_date && release.release_date >= now.toISOString().slice(0, 10)) ?? releases[0] ?? null;
+
+  const funnel = buildGrowthFunnel(metricsResult.data ?? []);
+  const diagnosis = diagnoseGrowthFunnel(funnel);
+  const topVaultCandidate = rankVaultTracks(vaultResult.data ?? []).find((item) => item.eligible && !item.track.linked_release_id) ?? null;
+  const biggestRisk = opportunities.find((item) => item.kind === "release_risk" && item.status === "new") ?? null;
+  const biggestOpportunity = opportunities.find((item) => item.kind !== "release_risk" && item.status === "new") ?? null;
 
   const workflowApprovalCount = automation.filter((job) => job.status === "awaiting_approval" || job.approval_status === "pending").length + publications.filter((job) => job.status === "awaiting_approval" || job.approval_status === "pending").length;
   const manualReady = publications.filter((job) => String(job.status) === "manual_ready");
@@ -99,7 +115,21 @@ export default async function TodayPage() {
 
   return (
     <div className="studio-v2-page">
-      <PageHeader title="Today" description="Only the decisions that need you. Atlas handles free, reversible internal work automatically." action={<Link className="button primary" href="/studio/releases/new">New release</Link>} />
+      <PageHeader title="Today" description="The highest-leverage decisions for growing Atlas Irwin. Routine internal work stays automated." action={<Link className="button primary" href="/studio/growth">Open Growth OS</Link>} />
+
+      <section className="growth-command-grid today-growth-pulse">
+        <article className="v2-section">
+          <div className="v2-section-heading"><div><span className="section-label">Biggest risk</span><h2>{biggestRisk ? biggestRisk.title : "No launch risk detected"}</h2></div></div>
+          {biggestRisk ? <><p className="v2-muted-copy">{biggestRisk.rationale}</p><Link className="button" href="/studio/growth#opportunities">Resolve in Growth OS</Link></> : <div className="v2-calm-state compact"><strong>Current releases have no evidence-backed red alert.</strong><p>Atlas only escalates a risk when timing or readiness data supports it.</p></div>}
+        </article>
+        <article className="v2-section">
+          <div className="v2-section-heading"><div><span className="section-label">Biggest opportunity</span><h2>{biggestOpportunity ? biggestOpportunity.title : topVaultCandidate ? `${topVaultCandidate.track.title} is your strongest next candidate` : "Waiting for stronger signal"}</h2></div></div>
+          {biggestOpportunity ? <><p className="v2-muted-copy">{biggestOpportunity.rationale}</p><Link className="button primary" href="/studio/growth#opportunities">Review opportunity</Link></> : topVaultCandidate ? <><p className="v2-muted-copy">Portfolio score {Math.round(topVaultCandidate.score)}/100 · {topVaultCandidate.reasons.join(" · ")}.</p><Link className="button primary" href="/studio/growth#vault">Review candidate</Link></> : <div className="v2-calm-state compact"><strong>Add the unreleased backlog.</strong><p>The manager becomes useful when it can see the music waiting behind the current release.</p></div>}
+        </article>
+      </section>
+
+      {diagnosis ? <section className="v2-section today-growth-diagnosis"><div className="v2-section-heading"><div><span className="section-label">What matters most today</span><h2>{diagnosis.label}</h2></div><Link href="/studio/growth#funnel">Full funnel</Link></div><p className="v2-muted-copy">{diagnosis.diagnosis}</p><div className="growth-action-note"><strong>Recommended move</strong><span>{diagnosis.action}</span></div></section> : null}
+
       <section className="v2-hero-grid">
         <article className="v2-focus-card">
           <div className="v2-section-heading"><div><span className="section-label">Needs you</span><h2>{needsYou.length ? `${needsYou.length} thing${needsYou.length === 1 ? "" : "s"}` : "You are clear"}</h2></div><Link href="/studio/inbox">Review all</Link></div>
@@ -107,7 +137,7 @@ export default async function TodayPage() {
         </article>
         <article className="v2-release-card">
           <span className="section-label">Next release</span>
-          {activeRelease ? <><div className="v2-release-artwork">{activeRelease.artwork_url ? <img src={activeRelease.artwork_url} alt={activeRelease.cover_alt || `${activeRelease.title} artwork`} /> : <div aria-hidden>{activeRelease.title.slice(0, 1).toUpperCase()}</div>}</div><h2>{activeRelease.title}</h2><p>{activeRelease.release_date ? `${shortDate(activeRelease.release_date)} · ${dateDistance(activeRelease.release_date)}` : "Release date not set"}</p><div className="v2-release-actions"><Link className="button primary" href={`/studio/releases/${activeRelease.id}`}>Open release</Link><Link className="button" href="/studio/calendar">Timeline</Link></div></> : <div className="v2-calm-state"><strong>No release in motion</strong><p>Create one workspace and Atlas will create the free starter plan around it.</p><Link className="button primary" href="/studio/releases/new">Create release</Link></div>}
+          {activeRelease ? <><div className="v2-release-artwork">{activeRelease.artwork_url ? <img src={activeRelease.artwork_url} alt={activeRelease.cover_alt || `${activeRelease.title} artwork`} /> : <div aria-hidden>{activeRelease.title.slice(0, 1).toUpperCase()}</div>}</div><h2>{activeRelease.title}</h2><p>{activeRelease.release_date ? `${shortDate(activeRelease.release_date)} · ${dateDistance(activeRelease.release_date)}` : "Release date not set"}</p><div className="v2-release-actions"><Link className="button primary" href={`/studio/releases/${activeRelease.id}`}>Open release</Link><Link className="button" href="/studio/growth#queue">Portfolio queue</Link></div></> : <div className="v2-calm-state"><strong>No release in motion</strong><p>Choose from the Vault instead of creating a release blindly.</p><Link className="button primary" href="/studio/growth#vault">Choose next track</Link></div>}
         </article>
       </section>
 
@@ -117,14 +147,14 @@ export default async function TodayPage() {
           <article><strong>{workingJobs.length}</strong><span>automation jobs</span><small>Queued or running</small></article>
           <article><strong>{scheduledPublications.length}</strong><span>publication jobs</span><small>{providerScheduled.length ? `${providerScheduled.length} scheduled at providers` : "Approved, scheduled or publishing"}</small></article>
           <article><strong>{upcomingContent.length}</strong><span>content moments</span><small>Next 7 days</small></article>
-          <article><strong>{campaignsResult.data?.length ?? 0}</strong><span>release plans</span><small>Draft, planned or active</small></article>
+          <article><strong>{funnel.fanSignalScore.toLocaleString()}</strong><span>active fan signal</span><small>Durable audience proxy</small></article>
         </div>
       </section>
 
       <section className="v2-two-column">
         <article className="v2-section v2-compact-section">
           <div className="v2-section-heading"><div><span className="section-label">Next 7 days</span><h2>What is coming</h2></div><Link href="/studio/calendar">Full timeline</Link></div>
-          {upcomingContent.length ? <div className="v2-simple-list">{upcomingContent.slice(0, 6).map((item) => <Link href={`/studio/production?edit=${item.id}`} key={item.id}><span>{shortDate(item.scheduled_at)}</span><strong>{item.title}</strong><small>{item.platform}</small></Link>)}</div> : <div className="v2-calm-state compact"><strong>No scheduled content this week.</strong><p>The starter plan and campaign planning will populate this automatically.</p></div>}
+          {upcomingContent.length ? <div className="v2-simple-list">{upcomingContent.slice(0, 6).map((item) => <Link href={`/studio/production?edit=${item.id}`} key={item.id}><span>{shortDate(item.scheduled_at)}</span><strong>{item.title}</strong><small>{item.platform}</small></Link>)}</div> : <div className="v2-calm-state compact"><strong>No scheduled content this week.</strong><p>The release playbook and campaign planning will populate this when useful.</p></div>}
         </article>
         <article className="v2-section v2-compact-section">
           <div className="v2-section-heading"><div><span className="section-label">What worked</span><h2>Reusable learnings</h2></div><Link href="/studio/learn">Learn</Link></div>
