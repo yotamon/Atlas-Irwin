@@ -1,357 +1,136 @@
 import Link from "next/link";
-import { publishRelease } from "@/app/studio/catalog-actions";
-import { EmptyState, PageHeader, Status } from "@/components/studio/ui";
-import { HomepageCatalogPreview } from "@/components/studio/homepage-catalog-preview";
+import { PageHeader } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { getPublicReleases } from "@/lib/public-catalog";
-import { publishStateLabel } from "@/lib/studio/catalog-labels";
-import { calculateReleaseReadiness } from "@/lib/studio/readiness";
-import type {
-  ContentItem,
-  HomepagePlacement,
-  MediaAsset,
-  MediaLink,
-  MetricSnapshot,
-  Release,
-  ReleaseExternalLink,
-  Track,
-} from "@/types/database";
+import { asMarketingClient } from "@/lib/marketing/db";
 
-const METRICS = [
-  ["streams", "Plays"],
-  ["saves", "Saves"],
-  ["follows", "Follows"],
-  ["profile_visits", "Profile visits"],
-  ["link_clicks", "Link clicks"],
-  ["views", "Content views"],
-] as const;
-
-function shortDate(value: string | null) {
-  if (!value) return "Date not set";
-  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(
-    new Date(`${value}T12:00:00`),
+function shortDate(value: string | null | undefined) {
+  if (!value) return "No date";
+  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", timeZone: "Europe/Berlin" }).format(
+    new Date(value.length === 10 ? `${value}T12:00:00+02:00` : value),
   );
 }
 
-function metricTotal(rows: MetricSnapshot[], key: (typeof METRICS)[number][0]) {
-  return rows.reduce((sum, row) => sum + row[key], 0);
+function dateDistance(value: string | null | undefined) {
+  if (!value) return "Date not set";
+  const target = new Date(value.length === 10 ? `${value}T12:00:00` : value).getTime();
+  const days = Math.ceil((target - Date.now()) / 86_400_000);
+  if (days === 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  if (days > 1) return `In ${days} days`;
+  const ago = Math.abs(days);
+  return `${ago} day${ago === 1 ? "" : "s"} ago`;
 }
 
-function deltaLabel(current: number, previous: number) {
-  if (!previous) return current ? "New this week" : "No change";
-  const delta = Math.round(((current - previous) / previous) * 100);
-  return `${delta > 0 ? "+" : ""}${delta}% vs last week`;
-}
-
-function percent(numerator: number, denominator: number) {
-  if (!denominator) return "—";
-  return `${((numerator / denominator) * 100).toFixed(1)}%`;
-}
-
-function relativeSync(value: string | null | undefined) {
-  if (!value) return "Not synced yet";
-  const minutes = Math.max(0, Math.round((Date.now() - Date.parse(value)) / 60000));
-  if (minutes < 2) return "Synced just now";
-  if (minutes < 60) return `Synced ${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `Synced ${hours}h ago`;
-  return `Synced ${Math.round(hours / 24)}d ago`;
-}
-
-export default async function CommandCenter() {
+export default async function TodayPage() {
   const { supabase, user } = await requireStudioAdmin();
+  const marketing = asMarketingClient(supabase);
   const now = new Date();
   const sevenDays = new Date(now);
-  sevenDays.setDate(now.getDate() + 7);
-  const previousWeek = new Date(now);
-  previousWeek.setDate(now.getDate() - 14);
+  sevenDays.setDate(sevenDays.getDate() + 7);
 
   const [
     releasesResult,
-    tracksResult,
-    placementsResult,
-    mediaAssetsResult,
-    mediaLinksResult,
-    externalLinksResult,
+    tasksResult,
     soundCloudResult,
     spotifyResult,
+    campaignsResult,
+    automationResult,
+    publicationResult,
     contentResult,
+    learningsResult,
     followupsResult,
-    tasksResult,
-    metricsResult,
-    soundCloudAccountResult,
-    spotifyAccountResult,
+    outreachDraftsResult,
   ] = await Promise.all([
-    supabase.from("releases").select("*").eq("owner_id", user.id).order("updated_at", { ascending: false }),
-    supabase.from("tracks").select("*").eq("owner_id", user.id).order("display_order"),
-    supabase.from("homepage_placements").select("*").eq("owner_id", user.id).order("display_order"),
-    supabase.from("media_assets").select("*").eq("owner_id", user.id),
-    supabase.from("media_links").select("*").eq("owner_id", user.id),
-    supabase.from("release_external_links").select("*").eq("owner_id", user.id),
-    supabase.from("soundcloud_tracks").select("*").eq("owner_id", user.id).eq("reconcile_status", "pending"),
-    supabase.from("spotify_tracks").select("*").eq("owner_id", user.id).eq("reconcile_status", "pending"),
-    supabase.from("content_items").select("*").eq("owner_id", user.id).order("scheduled_at", { ascending: true }),
-    supabase.from("outreach_messages").select("*,outreach_contacts(name)").eq("owner_id", user.id).order("follow_up_at"),
-    supabase.from("tasks").select("*").eq("owner_id", user.id).neq("status", "Done").order("due_at"),
-    supabase.from("metric_snapshots").select("*").eq("owner_id", user.id).gte("date", previousWeek.toISOString().slice(0, 10)).order("date"),
-    supabase.from("soundcloud_accounts").select("last_synced_at").eq("owner_id", user.id).maybeSingle(),
-    supabase.from("spotify_accounts").select("last_synced_at").eq("owner_id", user.id).maybeSingle(),
+    supabase.from("releases").select("id,title,release_date,artwork_url,cover_alt,status,active_release").eq("owner_id", user.id).order("updated_at", { ascending: false }),
+    supabase.from("tasks").select("id,title,due_at,priority,status").eq("owner_id", user.id).neq("status", "Done").order("due_at", { ascending: true }).limit(20),
+    supabase.from("soundcloud_tracks").select("id,linked_track_id").eq("owner_id", user.id).eq("reconcile_status", "pending"),
+    supabase.from("spotify_tracks").select("id,linked_track_id").eq("owner_id", user.id).eq("reconcile_status", "pending"),
+    marketing.from("campaigns").select("id,release_id,name,status").eq("owner_id", user.id).in("status", ["draft", "planned", "active"]),
+    marketing.from("automation_jobs").select("id,campaign_id,job_type,status,approval_status,run_after").eq("owner_id", user.id).not("status", "in", '("completed","failed","cancelled")').order("run_after", { ascending: true }).limit(40),
+    marketing.from("publication_jobs").select("id,campaign_id,content_item_id,platform,status,approval_status,scheduled_at").eq("owner_id", user.id).not("status", "in", '("published","failed","cancelled")').order("scheduled_at", { ascending: true }).limit(40),
+    marketing.from("content_items").select("id,release_id,campaign_id,title,platform,status,asset_url,scheduled_at").eq("owner_id", user.id).not("status", "eq", "Archived").order("scheduled_at", { ascending: true }).limit(100),
+    marketing.from("marketing_learnings").select("id,finding,status,confidence,created_at").eq("owner_id", user.id).in("status", ["proposed", "approved"]).order("created_at", { ascending: false }).limit(20),
+    supabase.from("outreach_messages").select("id,contact_id,channel,follow_up_at").eq("owner_id", user.id).not("follow_up_at", "is", null).lte("follow_up_at", sevenDays.toISOString()).order("follow_up_at", { ascending: true }).limit(12),
+    marketing.from("outreach_messages").select("id").eq("owner_id", user.id).is("sent_at", null).eq("response_status", "Draft"),
   ]);
 
-  const releases = (releasesResult.data ?? []) as Release[];
-  const tracks = (tracksResult.data ?? []) as Track[];
-  const placements = (placementsResult.data ?? []) as HomepagePlacement[];
-  const mediaAssets = (mediaAssetsResult.data ?? []) as MediaAsset[];
-  const mediaLinks = (mediaLinksResult.data ?? []) as MediaLink[];
-  const externalLinks = (externalLinksResult.data ?? []) as ReleaseExternalLink[];
-  const content = (contentResult.data ?? []) as ContentItem[];
-  const metrics = (metricsResult.data ?? []) as MetricSnapshot[];
-  const active = releases.find((release) => release.active_release) ?? releases[0] ?? null;
-  const activeTracks = active ? tracks.filter((track) => track.release_id === active.id) : [];
-  const activePlacement = active ? placements.find((placement) => placement.release_id === active.id) ?? null : null;
-  const activeLinks = active ? mediaLinks.filter((link) => link.release_id === active.id) : [];
-  const activeAssetIds = new Set(activeLinks.map((link) => link.media_asset_id));
-  const activeAssets = mediaAssets.filter((asset) => activeAssetIds.has(asset.id));
-  const activeContent = active ? content.filter((item) => item.release_id === active.id) : [];
-  const publicReleases = await getPublicReleases();
-  const unmatched = [...(soundCloudResult.data ?? []), ...(spotifyResult.data ?? [])].filter(
-    (item) => !item.linked_track_id,
-  );
-  const readiness = active
-    ? calculateReleaseReadiness({
-        release: active,
-        tracks: activeTracks,
-        placement: activePlacement,
-        mediaAssets: activeAssets,
-        mediaLinks: activeLinks,
-        externalLinks: externalLinks.filter((link) => link.release_id === active.id),
-        content: activeContent,
-        unresolvedConflicts: unmatched.length,
-      })
-    : null;
+  const firstError = [releasesResult,tasksResult,soundCloudResult,spotifyResult,campaignsResult,automationResult,publicationResult,contentResult,learningsResult,followupsResult,outreachDraftsResult].find((result) => result.error)?.error;
+  if (firstError) throw new Error(firstError.message);
 
-  const attention = [
-    ...(unmatched.length
-      ? [{ title: `${unmatched.length} unmatched external track${unmatched.length === 1 ? "" : "s"}`, detail: "SoundCloud or Spotify records need an explicit catalog decision.", href: "/studio/data-health?category=unmatched", level: "critical" }]
-      : []),
-    ...releases
-      .filter((release) => release.publish_state === "live" && !release.artwork_url)
-      .map((release) => ({ title: `${release.title} is live without cover art`, detail: "Attach an intentional public cover before promoting it.", href: `/studio/releases/${release.id}?tab=media`, level: "critical" })),
-    ...releases
-      .filter((release) => release.publish_state === "live" && !placements.some((placement) => placement.release_id === release.id && placement.enabled))
-      .map((release) => ({ title: `${release.title} is live but absent from the homepage`, detail: "Place it on the homepage or intentionally keep it catalog-only.", href: `/studio/releases/${release.id}?tab=website`, level: "warning" })),
-    ...placements
-      .filter((placement) => placement.enabled && !placement.default_track_id)
-      .map((placement) => ({ title: `${releases.find((release) => release.id === placement.release_id)?.title ?? "A homepage release"} has no default player track`, detail: "Choose the exact track the public player should open with.", href: `/studio/releases/${placement.release_id}?tab=website`, level: "critical" })),
-    ...content
-      .filter((item) => item.status === "Scheduled" && !item.asset_url)
-      .map((item) => ({ title: `${item.title} is scheduled without an asset`, detail: `${item.platform} · ${item.scheduled_at ? shortDate(item.scheduled_at.slice(0, 10)) : "date pending"}`, href: `/studio/content?edit=${item.id}`, level: "warning" })),
-    ...(active && readiness && !readiness.items.find((item) => item.id === "campaign-assets")?.complete
-      ? [{ title: "Active campaign needs a motion or social asset", detail: "Add a vertical video, visualizer, canvas, or social image.", href: `/studio/releases/${active.id}?tab=media`, level: "recommendation" }]
-      : []),
-  ].slice(0, 7);
+  const followups = followupsResult.data ?? [];
+  const contactIds = [...new Set(followups.map((message) => message.contact_id))];
+  const { data: contacts, error: contactError } = contactIds.length
+    ? await supabase.from("outreach_contacts").select("id,name").eq("owner_id", user.id).in("id", contactIds)
+    : { data: [], error: null };
+  if (contactError) throw new Error(contactError.message);
+  const contactById = new Map((contacts ?? []).map((contact) => [contact.id, contact.name]));
 
-  const upcomingContent = content.filter((item) => {
-    if (!item.scheduled_at) return false;
-    const date = new Date(item.scheduled_at);
-    return date >= now && date <= sevenDays;
-  });
-  const upcomingReleases = releases.filter((release) => {
-    if (!release.release_date) return false;
-    const date = new Date(`${release.release_date}T23:59:59`);
-    return date >= now && date <= sevenDays;
-  });
-  const dueFollowups = (followupsResult.data ?? []).filter((item) => {
-    if (!item.follow_up_at) return false;
-    const date = new Date(item.follow_up_at);
-    return date >= now && date <= sevenDays;
-  });
-  const dueTasks = (tasksResult.data ?? []).filter((item) => {
-    if (!item.due_at) return false;
-    const date = new Date(item.due_at);
-    return date >= now && date <= sevenDays;
-  });
-  const weekItems = [
-    ...upcomingContent.map((item) => ({ date: item.scheduled_at!, title: item.title, meta: `${item.platform} · ${item.status}`, href: `/studio/content?edit=${item.id}` })),
-    ...upcomingReleases.map((release) => ({ date: `${release.release_date}T12:00:00`, title: `${release.title} release date`, meta: release.publish_state, href: `/studio/releases/${release.id}` })),
-    ...dueFollowups.map((item) => ({ date: item.follow_up_at!, title: `Follow up with ${(item.outreach_contacts as unknown as { name: string } | null)?.name ?? "contact"}`, meta: item.channel, href: `/studio/outreach/${item.contact_id}` })),
-    ...dueTasks.map((item) => ({ date: item.due_at!, title: item.title, meta: `${item.priority} priority`, href: active ? `/studio/releases/${active.id}?tab=campaign` : "/studio/campaigns" })),
-  ].sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+  const releases = releasesResult.data ?? [];
+  const content = contentResult.data ?? [];
+  const automation = automationResult.data ?? [];
+  const publications = publicationResult.data ?? [];
+  const learnings = learningsResult.data ?? [];
+  const outreachDraftCount = outreachDraftsResult.data?.length ?? 0;
+  const activeRelease = releases.find((release) => release.active_release) ?? releases.find((release) => release.release_date && release.release_date >= now.toISOString().slice(0, 10)) ?? releases[0] ?? null;
 
-  const thisWeekStart = new Date(now);
-  thisWeekStart.setDate(now.getDate() - 7);
-  const currentMetrics = metrics.filter((row) => new Date(`${row.date}T12:00:00`) >= thisWeekStart);
-  const previousMetrics = metrics.filter((row) => new Date(`${row.date}T12:00:00`) < thisWeekStart);
-  const currentTotals = Object.fromEntries(METRICS.map(([key]) => [key, metricTotal(currentMetrics, key)])) as Record<(typeof METRICS)[number][0], number>;
-  const previousTotals = Object.fromEntries(METRICS.map(([key]) => [key, metricTotal(previousMetrics, key)])) as Record<(typeof METRICS)[number][0], number>;
-  const liveReleases = releases.filter((release) => release.publish_state === "live" && release.is_public).length;
-  const scheduledCount = content.filter((item) => item.status === "Scheduled").length;
-  const openTasks = tasksResult.data?.length ?? 0;
-  const primaryAction = attention[0] ?? (active && readiness?.recommendations[0]
-    ? { title: readiness.recommendations[0].label, detail: readiness.recommendations[0].detail, href: readiness.recommendations[0].href, level: "recommendation" }
-    : active
-      ? { title: "Build the next campaign action", detail: "Turn the active release into one concrete piece of scheduled content.", href: `/studio/releases/${active.id}?tab=campaign`, level: "recommendation" }
-      : { title: "Create your first release", detail: "Start a release workspace to unlock planning, publishing, and performance tracking.", href: "/studio/releases/new", level: "recommendation" });
+  const workflowApprovalCount = automation.filter((job) => job.status === "awaiting_approval" || job.approval_status === "pending").length + publications.filter((job) => job.status === "awaiting_approval" || job.approval_status === "pending").length;
+  const manualReady = publications.filter((job) => String(job.status) === "manual_ready");
+  const providerScheduled = publications.filter((job) => String(job.status) === "provider_scheduled");
+  const unmatched = [...(soundCloudResult.data ?? []), ...(spotifyResult.data ?? [])].filter((item) => !item.linked_track_id).length;
+  const missingAssets = content.filter((item) => item.scheduled_at && !item.asset_url && item.status !== "Published");
+  const proposed = learnings.filter((learning) => learning.status === "proposed");
+  const approvedLearnings = learnings.filter((learning) => learning.status === "approved");
+  const dueTasks = (tasksResult.data ?? []).filter((task) => task.due_at && new Date(task.due_at) <= sevenDays);
+
+  const needsYou = [
+    ...(workflowApprovalCount ? [{ id: "approvals", eyebrow: "Approval", title: `${workflowApprovalCount} workflow approval${workflowApprovalCount === 1 ? "" : "s"} ready`, detail: "Review external publication and exceptional automation in one place.", href: "/studio/inbox", tone: "important" }] : []),
+    ...(outreachDraftCount ? [{ id: "outreach-drafts", eyebrow: "Outreach approval", title: `${outreachDraftCount} message${outreachDraftCount === 1 ? "" : "s"} prepared`, detail: "Approve connected delivery or receive a prepared manual handoff.", href: "/studio/inbox", tone: "important" }] : []),
+    ...manualReady.slice(0, 2).map((job) => ({ id: `manual-${job.id}`, eyebrow: "Manual handoff", title: `${job.platform} is prepared`, detail: "No publishing adapter is connected, so Atlas prepared the approved handoff instead of pretending it published.", href: job.content_item_id ? `/studio/production?edit=${job.content_item_id}` : "/studio/inbox", tone: "warning" })),
+    ...(unmatched ? [{ id: "unmatched", eyebrow: "Ambiguous data", title: `${unmatched} catalog match${unmatched === 1 ? "" : "es"} need a decision`, detail: "Safe exact matches are repaired automatically. Only ambiguity reaches you.", href: "/studio/data-health?category=unmatched", tone: "warning" }] : []),
+    ...missingAssets.slice(0, 2).map((item) => ({ id: `asset-${item.id}`, eyebrow: "Creative blocker", title: `${item.title} needs an asset`, detail: `${item.platform}${item.scheduled_at ? ` · ${shortDate(item.scheduled_at)}` : ""}`, href: `/studio/production?edit=${item.id}`, tone: "normal" })),
+    ...followups.slice(0, 2).map((message) => ({ id: `outreach-${message.id}`, eyebrow: "Follow-up", title: `Follow up with ${contactById.get(message.contact_id) || "contact"}`, detail: `${message.channel} · ${dateDistance(message.follow_up_at)}`, href: `/studio/outreach/${message.contact_id}`, tone: "normal" })),
+    ...dueTasks.slice(0, 2).map((task) => ({ id: `task-${task.id}`, eyebrow: "Task", title: task.title, detail: task.due_at ? `${task.priority} · ${dateDistance(task.due_at)}` : task.priority, href: "/studio/calendar", tone: "normal" })),
+    ...(proposed.length ? [{ id: "learnings", eyebrow: "Learning", title: `${proposed.length} insight${proposed.length === 1 ? "" : "s"} to review`, detail: "Approve only what Atlas should remember for future releases.", href: "/studio/learn", tone: "normal" }] : []),
+  ].slice(0, 8);
+
+  const workingJobs = automation.filter((job) => job.status === "queued" || job.status === "running");
+  const scheduledPublications = publications.filter((job) => ["approved", "scheduled", "publishing", "provider_scheduled"].includes(String(job.status)));
+  const upcomingContent = content.filter((item) => item.scheduled_at && new Date(item.scheduled_at) >= now && new Date(item.scheduled_at) <= sevenDays);
 
   return (
-    <>
-      <PageHeader
-        title="Command Center"
-        description={`${new Intl.DateTimeFormat("en", { weekday: "long", month: "long", day: "numeric" }).format(now)} · A focused view of your release operation.`}
-        action={
-          <div className="actions">
-            <Link className="button primary" href={active ? `/studio/releases/${active.id}?tab=campaign` : "/studio/releases/new"}>
-              {active ? "Create campaign content" : "Create release"}
-            </Link>
-            <Link className="button" href="/studio/data-health">Review data health</Link>
-          </div>
-        }
-      />
-
-      <section className="command-overview" aria-label="Studio overview">
-        <Link href={active ? `/studio/releases/${active.id}#readiness` : "/studio/releases/new"}>
-          <span>Active readiness</span>
-          <strong>{readiness ? `${readiness.score}%` : "—"}</strong>
-          <small>{readiness ? `${readiness.blockers.length} blocking issue${readiness.blockers.length === 1 ? "" : "s"}` : "No active release"}</small>
-        </Link>
-        <Link href="/studio/releases">
-          <span>Public catalog</span>
-          <strong>{liveReleases}</strong>
-          <small>{releases.length} total release{releases.length === 1 ? "" : "s"}</small>
-        </Link>
-        <Link href="/studio/campaigns?view=calendar">
-          <span>Next 7 days</span>
-          <strong>{weekItems.length}</strong>
-          <small>{scheduledCount} content item{scheduledCount === 1 ? "" : "s"} scheduled</small>
-        </Link>
-        <Link href="/studio/analytics">
-          <span>Weekly plays</span>
-          <strong>{currentTotals.streams.toLocaleString()}</strong>
-          <small className={currentTotals.streams >= previousTotals.streams ? "positive" : "negative"}>{deltaLabel(currentTotals.streams, previousTotals.streams)}</small>
-        </Link>
-        <Link href="/studio/data-health">
-          <span>Open workload</span>
-          <strong>{attention.length + openTasks}</strong>
-          <small>{attention.length} issue{attention.length === 1 ? "" : "s"} · {openTasks} task{openTasks === 1 ? "" : "s"}</small>
-        </Link>
+    <div className="studio-v2-page">
+      <PageHeader title="Today" description="Only the decisions that need you. Atlas handles free, reversible internal work automatically." action={<Link className="button primary" href="/studio/releases/new">New release</Link>} />
+      <section className="v2-hero-grid">
+        <article className="v2-focus-card">
+          <div className="v2-section-heading"><div><span className="section-label">Needs you</span><h2>{needsYou.length ? `${needsYou.length} thing${needsYou.length === 1 ? "" : "s"}` : "You are clear"}</h2></div><Link href="/studio/inbox">Review all</Link></div>
+          {needsYou.length ? <div className="v2-inbox">{needsYou.map((item) => <Link className={`v2-inbox-item ${item.tone}`} href={item.href} key={item.id}><div><span>{item.eyebrow}</span><strong>{item.title}</strong><small>{item.detail}</small></div><b aria-hidden>→</b></Link>)}</div> : <div className="v2-calm-state"><strong>Nothing is blocked on you.</strong><p>Atlas can keep moving with the context and approvals it already has.</p></div>}
+        </article>
+        <article className="v2-release-card">
+          <span className="section-label">Next release</span>
+          {activeRelease ? <><div className="v2-release-artwork">{activeRelease.artwork_url ? <img src={activeRelease.artwork_url} alt={activeRelease.cover_alt || `${activeRelease.title} artwork`} /> : <div aria-hidden>{activeRelease.title.slice(0, 1).toUpperCase()}</div>}</div><h2>{activeRelease.title}</h2><p>{activeRelease.release_date ? `${shortDate(activeRelease.release_date)} · ${dateDistance(activeRelease.release_date)}` : "Release date not set"}</p><div className="v2-release-actions"><Link className="button primary" href={`/studio/releases/${activeRelease.id}`}>Open release</Link><Link className="button" href="/studio/calendar">Timeline</Link></div></> : <div className="v2-calm-state"><strong>No release in motion</strong><p>Create one workspace and Atlas will create the free starter plan around it.</p><Link className="button primary" href="/studio/releases/new">Create release</Link></div>}
+        </article>
       </section>
 
-      <section className={`next-action ${primaryAction.level}`} aria-labelledby="next-action-title">
-        <div className="next-action-marker" aria-hidden>01</div>
-        <div>
-          <span className="section-label">Next best action</span>
-          <h2 id="next-action-title">{primaryAction.title}</h2>
-          <p>{primaryAction.detail}</p>
+      <section className="v2-section">
+        <div className="v2-section-heading"><div><span className="section-label">Atlas is working on</span><h2>Automation, not admin</h2></div><Link href="/studio/settings">Automation settings</Link></div>
+        <div className="v2-status-grid">
+          <article><strong>{workingJobs.length}</strong><span>automation jobs</span><small>Queued or running</small></article>
+          <article><strong>{scheduledPublications.length}</strong><span>publication jobs</span><small>{providerScheduled.length ? `${providerScheduled.length} scheduled at providers` : "Approved, scheduled or publishing"}</small></article>
+          <article><strong>{upcomingContent.length}</strong><span>content moments</span><small>Next 7 days</small></article>
+          <article><strong>{campaignsResult.data?.length ?? 0}</strong><span>release plans</span><small>Draft, planned or active</small></article>
         </div>
-        <Link className="button primary" href={primaryAction.href}>Take action <span aria-hidden>→</span></Link>
       </section>
 
-      {active ? (
-        <section className="command-release" aria-labelledby="active-release-title">
-          <div className="command-artwork">
-            {active.artwork_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={active.artwork_url} alt={active.cover_alt || `${active.title} artwork`} />
-            ) : <div className="empty-orbit" />}
-          </div>
-          <div className="command-release-copy">
-            <span className="section-label">Active release</span>
-            <div className="catalog-card-badges">
-              <Status>{publishStateLabel(active.publish_state)}</Status>
-              <Status>{active.is_public ? "Public" : "Private"}</Status>
-              {activePlacement?.enabled ? <Status>On homepage</Status> : null}
-            </div>
-            <h2 id="active-release-title">{active.title}</h2>
-            <p>{active.story || active.core_emotion || "Give this release a story so every campaign decision has a center."}</p>
-            <dl className="release-facts">
-              <div><dt>Release date</dt><dd>{shortDate(active.release_date)}</dd></div>
-              <div><dt>Player opens with</dt><dd>{activeTracks.find((track) => track.id === activePlacement?.default_track_id)?.title || activeTracks.find((track) => track.is_primary)?.title || "Not selected"}</dd></div>
-            </dl>
-            <div className="form-actions">
-              <Link className="button primary" href={`/studio/releases/${active.id}`}>Open workspace</Link>
-              <Link className="button" href={`/?preview=${active.slug}#music`} target="_blank">Preview public appearance</Link>
-              <Link className="button" href={`/studio/releases/${active.id}?tab=website`}>Edit homepage</Link>
-              {readiness?.canPublish ? (
-                <form action={publishRelease}>
-                  <input type="hidden" name="release_id" value={active.id} />
-                  <input type="hidden" name="publish_state" value={active.publish_state === "live" ? "draft" : "live"} />
-                  <input type="hidden" name="is_public" value={active.publish_state === "live" ? "" : "on"} />
-                  <button className="button">{active.publish_state === "live" ? "Unpublish" : "Publish"}</button>
-                </form>
-              ) : null}
-            </div>
-          </div>
-          {readiness ? (
-            <Link className="readiness-dial" href={`/studio/releases/${active.id}#readiness`} aria-label={`Release readiness ${readiness.score} percent`}>
-              <strong>{readiness.score}</strong><span>% ready</span>
-              <small>{readiness.blockers.length} blocker{readiness.blockers.length === 1 ? "" : "s"}</small>
-            </Link>
-          ) : null}
-        </section>
-      ) : (
-        <EmptyState title="Choose the next release" body="Create a release workspace, then make it active to focus the Studio." href="/studio/releases/new" label="Create release" />
-      )}
-
-      <div className="command-layout">
-        <section className="command-section attention-queue">
-          <div className="section-head"><div><span className="section-label">Needs attention</span><h2>Decisions, not notifications</h2></div><Link href="/studio/data-health">See all</Link></div>
-          {attention.length ? attention.map((item, index) => (
-            <Link className="attention-row" href={item.href} key={`${item.title}-${index}`}>
-              <span className={`attention-index ${item.level}`}>{String(index + 1).padStart(2, "0")}</span>
-              <span><strong>{item.title}</strong><small>{item.detail}</small></span>
-              <span aria-hidden>Fix →</span>
-            </Link>
-          )) : <EmptyState title="Everything is aligned" body="No catalog, website, or campaign issues need action." />}
-        </section>
-
-        <section className="command-section homepage-preview">
-          <div className="section-head"><div><span className="section-label">Homepage live preview</span><h2>What listeners see now</h2></div><Link href={active ? `/studio/releases/${active.id}?tab=website` : "/studio/releases"}>Edit</Link></div>
-          <div className="live-preview-frame"><HomepageCatalogPreview releases={publicReleases} /></div>
-          <div className="placement-strip">
-            {placements.filter((placement) => placement.enabled).map((placement) => {
-              const release = releases.find((item) => item.id === placement.release_id);
-              return <Link href={`/studio/releases/${placement.release_id}?tab=website`} key={placement.id}><span>{placement.display_order + 1}</span>{release?.title ?? "Missing release"}<small>{placement.placement_type}</small></Link>;
-            })}
-          </div>
-        </section>
-
-        <section className="command-section week-rail">
-          <div className="section-head"><div><span className="section-label">This week</span><h2>Seven-day runway</h2></div><Link href="/studio/campaigns?view=calendar">Calendar</Link></div>
-          {weekItems.length ? weekItems.map((item) => (
-            <Link className="week-row" href={item.href} key={`${item.date}-${item.title}`}>
-              <time dateTime={item.date}>{new Intl.DateTimeFormat("en", { weekday: "short", day: "numeric" }).format(new Date(item.date))}</time>
-              <span><strong>{item.title}</strong><small>{item.meta}</small></span>
-            </Link>
-          )) : <EmptyState title="Clear runway" body="Schedule content, follow-ups, or campaign actions to shape the week." href={active ? `/studio/releases/${active.id}?tab=campaign` : "/studio/campaigns"} label="Plan the week" />}
-        </section>
-
-        <section className="command-section performance-pulse">
-          <div className="section-head"><div><span className="section-label">Performance pulse</span><h2>Signals worth watching</h2></div><Link href="/studio/analytics">Details</Link></div>
-          {metrics.length ? (
-            <div className="pulse-grid">
-              {METRICS.map(([key, label]) => {
-                const current = currentTotals[key];
-                const previous = previousTotals[key];
-                return <div key={key}><span>{label}</span><strong>{current.toLocaleString()}</strong><small className={current > previous ? "positive" : undefined}>{deltaLabel(current, previous)}</small></div>;
-              })}
-            </div>
-          ) : <EmptyState title="No performance snapshots yet" body="Connect SoundCloud or add a manual snapshot. The Studio will stay quiet until real data exists." href="/studio/analytics#new" label="Add snapshot" />}
-          {metrics.length ? (
-            <div className="signal-strip" aria-label="Weekly conversion signals">
-              <div><span>View → save</span><strong>{percent(currentTotals.saves, currentTotals.views)}</strong></div>
-              <div><span>Visit → follow</span><strong>{percent(currentTotals.follows, currentTotals.profile_visits)}</strong></div>
-              <div><span>View → click</span><strong>{percent(currentTotals.link_clicks, currentTotals.views)}</strong></div>
-            </div>
-          ) : null}
-        </section>
-      </div>
-
-      <footer className="data-freshness" aria-label="Connected data freshness">
-        <div><span className={spotifyAccountResult.data ? "source-dot connected" : "source-dot"} /> <strong>Spotify</strong><small>{spotifyAccountResult.data ? relativeSync(spotifyAccountResult.data.last_synced_at) : "Not connected"}</small></div>
-        <div><span className={soundCloudAccountResult.data ? "source-dot connected" : "source-dot"} /> <strong>SoundCloud</strong><small>{soundCloudAccountResult.data ? relativeSync(soundCloudAccountResult.data.last_synced_at) : "Not connected"}</small></div>
-        <div className="freshness-note"><span>Reporting window</span><strong>Last 7 days</strong><small>Compared with the prior 7 days</small></div>
-        <Link href="/studio/data-health">Review data sources →</Link>
-      </footer>
-    </>
+      <section className="v2-two-column">
+        <article className="v2-section v2-compact-section">
+          <div className="v2-section-heading"><div><span className="section-label">Next 7 days</span><h2>What is coming</h2></div><Link href="/studio/calendar">Full timeline</Link></div>
+          {upcomingContent.length ? <div className="v2-simple-list">{upcomingContent.slice(0, 6).map((item) => <Link href={`/studio/production?edit=${item.id}`} key={item.id}><span>{shortDate(item.scheduled_at)}</span><strong>{item.title}</strong><small>{item.platform}</small></Link>)}</div> : <div className="v2-calm-state compact"><strong>No scheduled content this week.</strong><p>The starter plan and campaign planning will populate this automatically.</p></div>}
+        </article>
+        <article className="v2-section v2-compact-section">
+          <div className="v2-section-heading"><div><span className="section-label">What worked</span><h2>Reusable learnings</h2></div><Link href="/studio/learn">Learn</Link></div>
+          {approvedLearnings.length ? <div className="v2-learning-list">{approvedLearnings.slice(0, 4).map((learning) => <div key={learning.id}><strong>{Math.round(Number(learning.confidence) * 100)}%</strong><p>{learning.finding}</p></div>)}</div> : <div className="v2-calm-state compact"><strong>No approved learnings yet.</strong><p>Atlas will suggest evidence-backed memory after campaigns collect enough signal.</p></div>}
+        </article>
+      </section>
+    </div>
   );
 }

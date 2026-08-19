@@ -8,6 +8,7 @@ import {
   discardMediaUpload,
   registerMediaUpload,
 } from "@/app/studio/catalog-actions";
+import { attachContentMediaV2 } from "@/app/studio/content-actions-v2";
 import { createClient } from "@/lib/supabase/client";
 import {
   compatibleMediaTypes,
@@ -71,9 +72,11 @@ async function mediaDimensions(file: File) {
 
 export function MediaUploader({
   releaseId,
+  contentItemId,
   defaultRole = "cover",
 }: {
   releaseId?: string;
+  contentItemId?: string;
   defaultRole?: MediaType;
 }) {
   const router = useRouter();
@@ -83,7 +86,7 @@ export function MediaUploader({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState("");
-  const [primary, setPrimary] = useState(Boolean(releaseId));
+  const [primary, setPrimary] = useState(Boolean(releaseId && !contentItemId));
   const [busy, setBusy] = useState(false);
 
   function addFiles(files: FileList | File[]) {
@@ -143,15 +146,22 @@ export function MediaUploader({
           title: items.length === 1 ? title : "",
           description,
           tags,
-          release_id: releaseId ?? "",
+          release_id: contentItemId ? "" : releaseId ?? "",
           is_primary: primary ? "on" : "",
           ...dimensions,
         }).forEach(([key, value]) => form.set(key, value));
         const result = await registerMediaUpload(form);
+        if (contentItemId) {
+          const attachForm = new FormData();
+          attachForm.set("content_item_id", contentItemId);
+          attachForm.set("media_asset_id", result.id);
+          attachForm.set("role", item.role);
+          await attachContentMediaV2(attachForm);
+        }
         setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? {
           ...entry,
           state: "done",
-          message: result.deduplicated ? "Already in the library — existing file reused." : "Added to the library.",
+          message: result.deduplicated ? "Already in the library, existing file reused and attached." : contentItemId ? "Uploaded and attached to this content item." : "Added to the library.",
         } : entry));
       } catch (error) {
         if (uploadTarget) {
@@ -173,6 +183,7 @@ export function MediaUploader({
 
   const completed = items.filter((item) => item.state === "done").length;
   const hasPending = items.some((item) => item.state === "ready" || item.state === "error");
+  const contextualAttach = Boolean(releaseId || contentItemId);
 
   return (
     <div className="media-uploader">
@@ -207,13 +218,13 @@ export function MediaUploader({
         <label className="field"><span>Display name {items.length > 1 ? "(single uploads only)" : ""}</span><input value={title} onChange={(event) => setTitle(event.target.value)} disabled={items.length > 1} placeholder={items[0]?.file.name || "Shown in the library"} /></label>
         <label className="field"><span>Tags</span><input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="release, artwork, blue-hour" /></label>
         <label className="field wide"><span>Notes</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={2} placeholder="Creative context, rights, source, or intended use" /></label>
-        {releaseId ? <label className="checkbox-field"><input type="checkbox" checked={primary} onChange={(event) => setPrimary(event.target.checked)} /> Make primary for this role</label> : null}
+        {releaseId && !contentItemId ? <label className="checkbox-field"><input type="checkbox" checked={primary} onChange={(event) => setPrimary(event.target.checked)} /> Make primary for this role</label> : null}
       </div>
       <div className="media-upload-actions">
         <button className="button primary" type="button" disabled={!items.length || busy || !hasPending} onClick={upload}>
-          {busy ? `Uploading ${completed + 1} of ${items.length}…` : completed === items.length && items.length ? "Upload complete" : releaseId ? "Upload and attach" : `Add ${items.length || ""} to library`}
+          {busy ? `Uploading ${completed + 1} of ${items.length}…` : completed === items.length && items.length ? "Upload complete" : contextualAttach ? "Upload and attach" : `Add ${items.length || ""} to library`}
         </button>
-        {completed ? <span>{completed} of {items.length} ready</span> : <span>Media is published to the public asset library.</span>}
+        {completed ? <span>{completed} of {items.length} ready</span> : <span>{contentItemId ? "Media will be attached to this content item." : "Media is published to the public asset library."}</span>}
       </div>
     </div>
   );

@@ -25,6 +25,9 @@ jobs:
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
 
+      - name: Verify Studio V2 product contracts
+        run: npm run test:studio
+
       - run: npm run typecheck
 
       - run: npm run lint
