@@ -83,7 +83,7 @@ create or replace function public.upsert_social_channel_token(
 )
 returns void language sql security definer set search_path = ''
 as $$
-  insert into private.social_channel_tokens(
+  insert into private.social_channel_tokens as current_token(
     owner_id, platform, access_token, refresh_token, scope, expires_at, refresh_expires_at
   )
   values(
@@ -91,10 +91,10 @@ as $$
   )
   on conflict(owner_id, platform) do update set
     access_token = excluded.access_token,
-    refresh_token = coalesce(excluded.refresh_token, private.social_channel_tokens.refresh_token),
+    refresh_token = coalesce(excluded.refresh_token, current_token.refresh_token),
     scope = excluded.scope,
     expires_at = excluded.expires_at,
-    refresh_expires_at = coalesce(excluded.refresh_expires_at, private.social_channel_tokens.refresh_expires_at)
+    refresh_expires_at = coalesce(excluded.refresh_expires_at, current_token.refresh_expires_at)
 $$;
 
 create or replace function public.delete_social_channel_token(p_owner_id uuid, p_platform text)
