@@ -6,7 +6,7 @@ import { getPublicReleases } from "@/lib/public-catalog";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { ReleaseCockpit } from "@/components/studio/release-cockpit";
 import { ReleaseCampaignBridge } from "@/components/studio/release-campaign-bridge";
-import { ReleaseWorkspaceV2 } from "@/components/studio/release-workspace-v2";
+import { ReleaseWorkspaceV2Final } from "@/components/studio/release-workspace-v2-final";
 import type { MusicVideoProject } from "@/types/database";
 
 export default async function ReleaseDetail({
@@ -37,122 +37,51 @@ export default async function ReleaseDetail({
     campaignResult,
   ] = await Promise.all([
     supabase.from("releases").select("*").eq("id", id).eq("owner_id", user.id).single(),
-    supabase
-      .from("tracks")
-      .select("*")
-      .eq("release_id", id)
-      .order("display_order")
-      .order("is_primary", { ascending: false }),
-    supabase
-      .from("homepage_placements")
-      .select("*")
-      .eq("release_id", id)
-      .maybeSingle(),
+    supabase.from("tracks").select("*").eq("release_id", id).order("display_order").order("is_primary", { ascending: false }),
+    supabase.from("homepage_placements").select("*").eq("release_id", id).maybeSingle(),
     supabase.from("media_links").select("*").eq("release_id", id),
-    supabase
-      .from("content_items")
-      .select("id", { count: "exact", head: true })
-      .eq("release_id", id),
-    supabase
-      .from("outreach_messages")
-      .select("id", { count: "exact", head: true })
-      .eq("release_id", id),
+    supabase.from("content_items").select("id", { count: "exact", head: true }).eq("release_id", id),
+    supabase.from("outreach_messages").select("id", { count: "exact", head: true }).eq("release_id", id),
     supabase.from("release_external_links").select("*").eq("release_id", id),
     supabase.from("content_items").select("*").eq("release_id", id).order("scheduled_at"),
     supabase.from("metric_snapshots").select("*").eq("release_id", id).order("date"),
     supabase.from("soundcloud_tracks").select("*").eq("reconcile_status", "pending"),
     supabase.from("spotify_tracks").select("*").eq("reconcile_status", "pending"),
-    marketing
-      .from("campaigns")
-      .select("id,name,status,mode,objective,primary_kpi")
-      .eq("owner_id", user.id)
-      .eq("release_id", id)
-      .not("status", "in", '("archived")')
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+    marketing.from("campaigns").select("id,name,status,mode,objective,primary_kpi").eq("owner_id", user.id).eq("release_id", id).not("status", "in", '("archived")').order("updated_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
   if (!release) notFound();
   if (campaignResult.error) throw new Error(campaignResult.error.message);
 
   const trackIds = (tracks ?? []).map((track) => track.id);
-  const { data: externalTrackIds } = trackIds.length
-    ? await supabase.from("track_external_ids").select("*").in("track_id", trackIds)
-    : { data: [] };
+  const { data: externalTrackIds } = trackIds.length ? await supabase.from("track_external_ids").select("*").in("track_id", trackIds) : { data: [] };
   const assetIds = [...new Set((mediaLinks ?? []).map((link) => link.media_asset_id))];
-  const { data: mediaAssets } = assetIds.length
-    ? await supabase.from("media_assets").select("*").in("id", assetIds)
-    : { data: [] };
+  const { data: mediaAssets } = assetIds.length ? await supabase.from("media_assets").select("*").in("id", assetIds) : { data: [] };
+  const contentIds = (contentItems ?? []).map((item) => item.id);
+  const { count: providerScheduledCount, error: providerScheduleError } = contentIds.length
+    ? await marketing.from("publication_jobs").select("id", { count: "exact", head: true }).eq("owner_id", user.id).eq("status", "provider_scheduled" as never).in("content_item_id", contentIds)
+    : { count: 0, error: null };
+  if (providerScheduleError) throw new Error(providerScheduleError.message);
 
   if (!advanced) {
-    return (
-      <ReleaseWorkspaceV2
-        release={release}
-        tracks={tracks ?? []}
-        mediaLinks={mediaLinks ?? []}
-        mediaAssets={mediaAssets ?? []}
-        contentItems={contentItems ?? []}
-        metrics={metrics ?? []}
-        campaign={campaignResult.data}
-        stage={stage}
-      />
-    );
+    return <ReleaseWorkspaceV2Final release={release} tracks={tracks ?? []} mediaLinks={mediaLinks ?? []} mediaAssets={mediaAssets ?? []} contentItems={contentItems ?? []} metrics={metrics ?? []} campaign={campaignResult.data} stage={stage} providerScheduledCount={providerScheduledCount ?? 0} />;
   }
 
   const mediaPreviewUrls = await createMediaPreviewMap(supabase, mediaAssets ?? []);
   let videoProjects: MusicVideoProject[] = [];
   if (tab === "video") {
-    const { data, error } = await supabase
-      .from("music_video_projects")
-      .select("*")
-      .eq("release_id", id)
-      .order("created_at", { ascending: false });
+    const { data, error } = await supabase.from("music_video_projects").select("*").eq("release_id", id).order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
     videoProjects = data ?? [];
   }
 
-  const releaseTerms = new Set(
-    [release.title, ...(tracks ?? []).map((track) => track.title)].map((value) =>
-      value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(),
-    ),
-  );
-  const relevantSoundCloud = (soundCloudPending ?? []).filter((item) =>
-    releaseTerms.has(item.title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()),
-  );
-  const relevantSpotify = (spotifyPending ?? []).filter((item) =>
-    releaseTerms.has(item.name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()),
-  );
+  const releaseTerms = new Set([release.title, ...(tracks ?? []).map((track) => track.title)].map((value) => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()));
+  const relevantSoundCloud = (soundCloudPending ?? []).filter((item) => releaseTerms.has(item.title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()));
+  const relevantSpotify = (spotifyPending ?? []).filter((item) => releaseTerms.has(item.name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()));
   const publicReleases = await getPublicReleases();
 
-  return (
-    <>
-      <div className="v2-advanced-banner">
-        <div>
-          <strong>Advanced workspace</strong>
-          <span>Legacy controls for exceptional cases, migrations and debugging.</span>
-        </div>
-        <Link className="button" href={`/studio/releases/${release.id}`}>Back to simple view</Link>
-      </div>
-      {tab === "campaign" ? <ReleaseCampaignBridge campaign={campaignResult.data} /> : null}
-      <ReleaseCockpit
-        release={release}
-        tracks={tracks ?? []}
-        placement={placement}
-        mediaLinks={mediaLinks ?? []}
-        mediaAssets={mediaAssets ?? []}
-        mediaPreviewUrls={mediaPreviewUrls}
-        externalLinks={externalLinks ?? []}
-        externalTrackIds={externalTrackIds ?? []}
-        contentCount={contentCount ?? 0}
-        contactCount={contactCount ?? 0}
-        contentItems={contentItems ?? []}
-        metrics={metrics ?? []}
-        unmatchedSoundCloud={relevantSoundCloud}
-        unmatchedSpotify={relevantSpotify}
-        publicReleases={publicReleases}
-        videoProjects={videoProjects}
-        tab={tab}
-      />
-    </>
-  );
+  return <>
+    <div className="v2-advanced-banner"><div><strong>Advanced workspace</strong><span>Legacy controls for exceptional cases, migrations and debugging.</span></div><Link className="button" href={`/studio/releases/${release.id}`}>Back to simple view</Link></div>
+    {tab === "campaign" ? <ReleaseCampaignBridge campaign={campaignResult.data} /> : null}
+    <ReleaseCockpit release={release} tracks={tracks ?? []} placement={placement} mediaLinks={mediaLinks ?? []} mediaAssets={mediaAssets ?? []} mediaPreviewUrls={mediaPreviewUrls} externalLinks={externalLinks ?? []} externalTrackIds={externalTrackIds ?? []} contentCount={contentCount ?? 0} contactCount={contactCount ?? 0} contentItems={contentItems ?? []} metrics={metrics ?? []} unmatchedSoundCloud={relevantSoundCloud} unmatchedSpotify={relevantSpotify} publicReleases={publicReleases} videoProjects={videoProjects} tab={tab} />
+  </>;
 }
