@@ -32,6 +32,7 @@ export default async function ReleaseDetail({
     { data: externalLinks },
     { data: contentItems },
     { data: metrics },
+    { data: playbookTasks },
     { data: soundCloudPending },
     { data: spotifyPending },
     campaignResult,
@@ -45,6 +46,7 @@ export default async function ReleaseDetail({
     supabase.from("release_external_links").select("*").eq("release_id", id),
     supabase.from("content_items").select("*").eq("release_id", id).order("scheduled_at"),
     supabase.from("metric_snapshots").select("*").eq("release_id", id).order("date"),
+    supabase.from("tasks").select("id,title,status,priority,due_at").eq("owner_id", user.id).eq("release_id", id).order("due_at", { ascending: true }),
     supabase.from("soundcloud_tracks").select("*").eq("reconcile_status", "pending"),
     supabase.from("spotify_tracks").select("*").eq("reconcile_status", "pending"),
     marketing.from("campaigns").select("id,name,status,mode,objective,primary_kpi").eq("owner_id", user.id).eq("release_id", id).not("status", "in", '("archived")').order("updated_at", { ascending: false }).limit(1).maybeSingle(),
@@ -63,7 +65,7 @@ export default async function ReleaseDetail({
   if (providerScheduleError) throw new Error(providerScheduleError.message);
 
   if (!advanced) {
-    return <ReleaseWorkspaceV2 release={release} tracks={tracks ?? []} mediaLinks={mediaLinks ?? []} mediaAssets={mediaAssets ?? []} contentItems={contentItems ?? []} metrics={metrics ?? []} campaign={campaignResult.data} stage={stage} providerScheduledCount={providerScheduledCount ?? 0} />;
+    return <ReleaseWorkspaceV2 release={release} tracks={tracks ?? []} mediaLinks={mediaLinks ?? []} mediaAssets={mediaAssets ?? []} contentItems={contentItems ?? []} metrics={metrics ?? []} campaign={campaignResult.data} stage={stage} playbookTasks={playbookTasks ?? []} providerScheduledCount={providerScheduledCount ?? 0} />;
   }
 
   const mediaPreviewUrls = await createMediaPreviewMap(supabase, mediaAssets ?? []);
