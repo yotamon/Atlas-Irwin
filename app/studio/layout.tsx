@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./studio.css";
 import "./studio-v2.css";
+import "./release-workspace-v2.css";
 import "./video-director.css";
 import "./video-director-states.css";
 import "./video-director-refinements.css";
