@@ -46,7 +46,7 @@ export async function createVaultTrackFromMedia(form: FormData) {
   const assetId = z.uuid().parse(value(form, "media_asset_id"));
   const { data: asset, error: assetError } = await supabase.from("media_assets").select("id,public_url,mime_type,duration_ms,metadata").eq("id", assetId).eq("owner_id", user.id).single();
   if (assetError || !asset) throw new Error(assetError?.message || "Media asset not found.");
-  if (!asset.mime_type.startsWith("audio/")) throw new Error("Only audio assets can become Vault tracks.");
+  if (!asset.mime_type?.startsWith("audio/")) throw new Error("Only audio assets can become Vault tracks.");
   if (!asset.public_url) throw new Error("Vault analysis requires a public media URL.");
 
   const { data: existing, error: existingError } = await growth.from("track_vault").select("*").eq("owner_id", user.id).eq("media_asset_id", asset.id).maybeSingle();
