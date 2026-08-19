@@ -1,5 +1,3 @@
-"use server";
-
 import { redirect } from "next/navigation";
 import { publishRelease as publishReleaseUnsafe } from "./catalog-actions";
 
@@ -15,6 +13,8 @@ export * from "./catalog-actions";
  * failures still propagate normally so they remain observable in Vercel.
  */
 export async function publishRelease(form: FormData) {
+  "use server";
+
   try {
     return await publishReleaseUnsafe(form);
   } catch (error) {
