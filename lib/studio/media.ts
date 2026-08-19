@@ -3,6 +3,9 @@ import type { Json, MediaAsset } from "@/types/database";
 export const MEDIA_TYPES = [
   "cover",
   "alternate_artwork",
+  "brand_reference",
+  "brand_logo",
+  "brand_motion_reference",
   "canvas_video",
   "visualizer",
   "audio_preview",
@@ -27,6 +30,9 @@ export type MediaKind = "image" | "video" | "audio" | "archive" | "unknown";
 export const MEDIA_TYPE_LABELS: Record<MediaType, string> = {
   cover: "Release artwork / thumbnail",
   alternate_artwork: "Alternate artwork",
+  brand_reference: "Atlas Irwin visual reference",
+  brand_logo: "Atlas Irwin logo / identity asset",
+  brand_motion_reference: "Atlas Irwin motion reference",
   canvas_video: "Canvas / cover-art video",
   visualizer: "Visualizer",
   audio_preview: "Audio preview",
@@ -49,12 +55,15 @@ const TYPES_BY_KIND: Record<MediaKind, readonly MediaType[]> = {
   image: [
     "cover",
     "alternate_artwork",
+    "brand_reference",
+    "brand_logo",
     "social_image",
     "press_image",
     "storyboard_frame",
     "thumbnail",
   ],
   video: [
+    "brand_motion_reference",
     "canvas_video",
     "visualizer",
     "lyric_video",
