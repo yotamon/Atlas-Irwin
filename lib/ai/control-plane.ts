@@ -160,7 +160,12 @@ export async function runAtlasAiTask<T>(input: RunTaskInput<T>): Promise<AtlasAi
   const budget = await enforceBudget(input.ownerId, settings);
   const policy = atlasAiTaskPolicy(input.task, settings);
   if (!policy.models.length) throw new Error(`Atlas AI task ${input.task} has no configured models.`);
-  const learnedRouting = await learnedRouteForTask({ ownerId: input.ownerId, settings, policy });
+  const learnedRouting = await learnedRouteForTask({ ownerId: input.ownerId, settings, policy }).catch(() => ({
+    applied: false,
+    reason: "Adaptive evidence is temporarily unavailable; using the configured route.",
+    route: policy.models,
+    evidence: [],
+  }));
   const primaryModels = learnedRouting.route.length ? learnedRouting.route : policy.models;
 
   const runAttempt = async ({
