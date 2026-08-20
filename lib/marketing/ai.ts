@@ -1,11 +1,10 @@
 import "server-only";
 
-import {
-  atlasAiGatewayConfigured,
-  generateGatewayStructured,
-  normalizeGatewayModel,
-  parseGatewayModelList,
-} from "@/lib/ai/gateway";
+import { requireStudioAdmin } from "@/lib/auth/studio";
+import { atlasAiGatewayConfigured } from "@/lib/ai/gateway";
+import { runAtlasAiTask } from "@/lib/ai/control-plane";
+import { strictQualityResult, type AtlasQualityGate } from "@/lib/ai/quality";
+import type { AtlasAiTaskType } from "@/lib/ai/tasks";
 
 export type MarketingTextProvider = "vercel-gateway" | "openai" | "google" | "zai";
 export type MarketingTextPreset = "economy" | "balanced" | "premium";
@@ -14,48 +13,86 @@ export type StructuredGenerationResult<T> = {
   value: T;
   provider: MarketingTextProvider;
   model: string;
+  requestedModel?: string;
   requestId: string | null;
   estimatedCostUsd: number | null;
   generationId?: string | null;
   routedProvider?: string | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  runId?: string | null;
+  rootRunId?: string | null;
+  escalated?: boolean;
+  qualityScore?: number | null;
 };
 
-function textPreset(): MarketingTextPreset {
-  const value = process.env.ATLAS_MARKETING_TEXT_PRESET?.trim().toLowerCase();
-  return value === "economy" || value === "premium" ? value : "balanced";
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }
 
-function premiumOpenAiModel() {
-  return normalizeGatewayModel(process.env.ATLAS_MARKETING_MODEL?.trim() || "openai/gpt-5.6-sol", "openai");
+function asArray(value: unknown) {
+  return Array.isArray(value) ? value : [];
 }
 
-function configuredRoute(name: string, fallback: string[]) {
-  const models = parseGatewayModelList(process.env[name]);
-  return models.length ? models : fallback;
+function stringValue(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
 }
 
-function marketingTextRoute(preset: MarketingTextPreset) {
-  const premium = premiumOpenAiModel();
-  if (preset === "economy") {
-    return configuredRoute("ATLAS_MARKETING_ECONOMY_MODELS", [
-      "zai/glm-4.7-flash",
-      "zai/glm-4.7-flashx",
-      "google/gemini-3.7-flash",
-      premium,
+function taskForName(name: string): AtlasAiTaskType {
+  if (name === "atlas_campaign_plan") return "marketing.campaign_plan";
+  if (name.includes("caption")) return "marketing.caption";
+  return "marketing.strategy";
+}
+
+function parseInputContext(input: string) {
+  try { return asRecord(JSON.parse(input)); }
+  catch { return {}; }
+}
+
+function campaignQualityGate(input: string): AtlasQualityGate<unknown> {
+  const context = parseInputContext(input);
+  const connected = new Set(asArray(context.connectedSocialChannels).filter((item): item is string => typeof item === "string"));
+  return (value) => {
+    const plan = asRecord(value);
+    const experiments = asArray(plan.experiments).map(asRecord);
+    const moments = asArray(plan.contentMoments).map(asRecord);
+    const experimentTitles = experiments.map((item) => stringValue(item.title)).filter(Boolean);
+    const momentExperimentTitles = moments.map((item) => stringValue(item.experimentTitle)).filter(Boolean);
+    const uniqueMomentKeys = new Set(moments.map((moment) => [
+      stringValue(moment.platform),
+      stringValue(moment.title),
+      String(moment.relativeDay ?? ""),
+    ].join("|")));
+    const variantCountsValid = experiments.every((experiment) => {
+      const variants = asArray(experiment.variants).map(asRecord);
+      return variants.length >= 2 && variants.length <= 3 && variants.every((variant) =>
+        stringValue(variant.hookText).length >= 3 && stringValue(variant.caption).length >= 3,
+      );
+    });
+    const experimentReferencesValid = experimentTitles.every((title) =>
+      momentExperimentTitles.filter((candidate) => candidate === title).length === 1,
+    );
+    const platformBoundaryValid = moments.every((moment) => connected.has(stringValue(moment.platform)));
+    const minimumMoments = connected.size ? Math.min(7, Math.max(4, connected.size * 2)) : 0;
+
+    return strictQualityResult([
+      { passed: stringValue(plan.strategySummary).length >= 40, failure: "Campaign strategy summary is too thin." },
+      { passed: moments.length >= minimumMoments, failure: `Campaign needs at least ${minimumMoments} useful content moments for the connected channel set.` },
+      { passed: moments.length <= 16, failure: "Campaign contains too many content moments and is not focused enough." },
+      { passed: uniqueMomentKeys.size === moments.length, failure: "Campaign contains duplicate posting moments." },
+      { passed: platformBoundaryValid, failure: "Campaign suggested a disconnected social platform." },
+      { passed: new Set(experimentTitles).size === experimentTitles.length, failure: "Campaign experiment titles are not unique." },
+      { passed: variantCountsValid, failure: "Every experiment needs 2-3 usable, materially written variants." },
+      { passed: experimentReferencesValid, failure: "Every experiment must be attached to exactly one content moment." },
     ]);
-  }
-  if (preset === "premium") {
-    return configuredRoute("ATLAS_MARKETING_PREMIUM_MODELS", [
-      premium,
-      "google/gemini-3.7-flash",
-      "zai/glm-4.7-flashx",
-    ]);
-  }
-  return configuredRoute("ATLAS_MARKETING_BALANCED_MODELS", [
-    "google/gemini-3.7-flash",
-    premium,
-    "zai/glm-4.7-flashx",
-  ]);
+  };
+}
+
+function qualityGateFor<T>(name: string, input: string): AtlasQualityGate<T> | undefined {
+  if (name === "atlas_campaign_plan") return campaignQualityGate(input) as AtlasQualityGate<T>;
+  return undefined;
 }
 
 export function marketingAiConfigured() {
@@ -63,7 +100,8 @@ export function marketingAiConfigured() {
 }
 
 export function marketingAiModel() {
-  return marketingTextRoute(textPreset())[0] ?? "google/gemini-3.7-flash";
+  // Kept for readiness surfaces. Actual routing is task-policy driven by the Control Plane.
+  return process.env.ATLAS_MARKETING_MODEL?.trim() || "auto via Atlas AI Control Plane";
 }
 
 export async function generateStructured<T>({
@@ -83,26 +121,36 @@ export async function generateStructured<T>({
     );
   }
 
-  const route = marketingTextRoute(textPreset());
-  const [model, ...fallbackModels] = route;
-  if (!model) throw new Error("Atlas marketing AI has no configured Gateway model route.");
-
-  const result = await generateGatewayStructured<T>({
-    name,
+  const { user } = await requireStudioAdmin();
+  const inputContext = parseInputContext(input);
+  const release = asRecord(inputContext.release);
+  const result = await runAtlasAiTask<T>({
+    ownerId: user.id,
+    task: taskForName(name),
+    purpose: name === "atlas_campaign_plan" ? "campaign_plan" : name,
+    releaseId: stringValue(release.id) || null,
+    promptVersion: name === "atlas_campaign_plan" ? "marketing-v2" : "marketing-control-v1",
     schema,
     instructions,
     input,
-    model,
-    fallbackModels,
+    inputContext,
+    qualityGate: qualityGateFor<T>(name, input),
   });
 
   return {
     value: result.value,
-    provider: "vercel-gateway",
+    provider: result.provider,
     model: result.model,
+    requestedModel: result.requestedModel,
     requestId: result.requestId,
     estimatedCostUsd: result.estimatedCostUsd,
     generationId: result.generationId,
     routedProvider: result.routedProvider,
+    inputTokens: result.inputTokens,
+    outputTokens: result.outputTokens,
+    runId: result.runId,
+    rootRunId: result.rootRunId,
+    escalated: result.escalated,
+    qualityScore: result.quality.score,
   };
 }
