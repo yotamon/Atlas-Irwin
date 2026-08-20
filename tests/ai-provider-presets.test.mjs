@@ -47,11 +47,40 @@ test("Studio explains preset model stacks, connections and price before spend", 
   assert.match(page, /Pricing anchors last verified/);
 });
 
-test("marketing structured text can route through ZAI Google and OpenAI", async () => {
+test("Vercel AI Gateway is the shared structured inference backbone", async () => {
+  const gateway = await source("lib/ai/gateway.ts");
+  assert.match(gateway, /https:\/\/ai-gateway\.vercel\.sh\/v1\/responses/);
+  assert.match(gateway, /AI_GATEWAY_API_KEY/);
+  assert.match(gateway, /VERCEL_OIDC_TOKEN/);
+  assert.match(gateway, /providerOptions:\s*\{ gateway: gatewayOptions \}/);
+  assert.match(gateway, /gatewayOptions\.models = fallbacks/);
+  assert.match(gateway, /"cost" \| "ttft" \| "tps"/);
+  assert.match(gateway, /estimatedCostUsd/);
+  assert.match(gateway, /generationId/);
+});
+
+test("marketing structured text routes through Gateway with Atlas-owned presets", async () => {
   const ai = await source("lib/marketing/ai.ts");
-  assert.match(ai, /glm-4\.7-flash/);
-  assert.match(ai, /gemini-3\.7-flash/);
-  assert.match(ai, /OPENAI_RESPONSES_URL/);
+  assert.match(ai, /generateGatewayStructured/);
+  assert.match(ai, /zai\/glm-4\.7-flash/);
+  assert.match(ai, /google\/gemini-3\.7-flash/);
+  assert.match(ai, /openai\/gpt-5\.6-sol/);
   assert.match(ai, /ATLAS_MARKETING_TEXT_PRESET/);
-  assert.doesNotMatch(ai, /\/api\/coding\/paas\/v4/);
+  assert.match(ai, /ATLAS_MARKETING_ECONOMY_MODELS/);
+  assert.match(ai, /ATLAS_MARKETING_BALANCED_MODELS/);
+  assert.match(ai, /ATLAS_MARKETING_PREMIUM_MODELS/);
+  assert.doesNotMatch(ai, /api\.openai\.com/);
+  assert.doesNotMatch(ai, /generativelanguage\.googleapis\.com/);
+  assert.doesNotMatch(ai, /api\.z\.ai\/api\/paas\/v4\/chat/);
+});
+
+test("Video Creative Director uses the shared Gateway but creative media providers stay direct", async () => {
+  const director = await source("lib/video-director/openai-director.ts");
+  const providers = await source("lib/marketing/creative-providers.ts");
+  assert.match(director, /generateGatewayStructured/);
+  assert.match(director, /VIDEO_DIRECTOR_LLM_FALLBACK_MODELS/);
+  assert.match(director, /atlasAiGatewayConfigured/);
+  assert.doesNotMatch(director, /api\.openai\.com/);
+  assert.match(providers, /https:\/\/api\.bfl\.ai\/v1/);
+  assert.match(providers, /https:\/\/generativelanguage\.googleapis\.com\/v1beta/);
 });
