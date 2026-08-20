@@ -62,16 +62,22 @@ Only unique/continuation source generation is counted as paid video generation i
 
 ## Creative Director
 
-The OpenAI Responses API is used server-side with strict Structured Outputs and `store=false`.
+Creative Director text/reasoning is routed server-side through the shared Vercel AI Gateway adapter with strict structured output and `store=false`.
 
 Configuration:
 
 ```bash
-OPENAI_API_KEY=...
-VIDEO_DIRECTOR_LLM_MODEL=<Responses API model available to this account>
+# Vercel deployments use the automatically injected VERCEL_OIDC_TOKEN.
+# Local/non-Vercel runtime only:
+AI_GATEWAY_API_KEY=...
+
+VIDEO_DIRECTOR_LLM_MODEL=openai/gpt-5.6-sol
+VIDEO_DIRECTOR_LLM_FALLBACK_MODELS=google/gemini-3.7-flash,zai/glm-4.7-flashx
 ```
 
-Both variables are required for Creative Director readiness. Atlas deliberately does not guess a paid API model ID because availability can vary by account and over time.
+`VIDEO_DIRECTOR_LLM_MODEL` is intentionally required. Atlas does not guess a paid Director model because quality, availability and cost can change. Fallbacks are optional and are handled inside Vercel AI Gateway.
+
+The legacy `OpenAIMusicVideoDirector` export name is temporarily retained so existing Studio actions do not require an unrelated migration. Its inference transport is now provider-neutral.
 
 The output is validated structured data, not prose that the UI later tries to parse.
 
@@ -85,6 +91,10 @@ The Director receives:
 - brand settings
 - available Media Library context
 - accumulated Director preferences from accepted/rejected generations
+
+Gateway routing does not weaken the production spend model. Creative Director calls produce plans and schemas; paid image/video generation still goes through specialist provider adapters, explicit quotes, approval envelopes and reservation/settlement logic.
+
+See [`ai-gateway.md`](ai-gateway.md) for the shared inference architecture.
 
 ## Higgsfield
 
