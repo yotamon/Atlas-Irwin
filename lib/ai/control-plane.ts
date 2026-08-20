@@ -1,6 +1,7 @@
 import "server-only";
 
 import { generateGatewayStructured } from "./gateway";
+import { learnedRouteForTask } from "./learning";
 import { atlasAiTaskPolicy, type AtlasAiTaskType } from "./tasks";
 import { noQualityGate, type AtlasQualityGate, type AtlasQualityResult } from "./quality";
 import { createMarketingServiceClient } from "@/lib/marketing/db";
@@ -74,7 +75,7 @@ export async function getAiBudgetSnapshot(ownerId: string, settings?: AiControlS
   for (const run of data ?? []) {
     const cost = numeric(run.actual_cost_usd ?? run.estimated_cost_usd);
     totalSpentUsd += cost;
-    // Control Plane v1 routes language/reasoning tasks only. Specialist media keeps its own hard-credit envelope.
+    // Control Plane v1 only routes language/reasoning tasks. Specialist media keeps its own hard-credit envelope.
     if (run.task_type) textSpentUsd += cost;
   }
   totalSpentUsd = Number(totalSpentUsd.toFixed(6));
@@ -107,8 +108,8 @@ export class AtlasAiQualityError extends Error {
 }
 
 async function enforceBudget(ownerId: string, settings: AiControlSettings) {
+  if (!settings.hard_stop) return getAiBudgetSnapshot(ownerId, settings);
   const budget = await getAiBudgetSnapshot(ownerId, settings);
-  if (!settings.hard_stop) return budget;
   if (budget.monthlyBudgetUsd <= 0 || budget.totalSpentUsd >= budget.monthlyBudgetUsd) {
     throw new AtlasAiBudgetError(`Atlas monthly AI budget is exhausted ($${budget.totalSpentUsd.toFixed(2)} / $${budget.monthlyBudgetUsd.toFixed(2)}).`);
   }
@@ -132,6 +133,7 @@ export type AtlasAiTaskResult<T> = {
   runId: string;
   rootRunId: string;
   escalated: boolean;
+  learnedRoutingApplied: boolean;
   quality: AtlasQualityResult;
 };
 
@@ -155,8 +157,11 @@ type RunTaskInput<T> = {
 export async function runAtlasAiTask<T>(input: RunTaskInput<T>): Promise<AtlasAiTaskResult<T>> {
   const client = createMarketingServiceClient();
   const settings = await loadAiControlSettings(input.ownerId);
+  const budget = await enforceBudget(input.ownerId, settings);
   const policy = atlasAiTaskPolicy(input.task, settings);
   if (!policy.models.length) throw new Error(`Atlas AI task ${input.task} has no configured models.`);
+  const learnedRouting = await learnedRouteForTask({ ownerId: input.ownerId, settings, policy });
+  const primaryModels = learnedRouting.route.length ? learnedRouting.route : policy.models;
 
   const runAttempt = async ({
     models,
@@ -169,10 +174,7 @@ export async function runAtlasAiTask<T>(input: RunTaskInput<T>): Promise<AtlasAi
     parentRunId: string | null;
     escalationReason?: string | null;
   }) => {
-    const model = models[0];
-    if (!model) throw new Error(`Atlas AI task ${input.task} has an empty model route for attempt ${attemptIndex + 1}.`);
-    const fallbackModels = models.slice(1);
-    const budgetAtStart = await enforceBudget(input.ownerId, settings);
+    const [model, ...fallbackModels] = models;
     const started = new Date();
     const { data: run, error: createError } = await client.from("generation_runs").insert({
       owner_id: input.ownerId,
@@ -194,9 +196,15 @@ export async function runAtlasAiTask<T>(input: RunTaskInput<T>): Promise<AtlasAi
       escalation_reason: escalationReason ?? null,
       metadata: asJson({
         policyTier: policy.tier,
+        configuredRoute: policy.models,
         route: models,
         providerSort: settings.provider_sort,
-        budgetAtStart,
+        budgetAtStart: budget,
+        adaptiveLearning: {
+          applied: learnedRouting.applied,
+          reason: learnedRouting.reason,
+          route: learnedRouting.route,
+        },
         ...(input.metadata && typeof input.metadata === "object" && !Array.isArray(input.metadata) ? input.metadata as Record<string, unknown> : {}),
       }),
     }).select("id").single();
@@ -254,7 +262,7 @@ export async function runAtlasAiTask<T>(input: RunTaskInput<T>): Promise<AtlasAi
     }
   };
 
-  const first = await runAttempt({ models: policy.models, attemptIndex: 0, parentRunId: null });
+  const first = await runAttempt({ models: primaryModels, attemptIndex: 0, parentRunId: null });
   if (first.quality.passed) {
     return {
       value: first.gateway.value,
@@ -270,6 +278,7 @@ export async function runAtlasAiTask<T>(input: RunTaskInput<T>): Promise<AtlasAi
       runId: first.runId,
       rootRunId: first.runId,
       escalated: false,
+      learnedRoutingApplied: learnedRouting.applied,
       quality: first.quality,
     };
   }
@@ -285,6 +294,7 @@ export async function runAtlasAiTask<T>(input: RunTaskInput<T>): Promise<AtlasAi
   }).eq("id", first.runId);
   if (escalationUpdateError) throw new Error(escalationUpdateError.message);
 
+  await enforceBudget(input.ownerId, settings);
   const second = await runAttempt({
     models: policy.escalationModels,
     attemptIndex: 1,
@@ -307,6 +317,7 @@ export async function runAtlasAiTask<T>(input: RunTaskInput<T>): Promise<AtlasAi
     runId: second.runId,
     rootRunId: first.runId,
     escalated: true,
+    learnedRoutingApplied: learnedRouting.applied,
     quality: second.quality,
   };
 }
