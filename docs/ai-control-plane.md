@@ -2,7 +2,7 @@
 
 The Atlas AI Control Plane is the application-owned policy, telemetry, quality and learning layer above Vercel AI Gateway.
 
-Vercel AI Gateway owns inference transport, provider routing and technical model fallback. Atlas owns the meaning of a task, its acceptable cost, its quality requirements, semantic escalation and what the artist's later choices teach the system.
+Vercel AI Gateway owns inference transport, provider routing and technical fallback. Atlas owns task meaning, model policy, budget limits, product quality, semantic escalation and evidence-based routing decisions.
 
 ## Architecture
 
@@ -12,7 +12,9 @@ Studio / automation
        v
 runAtlasAiTask()
        |
-       +--> task registry / routing mode
+       +--> task registry
+       +--> routing mode / task overrides
+       +--> evidence-gated adaptive route ordering
        +--> monthly + text budget preflight
        +--> generation_runs attempt ledger
        |
@@ -20,7 +22,7 @@ runAtlasAiTask()
 Vercel AI Gateway
        |
        +--> provider routing
-       +--> technical model fallback
+       +--> technical fallback
        |
        v
 structured result
@@ -37,24 +39,25 @@ Later Studio choices and performance
        v
 ai_feedback_events
        |
-       v
-AI Control Center / future learned routing
+       +--> Control Center analytics
+       +--> adaptive routing evidence
 ```
 
 ## Core boundaries
 
-- `lib/ai/gateway.ts`: transport adapter only. Auth, Gateway request shape, provider sorting, technical fallbacks and raw usage metadata.
-- `lib/ai/tasks.ts`: task registry. Defines task tier, model route, escalation route and quality threshold.
-- `lib/ai/control-plane.ts`: canonical execution path. Enforces budgets, writes attempt telemetry, evaluates quality and performs semantic escalation.
+- `lib/ai/gateway.ts`: transport only. Auth, request shape, provider sorting, technical fallbacks and raw usage metadata.
+- `lib/ai/tasks.ts`: task registry. Defines default tier, configured model route, escalation route and quality threshold.
+- `lib/ai/learning.ts`: evidence-gated adaptive ordering inside the approved task route.
+- `lib/ai/control-plane.ts`: canonical execution path. Enforces budgets, resolves the effective route, writes attempt telemetry, evaluates quality and performs semantic escalation.
 - `lib/ai/quality.ts`: deterministic quality-gate primitives.
-- `lib/ai/analytics.ts`: cost, quality, routing and human-signal aggregation for Studio.
-- `lib/ai/feedback.ts`: explicit feedback helpers. Database triggers cover the durable domain-level signals.
+- `lib/ai/analytics.ts`: cost, quality, routing, learning and human-signal aggregation for Studio.
+- `lib/ai/feedback.ts`: explicit feedback helpers. Database triggers cover durable domain-level signals.
 
-Do not put product-specific routing logic in the Gateway adapter. Do not bypass `runAtlasAiTask()` for ordinary text/reasoning inference.
+Do not put product routing semantics in the Gateway adapter. Do not bypass `runAtlasAiTask()` for ordinary text/reasoning inference.
 
 ## Task registry
 
-Current task types:
+Current tasks:
 
 | Task | Default tier | Semantic escalation |
 | --- | --- | --- |
@@ -66,45 +69,67 @@ Current task types:
 | `video.production_plan` | premium | none |
 | `video.shot_revision` | balanced | premium |
 
-The Studio-level routing mode can leave these rules on `auto` or force all Control Plane tasks to economy, balanced or premium. A forced tier intentionally disables semantic tier escalation because the user has explicitly chosen the tier.
+The owner-level routing mode may stay on `auto` or force economy, balanced or premium. A forced mode is an explicit decision and disables learned reordering and semantic tier escalation.
 
-Task-specific JSON overrides live in `ai_control_settings.task_overrides` so future experiments do not require environment-variable churn.
+Task-specific overrides live in `ai_control_settings.task_overrides`.
+
+## Adaptive routing
+
+Adaptive routing is active only when routing mode is `auto`.
+
+It is intentionally conservative:
+
+- 90-day evidence lookback
+- at least 6 completed samples for a candidate model
+- at least 3 human-rated samples
+- average human quality of at least 0.72
+- deterministic gate quality must satisfy the task threshold, capped at the 0.90 learning floor
+- only models already present in `policy.models` may be reordered
+- eligible models are ordered by observed cost, then human quality
+
+If there is not enough evidence, Atlas keeps the configured route. If learning does not change the order, the configured route remains effective. Forced Economy, Balanced or Premium modes always win over learned routing.
+
+The effective route decision is visible in `/studio/settings/ai`, including whether learning was applied and why. Every generation attempt also records the configured route, effective route and adaptive decision in `generation_runs.metadata`.
+
+Adaptive routing does not create new model IDs, cross task-policy boundaries or modify specialist media providers.
 
 ## Technical fallback vs semantic escalation
 
-These are deliberately different concepts.
+These are different events.
 
-A **technical fallback** happens inside Vercel AI Gateway when the requested route cannot be served and a configured fallback model is used. It is recorded on the attempt as `fallback_used`.
+A **technical fallback** happens inside Vercel AI Gateway when the requested route cannot be served and a configured fallback is used. Atlas records `fallback_used` on the attempt.
 
-A **semantic escalation** happens after Atlas receives a technically successful structured response but a deterministic product quality gate rejects it. Atlas marks the root attempt `escalated`, creates a second `generation_runs` row with `parent_run_id`, and runs the stronger route.
+A **semantic escalation** happens after a technically successful response fails a deterministic Atlas quality gate. Atlas marks the root run as escalated and creates a second `generation_runs` row linked with `parent_run_id`.
 
-Never use semantic retries for paid specialist media submission. Repeating a video/image provider request can spend money twice or create ambiguous remote jobs.
+Adaptive routing happens before both: it can reorder the approved first-pass route based on accumulated evidence.
+
+Never use semantic retries for paid specialist media submission.
 
 ## Telemetry
 
-`generation_runs` is the canonical request-attempt ledger. Every Control Plane call opens a row before external inference and completes or fails that row afterward.
+`generation_runs` is the canonical request-attempt ledger. A row is opened before inference and completed or failed afterward.
 
-Important fields include:
+It records:
 
 - task, purpose and prompt version
 - campaign, release and video-project lineage
-- requested and resolved model
+- configured/requested/resolved model information
 - routed provider
 - Gateway request/generation IDs
-- start/completion time and latency
+- latency
 - input/output token counts
-- estimated/actual recorded cost
+- recorded cost
 - technical fallback state
 - parent attempt and semantic escalation state
-- deterministic quality pass/score/failures
+- deterministic quality pass, score and failures
 - latest user outcome and edit ratio
-- additional metadata, including the route and budget snapshot present at request start
+- route, budget and adaptive-learning metadata present at request start
 
-The Control Center uses the full event stream for human-quality analytics rather than trusting only `generation_runs.user_outcome`, because one generation may produce many pieces of content with different outcomes.
+Human-quality analytics use the full `ai_feedback_events` stream because one generation may create multiple reviewable outputs with different outcomes.
 
 ## Budget policy
 
-`ai_control_settings` stores the owner-level policy. Defaults are intentionally conservative:
+`ai_control_settings` stores owner-level policy. Defaults:
 
 - monthly AI budget: $30
 - text/reasoning budget: $10
@@ -112,48 +137,40 @@ The Control Center uses the full event stream for human-quality analytics rather
 - video policy target: $12
 - hard stop: enabled
 - deterministic quality escalation: enabled
-- provider sort: cost
+- Gateway provider sort: cost
 
-Control Plane v1 enforces the monthly and text/reasoning budgets for language inference. Image/video values are visible policy targets only. Specialist media still uses its own quote, approval, reservation and hard-credit safeguards.
+The Control Plane enforces monthly and text/reasoning budgets for language inference. Specialist image/video values remain policy targets because those providers keep their own quote, approval, reservation and hard-credit systems.
 
-When `hard_stop` is enabled, a new attempt is refused before external inference if the relevant budget is already exhausted. Semantic escalation performs a fresh budget check before the stronger attempt.
+When `hard_stop` is enabled, a new attempt is refused before inference once the relevant recorded budget is exhausted. Semantic escalation checks budget again before the stronger attempt.
 
 ## Quality gates
 
-Quality is product-defined and deterministic wherever practical. Models do not self-grade their own output.
+Quality is product-defined and deterministic wherever practical. The generating model does not self-grade its own result.
 
-Campaign planning currently checks, among other constraints:
+Campaign planning checks strategy depth, content focus, duplicates, connected-channel boundaries, experiment uniqueness, usable variants and experiment-to-moment linkage.
 
-- meaningful strategy summary
-- focused amount of content
-- no duplicate moments
-- only connected social channels
-- unique experiments
-- usable variant counts/content
-- correct experiment-to-moment linkage
+Video concepts check treatment depth, concept distinctness and timeline validity.
 
-Video concepts check treatment depth, concept distinctness and valid timeline moments.
-
-Video production plans reuse the strict storyboard timeline validator and also check look-development coverage, visual-bible depth, executable prompts and the existence of actual source shots.
+Video production plans reuse the strict storyboard timeline validator and check look-development coverage, visual-bible depth, executable prompts and source-shot availability.
 
 Shot revisions validate timing, prompt usefulness and vertical metadata.
 
 ## Human and performance learning
 
-`ai_feedback_events` records granular evidence. Database triggers keep this coupled to domain changes rather than a particular UI implementation.
+`ai_feedback_events` stores granular evidence through domain-level database triggers.
 
-Current signals include:
+Signals include:
 
 - content variant approved -> accepted
 - content variant rejected -> rejected
-- generated content fields changed -> edited with an approximate changed-field ratio
+- generated content changed -> edited
 - generated content published -> published
 - video concept selected -> accepted
 - video production plan approved -> accepted
-- a newer generation replaces an older comparable one -> regenerated
-- content/variant performance snapshots -> performance evidence
+- newer comparable generation -> regenerated
+- performance snapshots -> performance evidence
 
-These events are intentionally raw evidence. Control Plane v1 reports their aggregates but does not yet let a small sample silently rewrite model policy. Future adaptive routing must use minimum-sample and confidence safeguards.
+Adaptive routing uses human quality signals only after minimum-sample safeguards are satisfied. Performance evidence is retained for analysis but is not currently allowed to silently reorder language models by itself.
 
 ## Studio Control Center
 
@@ -161,23 +178,24 @@ These events are intentionally raw evidence. Control Plane v1 reports their aggr
 
 - Control Plane health
 - monthly/text spend and guardrails
-- request success and deterministic quality rates
-- first-pass quality and semantic escalations
-- technical model fallbacks
+- request and deterministic quality rates
+- first-pass quality
+- semantic escalations and Gateway technical fallbacks
+- active adaptive routes
 - token use and latency
 - human acceptance/edit/reject/regenerate/publish signals
-- performance-sample count
 - task-level cost and quality
 - model-level cost and failures
-- effective task registry routes
+- configured task registry
+- effective adaptive routes and evidence decisions
 - routing/budget controls
 - recent attempt trace
 
-Secrets are never rendered in this page.
+Secrets are never rendered on this page.
 
 ## Specialist media boundary
 
-Higgsfield, BFL/FLUX, Google image/video, Z.AI Vidu, fal.ai, MiniMax Music, ElevenLabs Music and other paid asynchronous specialist adapters stay outside the semantic retry loop unless a future migration can preserve all of these guarantees:
+Higgsfield, BFL/FLUX, Google image/video, Z.AI Vidu, fal.ai, MiniMax Music, ElevenLabs Music and other paid asynchronous specialist adapters stay outside automatic semantic retry unless a future implementation can preserve all of these guarantees:
 
 1. quote before spend
 2. explicit approval where required
@@ -186,13 +204,13 @@ Higgsfield, BFL/FLUX, Google image/video, Z.AI Vidu, fal.ai, MiniMax Music, Elev
 5. safe handling of ambiguous remote submission state
 6. reconciliation of actual spend/results
 
-The Control Plane may eventually own policy and analytics for those operations, but it must never turn an uncertain paid media request into an automatic retry.
+The Control Plane may own more policy and analytics for those operations later, but it must never turn an uncertain paid media request into an automatic duplicate spend.
 
 ## Operational rules
 
-- Keep `AI_GATEWAY_API_KEY` server-only for local/non-Vercel runtimes. Vercel production uses OIDC.
+- Keep `AI_GATEWAY_API_KEY` server-only for local/non-Vercel runtimes. Vercel production may use OIDC.
 - Do not use a GLM Coding Plan key for Atlas application inference.
-- Keep task semantics in Atlas, not in provider-specific code.
-- Prefer deterministic validation before adding model-as-judge evaluation.
-- Store evidence first. Only automate learned routing after enough samples exist to support the decision.
-- Treat the Vercel dashboard as provider/infrastructure observability and Atlas `generation_runs` + `ai_feedback_events` as product observability.
+- Keep task semantics in Atlas, not provider-specific code.
+- Prefer deterministic validation before model-as-judge evaluation.
+- Adaptive routing must remain evidence-gated and constrained to approved task routes.
+- Treat Vercel observability as infrastructure/provider telemetry and Atlas `generation_runs` + `ai_feedback_events` as product telemetry.
