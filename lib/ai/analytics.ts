@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createMarketingServiceClient } from "@/lib/marketing/db";
+import { learnedRouteForTask } from "./learning";
 import { atlasAiTaskRegistry } from "./tasks";
 import { getAiBudgetSnapshot, loadAiControlSettings } from "./control-plane";
 
@@ -88,6 +89,17 @@ export async function getAiControlSummary(ownerId: string) {
     performance: feedback.filter((event) => event.event_type === "performance").length,
   };
 
+  const registry = atlasAiTaskRegistry(settings);
+  const learning = await Promise.all(registry.map(async (policy) => {
+    const decision = await learnedRouteForTask({ ownerId, settings, policy });
+    return {
+      task: policy.task,
+      label: policy.label,
+      configuredRoute: policy.models,
+      ...decision,
+    };
+  }));
+
   return {
     settings,
     budget,
@@ -100,6 +112,7 @@ export async function getAiControlSummary(ownerId: string) {
       firstPassSuccessRate: firstPassMeasured.length ? firstPassMeasured.filter((run) => run.quality_gate_passed).length / firstPassMeasured.length : null,
       semanticEscalations: roots.filter((run) => run.escalated).length,
       technicalFallbacks: runs.filter((run) => run.fallback_used).length,
+      adaptiveRoutes: learning.filter((decision) => decision.applied).length,
       totalInputTokens: runs.reduce((sum, run) => sum + Number(run.input_tokens ?? 0), 0),
       totalOutputTokens: runs.reduce((sum, run) => sum + Number(run.output_tokens ?? 0), 0),
       averageLatencyMs: average(completed.flatMap((run) => run.latency_ms === null ? [] : [Number(run.latency_ms)])),
@@ -117,6 +130,7 @@ export async function getAiControlSummary(ownerId: string) {
     })).sort((a, b) => b.costUsd - a.costUsd || b.requests - a.requests),
     models: [...modelMap.values()].map((row) => ({ ...row, costUsd: Number(row.costUsd.toFixed(6)) })).sort((a, b) => b.costUsd - a.costUsd || b.requests - a.requests),
     recentRuns: runs.slice(0, 30),
-    registry: atlasAiTaskRegistry(settings),
+    registry,
+    learning,
   };
 }
