@@ -7,7 +7,7 @@ async function source(path) {
 }
 
 test("Control Plane persists complete request telemetry and budget settings", async () => {
-  const migration = await source("supabase/migrations/20260820150500_ai_control_plane.sql");
+  const migration = await source("supabase/migrations/20260820172743_ai_control_plane.sql");
   for (const column of [
     "task_type", "requested_model", "routed_provider", "gateway_generation_id",
     "video_project_id", "parent_run_id", "latency_ms", "input_tokens", "output_tokens",
@@ -21,7 +21,7 @@ test("Control Plane persists complete request telemetry and budget settings", as
 });
 
 test("human and performance choices become durable AI feedback events", async () => {
-  const migration = await source("supabase/migrations/20260820150500_ai_control_plane.sql");
+  const migration = await source("supabase/migrations/20260820172743_ai_control_plane.sql");
   assert.match(migration, /create table public\.ai_feedback_events/);
   assert.match(migration, /record_ai_variant_feedback/);
   assert.match(migration, /record_ai_content_feedback/);
@@ -40,13 +40,16 @@ test("Campaign Brain links generated content to the canonical Control Plane run"
   assert.match(actions, /generation_run_id: generationRun\.id/);
 });
 
-test("adaptive routing requires evidence and only reorders approved task models", async () => {
+test("adaptive routing requires evidence, stays within approved models and fails open", async () => {
   const controlPlane = await source("lib/ai/control-plane.ts");
+  const analytics = await source("lib/ai/analytics.ts");
   const learning = await source("lib/ai/learning.ts");
   assert.match(controlPlane, /learnedRouteForTask/);
   assert.match(controlPlane, /const primaryModels = learnedRouting\.route/);
   assert.match(controlPlane, /configuredRoute: policy\.models/);
   assert.match(controlPlane, /learnedRoutingApplied/);
+  assert.match(controlPlane, /Adaptive evidence is temporarily unavailable; using the configured route/);
+  assert.match(analytics, /Adaptive evidence is temporarily unavailable; using the configured route/);
   assert.match(learning, /MIN_COMPLETED_SAMPLES = 6/);
   assert.match(learning, /MIN_HUMAN_SAMPLES = 3/);
   assert.match(learning, /settings\.routing_mode !== "auto"/);
