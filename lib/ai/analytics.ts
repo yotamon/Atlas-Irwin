@@ -91,7 +91,12 @@ export async function getAiControlSummary(ownerId: string) {
 
   const registry = atlasAiTaskRegistry(settings);
   const learning = await Promise.all(registry.map(async (policy) => {
-    const decision = await learnedRouteForTask({ ownerId, settings, policy });
+    const decision = await learnedRouteForTask({ ownerId, settings, policy }).catch(() => ({
+      applied: false,
+      reason: "Adaptive evidence is temporarily unavailable; using the configured route.",
+      route: policy.models,
+      evidence: [],
+    }));
     return {
       task: policy.task,
       label: policy.label,
