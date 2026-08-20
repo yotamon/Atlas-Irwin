@@ -57,28 +57,49 @@ test("Vercel AI Gateway is the shared structured inference backbone", async () =
   assert.match(gateway, /"cost" \| "ttft" \| "tps"/);
   assert.match(gateway, /estimatedCostUsd/);
   assert.match(gateway, /generationId/);
+  assert.match(gateway, /inputTokens/);
+  assert.match(gateway, /outputTokens/);
 });
 
-test("marketing structured text routes through Gateway with Atlas-owned presets", async () => {
+test("Atlas owns task routing above the Gateway", async () => {
+  const tasks = await source("lib/ai/tasks.ts");
+  const control = await source("lib/ai/control-plane.ts");
+  assert.match(tasks, /marketing\.campaign_plan/);
+  assert.match(tasks, /video\.concepts/);
+  assert.match(tasks, /video\.production_plan/);
+  assert.match(tasks, /video\.shot_revision/);
+  assert.match(tasks, /ATLAS_MARKETING_ECONOMY_MODELS/);
+  assert.match(tasks, /ATLAS_MARKETING_BALANCED_MODELS/);
+  assert.match(tasks, /ATLAS_MARKETING_PREMIUM_MODELS/);
+  assert.match(tasks, /VIDEO_DIRECTOR_LLM_MODEL/);
+  assert.match(control, /runAtlasAiTask/);
+  assert.match(control, /quality_escalation/);
+  assert.match(control, /parent_run_id/);
+  assert.match(control, /AtlasAiBudgetError/);
+  assert.match(control, /AtlasAiQualityError/);
+  assert.match(control, /generateGatewayStructured/);
+});
+
+test("marketing structured text uses Control Plane quality gates instead of provider clients", async () => {
   const ai = await source("lib/marketing/ai.ts");
-  assert.match(ai, /generateGatewayStructured/);
-  assert.match(ai, /zai\/glm-4\.7-flash/);
-  assert.match(ai, /google\/gemini-3\.7-flash/);
-  assert.match(ai, /openai\/gpt-5\.6-sol/);
-  assert.match(ai, /ATLAS_MARKETING_TEXT_PRESET/);
-  assert.match(ai, /ATLAS_MARKETING_ECONOMY_MODELS/);
-  assert.match(ai, /ATLAS_MARKETING_BALANCED_MODELS/);
-  assert.match(ai, /ATLAS_MARKETING_PREMIUM_MODELS/);
+  assert.match(ai, /runAtlasAiTask/);
+  assert.match(ai, /marketing\.campaign_plan/);
+  assert.match(ai, /campaignQualityGate/);
+  assert.match(ai, /disconnected social platform/);
   assert.doesNotMatch(ai, /api\.openai\.com/);
   assert.doesNotMatch(ai, /generativelanguage\.googleapis\.com/);
   assert.doesNotMatch(ai, /api\.z\.ai\/api\/paas\/v4\/chat/);
 });
 
-test("Video Creative Director uses the shared Gateway but creative media providers stay direct", async () => {
+test("Video Creative Director uses Control Plane but creative media providers stay direct", async () => {
   const director = await source("lib/video-director/openai-director.ts");
   const providers = await source("lib/marketing/creative-providers.ts");
-  assert.match(director, /generateGatewayStructured/);
-  assert.match(director, /VIDEO_DIRECTOR_LLM_FALLBACK_MODELS/);
+  assert.match(director, /runAtlasAiTask/);
+  assert.match(director, /video\.concepts/);
+  assert.match(director, /video\.production_plan/);
+  assert.match(director, /video\.shot_revision/);
+  assert.match(director, /conceptQualityGate/);
+  assert.match(director, /planQualityGate/);
   assert.match(director, /atlasAiGatewayConfigured/);
   assert.doesNotMatch(director, /api\.openai\.com/);
   assert.match(providers, /https:\/\/api\.bfl\.ai\/v1/);
