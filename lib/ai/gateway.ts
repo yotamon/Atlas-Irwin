@@ -12,6 +12,8 @@ export type GatewayStructuredResult<T> = {
   generationId: string | null;
   routedProvider: string | null;
   estimatedCostUsd: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
 };
 
 type GatewayResponsePayload = {
@@ -26,6 +28,7 @@ type GatewayResponsePayload = {
       refusal?: string;
     }>;
   }>;
+  usage?: unknown;
   error?: unknown;
   provider_metadata?: unknown;
   providerMetadata?: unknown;
@@ -111,9 +114,14 @@ function gatewayMetadata(payload: GatewayResponsePayload) {
   return asRecord(metadata?.gateway) ?? asRecord(payload.gateway) ?? {};
 }
 
-function numericCost(value: unknown) {
-  const cost = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
-  return Number.isFinite(cost) && cost >= 0 ? cost : null;
+function numeric(value: unknown) {
+  const result = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(result) && result >= 0 ? result : null;
+}
+
+function integer(value: unknown) {
+  const result = numeric(value);
+  return result === null ? null : Math.round(result);
 }
 
 function metadataString(record: Record<string, unknown>, ...keys: string[]) {
@@ -124,6 +132,14 @@ function metadataString(record: Record<string, unknown>, ...keys: string[]) {
   return null;
 }
 
+function usageTokens(payload: GatewayResponsePayload) {
+  const usage = asRecord(payload.usage) ?? {};
+  return {
+    inputTokens: integer(usage.input_tokens ?? usage.prompt_tokens ?? usage.inputTokens ?? usage.promptTokens),
+    outputTokens: integer(usage.output_tokens ?? usage.completion_tokens ?? usage.outputTokens ?? usage.completionTokens),
+  };
+}
+
 export async function generateGatewayStructured<T>({
   name,
   schema,
@@ -132,6 +148,7 @@ export async function generateGatewayStructured<T>({
   model,
   fallbackModels = [],
   timeoutMs,
+  providerSort,
 }: {
   name: string;
   schema: Record<string, unknown>;
@@ -140,6 +157,7 @@ export async function generateGatewayStructured<T>({
   model: string;
   fallbackModels?: string[];
   timeoutMs?: number;
+  providerSort?: AtlasGatewayProviderSort;
 }): Promise<GatewayStructuredResult<T>> {
   const token = envToken();
   if (!token) {
@@ -157,7 +175,7 @@ export async function generateGatewayStructured<T>({
       .filter((candidate) => candidate && candidate !== requestedModel),
   ));
   const clientRequestId = crypto.randomUUID();
-  const gatewayOptions: Record<string, unknown> = { sort: gatewayProviderSort() };
+  const gatewayOptions: Record<string, unknown> = { sort: providerSort ?? gatewayProviderSort() };
   if (fallbacks.length) gatewayOptions.models = fallbacks;
 
   const headers: Record<string, string> = {
@@ -209,6 +227,7 @@ export async function generateGatewayStructured<T>({
 
   const gateway = gatewayMetadata(payload);
   const routing = asRecord(gateway.routing) ?? {};
+  const usage = usageTokens(payload);
   return {
     value,
     model: typeof payload.model === "string" && payload.model.trim() ? payload.model : requestedModel,
@@ -216,6 +235,8 @@ export async function generateGatewayStructured<T>({
     requestId: response.headers.get("x-request-id") || payload.id || clientRequestId,
     generationId: metadataString(gateway, "generationId", "generation_id"),
     routedProvider: metadataString(routing, "finalProvider", "resolvedProvider", "final_provider", "resolved_provider"),
-    estimatedCostUsd: numericCost(gateway.cost),
+    estimatedCostUsd: numeric(gateway.cost),
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
   };
 }
