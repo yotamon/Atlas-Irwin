@@ -1,11 +1,9 @@
 import "server-only";
 
-import {
-  atlasAiGatewayConfigured,
-  generateGatewayStructured,
-  normalizeGatewayModel,
-  parseGatewayModelList,
-} from "@/lib/ai/gateway";
+import { atlasAiGatewayConfigured, normalizeGatewayModel } from "@/lib/ai/gateway";
+import { runAtlasAiTask } from "@/lib/ai/control-plane";
+import { strictQualityResult, type AtlasQualityGate } from "@/lib/ai/quality";
+import type { AtlasAiTaskType } from "@/lib/ai/tasks";
 import type {
   MusicVideoCreativeDirector,
   ProductionPlan,
@@ -81,33 +79,6 @@ const VISUAL_BIBLE_SCHEMA = {
   },
 } as const;
 
-function directorModel() {
-  const model = normalizeGatewayModel(process.env.VIDEO_DIRECTOR_LLM_MODEL?.trim() || "");
-  if (!model) {
-    throw new Error(
-      "Creative Director model is not configured. Set VIDEO_DIRECTOR_LLM_MODEL to a Vercel AI Gateway model ID such as openai/gpt-5.6-sol.",
-    );
-  }
-  return model;
-}
-
-function directorFallbackModels() {
-  return parseGatewayModelList(process.env.VIDEO_DIRECTOR_LLM_FALLBACK_MODELS);
-}
-
-async function structuredResponse<T>(input: { name: string; schema: Record<string, unknown>; instructions: string; prompt: string }): Promise<T> {
-  const result = await generateGatewayStructured<T>({
-    name: input.name,
-    schema: input.schema,
-    instructions: input.instructions,
-    input: input.prompt,
-    model: directorModel(),
-    fallbackModels: directorFallbackModels(),
-    timeoutMs: 180_000,
-  });
-  return result.value;
-}
-
 function compactContext(context: VideoProjectContext) {
   const brief = parseVideoCreativeBrief(context.project.creative_brief);
   return {
@@ -137,39 +108,143 @@ Creative requirements:
 - test_shot_indexes must refer only to unique or continuation source shots that can actually be generated and reviewed.
 - The final result must feel intentional, premium, strange enough to be memorable, and recognizably part of one Atlas Irwin world.`;
 
-// Kept under the existing export name to avoid a migration across Studio actions.
-// Inference is now provider-agnostic and routed through Vercel AI Gateway.
+async function structuredResponse<T>({
+  context,
+  task,
+  purpose,
+  schema,
+  instructions,
+  prompt,
+  qualityGate,
+}: {
+  context: VideoProjectContext;
+  task: AtlasAiTaskType;
+  purpose: string;
+  schema: Record<string, unknown>;
+  instructions: string;
+  prompt: string;
+  qualityGate: AtlasQualityGate<T>;
+}): Promise<T> {
+  const result = await runAtlasAiTask<T>({
+    ownerId: context.project.owner_id,
+    task,
+    purpose,
+    releaseId: context.release.id,
+    videoProjectId: context.project.id,
+    promptVersion: "video-director-v2",
+    schema,
+    instructions,
+    input: prompt,
+    inputContext: compactContext(context),
+    qualityGate,
+    timeoutMs: 180_000,
+  });
+  return result.value;
+}
+
+function conceptQualityGate(context: VideoProjectContext): AtlasQualityGate<{ concepts: VideoConcept[] }> {
+  const durationMs = context.musicMap?.duration_ms || Math.round((context.track.duration ?? 0) * 1000);
+  return ({ concepts }) => {
+    const titles = concepts.map((concept) => concept.title.trim().toLowerCase());
+    const premises = concepts.map((concept) => concept.premise.trim().toLowerCase());
+    const richConcepts = concepts.every((concept) =>
+      concept.premise.trim().length >= 30 &&
+      concept.story.trim().length >= 60 &&
+      concept.visual_language.trim().length >= 25 &&
+      concept.camera_language.trim().length >= 15 &&
+      concept.recurring_motif.trim().length >= 8 &&
+      concept.anti_cliches.length >= 2 &&
+      concept.signature_moments.length >= 2,
+    );
+    const timingsValid = concepts.every((concept) => concept.signature_moments.every((moment) =>
+      moment.time_ms >= 0 && (durationMs <= 0 || moment.time_ms <= durationMs),
+    ));
+    return strictQualityResult([
+      { passed: concepts.length === 3, failure: "Creative Director must return exactly three concepts." },
+      { passed: new Set(titles).size === concepts.length, failure: "Video concepts are not distinct enough by title." },
+      { passed: new Set(premises).size === concepts.length, failure: "Video concepts repeat the same premise." },
+      { passed: richConcepts, failure: "One or more concepts are too thin to review as a real creative treatment." },
+      { passed: timingsValid, failure: "A signature moment falls outside the track timeline." },
+    ]);
+  };
+}
+
+function planQualityGate(context: VideoProjectContext): AtlasQualityGate<ProductionPlan> {
+  return (plan) => {
+    const failures: string[] = [];
+    try { validatePlanTimeline(plan, context); }
+    catch (error) { failures.push(error instanceof Error ? error.message : "Storyboard timeline validation failed."); }
+    const shots = plan.scenes.flatMap((scene) => scene.shots);
+    const paidSources = shots.filter((shot) => shot.reuse_strategy === "unique" || shot.reuse_strategy === "continuation").length;
+    const hasUsefulBible = plan.visual_bible.world.trim().length >= 20
+      && plan.visual_bible.camera_rules.length >= 2
+      && plan.visual_bible.continuity_rules.length >= 2
+      && plan.visual_bible.avoid.length >= 2;
+    const promptsExecutable = shots.every((shot) => shot.prompt.trim().length >= 35 && shot.description.trim().length >= 10);
+    return strictQualityResult([
+      { passed: failures.length === 0, failure: failures.join("; ") || "Storyboard timeline is invalid." },
+      { passed: plan.look_dev_prompts.length >= 3 && plan.look_dev_prompts.length <= 10, failure: "Production plan needs 3-10 useful look-development prompts." },
+      { passed: hasUsefulBible, failure: "Visual bible is too thin to preserve continuity." },
+      { passed: promptsExecutable, failure: "One or more storyboard prompts are not executable enough for a video model." },
+      { passed: paidSources > 0, failure: "Production plan contains no source shots that can actually be generated." },
+    ]);
+  };
+}
+
+function shotQualityGate(): AtlasQualityGate<StoryboardShot> {
+  return (shot) => strictQualityResult([
+    { passed: shot.end_ms > shot.start_ms, failure: "Revised shot has an invalid duration." },
+    { passed: shot.description.trim().length >= 10, failure: "Revised shot description is too thin." },
+    { passed: shot.prompt.trim().length >= 35, failure: "Revised shot prompt is not executable enough." },
+    { passed: ["left", "center", "right"].includes(shot.vertical_focus), failure: "Revised shot is missing a valid vertical focus." },
+  ]);
+}
+
+// Kept under the existing export name so Studio actions do not need a migration.
+// The implementation is provider-agnostic and all reasoning now runs through Atlas AI Control Plane.
 export class OpenAIMusicVideoDirector implements MusicVideoCreativeDirector {
   async createConcepts(context: VideoProjectContext): Promise<VideoConcept[]> {
-    const result = await structuredResponse<{ concepts: VideoConcept[] }>({ name: "atlas_video_concepts", instructions: DIRECTOR_INSTRUCTIONS, prompt: `Create exactly three materially different music-video concepts. They must differ in premise and visual mechanism, not merely color palette. Context:\
-${JSON.stringify(compactContext(context))}`, schema: { type: "object", additionalProperties: false, required: ["concepts"], properties: { concepts: { type: "array", minItems: 3, maxItems: 3, items: CONCEPT_SCHEMA } } } });
+    const result = await structuredResponse<{ concepts: VideoConcept[] }>({
+      context,
+      task: "video.concepts",
+      purpose: "video_concepts",
+      instructions: DIRECTOR_INSTRUCTIONS,
+      prompt: `Create exactly three materially different music-video concepts. They must differ in premise and visual mechanism, not merely color palette. Context:\n${JSON.stringify(compactContext(context))}`,
+      schema: { type: "object", additionalProperties: false, required: ["concepts"], properties: { concepts: { type: "array", minItems: 3, maxItems: 3, items: CONCEPT_SCHEMA } } },
+      qualityGate: conceptQualityGate(context),
+    });
     return result.concepts;
   }
 
   async createProductionPlan(context: VideoProjectContext, concept: VideoConcept): Promise<ProductionPlan> {
     const result = await structuredResponse<ProductionPlan>({
-      name: "atlas_video_production_plan",
-      instructions: `${DIRECTOR_INSTRUCTIONS}\
-Build a timeline with no gaps or overlaps that covers the full target duration. Keep individual generated source sequences practical for current video models, usually 4-15 seconds. Shots may reuse a generated source editorially; mark that with reuse_strategy. Reserve quality priority for hero moments rather than every shot.`,
-      prompt: `Turn the approved concept into a visual bible and production-ready storyboard. Approved concept:\
-${JSON.stringify(concept)}\
-\
-Project context:\
-${JSON.stringify(compactContext(context))}`,
+      context,
+      task: "video.production_plan",
+      purpose: "video_production_plan",
+      instructions: `${DIRECTOR_INSTRUCTIONS}\nBuild a timeline with no gaps or overlaps that covers the full target duration. Keep individual generated source sequences practical for current video models, usually 4-15 seconds. Shots may reuse a generated source editorially; mark that with reuse_strategy. Reserve quality priority for hero moments rather than every shot.`,
+      prompt: `Turn the approved concept into a visual bible and production-ready storyboard. Approved concept:\n${JSON.stringify(concept)}\n\nProject context:\n${JSON.stringify(compactContext(context))}`,
       schema: { type: "object", additionalProperties: false, required: ["visual_bible", "scenes", "look_dev_prompts", "test_shot_indexes", "editing_strategy", "reuse_strategy", "production_notes"], properties: {
         visual_bible: VISUAL_BIBLE_SCHEMA,
         scenes: { type: "array", minItems: 1, items: { type: "object", additionalProperties: false, required: ["title", "start_ms", "end_ms", "description", "visual_intent", "shots"], properties: { title: { type: "string" }, start_ms: { type: "integer", minimum: 0 }, end_ms: { type: "integer", minimum: 1 }, description: { type: "string" }, visual_intent: { type: "string" }, shots: { type: "array", minItems: 1, items: SHOT_SCHEMA } } } },
         look_dev_prompts: { type: "array", minItems: 3, maxItems: 10, items: { type: "object", additionalProperties: false, required: ["label", "prompt", "purpose"], properties: { label: { type: "string" }, prompt: { type: "string" }, purpose: { type: "string" } } } },
         test_shot_indexes: { type: "array", minItems: 1, items: { type: "integer", minimum: 0 }, maxItems: 4 }, editing_strategy: { type: "string" }, reuse_strategy: { type: "string" }, production_notes: { type: "array", items: { type: "string" } },
       } },
+      qualityGate: planQualityGate(context),
     });
     validatePlanTimeline(result, context);
     return result;
   }
 
   async reviseShot(input: { context: VideoProjectContext; concept: VideoConcept; visualBible: VisualBible; currentShot: StoryboardShotRevisionInput; instruction: string }): Promise<StoryboardShot> {
-    return structuredResponse<StoryboardShot>({ name: "atlas_video_shot_revision", instructions: `${DIRECTOR_INSTRUCTIONS}\
-Revise only the requested shot. Preserve its exact start_ms and end_ms unless the instruction explicitly requires a timing change. Preserve continuity with the visual bible. Always return explicit vertical_safe and vertical_focus values.`, prompt: JSON.stringify({ instruction: input.instruction, current_shot: input.currentShot, visual_bible: input.visualBible, approved_concept: input.concept, project: compactContext(input.context) }), schema: SHOT_SCHEMA });
+    return structuredResponse<StoryboardShot>({
+      context: input.context,
+      task: "video.shot_revision",
+      purpose: "video_shot_revision",
+      instructions: `${DIRECTOR_INSTRUCTIONS}\nRevise only the requested shot. Preserve its exact start_ms and end_ms unless the instruction explicitly requires a timing change. Preserve continuity with the visual bible. Always return explicit vertical_safe and vertical_focus values.`,
+      prompt: JSON.stringify({ instruction: input.instruction, current_shot: input.currentShot, visual_bible: input.visualBible, approved_concept: input.concept, project: compactContext(input.context) }),
+      schema: SHOT_SCHEMA,
+      qualityGate: shotQualityGate(),
+    });
   }
 }
 
@@ -214,7 +289,7 @@ function validatePlanTimeline(plan: ProductionPlan, context: VideoProjectContext
 }
 
 export function openAIDirectorReadiness() {
-  const model = normalizeGatewayModel(process.env.VIDEO_DIRECTOR_LLM_MODEL?.trim() || "");
+  const model = normalizeGatewayModel(process.env.VIDEO_DIRECTOR_LLM_MODEL?.trim() || "openai/gpt-5.6-sol");
   return {
     configured: Boolean(atlasAiGatewayConfigured() && model),
     model: model || "Not configured",

@@ -239,24 +239,48 @@ export async function generateCampaignStrategy(form: FormData) {
     if (deleteExperimentError) throw new Error(deleteExperimentError.message);
   }
 
-  const { data: generationRun, error: generationError } = await marketing
-    .from("generation_runs")
-    .insert({
-      owner_id: user.id,
-      campaign_id: campaignId,
-      release_id: campaign.release_id,
-      purpose: "campaign_plan",
-      provider: generation.provider,
-      model: generation.model,
-      prompt_version: "marketing-v1",
-      input_context: json(context),
-      output: json(plan),
-      status: "completed",
-      provider_request_id: generation.requestId,
-    })
-    .select("id")
-    .single();
-  if (generationError) throw new Error(generationError.message);
+  let generationRun: { id: string };
+  const controlPlaneRunId = "runId" in generation && typeof generation.runId === "string" ? generation.runId : null;
+  if (controlPlaneRunId) {
+    const { data: linkedRun, error: linkRunError } = await marketing
+      .from("generation_runs")
+      .update({
+        campaign_id: campaignId,
+        release_id: campaign.release_id,
+        input_context: json(context),
+        output: json(plan),
+      })
+      .eq("id", controlPlaneRunId)
+      .eq("owner_id", user.id)
+      .select("id")
+      .single();
+    if (linkRunError || !linkedRun) throw new Error(linkRunError?.message || "AI generation run could not be linked to this campaign.");
+    generationRun = linkedRun;
+  } else {
+    const { data: fallbackRun, error: generationError } = await marketing
+      .from("generation_runs")
+      .insert({
+        owner_id: user.id,
+        campaign_id: campaignId,
+        release_id: campaign.release_id,
+        purpose: "campaign_plan",
+        task_type: "marketing.campaign_plan",
+        provider: generation.provider,
+        model: generation.model,
+        requested_model: generation.model,
+        prompt_version: "marketing-v2",
+        input_context: json(context),
+        output: json(plan),
+        status: "completed",
+        quality_gate_passed: generation.provider === "template" ? null : true,
+        user_outcome: "unknown",
+        completed_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+    if (generationError || !fallbackRun) throw new Error(generationError?.message || "Fallback generation run could not be saved.");
+    generationRun = fallbackRun;
+  }
 
   const kpis = OBJECTIVE_KPIS[objectiveSchema.parse(campaign.objective)];
   const { error: updateCampaignError } = await marketing
@@ -267,7 +291,7 @@ export async function generateCampaignStrategy(form: FormData) {
       secondary_kpis: kpis.secondary,
       audience_segments: json(plan.audienceSegments),
       strategy: json({
-        planVersion: "marketing-v1",
+        planVersion: "marketing-v2",
         generatedAt: new Date().toISOString(),
         provider: generation.provider,
         model: generation.model,
@@ -304,7 +328,7 @@ export async function generateCampaignStrategy(form: FormData) {
   const experimentByTitle = new Map((experiments ?? []).map((experiment) => [experiment.title, experiment.id]));
   const planExperimentByTitle = new Map(plan.experiments.map((experiment) => [experiment.title, experiment]));
   const destinationUrl = releaseResult.data.smart_link_url || releaseResult.data.spotify_url || releaseResult.data.soundcloud_url;
-  const source = generation.provider === "openai" ? "ai" : "planner";
+  const source = generation.provider === "template" ? "planner" : "ai";
 
   for (const moment of plan.contentMoments) {
     const experimentId = moment.experimentTitle ? experimentByTitle.get(moment.experimentTitle) ?? null : null;
