@@ -10,6 +10,10 @@ type Table<Row> = {
 export type CampaignStatus = "draft" | "planned" | "active" | "paused" | "completed" | "archived";
 export type CampaignMode = "suggest" | "assisted" | "autopilot";
 export type ApprovalStatus = "not_required" | "pending" | "approved" | "rejected";
+export type AiRoutingMode = "auto" | "economy" | "balanced" | "premium";
+export type AiProviderSort = "cost" | "ttft" | "tps";
+export type AiUserOutcome = "accepted" | "edited" | "rejected" | "regenerated" | "published" | "unknown";
+export type AiFeedbackEventType = "accepted" | "edited" | "rejected" | "regenerated" | "published" | "performance";
 
 export type Campaign = {
   id: string;
@@ -74,18 +78,70 @@ export type GenerationRun = {
   owner_id: string;
   campaign_id: string | null;
   release_id: string | null;
+  video_project_id: string | null;
+  parent_run_id: string | null;
   purpose: string;
+  task_type: string | null;
   provider: string;
   model: string;
+  requested_model: string | null;
+  routed_provider: string | null;
+  gateway_generation_id: string | null;
   prompt_version: string;
   input_context: Json;
   output: Json;
   status: "queued" | "running" | "completed" | "failed";
+  attempt_index: number;
+  started_at: string | null;
+  completed_at: string | null;
+  latency_ms: number | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
   estimated_cost_usd: number | null;
+  actual_cost_usd: number | null;
   provider_request_id: string | null;
+  fallback_used: boolean;
+  fallback_count: number;
+  escalated: boolean;
+  escalation_reason: string | null;
+  quality_gate_passed: boolean | null;
+  quality_score: number | null;
+  quality_failures: Json;
+  user_outcome: AiUserOutcome | null;
+  edit_distance_ratio: number | null;
+  outcome_recorded_at: string | null;
+  metadata: Json;
   error: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type AiControlSettings = {
+  owner_id: string;
+  routing_mode: AiRoutingMode;
+  monthly_budget_usd: number;
+  text_budget_usd: number;
+  image_budget_usd: number;
+  video_budget_usd: number;
+  hard_stop: boolean;
+  quality_escalation: boolean;
+  provider_sort: AiProviderSort;
+  task_overrides: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AiFeedbackEvent = {
+  id: string;
+  owner_id: string;
+  generation_run_id: string;
+  event_type: AiFeedbackEventType;
+  entity_type: string | null;
+  entity_id: string | null;
+  edit_distance_ratio: number | null;
+  quality_signal: number | null;
+  metadata: Json;
+  created_at: string;
 };
 
 export type MarketingContentItem = ContentItem & {
@@ -302,6 +358,8 @@ export type MarketingDatabase = {
       campaign_phases: Table<CampaignPhase>;
       campaign_experiments: Table<CampaignExperiment>;
       generation_runs: Table<GenerationRun>;
+      ai_control_settings: Table<AiControlSettings>;
+      ai_feedback_events: Table<AiFeedbackEvent>;
       content_items: Table<MarketingContentItem>;
       content_variants: Table<ContentVariant>;
       publication_jobs: Table<PublicationJob>;
