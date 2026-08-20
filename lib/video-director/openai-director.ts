@@ -1,5 +1,11 @@
 import "server-only";
 
+import {
+  atlasAiGatewayConfigured,
+  generateGatewayStructured,
+  normalizeGatewayModel,
+  parseGatewayModelList,
+} from "@/lib/ai/gateway";
 import type {
   MusicVideoCreativeDirector,
   ProductionPlan,
@@ -75,38 +81,31 @@ const VISUAL_BIBLE_SCHEMA = {
   },
 } as const;
 
-type ResponsePayload = { output_text?: string; output?: Array<{ type?: string; content?: Array<{ type?: string; text?: string; refusal?: string }> }>; error?: { message?: string } };
-
-function apiKey() {
-  const key = process.env.OPENAI_API_KEY?.trim();
-  if (!key) throw new Error("Creative Director is not configured. Set OPENAI_API_KEY.");
-  return key;
-}
-
 function directorModel() {
-  const model = process.env.VIDEO_DIRECTOR_LLM_MODEL?.trim();
+  const model = normalizeGatewayModel(process.env.VIDEO_DIRECTOR_LLM_MODEL?.trim() || "");
   if (!model) {
     throw new Error(
-      "Creative Director model is not configured. Set VIDEO_DIRECTOR_LLM_MODEL to a Responses API model available to this OpenAI account.",
+      "Creative Director model is not configured. Set VIDEO_DIRECTOR_LLM_MODEL to a Vercel AI Gateway model ID such as openai/gpt-5.6-sol.",
     );
   }
   return model;
 }
 
-function outputText(payload: ResponsePayload) {
-  if (payload.output_text) return payload.output_text;
-  for (const item of payload.output ?? []) for (const content of item.content ?? []) { if (content.type === "refusal" && content.refusal) throw new Error(`Creative Director refused: ${content.refusal}`); if (content.text) return content.text; }
-  throw new Error(payload.error?.message || "Creative Director returned no structured output.");
+function directorFallbackModels() {
+  return parseGatewayModelList(process.env.VIDEO_DIRECTOR_LLM_FALLBACK_MODELS);
 }
 
 async function structuredResponse<T>(input: { name: string; schema: Record<string, unknown>; instructions: string; prompt: string }): Promise<T> {
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST", headers: { Authorization: `Bearer ${apiKey()}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model: directorModel(), store: false, instructions: input.instructions, input: input.prompt, text: { verbosity: "medium", format: { type: "json_schema", name: input.name, strict: true, schema: input.schema } } }),
+  const result = await generateGatewayStructured<T>({
+    name: input.name,
+    schema: input.schema,
+    instructions: input.instructions,
+    input: input.prompt,
+    model: directorModel(),
+    fallbackModels: directorFallbackModels(),
+    timeoutMs: 180_000,
   });
-  const payload = await response.json().catch(() => ({})) as ResponsePayload;
-  if (!response.ok) throw new Error(payload.error?.message || `Creative Director failed (${response.status}).`);
-  try { return JSON.parse(outputText(payload)) as T; } catch (error) { throw new Error(`Creative Director returned invalid structured JSON: ${error instanceof Error ? error.message : "unknown parse error"}`); }
+  return result.value;
 }
 
 function compactContext(context: VideoProjectContext) {
@@ -138,17 +137,25 @@ Creative requirements:
 - test_shot_indexes must refer only to unique or continuation source shots that can actually be generated and reviewed.
 - The final result must feel intentional, premium, strange enough to be memorable, and recognizably part of one Atlas Irwin world.`;
 
+// Kept under the existing export name to avoid a migration across Studio actions.
+// Inference is now provider-agnostic and routed through Vercel AI Gateway.
 export class OpenAIMusicVideoDirector implements MusicVideoCreativeDirector {
   async createConcepts(context: VideoProjectContext): Promise<VideoConcept[]> {
-    const result = await structuredResponse<{ concepts: VideoConcept[] }>({ name: "atlas_video_concepts", instructions: DIRECTOR_INSTRUCTIONS, prompt: `Create exactly three materially different music-video concepts. They must differ in premise and visual mechanism, not merely color palette. Context:\n${JSON.stringify(compactContext(context))}`, schema: { type: "object", additionalProperties: false, required: ["concepts"], properties: { concepts: { type: "array", minItems: 3, maxItems: 3, items: CONCEPT_SCHEMA } } } });
+    const result = await structuredResponse<{ concepts: VideoConcept[] }>({ name: "atlas_video_concepts", instructions: DIRECTOR_INSTRUCTIONS, prompt: `Create exactly three materially different music-video concepts. They must differ in premise and visual mechanism, not merely color palette. Context:\
+${JSON.stringify(compactContext(context))}`, schema: { type: "object", additionalProperties: false, required: ["concepts"], properties: { concepts: { type: "array", minItems: 3, maxItems: 3, items: CONCEPT_SCHEMA } } } });
     return result.concepts;
   }
 
   async createProductionPlan(context: VideoProjectContext, concept: VideoConcept): Promise<ProductionPlan> {
     const result = await structuredResponse<ProductionPlan>({
       name: "atlas_video_production_plan",
-      instructions: `${DIRECTOR_INSTRUCTIONS}\nBuild a timeline with no gaps or overlaps that covers the full target duration. Keep individual generated source sequences practical for current video models, usually 4-15 seconds. Shots may reuse a generated source editorially; mark that with reuse_strategy. Reserve quality priority for hero moments rather than every shot.`,
-      prompt: `Turn the approved concept into a visual bible and production-ready storyboard. Approved concept:\n${JSON.stringify(concept)}\n\nProject context:\n${JSON.stringify(compactContext(context))}`,
+      instructions: `${DIRECTOR_INSTRUCTIONS}\
+Build a timeline with no gaps or overlaps that covers the full target duration. Keep individual generated source sequences practical for current video models, usually 4-15 seconds. Shots may reuse a generated source editorially; mark that with reuse_strategy. Reserve quality priority for hero moments rather than every shot.`,
+      prompt: `Turn the approved concept into a visual bible and production-ready storyboard. Approved concept:\
+${JSON.stringify(concept)}\
+\
+Project context:\
+${JSON.stringify(compactContext(context))}`,
       schema: { type: "object", additionalProperties: false, required: ["visual_bible", "scenes", "look_dev_prompts", "test_shot_indexes", "editing_strategy", "reuse_strategy", "production_notes"], properties: {
         visual_bible: VISUAL_BIBLE_SCHEMA,
         scenes: { type: "array", minItems: 1, items: { type: "object", additionalProperties: false, required: ["title", "start_ms", "end_ms", "description", "visual_intent", "shots"], properties: { title: { type: "string" }, start_ms: { type: "integer", minimum: 0 }, end_ms: { type: "integer", minimum: 1 }, description: { type: "string" }, visual_intent: { type: "string" }, shots: { type: "array", minItems: 1, items: SHOT_SCHEMA } } } },
@@ -161,7 +168,8 @@ export class OpenAIMusicVideoDirector implements MusicVideoCreativeDirector {
   }
 
   async reviseShot(input: { context: VideoProjectContext; concept: VideoConcept; visualBible: VisualBible; currentShot: StoryboardShotRevisionInput; instruction: string }): Promise<StoryboardShot> {
-    return structuredResponse<StoryboardShot>({ name: "atlas_video_shot_revision", instructions: `${DIRECTOR_INSTRUCTIONS}\nRevise only the requested shot. Preserve its exact start_ms and end_ms unless the instruction explicitly requires a timing change. Preserve continuity with the visual bible. Always return explicit vertical_safe and vertical_focus values.`, prompt: JSON.stringify({ instruction: input.instruction, current_shot: input.currentShot, visual_bible: input.visualBible, approved_concept: input.concept, project: compactContext(input.context) }), schema: SHOT_SCHEMA });
+    return structuredResponse<StoryboardShot>({ name: "atlas_video_shot_revision", instructions: `${DIRECTOR_INSTRUCTIONS}\
+Revise only the requested shot. Preserve its exact start_ms and end_ms unless the instruction explicitly requires a timing change. Preserve continuity with the visual bible. Always return explicit vertical_safe and vertical_focus values.`, prompt: JSON.stringify({ instruction: input.instruction, current_shot: input.currentShot, visual_bible: input.visualBible, approved_concept: input.concept, project: compactContext(input.context) }), schema: SHOT_SCHEMA });
   }
 }
 
@@ -206,9 +214,9 @@ function validatePlanTimeline(plan: ProductionPlan, context: VideoProjectContext
 }
 
 export function openAIDirectorReadiness() {
-  const model = process.env.VIDEO_DIRECTOR_LLM_MODEL?.trim() || "";
+  const model = normalizeGatewayModel(process.env.VIDEO_DIRECTOR_LLM_MODEL?.trim() || "");
   return {
-    configured: Boolean(process.env.OPENAI_API_KEY?.trim() && model),
+    configured: Boolean(atlasAiGatewayConfigured() && model),
     model: model || "Not configured",
   };
 }
