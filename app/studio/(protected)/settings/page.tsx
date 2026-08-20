@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { atlasAiGatewayConfigured } from "@/lib/ai/gateway";
 import {
   SOCIAL_PLATFORM_DEFINITIONS,
   SOCIAL_PLATFORM_KEYS,
@@ -138,6 +139,25 @@ export default async function SettingsPage() {
             <div><strong>Learning memory</strong></div>
             <p>Review performance conclusions Atlas may reuse in future plans.</p>
             <small>Review learnings →</small>
+          </Link>
+        </div>
+      </section>
+
+      <section className="v2-section">
+        <div className="v2-section-heading">
+          <div>
+            <span className="section-label">AI & generation</span>
+            <h2>One control plane for model quality, routing and cost</h2>
+          </div>
+        </div>
+        <div className="v2-settings-grid">
+          <Link href="/studio/settings/ai">
+            <div>
+              <span className={`v2-dot ${atlasAiGatewayConfigured() ? "connected" : ""}`} aria-hidden />
+              <strong>AI Control Center</strong>
+            </div>
+            <p>{atlasAiGatewayConfigured() ? "Gateway healthy · task routing, quality gates, budgets and learning are active" : "Gateway needs configuration before AI tasks can run"}</p>
+            <small>Review AI intelligence →</small>
           </Link>
         </div>
       </section>
