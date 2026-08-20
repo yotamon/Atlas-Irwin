@@ -40,7 +40,21 @@ test("Campaign Brain links generated content to the canonical Control Plane run"
   assert.match(actions, /generation_run_id: generationRun\.id/);
 });
 
-test("AI Control Center exposes cost quality routing and learning without secrets", async () => {
+test("adaptive routing requires evidence and only reorders approved task models", async () => {
+  const controlPlane = await source("lib/ai/control-plane.ts");
+  const learning = await source("lib/ai/learning.ts");
+  assert.match(controlPlane, /learnedRouteForTask/);
+  assert.match(controlPlane, /const primaryModels = learnedRouting\.route/);
+  assert.match(controlPlane, /configuredRoute: policy\.models/);
+  assert.match(controlPlane, /learnedRoutingApplied/);
+  assert.match(learning, /MIN_COMPLETED_SAMPLES = 6/);
+  assert.match(learning, /MIN_HUMAN_SAMPLES = 3/);
+  assert.match(learning, /settings\.routing_mode !== "auto"/);
+  assert.match(learning, /policy\.models\.filter/);
+  assert.doesNotMatch(learning, /tierModels\(/);
+});
+
+test("AI Control Center exposes cost quality configured and learned routing without secrets", async () => {
   const page = await source("app/studio/(protected)/settings/ai/page.tsx");
   assert.match(page, /AI & Generation/);
   assert.match(page, /First-pass quality/);
@@ -49,6 +63,9 @@ test("AI Control Center exposes cost quality routing and learning without secret
   assert.match(page, /Task intelligence/);
   assert.match(page, /Model economics/);
   assert.match(page, /Routing policy/);
+  assert.match(page, /Adaptive learning/);
+  assert.match(page, /Evidence-gated effective routes/);
+  assert.match(page, /Configured route/);
   assert.match(page, /Recent AI attempts/);
   assert.doesNotMatch(page, /AI_GATEWAY_API_KEY/);
   assert.doesNotMatch(page, /VERCEL_OIDC_TOKEN/);
