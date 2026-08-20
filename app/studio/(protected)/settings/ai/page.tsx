@@ -62,6 +62,7 @@ export default async function AiControlCenterPage() {
           <Panel title="Quality gate pass">{percent(stats.qualityPassRate)}</Panel>
           <Panel title="Semantic escalations">{stats.semanticEscalations.toLocaleString()}</Panel>
           <Panel title="Provider fallbacks">{stats.technicalFallbacks.toLocaleString()}</Panel>
+          <Panel title="Adaptive routes">{stats.adaptiveRoutes.toLocaleString()}</Panel>
           <Panel title="Avg latency">{latency(stats.averageLatencyMs)}</Panel>
           <Panel title="Human quality signal">{percent(stats.humanQualityScore)}</Panel>
         </div>
@@ -116,12 +117,26 @@ export default async function AiControlCenterPage() {
       <section className="studio-panel feature">
         <div className="panel-head"><div><span className="section-label">Routing policy</span><h2>Task registry</h2></div><Status>{settings.routing_mode}</Status></div>
         <table className="studio-table">
-          <thead><tr><th>Task</th><th>Tier</th><th>Primary route</th><th>Semantic escalation</th></tr></thead>
+          <thead><tr><th>Task</th><th>Tier</th><th>Configured route</th><th>Semantic escalation</th></tr></thead>
           <tbody>{summary.registry.map((policy) => <tr key={policy.task}>
             <td><strong>{policy.label}</strong><br /><small>{policy.task}</small></td>
             <td>{policy.tier}</td>
             <td>{policy.models.map(shortModel).join(" → ")}</td>
             <td>{policy.escalationModels.length ? policy.escalationModels.map(shortModel).join(" → ") : "None"}</td>
+          </tr>)}</tbody>
+        </table>
+      </section>
+
+      <section className="studio-panel feature">
+        <div className="panel-head"><div><span className="section-label">Adaptive learning</span><h2>Evidence-gated effective routes</h2></div><Status>{stats.adaptiveRoutes} active</Status></div>
+        <p><small>Atlas may reorder only models already approved for that task. It requires enough completed runs, deterministic quality and human feedback first. Forced Economy, Balanced or Premium modes always disable learned reordering.</small></p>
+        <table className="studio-table">
+          <thead><tr><th>Task</th><th>State</th><th>Effective route</th><th>Evidence decision</th></tr></thead>
+          <tbody>{summary.learning.map((decision) => <tr key={decision.task}>
+            <td><strong>{decision.label}</strong><br /><small>{decision.task}</small></td>
+            <td><Status>{decision.applied ? "learned" : "configured"}</Status></td>
+            <td>{decision.route.map(shortModel).join(" → ")}</td>
+            <td><small>{decision.reason}</small></td>
           </tr>)}</tbody>
         </table>
       </section>
