@@ -84,7 +84,9 @@ Legacy weighted scoring remains available only for older release views that do n
 
 Campaign planning is an explicit action and never spends on page load.
 
-When `OPENAI_API_KEY` is configured, the planner uses the OpenAI Responses API with strict structured output. The prompt includes:
+Structured text generation is routed through the shared Vercel AI Gateway adapter in `lib/ai/gateway.ts`. Campaign Brain still owns the product-level `economy`, `balanced` and `premium` policies. The Gateway handles provider routing and ordered model fallback for the route Atlas selects.
+
+The prompt includes:
 
 - release identity and story
 - sonic and emotional hook
@@ -95,9 +97,31 @@ When `OPENAI_API_KEY` is configured, the planner uses the OpenAI Responses API w
 - historical content performance
 - the selected campaign objective
 
-If the AI provider is unavailable, Atlas falls back to an adaptive release-specific planner. It does not fall back to the old fixed 11-item content template.
+If Gateway-backed AI planning is unavailable, Atlas falls back to an adaptive release-specific planner. It does not fall back to the old fixed 11-item content template.
 
-Each run is recorded in `generation_runs` with provider, model, prompt version, input context, output, and request ID where available.
+Each successful AI run can record provider/gateway identity, resolved model, prompt version, input context, output, request ID, generation ID and cost metadata where available. Atlas generation lineage remains the source of truth even though Vercel also provides operational Gateway observability.
+
+Default model routes preserve the existing value-for-money policy:
+
+```text
+economy
+  zai/glm-4.7-flash
+  -> zai/glm-4.7-flashx
+  -> google/gemini-3.7-flash
+  -> openai/gpt-5.6-sol
+
+balanced
+  google/gemini-3.7-flash
+  -> openai/gpt-5.6-sol
+  -> zai/glm-4.7-flashx
+
+premium
+  openai/gpt-5.6-sol
+  -> google/gemini-3.7-flash
+  -> zai/glm-4.7-flashx
+```
+
+See [`ai-gateway.md`](ai-gateway.md) for authentication, routing responsibilities, model overrides and failure semantics.
 
 ## Attribution
 
@@ -168,11 +192,22 @@ SUPABASE_SERVICE_ROLE_KEY
 CRON_SECRET
 ```
 
-Optional AI planning:
+Gateway-backed AI planning on Vercel deployments uses the automatically injected `VERCEL_OIDC_TOKEN`. Local development or non-Vercel runtimes should set:
 
 ```text
-OPENAI_API_KEY
-ATLAS_MARKETING_MODEL=gpt-5.6
+AI_GATEWAY_API_KEY
+```
+
+Optional routing configuration:
+
+```text
+ATLAS_MARKETING_TEXT_PRESET=balanced
+ATLAS_MARKETING_MODEL=openai/gpt-5.6-sol
+ATLAS_MARKETING_ECONOMY_MODELS=
+ATLAS_MARKETING_BALANCED_MODELS=
+ATLAS_MARKETING_PREMIUM_MODELS=
+ATLAS_AI_GATEWAY_PROVIDER_SORT=cost
+ATLAS_AI_GATEWAY_TIMEOUT_MS=90000
 ```
 
 Recommended attribution hardening:
@@ -181,20 +216,21 @@ Recommended attribution hardening:
 ATTRIBUTION_HASH_SALT=<long random secret>
 ```
 
-Music Lab and Video Director keep their own provider credentials.
+Music Lab and paid creative media providers keep their own direct provider credentials and approval controls.
 
 ## Deployment order
 
 1. Apply all Supabase migrations in order.
-2. Add server-only secrets to the deployment environment.
+2. Add required server-only secrets to the deployment environment.
 3. Deploy the Next.js application.
-4. Create a campaign for a release.
-5. Generate a plan and inspect the recorded generation run.
-6. Approve a variant and queue publication.
-7. Run the automation cycle manually once.
-8. Verify the handoff or real adapter result.
-9. Add metric snapshots or sync metrics.
-10. Evaluate the experiment and approve only learnings that have enough evidence.
+4. Confirm Vercel Gateway/OIDC readiness or configure a Gateway key for non-Vercel runtime testing.
+5. Create a campaign for a release.
+6. Generate a plan and inspect the recorded generation run.
+7. Approve a variant and queue publication.
+8. Run the automation cycle manually once.
+9. Verify the handoff or real adapter result.
+10. Add metric snapshots or sync metrics.
+11. Evaluate the experiment and approve only learnings that have enough evidence.
 
 ## Safety invariants
 
@@ -206,3 +242,4 @@ Music Lab and Video Director keep their own provider credentials.
 - No raw IP address is stored for attribution.
 - Release-date changes do not silently orphan unfinished campaign schedules.
 - Automation and publication jobs use idempotency/concurrency controls.
+- Gateway routing must not bypass Atlas quality tiers, schemas, approval gates or media spend controls.
