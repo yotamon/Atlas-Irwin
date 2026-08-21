@@ -49,16 +49,46 @@ function isVerticalSafe(shot: ExtendedMusicVideoShot) {
   return record(shot.generation_params).vertical_safe === true;
 }
 
-function chooseHighlightWindow(project: ExtendedMusicVideoProject, durationMs: number) {
+function chooseHighlightWindow(
+  project: ExtendedMusicVideoProject,
+  durationMs: number,
+) {
   const map = parseMusicMap(project.music_map);
   const trackDuration = map?.duration_ms || 0;
+  const durationKey = String(Math.round(durationMs / 1000));
+  const scoredCut = map?.social_cuts?.[durationKey];
+  if (scoredCut && scoredCut.end_ms > scoredCut.start_ms) {
+    return {
+      start: Math.max(0, scoredCut.start_ms),
+      end: Math.min(trackDuration || scoredCut.end_ms, scoredCut.end_ms),
+      source: "music_intelligence" as const,
+      candidateId: scoredCut.candidate_id,
+    };
+  }
+
+  const candidate = [...(map?.hook_candidates ?? [])]
+    .sort((a, b) => {
+      const durationPenaltyA = Math.abs(a.duration_ms - durationMs) / Math.max(durationMs, 1);
+      const durationPenaltyB = Math.abs(b.duration_ms - durationMs) / Math.max(durationMs, 1);
+      return (durationPenaltyA - durationPenaltyB) || (b.score - a.score);
+    })[0];
+  if (candidate) {
+    return {
+      start: candidate.start_ms,
+      end: candidate.end_ms,
+      source: "hook_candidate" as const,
+      candidateId: candidate.id,
+    };
+  }
+
+  // Legacy/fallback compatibility only. v2 maps should resolve above.
   const sections = map?.sections ?? [];
   const strongest = [...sections].sort((a, b) => b.energy - a.energy)[0];
   const center = strongest
     ? Math.round((strongest.start_ms + strongest.end_ms) / 2)
     : map?.peaks_ms?.[0] ?? Math.round(trackDuration / 2);
   const start = Math.max(0, Math.min(Math.max(0, trackDuration - durationMs), center - Math.round(durationMs / 2)));
-  return { start, end: start + durationMs };
+  return { start, end: start + durationMs, source: "legacy_energy" as const, candidateId: null };
 }
 
 async function timelineSources(
@@ -112,9 +142,14 @@ export async function buildRenderManifest(input: {
 
   const fullStart = sources[0].shot.start_ms;
   const fullEnd = sources.at(-1)!.shot.end_ms;
-  const window = spec.durationMs
+  const highlighted = spec.durationMs
     ? chooseHighlightWindow(input.project, Math.min(spec.durationMs, fullEnd - fullStart))
+    : null;
+  const window = highlighted
+    ? { start: Math.max(fullStart, highlighted.start), end: Math.min(fullEnd, highlighted.end) }
     : { start: fullStart, end: fullEnd };
+  if (window.end <= window.start) throw new Error("Selected music-intelligence window does not overlap the locked storyboard timeline.");
+
   const clips = sources.flatMap(({ shot, url, assetId }) => {
     const overlapStart = Math.max(window.start, shot.start_ms);
     const overlapEnd = Math.min(window.end, shot.end_ms);
@@ -130,7 +165,7 @@ export async function buildRenderManifest(input: {
     }];
   });
   return {
-    version: 1,
+    version: 2,
     type: input.type,
     primary_aspect_ratio: input.project.primary_aspect_ratio,
     width: spec.width,
@@ -139,6 +174,8 @@ export async function buildRenderManifest(input: {
     audio_url: input.audioUrl,
     audio_start_ms: window.start,
     duration_ms: window.end - window.start,
+    music_window_source: highlighted?.source ?? "full_timeline",
+    music_hook_candidate_id: highlighted?.candidateId ?? null,
     clips,
     unsafe_vertical_shot_ids: unsafeShotIds,
     generated_at: new Date().toISOString(),
