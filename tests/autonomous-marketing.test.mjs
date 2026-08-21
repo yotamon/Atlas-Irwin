@@ -1,0 +1,71 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { access, readFile } from "node:fs/promises";
+
+const files = [
+  "lib/marketing/social-auth.ts",
+  "lib/marketing/social-oauth.ts",
+  "lib/marketing/audience.ts",
+  "lib/marketing/radar.ts",
+  "lib/marketing/next-best-action.ts",
+  "app/studio/(protected)/audience/page.tsx",
+  "app/studio/(protected)/autopilot/page.tsx",
+  "supabase/migrations/20260821214500_autonomous_marketing_os.sql",
+];
+
+test("autonomous marketing surfaces and durable state exist", async () => {
+  await Promise.all(files.map((path) => access(path)));
+  const migration = await readFile("supabase/migrations/20260821214500_autonomous_marketing_os.sql", "utf8");
+  for (const table of ["audience_interactions", "marketing_opportunities", "next_best_actions"]) {
+    assert.ok(migration.includes(`create table public.${table}`));
+    assert.ok(migration.includes(`alter table public.${table} enable row level security`));
+  }
+});
+
+test("first-party channel adapters replace the fake universal manual adapter", async () => {
+  const channels = await readFile("lib/marketing/channels.ts", "utf8");
+  for (const adapter of ["InstagramChannelAdapter", "TikTokChannelAdapter", "YouTubeChannelAdapter"]) {
+    assert.ok(channels.includes(`class ${adapter}`));
+  }
+  assert.ok(channels.includes("TIKTOK_DIRECT_POST_AUDITED"));
+  assert.ok(channels.includes("tiktok:draft-upload"));
+  assert.ok(channels.includes("instagram_business_manage_insights"));
+  assert.ok(channels.includes("youtube.upload"));
+  assert.notEqual(channels.trim().endsWith("return new ManualHandoffAdapter(platform);\n}"), false);
+});
+
+test("social OAuth asks only for automation capabilities Atlas can actually use", async () => {
+  const oauth = await readFile("lib/marketing/social-oauth.ts", "utf8");
+  for (const scope of [
+    "instagram_business_content_publish",
+    "instagram_business_manage_insights",
+    "instagram_business_manage_comments",
+    "video.list",
+    "video.upload",
+    "youtube.upload",
+    "youtube.force-ssl",
+  ]) assert.ok(oauth.includes(scope));
+  assert.ok(oauth.includes('truthyEnv("TIKTOK_DIRECT_POST_AUDITED")'));
+});
+
+test("published content feeds the measurement and learning loop", async () => {
+  const publications = await readFile("lib/marketing/publications.ts", "utf8");
+  const automation = await readFile("lib/marketing/automation.ts", "utf8");
+  assert.ok(publications.includes('event_type: "content.published"'));
+  assert.ok(automation.includes('event.event_type === "content.published"'));
+  assert.ok(automation.includes("for (const hours of [24, 72, 168])"));
+  assert.ok(automation.includes("evaluate_experiment"));
+  assert.ok(automation.includes("generate_winner_derivatives"));
+});
+
+test("the automation cycle senses before ranking next actions", async () => {
+  const cron = await readFile("app/api/cron/marketing/route.ts", "utf8");
+  const audience = cron.indexOf("syncAudienceInteractions()");
+  const radar = cron.indexOf("refreshMarketingRadarIfDue()");
+  const decision = cron.indexOf("refreshNextBestActions()");
+  assert.ok(audience > 0 && radar > audience && decision > radar);
+  const audienceCode = await readFile("lib/marketing/audience.ts", "utf8");
+  assert.ok(audienceCode.includes("Replies are never auto-sent") === false);
+  assert.ok(audienceCode.includes("sendAudienceReply"));
+  assert.ok(audienceCode.includes("MAX_REPLY_DRAFTS_PER_CYCLE"));
+});
