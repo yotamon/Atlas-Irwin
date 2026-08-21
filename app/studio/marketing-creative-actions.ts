@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { assertSpecialistMediaSpendAllowed } from "@/lib/ai/control-plane";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { buildCohesiveVisualPrompt, loadCreativeReferenceContext } from "@/lib/marketing/creative-context";
@@ -191,6 +192,15 @@ export async function approvePreparedCreativeGeneration(form: FormData) {
   if (request.provider !== providerId || !request.model || !request.prompt || !request.operation) {
     throw new Error("Prepared provider request is invalid or no longer matches the stored provider.");
   }
+  const outputKind = inputContext.outputKind;
+  if (outputKind !== "image" && outputKind !== "video") {
+    throw new Error("Prepared generation is missing its media spend category.");
+  }
+  await assertSpecialistMediaSpendAllowed({
+    ownerId: user.id,
+    kind: outputKind,
+    estimatedUsd: typeof run.estimated_cost_usd === "number" ? run.estimated_cost_usd : null,
+  });
 
   const provider = creativeProvider(providerId);
   try {
