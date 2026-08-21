@@ -208,13 +208,16 @@ export async function queueMediaWorkerJob(input: {
     });
 
     const requestPath = `/tmp/atlas-worker-${job.id}.json`;
-    await sandbox.writeFile(requestPath, JSON.stringify({
-      job_id: job.id,
-      job_type: input.jobType,
-      payload: input.payload,
-      callback_url: callbackUrl,
-      callback_token: credential.token,
-    }));
+    await sandbox.writeFiles([{ 
+      path: requestPath,
+      content: JSON.stringify({
+        job_id: job.id,
+        job_type: input.jobType,
+        payload: input.payload,
+        callback_url: callbackUrl,
+        callback_token: credential.token,
+      }),
+    }]);
 
     const { data: queued, error: queueError } = await input.db.from("music_video_worker_jobs")
       .update({
