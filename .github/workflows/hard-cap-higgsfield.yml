@@ -1,0 +1,91 @@
+name: Enforce Higgsfield Dollar Hard Caps
+
+on:
+  push:
+    branches:
+      - feat/zero-cost-ai-control
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/zero-cost-ai-control
+
+      - name: Patch exact media spend accounting
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          control = Path('lib/ai/control-plane.ts')
+          text = control.read_text()
+          old = '''export async function assertSpecialistMediaSpendAllowed(input: {\n  ownerId: string;\n  kind: "image" | "video";\n  estimatedUsd?: number | null;\n}) {'''
+          new = '''export async function assertSpecialistMediaSpendAllowed(input: {\n  ownerId: string;\n  kind: "image" | "video";\n  estimatedUsd?: number | null;\n  externalTotalSpentUsd?: number | null;\n  externalKindSpentUsd?: number | null;\n}) {'''
+          if old not in text:
+              raise SystemExit('spend input marker not found')
+          text = text.replace(old, new, 1)
+
+          old = '''  const budget = await getAiBudgetSnapshot(input.ownerId, settings);\n  const requested = numeric(input.estimatedUsd ?? 0);\n  if (budget.monthlyBudgetUsd <= 0 || budget.totalSpentUsd + requested > budget.monthlyBudgetUsd + 0.000001) {\n    throw new AtlasAiBudgetError(\n      `This ${input.kind} generation would exceed the monthly AI budget ($${budget.totalSpentUsd.toFixed(2)} + $${requested.toFixed(2)} > $${budget.monthlyBudgetUsd.toFixed(2)}).`,\n    );\n  }\n\n  if (requested > 0) {'''
+          new = '''  if (input.estimatedUsd === null || input.estimatedUsd === undefined || !Number.isFinite(input.estimatedUsd) || input.estimatedUsd < 0) {\n    throw new AtlasAiBudgetError(\n      `Atlas cannot verify the ${input.kind} hard cap because this provider request has no reliable USD estimate. Keep Zero Cost enabled or configure verified provider pricing before approving spend.`,\n    );\n  }\n\n  const budget = await getAiBudgetSnapshot(input.ownerId, settings);\n  const requested = numeric(input.estimatedUsd);\n  const externalTotalSpent = numeric(input.externalTotalSpentUsd ?? 0);\n  if (budget.monthlyBudgetUsd <= 0 || budget.totalSpentUsd + externalTotalSpent + requested > budget.monthlyBudgetUsd + 0.000001) {\n    throw new AtlasAiBudgetError(\n      `This ${input.kind} generation would exceed the monthly AI budget ($${(budget.totalSpentUsd + externalTotalSpent).toFixed(2)} + $${requested.toFixed(2)} > $${budget.monthlyBudgetUsd.toFixed(2)}).`,\n    );\n  }\n\n  if (requested > 0) {'''
+          if old not in text:
+              raise SystemExit('budget marker not found')
+          text = text.replace(old, new, 1)
+          old = '''    const spent = (data ?? []).reduce((sum, run) => {\n      const context = run.input_context && typeof run.input_context === "object" && !Array.isArray(run.input_context)\n        ? run.input_context as Record<string, unknown>\n        : {};\n      if (context.outputKind !== input.kind) return sum;\n      return sum + numeric(run.actual_cost_usd ?? run.estimated_cost_usd);\n    }, 0);\n    if (spent + requested > limit + 0.000001) {'''
+          new = '''    const marketingSpent = (data ?? []).reduce((sum, run) => {\n      const context = run.input_context && typeof run.input_context === "object" && !Array.isArray(run.input_context)\n        ? run.input_context as Record<string, unknown>\n        : {};\n      if (context.outputKind !== input.kind) return sum;\n      return sum + numeric(run.actual_cost_usd ?? run.estimated_cost_usd);\n    }, 0);\n    const spent = marketingSpent + numeric(input.externalKindSpentUsd ?? 0);\n    if (spent + requested > limit + 0.000001) {'''
+          if old not in text:
+              raise SystemExit('kind spend marker not found')
+          control.write_text(text.replace(old, new, 1))
+
+          generation = Path('lib/video-director/generation.ts')
+          text = generation.read_text()
+          marker = '''function paidShot(strategy: ExtendedMusicVideoShot["reuse_strategy"]) {\n  return strategy === "unique" || strategy === "continuation";\n}\n'''
+          helper = marker + '''\nfunction higgsfieldUsdPerCredit() {\n  const value = Number(process.env.HIGGSFIELD_USD_PER_CREDIT);\n  return Number.isFinite(value) && value > 0 ? value : null;\n}\n\nasync function videoDirectorSpendSnapshot(\n  db: SupabaseClient<VideoDatabase>,\n  ownerId: string,\n) {\n  const usdPerCredit = higgsfieldUsdPerCredit();\n  if (usdPerCredit === null) return null;\n  const start = new Date();\n  start.setUTCDate(1);\n  start.setUTCHours(0, 0, 0, 0);\n  const { data, error } = await db.from("music_video_generations")\n    .select("operation_type,estimated_credits,actual_credits,billing_status")\n    .eq("owner_id", ownerId)\n    .gte("created_at", start.toISOString())\n    .in("billing_status", ["reserved", "charged"]);\n  if (error) throw new Error(error.message);\n  let totalUsd = 0;\n  let imageUsd = 0;\n  let videoUsd = 0;\n  for (const generation of data ?? []) {\n    const credits = generation.billing_status === "charged"\n      ? Number(generation.actual_credits ?? generation.estimated_credits ?? 0)\n      : Number(generation.estimated_credits ?? 0);\n    const usd = Math.max(0, credits) * usdPerCredit;\n    totalUsd += usd;\n    if (generation.operation_type === "look_image") imageUsd += usd;\n    else videoUsd += usd;\n  }\n  return { usdPerCredit, totalUsd, imageUsd, videoUsd };\n}\n'''
+          if marker not in text:
+              raise SystemExit('paidShot marker not found')
+          text = text.replace(marker, helper, 1)
+
+          old = '''  const mediaKind = operationTypes.every((operation) => operation === "look_image") ? "image" : "video";\n  await assertSpecialistMediaSpendAllowed({ ownerId: input.ownerId, kind: mediaKind });\n'''
+          new = '''  const mediaKind = operationTypes.every((operation) => operation === "look_image") ? "image" : "video";\n  const spend = await videoDirectorSpendSnapshot(input.db, input.ownerId);\n  await assertSpecialistMediaSpendAllowed({\n    ownerId: input.ownerId,\n    kind: mediaKind,\n    estimatedUsd: spend ? maxCredits * spend.usdPerCredit : null,\n    externalTotalSpentUsd: spend?.totalUsd ?? null,\n    externalKindSpentUsd: spend ? (mediaKind === "image" ? spend.imageUsd : spend.videoUsd) : null,\n  });\n'''
+          if old not in text:
+              raise SystemExit('approval guard marker not found')
+          text = text.replace(old, new, 1)
+
+          old = '''  await assertSpecialistMediaSpendAllowed({\n    ownerId: generation.owner_id,\n    kind: generation.operation_type === "look_image" ? "image" : "video",\n  });\n'''
+          new = '''  const mediaKind = generation.operation_type === "look_image" ? "image" : "video";\n  const spend = await videoDirectorSpendSnapshot(input.db, generation.owner_id);\n  await assertSpecialistMediaSpendAllowed({\n    ownerId: generation.owner_id,\n    kind: mediaKind,\n    estimatedUsd: spend ? Number(generation.estimated_credits) * spend.usdPerCredit : null,\n    externalTotalSpentUsd: spend?.totalUsd ?? null,\n    externalKindSpentUsd: spend ? (mediaKind === "image" ? spend.imageUsd : spend.videoUsd) : null,\n  });\n'''
+          if old not in text:
+              raise SystemExit('submit guard marker not found')
+          generation.write_text(text.replace(old, new, 1))
+
+          env = Path('.env.example')
+          text = env.read_text()
+          old = '# Optional conversion only for clearer Studio cost display. Higgsfield credits remain the billing source of truth.\nHIGGSFIELD_USD_PER_CREDIT=\n'
+          new = '# Required before unlocking a non-zero global image/video USD hard cap for Video Director. Zero Cost works without it. Higgsfield credits remain the billing source of truth.\nHIGGSFIELD_USD_PER_CREDIT=\n'
+          if old in text:
+              text = text.replace(old, new, 1)
+          env.write_text(text)
+
+          tests = Path('tests/ai-control-plane.test.mjs')
+          text = tests.read_text()
+          marker = '  assert.ok(videoSubmit >= 0 && videoSubmitGuard > videoSubmit && reserve > videoSubmitGuard);\n'
+          if marker not in text:
+              raise SystemExit('video test marker not found')
+          addition = marker + '  assert.match(videoGeneration, /HIGGSFIELD_USD_PER_CREDIT/);\n  assert.match(videoGeneration, /videoDirectorSpendSnapshot/);\n  assert.match(controlPlane, /externalTotalSpentUsd/);\n  assert.match(controlPlane, /no reliable USD estimate/);\n'
+          tests.write_text(text.replace(marker, addition, 1))
+          PY
+
+      - name: Commit changes
+        run: |
+          if git diff --quiet; then
+            echo "Already applied"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/ai/control-plane.ts lib/video-director/generation.ts .env.example tests/ai-control-plane.test.mjs
+          git commit -m "feat: enforce Higgsfield dollar hard caps"
+          git push
