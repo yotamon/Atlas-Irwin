@@ -1,6 +1,9 @@
 import { runMarketingAutomationCycle } from "@/lib/marketing/automation";
+import { syncAudienceInteractions } from "@/lib/marketing/audience";
+import { refreshNextBestActions } from "@/lib/marketing/next-best-action";
 import { processDueOutreachEnrollments } from "@/lib/marketing/outreach";
 import { processDuePublicationJobs } from "@/lib/marketing/publications";
+import { refreshMarketingRadarIfDue } from "@/lib/marketing/radar";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,7 +22,10 @@ export async function GET(request: Request) {
     const publications = await processDuePublicationJobs();
     const outreach = await processDueOutreachEnrollments();
     const automation = await runMarketingAutomationCycle();
-    return Response.json({ ok: true, publications, outreach, automation });
+    const audience = await syncAudienceInteractions();
+    const radar = await refreshMarketingRadarIfDue();
+    const nextBestActions = await refreshNextBestActions();
+    return Response.json({ ok: true, publications, outreach, automation, audience, radar, nextBestActions });
   } catch (error) {
     return Response.json(
       { ok: false, error: error instanceof Error ? error.message : "Marketing automation failed." },
