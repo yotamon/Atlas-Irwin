@@ -140,9 +140,25 @@ async def analyze_job(payload: dict[str, Any], workdir: Path) -> dict[str, Any]:
     audio_url = str(payload.get("audio_url") or "")
     if not audio_url:
         raise ValueError("audio_url is required")
-    audio_path = workdir / "source-audio"
-    await download(audio_url, audio_path)
-    return {"music_map": await asyncio.to_thread(analyze_music, audio_path)}
+    source_path = workdir / "source-audio"
+    analysis_path = workdir / "analysis-source.wav"
+    await download(audio_url, source_path)
+    # Standardize the decoder/timing domain before beat tracking. Lossy formats can differ
+    # by tens of milliseconds between decoders; PCM WAV makes every downstream analyzer
+    # operate on the exact same sample timeline.
+    await ffmpeg(
+        "-i",
+        str(source_path),
+        "-vn",
+        "-ac",
+        "2",
+        "-ar",
+        "44100",
+        "-c:a",
+        "pcm_s16le",
+        str(analysis_path),
+    )
+    return {"music_map": await asyncio.to_thread(analyze_music, analysis_path)}
 
 
 def crop_filter(width: int, height: int, fps: int, focus_x: float) -> str:
