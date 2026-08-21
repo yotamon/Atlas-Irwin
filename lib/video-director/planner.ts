@@ -24,7 +24,28 @@ function shotMusicContext(context: VideoProjectContext, startMs: number, endMs: 
   const midpoint = (startMs + endMs) / 2;
   const section = context.musicMap?.sections.find((item) => midpoint >= item.start_ms && midpoint < item.end_ms) ?? null;
   const energyValue = section?.energy ?? 0.5;
-  return { section_id: section?.id ?? null, section_label: section?.label ?? "Unknown", section_type: section?.type ?? "unknown", energy_value: energyValue, energy: energyValue >= 0.82 ? "peak" : energyValue <= 0.38 ? "low" : "mid", near_edit_point: Boolean(context.musicMap?.edit_points.some((point) => Math.abs(point.ms - startMs) <= 700)) };
+  const hook = context.musicMap?.hook_candidates?.find((item) => {
+    const overlap = Math.max(0, Math.min(endMs, item.end_ms) - Math.max(startMs, item.start_ms));
+    return overlap >= Math.min(endMs - startMs, item.end_ms - item.start_ms) * 0.4;
+  }) ?? null;
+  const nearestDownbeat = context.musicMap?.analysis?.real_downbeats
+    ? context.musicMap.downbeats_ms.reduce<number | null>((nearest, point) => {
+        if (nearest === null) return point;
+        return Math.abs(point - startMs) < Math.abs(nearest - startMs) ? point : nearest;
+      }, null)
+    : null;
+  return {
+    section_id: section?.id ?? null,
+    section_label: section?.label ?? "Unknown",
+    section_type: section?.type ?? "unknown",
+    energy_value: energyValue,
+    energy: energyValue >= 0.82 ? "peak" : energyValue <= 0.38 ? "low" : "mid",
+    near_edit_point: Boolean(context.musicMap?.edit_points.some((point) => Math.abs(point.ms - startMs) <= 700)),
+    starts_on_downbeat: nearestDownbeat !== null && Math.abs(nearestDownbeat - startMs) <= 80,
+    hook_candidate_id: hook?.id ?? null,
+    hook_score: hook?.score ?? null,
+    hook_kind: hook?.kind ?? null,
+  };
 }
 
 function durationForGeneration(shotDurationSeconds: number, model: string) {
@@ -35,9 +56,104 @@ function durationForGeneration(shotDurationSeconds: number, model: string) {
 
 function requiresPaidSource(strategy: ExtendedMusicVideoShot["reuse_strategy"]) { return strategy === "unique" || strategy === "continuation"; }
 
+function nearestPoint(value: number, points: number[], toleranceMs: number) {
+  let best: number | null = null;
+  let distance = Number.POSITIVE_INFINITY;
+  for (const point of points) {
+    const nextDistance = Math.abs(point - value);
+    if (nextDistance < distance) {
+      best = point;
+      distance = nextDistance;
+    }
+  }
+  return distance <= toleranceMs ? best : null;
+}
+
+/**
+ * Keep the Director's editorial shape, but make technically close cuts land on verified
+ * musical boundaries. We never use inferred every-fourth-beat downbeats as truth: if the
+ * analyzer did not verify downbeats, snapping is limited to structural edit points/sections.
+ */
+export function alignProductionPlanToMusicMap(
+  plan: ProductionPlan,
+  context: VideoProjectContext,
+): ProductionPlan {
+  const map = context.musicMap;
+  const flattened = plan.scenes.flatMap((scene, sceneIndex) =>
+    scene.shots.map((shot, shotIndex) => ({ sceneIndex, shotIndex, shot })),
+  );
+  if (!map || flattened.length < 2) return plan;
+
+  const structuralPoints = [
+    ...map.edit_points.map((point) => point.ms),
+    ...map.sections.slice(1).map((section) => section.start_ms),
+  ];
+  const musicalPoints = map.analysis?.real_downbeats
+    ? [...map.downbeats_ms, ...structuralPoints]
+    : structuralPoints;
+  const uniquePoints = [...new Set(musicalPoints)]
+    .filter((point) => point > 0 && point < map.duration_ms)
+    .sort((a, b) => a - b);
+  if (!uniquePoints.length) return plan;
+
+  const originalBoundaries = [
+    flattened[0].shot.start_ms,
+    ...flattened.map((entry) => entry.shot.end_ms),
+  ];
+  const alignedBoundaries = [...originalBoundaries];
+  const minimumShotMs = 1200;
+  const snapToleranceMs = map.analysis?.real_downbeats ? 900 : 1300;
+
+  for (let index = 1; index < alignedBoundaries.length - 1; index += 1) {
+    const original = originalBoundaries[index];
+    const candidate = nearestPoint(original, uniquePoints, snapToleranceMs);
+    if (candidate === null) continue;
+    const previous = alignedBoundaries[index - 1];
+    const nextOriginal = originalBoundaries[index + 1];
+    if (candidate - previous < minimumShotMs) continue;
+    if (nextOriginal - candidate < minimumShotMs) continue;
+    alignedBoundaries[index] = candidate;
+  }
+
+  const shotsByScene = new Map<number, typeof flattened>();
+  flattened.forEach((entry, index) => {
+    const list = shotsByScene.get(entry.sceneIndex) ?? [];
+    list.push({
+      ...entry,
+      shot: {
+        ...entry.shot,
+        start_ms: alignedBoundaries[index],
+        end_ms: alignedBoundaries[index + 1],
+      },
+    });
+    shotsByScene.set(entry.sceneIndex, list);
+  });
+
+  return {
+    ...plan,
+    scenes: plan.scenes.map((scene, sceneIndex) => {
+      const entries = shotsByScene.get(sceneIndex) ?? [];
+      if (!entries.length) return scene;
+      return {
+        ...scene,
+        start_ms: entries[0].shot.start_ms,
+        end_ms: entries.at(-1)!.shot.end_ms,
+        shots: entries.map((entry) => entry.shot),
+      };
+    }),
+    production_notes: [
+      ...plan.production_notes,
+      map.analysis?.real_downbeats
+        ? "Atlas snapped nearby storyboard boundaries to verified musical downbeats/structural transitions."
+        : "Atlas snapped nearby storyboard boundaries only to detected structural transitions because verified downbeats were unavailable.",
+    ],
+  };
+}
+
 export async function persistProductionPlan(input: { db: SupabaseClient<VideoDatabase>; ownerId: string; context: VideoProjectContext & { project: ExtendedMusicVideoProject }; plan: ProductionPlan }) {
   const provider = new HiggsfieldProvider();
-  const flattened = input.plan.scenes.flatMap((scene, sceneIndex) => scene.shots.map((shot, shotIndex) => ({ scene, sceneIndex, shot, shotIndex })));
+  const alignedPlan = alignProductionPlanToMusicMap(input.plan, input.context);
+  const flattened = alignedPlan.scenes.flatMap((scene, sceneIndex) => scene.shots.map((shot, shotIndex) => ({ scene, sceneIndex, shot, shotIndex })));
   const shotRows: Array<{ sceneIndex: number; data: Omit<Partial<ExtendedMusicVideoShot>, "scene_id"> & { display_order: number; start_ms: number; end_ms: number; description: string }; quoteCredits: number; reserveCredits: number }> = [];
   let sourceGenerationCredits = 0;
   let sourceReserveCredits = 0;
@@ -49,7 +165,7 @@ export async function persistProductionPlan(input: { db: SupabaseClient<VideoDat
     // generation. Route with that future requirement now so planning can never choose a
     // model that will later reject the canonical image references.
     const provisional = { generation_priority: entry.shot.generation_priority, capability_profile: json(entry.shot.capability_profile), start_asset_id: null, end_asset_id: null, reference_asset_ids: json(["planned-look-reference"]), music_context: json(musicContext) };
-    const testIndexes = new Set(input.plan.test_shot_indexes);
+    const testIndexes = new Set(alignedPlan.test_shot_indexes);
     const routing = routeVideoShot({ ...provisional, targetResolution: input.context.project.target_resolution, isTest: testIndexes.has(index) });
     const seconds = Math.max(0.1, (entry.shot.end_ms - entry.shot.start_ms) / 1000);
     const generationSeconds = durationForGeneration(seconds, routing.model);
@@ -67,13 +183,13 @@ export async function persistProductionPlan(input: { db: SupabaseClient<VideoDat
   const lookModel = routeLookDevelopmentModel();
   let lookCredits = 0;
   let lookReserveCredits = 0;
-  for (const prompt of input.plan.look_dev_prompts) {
+  for (const prompt of alignedPlan.look_dev_prompts) {
     const quote = await provider.quote({ operation: "look_image", model: lookModel.id, prompt: prompt.prompt, aspectRatio: input.context.project.primary_aspect_ratio, resolution: input.context.project.target_resolution });
     lookCredits += quote.credits;
     lookReserveCredits += quote.reserveCredits;
   }
-  const costEstimate = { source_generation_credits: Number(sourceGenerationCredits.toFixed(2)), source_reserve_credits: Number(sourceReserveCredits.toFixed(2)), look_dev_credits: Number(lookCredits.toFixed(2)), look_dev_reserve_credits: Number(lookReserveCredits.toFixed(2)), total_credits: Number((sourceGenerationCredits + lookCredits).toFixed(2)), total_reserve_credits: Number((sourceReserveCredits + lookReserveCredits).toFixed(2)), unique_source_sequences: shotRows.filter((row) => requiresPaidSource(row.data.reuse_strategy ?? "unique")).length, editorial_reuse_shots: shotRows.filter((row) => !requiresPaidSource(row.data.reuse_strategy ?? "unique")).length, look_dev_frames: input.plan.look_dev_prompts.length, quote_note: "Planning estimate. Every paid batch is rechecked against an approval envelope and the project hard cap before submission." };
-  const storedPlan = { ...input.plan, cost_estimate: costEstimate };
+  const costEstimate = { source_generation_credits: Number(sourceGenerationCredits.toFixed(2)), source_reserve_credits: Number(sourceReserveCredits.toFixed(2)), look_dev_credits: Number(lookCredits.toFixed(2)), look_dev_reserve_credits: Number(lookReserveCredits.toFixed(2)), total_credits: Number((sourceGenerationCredits + lookCredits).toFixed(2)), total_reserve_credits: Number((sourceReserveCredits + lookReserveCredits).toFixed(2)), unique_source_sequences: shotRows.filter((row) => requiresPaidSource(row.data.reuse_strategy ?? "unique")).length, editorial_reuse_shots: shotRows.filter((row) => !requiresPaidSource(row.data.reuse_strategy ?? "unique")).length, look_dev_frames: alignedPlan.look_dev_prompts.length, quote_note: "Planning estimate. Every paid batch is rechecked against an approval envelope and the project hard cap before submission." };
+  const storedPlan = { ...alignedPlan, cost_estimate: costEstimate };
 
   const { error: clearShotsError } = await input.db.from("music_video_shots").delete().eq("project_id", input.context.project.id).eq("owner_id", input.ownerId);
   if (clearShotsError) throw new Error(clearShotsError.message);
@@ -81,8 +197,8 @@ export async function persistProductionPlan(input: { db: SupabaseClient<VideoDat
   if (clearScenesError) throw new Error(clearScenesError.message);
 
   const sceneIds: string[] = [];
-  for (let index = 0; index < input.plan.scenes.length; index += 1) {
-    const scene = input.plan.scenes[index];
+  for (let index = 0; index < alignedPlan.scenes.length; index += 1) {
+    const scene = alignedPlan.scenes[index];
     const { data, error } = await input.db.from("music_video_scenes").insert({ owner_id: input.ownerId, project_id: input.context.project.id, display_order: index, start_ms: scene.start_ms, end_ms: scene.end_ms, title: scene.title, description: scene.description, visual_intent: json({ description: scene.visual_intent }) }).select("id").single();
     if (error || !data) throw new Error(error?.message || "Could not save storyboard scene.");
     sceneIds.push(data.id);
@@ -95,7 +211,7 @@ export async function persistProductionPlan(input: { db: SupabaseClient<VideoDat
     if (error || !data) throw new Error(error?.message || "Could not save storyboard shot.");
     insertedShotIds.push(data.id);
   }
-  const { error: projectError } = await input.db.from("music_video_projects").update({ visual_bible: json(input.plan.visual_bible), production_plan: json(storedPlan), estimated_credits: costEstimate.total_credits, status: "production_plan_review", last_error: null }).eq("id", input.context.project.id).eq("owner_id", input.ownerId);
+  const { error: projectError } = await input.db.from("music_video_projects").update({ visual_bible: json(alignedPlan.visual_bible), production_plan: json(storedPlan), estimated_credits: costEstimate.total_credits, status: "production_plan_review", last_error: null }).eq("id", input.context.project.id).eq("owner_id", input.ownerId);
   if (projectError) throw new Error(projectError.message);
   return { plan: storedPlan, costEstimate, shotIds: insertedShotIds };
 }
