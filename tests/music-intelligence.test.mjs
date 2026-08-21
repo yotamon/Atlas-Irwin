@@ -59,3 +59,17 @@ test("track-level analysis is cached and can drive Content Lab timestamps", asyn
   assert.ok(migration.includes("audio_timestamp_start"));
   assert.ok(migration.includes("audio_timestamp_end"));
 });
+
+test("production Media Worker uses package-safe imports and durable Cloud Tasks dispatch", async () => {
+  const worker = await readFile("services/media-worker/app/main.py", "utf8");
+  const deploy = await readFile("scripts/deploy-media-worker.mjs", "utf8");
+  const health = await readFile("app/api/health/media-worker/route.ts", "utf8");
+  assert.ok(worker.includes("from .music_intelligence import"));
+  assert.ok(worker.includes("CloudTasksClient"));
+  assert.ok(worker.includes('dispatch_mode": "cloud_tasks"'));
+  assert.ok(worker.includes("/v1/execute"));
+  assert.ok(deploy.includes('"--min-instances", "0"'));
+  assert.ok(deploy.includes("cloudtasks.googleapis.com"));
+  assert.ok(deploy.includes("roles/cloudtasks.enqueuer"));
+  assert.ok(health.includes('dispatchMode === "cloud_tasks"'));
+});
