@@ -159,6 +159,8 @@ export async function assertSpecialistMediaSpendAllowed(input: {
   ownerId: string;
   kind: "image" | "video";
   estimatedUsd?: number | null;
+  externalTotalSpentUsd?: number | null;
+  externalKindSpentUsd?: number | null;
 }) {
   const settings = await loadAiControlSettings(input.ownerId);
   if (!settings.hard_stop) return settings;
@@ -170,11 +172,18 @@ export async function assertSpecialistMediaSpendAllowed(input: {
     );
   }
 
-  const budget = await getAiBudgetSnapshot(input.ownerId, settings);
-  const requested = numeric(input.estimatedUsd ?? 0);
-  if (budget.monthlyBudgetUsd <= 0 || budget.totalSpentUsd + requested > budget.monthlyBudgetUsd + 0.000001) {
+  if (input.estimatedUsd === null || input.estimatedUsd === undefined || !Number.isFinite(input.estimatedUsd) || input.estimatedUsd < 0) {
     throw new AtlasAiBudgetError(
-      `This ${input.kind} generation would exceed the monthly AI budget ($${budget.totalSpentUsd.toFixed(2)} + $${requested.toFixed(2)} > $${budget.monthlyBudgetUsd.toFixed(2)}).`,
+      `Atlas cannot verify the ${input.kind} hard cap because this provider request has no reliable USD estimate. Keep Zero Cost enabled or configure verified provider pricing before approving spend.`,
+    );
+  }
+
+  const budget = await getAiBudgetSnapshot(input.ownerId, settings);
+  const requested = numeric(input.estimatedUsd);
+  const externalTotalSpent = numeric(input.externalTotalSpentUsd ?? 0);
+  if (budget.monthlyBudgetUsd <= 0 || budget.totalSpentUsd + externalTotalSpent + requested > budget.monthlyBudgetUsd + 0.000001) {
+    throw new AtlasAiBudgetError(
+      `This ${input.kind} generation would exceed the monthly AI budget ($${(budget.totalSpentUsd + externalTotalSpent).toFixed(2)} + $${requested.toFixed(2)} > $${budget.monthlyBudgetUsd.toFixed(2)}).`,
     );
   }
 
@@ -187,13 +196,14 @@ export async function assertSpecialistMediaSpendAllowed(input: {
       .like("purpose", "content_asset:%")
       .in("status", ["running", "completed"]);
     if (error) throw new Error(error.message);
-    const spent = (data ?? []).reduce((sum, run) => {
+    const marketingSpent = (data ?? []).reduce((sum, run) => {
       const context = run.input_context && typeof run.input_context === "object" && !Array.isArray(run.input_context)
         ? run.input_context as Record<string, unknown>
         : {};
       if (context.outputKind !== input.kind) return sum;
       return sum + numeric(run.actual_cost_usd ?? run.estimated_cost_usd);
     }, 0);
+    const spent = marketingSpent + numeric(input.externalKindSpentUsd ?? 0);
     if (spent + requested > limit + 0.000001) {
       throw new AtlasAiBudgetError(
         `This ${input.kind} generation would exceed its budget ($${spent.toFixed(2)} + $${requested.toFixed(2)} > $${limit.toFixed(2)}).`,

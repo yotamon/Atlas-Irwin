@@ -107,6 +107,10 @@ test("Zero Cost mode blocks specialist media at the provider boundary", async ()
   const videoSubmitGuard = videoGeneration.indexOf("await assertSpecialistMediaSpendAllowed({", videoSubmit);
   const reserve = videoGeneration.indexOf("reserve_music_video_generation", videoSubmit);
   assert.ok(videoSubmit >= 0 && videoSubmitGuard > videoSubmit && reserve > videoSubmitGuard);
+  assert.match(videoGeneration, /HIGGSFIELD_USD_PER_CREDIT/);
+  assert.match(videoGeneration, /videoDirectorSpendSnapshot/);
+  assert.match(controlPlane, /externalTotalSpentUsd/);
+  assert.match(controlPlane, /no reliable USD estimate/);
 });
 
 test("AI tasks reuse quality-approved deterministic results and escalate cheaply", async () => {

@@ -65,6 +65,41 @@ function paidShot(strategy: ExtendedMusicVideoShot["reuse_strategy"]) {
   return strategy === "unique" || strategy === "continuation";
 }
 
+function higgsfieldUsdPerCredit() {
+  const value = Number(process.env.HIGGSFIELD_USD_PER_CREDIT);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+async function videoDirectorSpendSnapshot(
+  db: SupabaseClient<VideoDatabase>,
+  ownerId: string,
+) {
+  const usdPerCredit = higgsfieldUsdPerCredit();
+  if (usdPerCredit === null) return null;
+  const start = new Date();
+  start.setUTCDate(1);
+  start.setUTCHours(0, 0, 0, 0);
+  const { data, error } = await db.from("music_video_generations")
+    .select("operation_type,estimated_credits,actual_credits,billing_status")
+    .eq("owner_id", ownerId)
+    .gte("created_at", start.toISOString())
+    .in("billing_status", ["reserved", "charged"]);
+  if (error) throw new Error(error.message);
+  let totalUsd = 0;
+  let imageUsd = 0;
+  let videoUsd = 0;
+  for (const generation of data ?? []) {
+    const credits = generation.billing_status === "charged"
+      ? Number(generation.actual_credits ?? generation.estimated_credits ?? 0)
+      : Number(generation.estimated_credits ?? 0);
+    const usd = Math.max(0, credits) * usdPerCredit;
+    totalUsd += usd;
+    if (generation.operation_type === "look_image") imageUsd += usd;
+    else videoUsd += usd;
+  }
+  return { usdPerCredit, totalUsd, imageUsd, videoUsd };
+}
+
 function referenceIds(shot: ExtendedMusicVideoShot) {
   const general = Array.isArray(shot.reference_asset_ids)
     ? shot.reference_asset_ids.filter((value): value is string => typeof value === "string")
@@ -231,7 +266,14 @@ export async function createApprovalEnvelope(input: {
   const shotIds = [...new Set((generations ?? []).flatMap((generation) => generation.shot_id ? [generation.shot_id] : []))];
   const operationTypes = [...new Set((generations ?? []).map((generation) => generation.operation_type))];
   const mediaKind = operationTypes.every((operation) => operation === "look_image") ? "image" : "video";
-  await assertSpecialistMediaSpendAllowed({ ownerId: input.ownerId, kind: mediaKind });
+  const spend = await videoDirectorSpendSnapshot(input.db, input.ownerId);
+  await assertSpecialistMediaSpendAllowed({
+    ownerId: input.ownerId,
+    kind: mediaKind,
+    estimatedUsd: spend ? maxCredits * spend.usdPerCredit : null,
+    externalTotalSpentUsd: spend?.totalUsd ?? null,
+    externalKindSpentUsd: spend ? (mediaKind === "image" ? spend.imageUsd : spend.videoUsd) : null,
+  });
   const models = [...new Set((generations ?? []).map((generation) => generation.model))];
   const approvalType = operationTypes.every((operation) => operation === "look_image") ? "look" : "generation_batch";
   const { data: approval, error: approvalError } = await input.db.from("music_video_approvals").insert({
@@ -468,9 +510,14 @@ export async function submitGeneration(input: {
 }) {
   const generation = input.generation;
   if (!generation.approval_id) throw new Error("Generation has no approval envelope.");
+  const mediaKind = generation.operation_type === "look_image" ? "image" : "video";
+  const spend = await videoDirectorSpendSnapshot(input.db, generation.owner_id);
   await assertSpecialistMediaSpendAllowed({
     ownerId: generation.owner_id,
-    kind: generation.operation_type === "look_image" ? "image" : "video",
+    kind: mediaKind,
+    estimatedUsd: spend ? Number(generation.estimated_credits) * spend.usdPerCredit : null,
+    externalTotalSpentUsd: spend?.totalUsd ?? null,
+    externalKindSpentUsd: spend ? (mediaKind === "image" ? spend.imageUsd : spend.videoUsd) : null,
   });
   const readiness = higgsfieldReadiness();
   if (!readiness.hasCredentials) throw new Error("Higgsfield credentials are not configured.");
