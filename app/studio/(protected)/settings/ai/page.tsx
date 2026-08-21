@@ -44,6 +44,7 @@ export default async function AiControlCenterPage() {
         <Panel title="Control Plane">{atlasAiGatewayConfigured() ? "Healthy" : "Not configured"}</Panel>
         <Panel title="Month spend">{money(budget.totalSpentUsd)}</Panel>
         <Panel title="AI requests">{stats.requests.toLocaleString()}</Panel>
+        <Panel title="Cache reuses">{stats.cacheReuses.toLocaleString()}</Panel>
         <Panel title="First-pass quality">{percent(stats.firstPassSuccessRate)}</Panel>
       </div>
 
@@ -52,7 +53,7 @@ export default async function AiControlCenterPage() {
           <div><span className="section-label">Zero Cost mode</span><h2>{zeroCost ? "Paid media is locked" : "One click back to $0 media spend"}</h2></div>
           <Status>{zeroCost ? "active" : "custom"}</Status>
         </div>
-        <p><small>Zero Cost keeps routing on cost-first Auto, caps text/reasoning at $4.50, and sets paid image and video budgets to $0. Provider submission is blocked server-side until you deliberately raise the relevant media budget.</small></p>
+        <p><small>Zero Cost keeps routing on cost-first Auto, caps text/reasoning at $2.25, and sets paid image and video budgets to $0. Provider submission is blocked server-side until you deliberately raise the relevant media budget.</small></p>
         <form action={applyZeroCostPreset}>
           <Submit>{zeroCost ? "Re-apply Zero Cost" : "Enable Zero Cost"}</Submit>
         </form>

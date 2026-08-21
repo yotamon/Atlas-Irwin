@@ -9,7 +9,7 @@ import { createMarketingServiceClient } from "@/lib/marketing/db";
 import type { Json } from "@/types/database";
 import type { AiControlSettings } from "@/types/marketing-database";
 
-export const ZERO_COST_TEXT_BUDGET_USD = 4.5;
+export const ZERO_COST_TEXT_BUDGET_USD = 2.25;
 
 const DEFAULT_SETTINGS: Omit<AiControlSettings, "created_at" | "updated_at"> = {
   owner_id: "",
@@ -72,7 +72,13 @@ export type AiBudgetSnapshot = {
 };
 
 export function isZeroCostPolicy(settings: AiControlSettings) {
-  return settings.hard_stop && Number(settings.image_budget_usd) <= 0 && Number(settings.video_budget_usd) <= 0;
+  return settings.hard_stop
+    && settings.routing_mode === "auto"
+    && settings.provider_sort === "cost"
+    && Number(settings.monthly_budget_usd) <= ZERO_COST_TEXT_BUDGET_USD
+    && Number(settings.text_budget_usd) <= ZERO_COST_TEXT_BUDGET_USD
+    && Number(settings.image_budget_usd) <= 0
+    && Number(settings.video_budget_usd) <= 0;
 }
 
 export async function loadAiControlSettings(ownerId: string): Promise<AiControlSettings> {

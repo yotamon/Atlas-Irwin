@@ -90,7 +90,7 @@ test("Zero Cost mode blocks specialist media at the provider boundary", async ()
   const page = await source("app/studio/(protected)/settings/ai/page.tsx");
   const marketingCreative = await source("app/studio/marketing-creative-actions.ts");
   const videoGeneration = await source("lib/video-director/generation.ts");
-  assert.match(controlPlane, /ZERO_COST_TEXT_BUDGET_USD = 4\.5/);
+  assert.match(controlPlane, /ZERO_COST_TEXT_BUDGET_USD = 2\.25/);
   assert.match(controlPlane, /assertSpecialistMediaSpendAllowed/);
   assert.match(actions, /applyZeroCostPreset/);
   assert.match(actions, /image_budget_usd: 0/);
@@ -118,6 +118,8 @@ test("AI tasks reuse quality-approved deterministic results and escalate cheaply
   assert.ok(controlPlane.indexOf('if (cacheMode === "use")') < controlPlane.indexOf("const budget = await enforceBudget"));
   assert.match(controlPlane, /quality_gate_passed", true/);
   assert.match(controlPlane, /cacheHit: true/);
+  assert.match(controlPlane, /provider: "atlas-cache"/);
+  assert.match(controlPlane, /cacheSourceRunId/);
   assert.match(tasks, /zai\/glm-4\.7-flash/);
   assert.match(tasks, /openai\/gpt-5\.6-luna/);
   assert.match(tasks, /openai\/gpt-5\.6-sol/);
