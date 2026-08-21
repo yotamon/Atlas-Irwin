@@ -85,7 +85,6 @@ export async function loadAiControlSettings(ownerId: string): Promise<AiControlS
   const { data: created, error: createError } = await client.from("ai_control_settings").insert(row).select("*").maybeSingle();
   if (!createError && created) return created;
 
-  // A concurrent first request may have created the singleton row.
   const { data: raced, error: racedError } = await client.from("ai_control_settings").select("*").eq("owner_id", ownerId).single();
   if (racedError || !raced) throw new Error(createError?.message || racedError?.message || "AI control settings could not be initialized.");
   return raced;
@@ -239,9 +238,9 @@ type RunTaskInput<T> = {
 async function cachedTaskResult<T>(ownerId: string, cacheKey: string): Promise<AtlasAiTaskResult<T> | null> {
   const client = createMarketingServiceClient();
   const { data, error } = await client.from("generation_runs")
-    .select("id,parent_run_id,output,model,requested_model,routed_provider,provider_request_id,gateway_generation_id,estimated_cost_usd,input_tokens,output_tokens,quality_score,quality_failures")
+    .select("id,parent_run_id,output,model,requested_model,routed_provider,provider_request_id,gateway_generation_id,quality_score,quality_failures")
     .eq("owner_id", ownerId)
-    .eq("cache_key", cacheKey)
+    .contains("metadata", { cacheKey, cacheEligible: true })
     .eq("status", "completed")
     .eq("quality_gate_passed", true)
     .order("created_at", { ascending: false })
@@ -310,6 +309,23 @@ export async function runAtlasAiTask<T>(input: RunTaskInput<T>): Promise<AtlasAi
   }) => {
     const [model, ...fallbackModels] = models;
     const started = new Date();
+    const runMetadata = {
+      policyTier: policy.tier,
+      configuredRoute: policy.models,
+      route: models,
+      semanticEscalationRoute: policy.escalationModels,
+      providerSort: settings.provider_sort,
+      budgetAtStart: budget,
+      cacheKey,
+      cacheMode,
+      cacheEligible: cacheMode !== "off",
+      adaptiveLearning: {
+        applied: learnedRouting.applied,
+        reason: learnedRouting.reason,
+        route: learnedRouting.route,
+      },
+      ...(input.metadata && typeof input.metadata === "object" && !Array.isArray(input.metadata) ? input.metadata as Record<string, unknown> : {}),
+    };
     const { data: run, error: createError } = await client.from("generation_runs").insert({
       owner_id: input.ownerId,
       campaign_id: input.campaignId ?? null,
@@ -328,23 +344,7 @@ export async function runAtlasAiTask<T>(input: RunTaskInput<T>): Promise<AtlasAi
       attempt_index: attemptIndex,
       started_at: started.toISOString(),
       escalation_reason: escalationReason ?? null,
-      cache_key: null,
-      metadata: asJson({
-        policyTier: policy.tier,
-        configuredRoute: policy.models,
-        route: models,
-        semanticEscalationRoute: policy.escalationModels,
-        providerSort: settings.provider_sort,
-        budgetAtStart: budget,
-        cacheKey,
-        cacheMode,
-        adaptiveLearning: {
-          applied: learnedRouting.applied,
-          reason: learnedRouting.reason,
-          route: learnedRouting.route,
-        },
-        ...(input.metadata && typeof input.metadata === "object" && !Array.isArray(input.metadata) ? input.metadata as Record<string, unknown> : {}),
-      }),
+      metadata: asJson(runMetadata),
     }).select("id").single();
     if (createError || !run) throw new Error(createError?.message || "AI generation run could not be created.");
 
@@ -385,7 +385,6 @@ export async function runAtlasAiTask<T>(input: RunTaskInput<T>): Promise<AtlasAi
         quality_gate_passed: quality.passed,
         quality_score: quality.score,
         quality_failures: asJson(quality.failures),
-        cache_key: quality.passed && cacheMode !== "off" ? cacheKey : null,
       }).eq("id", run.id);
       if (updateError) throw new Error(updateError.message);
       return { gateway, quality, runId: run.id };
