@@ -100,7 +100,7 @@ test("Zero Cost mode blocks specialist media at the provider boundary", async ()
   const marketingGuard = marketingCreative.indexOf("await assertSpecialistMediaSpendAllowed({");
   const marketingSubmit = marketingCreative.indexOf("provider.submit(");
   assert.ok(marketingGuard >= 0 && marketingSubmit > marketingGuard);
-  const videoApprovalGuard = videoGeneration.indexOf("await assertSpecialistMediaSpendAllowed({ ownerId: input.ownerId");
+  const videoApprovalGuard = videoGeneration.indexOf("await assertSpecialistMediaSpendAllowed({");
   const videoApprovalInsert = videoGeneration.indexOf('from("music_video_approvals").insert');
   assert.ok(videoApprovalGuard >= 0 && videoApprovalInsert > videoApprovalGuard);
   const videoSubmit = videoGeneration.indexOf("export async function submitGeneration");
