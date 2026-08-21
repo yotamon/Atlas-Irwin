@@ -6,6 +6,7 @@ import { join } from "node:path";
 const repository = process.env.MEDIA_WORKER_REPOSITORY?.trim() || "atlas-media-worker";
 const tag = process.env.MEDIA_WORKER_TAG?.trim() || "latest";
 const image = `${repository}:${tag}`;
+const sandboxName = process.env.MEDIA_WORKER_SANDBOX_NAME?.trim() || "atlas-media-worker-cache";
 const vercelProject = process.env.VERCEL_PROJECT?.trim() || "atlas-irwin";
 const vercelScope = process.env.VERCEL_SCOPE?.trim() || "cart-shift";
 const siteUrl = (process.env.ATLAS_SITE_URL?.trim() || "https://atlasirwin.com").replace(/\/$/, "");
@@ -64,21 +65,38 @@ console.log(`Building ${image} and pushing it to Vercel Container Registry...`);
 run("vercel", ["vcr", "build", "docker", "services/media-worker", image, "--push"]);
 
 // Local Sandbox SDK calls need the short-lived project OIDC token. Production calls are
-// automatically authenticated by Vercel, so this file is only used for the deployment smoke test.
+// automatically authenticated by Vercel, so this file is only used to prepare/smoke-test
+// the named model-cache Sandbox before Atlas production traffic can dispatch a real job.
 const envPath = join(tmpdir(), `atlas-vercel-${process.pid}.env`);
 try {
   run("vercel", ["env", "pull", envPath, "--yes", "--environment", "production", "--scope", vercelScope]);
   loadEnvFile(envPath);
 
   const { Sandbox } = await import("@vercel/sandbox");
-  console.log("Smoke-testing the custom image inside a free Vercel Sandbox...");
+
+  // A named Sandbox keeps its image/config and filesystem snapshot. Re-create it on deploy so
+  // a newly pushed worker image can never accidentally resume an older application image.
+  try {
+    const previous = await Sandbox.get({ name: sandboxName });
+    try {
+      await previous.stop();
+    } catch {
+      // It may already be stopped.
+    }
+    await previous.delete();
+  } catch {
+    // First deploy: no cache Sandbox exists yet.
+  }
+
+  console.log("Preparing the persistent free-tier Media Worker cache Sandbox...");
   const sandbox = await Sandbox.create({
-    name: `atlas-worker-smoke-${Date.now()}`,
+    name: sandboxName,
     image,
-    resources: { vcpus: 1 },
-    timeout: 5 * 60 * 1000,
-    persistent: false,
-    tags: { app: "atlas-irwin", job: "deploy-smoke-test" },
+    resources: { vcpus: 4 },
+    timeout: 45 * 60 * 1000,
+    persistent: true,
+    keepLastSnapshots: { count: 1 },
+    tags: { app: "atlas-irwin", role: "media-worker" },
   });
   try {
     const result = await sandbox.runCommand({
@@ -94,11 +112,12 @@ try {
       throw new Error(`Media Worker image smoke test failed: ${stderr}`);
     }
   } finally {
+    // Stop compute but keep exactly one filesystem snapshot. The first real analysis will add
+    // downloaded model checkpoints to this cache; later jobs resume without re-downloading.
     try {
       await sandbox.stop();
-      await sandbox.delete();
     } catch {
-      // The short smoke-test Sandbox may already have stopped.
+      // The short smoke-test session may already have stopped.
     }
   }
 } finally {
@@ -141,7 +160,8 @@ if (
 
 console.log("\nAtlas Media Worker is Vercel-native and ready.");
 console.log(`VCR image: ${image}`);
-console.log("Runtime: Vercel Sandbox, ephemeral, 4 vCPU / 8 GB for real jobs");
+console.log(`Persistent cache: ${sandboxName} (stopped between jobs, one snapshot retained)`);
+console.log("Runtime: Vercel Sandbox, up to 4 vCPU / 8 GB for real jobs");
 console.log("Concurrency guard: 1 active Media Worker job per owner");
 console.log("Paid fallback: disabled");
 console.log(`Atlas health: ${siteUrl}/api/health/media-worker`);
