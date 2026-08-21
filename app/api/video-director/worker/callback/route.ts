@@ -1,23 +1,16 @@
-import { timingSafeEqual } from "node:crypto";
-import { NextResponse } from "next/server";
+import { createHash, timingSafeEqual } from "node:crypto";
+import { after, NextResponse } from "next/server";
+import { Sandbox } from "@vercel/sandbox";
 import { createServiceClient } from "@/lib/supabase/service";
 import {
   registerWorkerRenderAsset,
   registerWorkerThumbnailAsset,
 } from "@/lib/video-director/assets";
+import { MEDIA_WORKER_CALLBACK_HASH_KEY } from "@/lib/video-director/worker";
 import type { Json } from "@/types/database";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function authorized(request: Request) {
-  const secret = process.env.MEDIA_WORKER_SECRET?.trim();
-  const authorization = request.headers.get("authorization") || "";
-  if (!secret || !authorization.startsWith("Bearer ")) return false;
-  const actual = Buffer.from(authorization.slice(7));
-  const expected = Buffer.from(secret);
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
-}
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -27,6 +20,45 @@ function record(value: unknown): Record<string, unknown> {
 
 function json(value: unknown): Json {
   return value as Json;
+}
+
+function safeEqual(actual: string, expected: string) {
+  const actualBuffer = Buffer.from(actual);
+  const expectedBuffer = Buffer.from(expected);
+  return actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer);
+}
+
+function authorized(request: Request, requestPayload: Record<string, unknown>) {
+  const authorization = request.headers.get("authorization") || "";
+  if (!authorization.startsWith("Bearer ")) return false;
+  const token = authorization.slice(7);
+  if (!token) return false;
+
+  const expectedHash = requestPayload[MEDIA_WORKER_CALLBACK_HASH_KEY];
+  if (typeof expectedHash === "string" && expectedHash.length === 64) {
+    const actualHash = createHash("sha256").update(token).digest("hex");
+    return safeEqual(actualHash, expectedHash);
+  }
+
+  // Temporary compatibility for any legacy external worker job that existed before the
+  // Vercel Sandbox migration. New jobs use one-time per-job callback credentials above.
+  const legacySecret = process.env.MEDIA_WORKER_SECRET?.trim();
+  return Boolean(legacySecret && safeEqual(token, legacySecret));
+}
+
+function scheduleSandboxCleanup(externalJobId: string | null) {
+  if (!externalJobId?.startsWith("atlas-media-worker")) return;
+  after(async () => {
+    try {
+      const sandbox = await Sandbox.get({ name: externalJobId });
+      // Stopping ends CPU/memory usage immediately. Because this is a named persistent
+      // Sandbox, Vercel snapshots the filesystem so downloaded ML checkpoints are reused
+      // by the next job instead of consuming free CPU/network repeatedly.
+      await sandbox.stop();
+    } catch {
+      // A Hobby timeout or a previous terminal callback may already have stopped the session.
+    }
+  });
 }
 
 async function markWorkerTerminal(
@@ -46,7 +78,6 @@ async function markWorkerTerminal(
 }
 
 export async function POST(request: Request) {
-  if (!authorized(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const body = await request.json().catch(() => null) as unknown;
   const payload = record(body);
   const jobId = typeof payload.job_id === "string" ? payload.job_id : "";
@@ -64,9 +95,15 @@ export async function POST(request: Request) {
     .single();
   if (jobError || !job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
 
+  const requestPayload = record(job.request_payload);
+  if (!authorized(request, requestPayload)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   // Ignore late/out-of-order callbacks only after the full terminal reconciliation has
   // completed. Terminal worker state is the durable commit marker.
   if (["completed", "failed"].includes(job.status)) {
+    scheduleSandboxCleanup(job.external_job_id);
     return NextResponse.json({ ok: true, duplicate: true });
   }
 
@@ -77,8 +114,6 @@ export async function POST(request: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true });
   }
-
-  const requestPayload = record(job.request_payload);
 
   if (status === "failed") {
     try {
@@ -124,6 +159,7 @@ export async function POST(request: Request) {
         }
       }
       await markWorkerTerminal(db, job.id, "failed", result, callbackError || "Worker job failed");
+      scheduleSandboxCleanup(job.external_job_id);
       return NextResponse.json({ ok: true });
     } catch (error) {
       return NextResponse.json({ error: error instanceof Error ? error.message : "Worker failure reconciliation failed" }, { status: 500 });
@@ -143,6 +179,7 @@ export async function POST(request: Request) {
       }).eq("id", job.project_id);
       if (projectError) throw new Error(projectError.message);
       await markWorkerTerminal(db, job.id, "completed", result, null);
+      scheduleSandboxCleanup(job.external_job_id);
       return NextResponse.json({ ok: true });
     } catch (error) {
       return NextResponse.json({ error: error instanceof Error ? error.message : "Audio analysis reconciliation failed" }, { status: 500 });
@@ -177,6 +214,7 @@ export async function POST(request: Request) {
         .eq("id", job.project_id);
       if (projectError) throw new Error(projectError.message);
       await markWorkerTerminal(db, job.id, "completed", { ...result, media_asset_id: asset.id }, null);
+      scheduleSandboxCleanup(job.external_job_id);
       return NextResponse.json({ ok: true });
     } catch (error) {
       return NextResponse.json({ error: error instanceof Error ? error.message : "Thumbnail reconciliation failed" }, { status: 500 });
@@ -230,6 +268,7 @@ export async function POST(request: Request) {
     }
 
     await markWorkerTerminal(db, job.id, "completed", result, null);
+    scheduleSandboxCleanup(job.external_job_id);
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Render reconciliation failed" }, { status: 500 });

@@ -60,16 +60,41 @@ test("track-level analysis is cached and can drive Content Lab timestamps", asyn
   assert.ok(migration.includes("audio_timestamp_end"));
 });
 
-test("production Media Worker uses package-safe imports and durable Cloud Tasks dispatch", async () => {
+test("production Media Worker is Vercel Sandbox native with no paid-cloud fallback", async () => {
   const worker = await readFile("services/media-worker/app/main.py", "utf8");
+  const runner = await readFile("services/media-worker/app/runner.py", "utf8");
+  const requirements = await readFile("services/media-worker/requirements.txt", "utf8");
+  const dispatcher = await readFile("lib/video-director/worker.ts", "utf8");
+  const callback = await readFile("app/api/video-director/worker/callback/route.ts", "utf8");
   const deploy = await readFile("scripts/deploy-media-worker.mjs", "utf8");
   const health = await readFile("app/api/health/media-worker/route.ts", "utf8");
+
   assert.ok(worker.includes("from .music_intelligence import"));
-  assert.ok(worker.includes("CloudTasksClient"));
-  assert.ok(worker.includes('dispatch_mode": "cloud_tasks"'));
-  assert.ok(worker.includes("/v1/execute"));
-  assert.ok(deploy.includes('"--min-instances", "0"'));
-  assert.ok(deploy.includes("cloudtasks.googleapis.com"));
-  assert.ok(deploy.includes("roles/cloudtasks.enqueuer"));
-  assert.ok(health.includes('dispatchMode === "cloud_tasks"'));
+  assert.ok(worker.includes('"dispatch_mode": "vercel_sandbox_runner"'));
+  assert.ok(runner.includes("WorkerRequest.model_validate_json"));
+  assert.ok(runner.includes("asyncio.run(execute(request))"));
+  assert.equal(requirements.includes("google-cloud-tasks"), false);
+
+  assert.ok(dispatcher.includes('from "@vercel/sandbox"'));
+  assert.ok(dispatcher.includes("Sandbox.getOrCreate"));
+  assert.ok(dispatcher.includes('MEDIA_WORKER_SANDBOX_NAME = "atlas-media-worker-cache"'));
+  assert.ok(dispatcher.includes("resources: { vcpus: 4 }"));
+  assert.ok(dispatcher.includes("45 * 60 * 1000"));
+  assert.ok(dispatcher.includes("persistent: true"));
+  assert.ok(dispatcher.includes("keepLastSnapshots: { count: 1 }"));
+  assert.ok(dispatcher.includes("detached: true"));
+  assert.ok(dispatcher.includes("Atlas did not use a paid fallback"));
+  assert.ok(dispatcher.includes("MEDIA_WORKER_CALLBACK_HASH_KEY"));
+
+  assert.ok(callback.includes("scheduleSandboxCleanup"));
+  assert.ok(callback.includes("await sandbox.stop()"));
+  assert.equal(callback.includes("await sandbox.delete()"), false);
+
+  assert.ok(deploy.includes('"vcr", "build", "docker"'));
+  assert.ok(deploy.includes("persistent: true"));
+  assert.ok(deploy.includes("keepLastSnapshots: { count: 1 }"));
+  assert.equal(deploy.includes("gcloud"), false);
+  assert.equal(deploy.includes("cloudtasks.googleapis.com"), false);
+  assert.ok(health.includes('dispatch_mode: "vercel_sandbox"'));
+  assert.ok(health.includes("zero_cost_mode: true"));
 });
