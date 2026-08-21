@@ -45,7 +45,6 @@ export async function learnedRouteForTask({
   settings: AiControlSettings;
   policy: AtlasAiTaskPolicy;
 }): Promise<LearnedRouteDecision> {
-  // Forced routing modes are an explicit user decision and always beat learned routing.
   if (settings.routing_mode !== "auto") {
     return { applied: false, reason: `Routing is forced to ${settings.routing_mode}.`, route: policy.models, evidence: [] };
   }
@@ -57,6 +56,7 @@ export async function learnedRouteForTask({
   const { data: runs, error: runsError } = await client.from("generation_runs")
     .select("id,model,status,quality_score,actual_cost_usd,estimated_cost_usd")
     .eq("owner_id", ownerId)
+    .eq("provider", "vercel-gateway")
     .eq("task_type", policy.task)
     .gte("created_at", lookbackIso())
     .in("model", policy.models)
