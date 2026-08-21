@@ -1,27 +1,53 @@
 # Atlas Media Worker
 
-The Media Worker keeps CPU-heavy audio intelligence and deterministic FFmpeg assembly outside Vercel.
+The Atlas Media Worker runs CPU-heavy Music Intelligence and deterministic FFmpeg assembly in Vercel Sandbox. It is intentionally designed for the Vercel Hobby tier and has no Google Cloud or paid-infrastructure fallback.
 
 It provides:
 
 - Music Intelligence v2 using `all-in-one-infer` for semantic structure, BPM, beats and real downbeats
-- a clearly labelled librosa fallback when semantic inference is unavailable
+- an explicit librosa fallback when semantic inference is unavailable
 - Atlas-specific hook ranking using recurrence, structural importance, energy lift, novelty, groove, melodic salience, edit-boundary fit and loopability
 - ready-to-use 6s / 8s / 15s / 30s social audio windows
-- energy curves, peaks and onset-informed edit points
 - deterministic FFmpeg assembly using the original track audio
-- subject-aware horizontal crop for vertical outputs using each storyboard shot's `focus_x`
-- direct upload to a short-lived Supabase signed upload URL
+- direct upload to short-lived Supabase signed upload URLs
 - authenticated callbacks to Atlas for durable job state
-- Cloud Tasks backed production dispatch so expensive workers can safely scale to zero
 
 The worker never receives the Supabase service-role key and never writes directly to the database.
+
+## Why Vercel Sandbox
+
+The normal Atlas web application stays on Vercel Functions. Heavy PyTorch/source-separation/FFmpeg work needs more CPU and RAM, so each real media job resumes a named Vercel Sandbox created from the custom `atlas-media-worker:latest` VCR image.
+
+The production profile is deliberately conservative:
+
+- Vercel Hobby only
+- up to 4 vCPU / 8 GB RAM
+- one active Atlas media job at a time
+- 45-minute maximum Sandbox session
+- no paid fallback
+- canonical per-track Music Intelligence cache in Postgres
+- one persistent Sandbox filesystem snapshot for downloaded ML checkpoints
+- compute stopped immediately after terminal callback
+
+If Vercel rejects a Sandbox because the free Hobby quota is unavailable, Atlas marks the job failed with a clear free-quota message. It does not dispatch to Google Cloud or another paid worker.
+
+## Persistent model cache
+
+`all-in-one-infer` downloads model checkpoints at runtime. Atlas uses one named persistent Sandbox:
+
+```text
+atlas-media-worker-cache
+```
+
+The VM is not left running. After each completed or failed job, the callback route calls `sandbox.stop()`. Vercel snapshots the filesystem and Atlas keeps only the latest snapshot.
+
+The next job resumes that snapshot, so downloaded model checkpoints can be reused without paying the CPU/time cost of downloading and preparing them again. A new Media Worker deployment recreates this cache Sandbox so a new VCR image cannot accidentally resume an older application image.
 
 ## Music Intelligence behavior
 
 `analyze_audio` returns a versioned `music_map`.
 
-A v2 map includes semantic sections, musical timing, ranked hook candidates and social cuts:
+A v2 map contains semantic sections, musical timing, ranked hook candidates and social cuts:
 
 ```json
 {
@@ -53,57 +79,57 @@ A v2 map includes semantic sections, musical timing, ranked hook candidates and 
 
 Atlas converts every source to 44.1 kHz PCM WAV before structural inference so beat and edit timing share one decoder/sample timeline.
 
-`all-in-one-infer` performs source separation internally before structural inference. Model checkpoints are downloaded on first use and cached inside the instance filesystem. Canonical per-track caching in Postgres prevents the same completed v2 analysis from being dispatched again for another Video Director project.
-
 If semantic inference cannot load or complete, Atlas still analyzes the waveform with librosa. That result is explicitly returned as `analysis.quality = "fallback"`; generic sections and inferred editing grids are never presented as verified semantic labels/downbeats. A duration-only estimate never invents a hook.
 
-## Production dispatch architecture
+## Dispatch architecture
 
-Production uses two Cloud Run routes:
-
-1. `POST /v1/jobs` authenticates the Atlas request, creates a deterministic Cloud Task and returns quickly.
-2. Cloud Tasks calls `POST /v1/execute`. That request stays open for the entire analysis/render operation and receives automatic retry behavior from Cloud Tasks.
-
-Because the expensive operation is attached to a live HTTP request, Cloud Run no longer needs an always-on instance or background CPU allocation. It can scale to zero between jobs.
-
-Explicit Cloud Task IDs are derived from Atlas worker job IDs. Repeated Vercel dispatch attempts therefore resolve to the same Cloud Task rather than creating duplicate paid/CPU-heavy work.
-
-The production health response should include:
-
-```json
-{
-  "ok": true,
-  "version": 2.1,
-  "dispatch_mode": "cloud_tasks",
-  "music_intelligence": {
-    "semantic_analyzer_available": true
-  }
-}
+```text
+Atlas Next.js
+  -> create/reuse canonical worker job in Supabase
+  -> resume atlas-media-worker-cache Sandbox
+  -> run python -m app.runner <request.json>
+  -> worker reports running/completed/failed to Atlas callback
+  -> Atlas reconciles durable database state
+  -> callback stops Sandbox compute
+  -> Vercel keeps one filesystem snapshot for model cache
 ```
 
-## Required environment
+Every dispatched job receives a random one-time callback token. Atlas stores only its SHA-256 hash in the durable job payload. The plaintext token exists only in the request file inside the Sandbox. Legacy `MEDIA_WORKER_SECRET` callback authentication remains only for old jobs created before this migration.
 
-The deployed worker receives:
+Before dispatching CPU work, Atlas checks the canonical track-level Music Intelligence cache. A completed v2 analysis is reused across Video Director, Growth and Marketing instead of analyzing the same track again.
+
+## Vercel Hobby budget policy
+
+The code is intentionally fail-closed on cost:
+
+- concurrency is capped at one active Atlas media job per owner
+- existing completed analysis is reused
+- active duplicate jobs are not dispatched again
+- quota/billing/limit errors become an explicit Hobby-quota failure
+- no Google Cloud credentials or worker URL exist
+- no paid fallback is configured
+
+Actual tracks-per-month depends on real Active CPU consumed by `all-in-one-infer`, not only wall-clock duration. Measure the first real production analysis before assuming a fixed monthly track count.
+
+Video rendering can also consume Sandbox CPU and network egress, so large render workloads share the same free-tier allowance with Music Intelligence.
+
+## Vercel Container Registry image
+
+The Python worker remains containerized so FFmpeg, PyTorch and Python dependencies are reproducible.
 
 ```bash
-MEDIA_WORKER_SECRET=<shared-secret-from-Secret-Manager>
-GCP_PROJECT_ID=<project-id>
-CLOUD_TASKS_LOCATION=europe-west3
-CLOUD_TASKS_QUEUE=atlas-media-worker
+docker build -t atlas-media-worker services/media-worker
 ```
 
-Vercel receives the matching:
+Production uses the Vercel Container Registry image `atlas-media-worker:latest` by default. Override it only when intentionally testing another tag:
 
 ```bash
-MEDIA_WORKER_URL=https://<cloud-run-service>.run.app
-MEDIA_WORKER_SECRET=<same-shared-secret>
+MEDIA_WORKER_IMAGE=atlas-media-worker:next
 ```
-
-The public Atlas health proxy at `/api/health/media-worker` never exposes the service URL or secret.
 
 ## One-command production deployment
 
-The repository includes a deployment script that provisions/updates the complete worker path:
+The repository includes:
 
 ```bash
 npm run media-worker:deploy
@@ -111,67 +137,57 @@ npm run media-worker:deploy
 
 Prerequisites:
 
-- Google Cloud CLI installed and authenticated with `gcloud auth login`
-- a billing-enabled GCP project selected with `gcloud config set project <PROJECT_ID>` (or `GCP_PROJECT_ID` set)
 - Vercel CLI installed and authenticated with `vercel login`
+- Docker available locally
+- checkout linked or linkable to the `cart-shift/atlas-irwin` Vercel project
 
 The script:
 
-- enables Cloud Run, Cloud Build, Artifact Registry, Cloud Tasks, Secret Manager and IAM APIs
-- creates/reuses a dedicated `atlas-media-worker` service account
-- creates/reuses the shared secret in Secret Manager
-- grants only Secret Accessor and Cloud Tasks Enqueuer permissions required by the worker
-- creates/updates a Cloud Tasks queue
-- deploys Cloud Run in `europe-west3` by default
-- configures 4 CPU / 8 GiB, request concurrency 1 and scale-to-zero
-- verifies worker version, Cloud Tasks mode and `all-in-one-infer` availability before connecting Atlas
-- writes `MEDIA_WORKER_URL` and `MEDIA_WORKER_SECRET` into Vercel Production and Preview through Vercel CLI
-- redeploys Atlas
-- polls `https://atlasirwin.com/api/health/media-worker` until the whole path is healthy
+1. links the checkout to Atlas on Vercel
+2. builds the Docker image and pushes it to Vercel Container Registry
+3. obtains local project auth through `vercel env pull`
+4. removes any old named cache Sandbox so the new image is authoritative
+5. creates the persistent 4-vCPU cache Sandbox and verifies Python, FFmpeg and `all-in-one-infer`
+6. stops the Sandbox, retaining one filesystem snapshot
+7. deploys Atlas production
+8. verifies `/api/health/media-worker`
 
-Optional overrides:
+There is no `gcloud`, Cloud Run, Cloud Tasks, Google Secret Manager, Google service account or GCP billing account in this deployment path.
 
-```bash
-GCP_PROJECT_ID=... \
-GCP_REGION=europe-west3 \
-MEDIA_WORKER_MAX_CONCURRENT=1 \
-VERCEL_SCOPE=cart-shift \
-VERCEL_PROJECT=atlas-irwin \
-npm run media-worker:deploy
+## Health contract
+
+The public Atlas health endpoint is:
+
+```text
+/api/health/media-worker
 ```
 
-`MEDIA_WORKER_MAX_CONCURRENT=1` is deliberately conservative for Atlas: only one PyTorch/source-separation job runs at once, preventing an accidental burst of large Cloud Run instances. Increase it only after observing real workload and cost.
+It reports the dispatch architecture without booting PyTorch just to perform a health check. A healthy configuration reports Vercel Sandbox mode, zero-cost mode and Music Intelligence v2 support. Runtime semantic-analyzer verification happens when the VCR image is smoke-tested and on real jobs.
 
-## Local run
+## Local development
 
-Cloud Tasks variables are optional locally. Without them, `/v1/jobs` uses an in-process background task for development only.
+The worker logic can still be exercised directly with Docker:
 
 ```bash
 docker build -t atlas-media-worker services/media-worker
-docker run --rm -p 8080:8080 \
-  -e MEDIA_WORKER_SECRET=local-secret \
-  atlas-media-worker
+docker run --rm atlas-media-worker \
+  python -c "from app.main import allin1_infer; import shutil; assert allin1_infer is not None; assert shutil.which('ffmpeg')"
 ```
 
-Health check:
-
-```bash
-curl http://localhost:8080/health
-```
-
-Local health will show `dispatch_mode: "local_background"` unless Cloud Tasks variables are supplied.
+Production dispatch itself is Vercel-specific because Sandbox authentication is supplied automatically by Vercel deployments.
 
 ## Failure behavior
 
-Atlas persists a worker job before dispatch. A callback marks it `running`, `completed`, or `failed`.
+Atlas persists a worker job before dispatch. The callback marks it `running`, `completed`, or `failed`.
 
-- a semantic analyzer failure can degrade to the explicit librosa audio fallback without losing the whole analysis
-- an unrecoverable audio-analysis failure moves the project to a recoverable blocked state
-- render failure returns the project to `ready_to_render`
+- semantic analyzer failure may degrade to the explicit librosa audio fallback
+- unrecoverable audio-analysis failure moves the project to a recoverable blocked state
+- render failure returns the project to a retryable state
 - no generation credits are affected by a Media Worker failure
-- final assets are registered in the Media Library only after the signed upload succeeds
-- if the terminal callback cannot reach Atlas, Cloud Tasks retries the execution delivery
-- duplicate terminal callbacks are safe because Atlas reconciliation is idempotent
+- final assets are registered only after signed upload succeeds
+- callback transport is retried several times inside the worker
+- duplicate terminal callbacks are safe because reconciliation is idempotent
+- the Sandbox is stopped after terminal reconciliation so idle CPU/RAM is not consumed
 
 ## Render contract
 
