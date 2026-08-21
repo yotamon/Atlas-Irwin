@@ -1,0 +1,106 @@
+name: Apply Zero Cost Guard Patch
+
+on:
+  push:
+    branches:
+      - feat/zero-cost-ai-control
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/zero-cost-ai-control
+
+      - name: Patch Video Director spend guards and tests
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          generation = Path('lib/video-director/generation.ts')
+          text = generation.read_text()
+          text = text.replace(
+              'import { createHash } from "node:crypto";\n',
+              'import { createHash } from "node:crypto";\nimport { assertSpecialistMediaSpendAllowed } from "@/lib/ai/control-plane";\n',
+              1,
+          )
+          marker = '  const operationTypes = [...new Set((generations ?? []).map((generation) => generation.operation_type))];\n'
+          guard = marker + '  const mediaKind = operationTypes.every((operation) => operation === "look_image") ? "image" : "video";\n  await assertSpecialistMediaSpendAllowed({ ownerId: input.ownerId, kind: mediaKind });\n'
+          if marker not in text:
+              raise SystemExit('approval operation marker not found')
+          text = text.replace(marker, guard, 1)
+          marker = '  if (!generation.approval_id) throw new Error("Generation has no approval envelope.");\n'
+          guard = marker + '  await assertSpecialistMediaSpendAllowed({\n    ownerId: generation.owner_id,\n    kind: generation.operation_type === "look_image" ? "image" : "video",\n  });\n'
+          if marker not in text:
+              raise SystemExit('submit approval marker not found')
+          text = text.replace(marker, guard, 1)
+          generation.write_text(text)
+
+          control = Path('lib/ai/control-plane.ts')
+          text = control.read_text()
+          old = '''      budgetAtStart: budget,\n      cacheKey,\n      cacheMode,\n      cacheEligible: cacheMode !== "off",\n      adaptiveLearning: {\n        applied: learnedRouting.applied,\n        reason: learnedRouting.reason,\n        route: learnedRouting.route,\n      },\n      ...(input.metadata && typeof input.metadata === "object" && !Array.isArray(input.metadata) ? input.metadata as Record<string, unknown> : {}),\n'''
+          new = '''      budgetAtStart: budget,\n      ...(input.metadata && typeof input.metadata === "object" && !Array.isArray(input.metadata) ? input.metadata as Record<string, unknown> : {}),\n      cacheKey,\n      cacheMode,\n      cacheEligible: cacheMode !== "off",\n      adaptiveLearning: {\n        applied: learnedRouting.applied,\n        reason: learnedRouting.reason,\n        route: learnedRouting.route,\n      },\n'''
+          if old not in text:
+              raise SystemExit('cache metadata marker not found')
+          control.write_text(text.replace(old, new, 1))
+
+          tests = Path('tests/ai-control-plane.test.mjs')
+          text = tests.read_text()
+          addition = r'''
+
+test("Zero Cost mode blocks specialist media at the provider boundary", async () => {
+  const controlPlane = await source("lib/ai/control-plane.ts");
+  const actions = await source("app/studio/ai-control-actions.ts");
+  const page = await source("app/studio/(protected)/settings/ai/page.tsx");
+  const marketingCreative = await source("app/studio/marketing-creative-actions.ts");
+  const videoGeneration = await source("lib/video-director/generation.ts");
+  assert.match(controlPlane, /ZERO_COST_TEXT_BUDGET_USD = 4\.5/);
+  assert.match(controlPlane, /assertSpecialistMediaSpendAllowed/);
+  assert.match(actions, /applyZeroCostPreset/);
+  assert.match(actions, /image_budget_usd: 0/);
+  assert.match(actions, /video_budget_usd: 0/);
+  assert.match(page, /Zero Cost mode/);
+  assert.match(page, /Image hard cap/);
+  assert.match(marketingCreative, /assertSpecialistMediaSpendAllowed/);
+  assert.ok(marketingCreative.indexOf("assertSpecialistMediaSpendAllowed({") < marketingCreative.indexOf("provider.submit("));
+  assert.match(videoGeneration, /assertSpecialistMediaSpendAllowed/);
+  assert.ok(videoGeneration.indexOf("assertSpecialistMediaSpendAllowed({ ownerId: input.ownerId") < videoGeneration.indexOf("music_video_approvals"));
+});
+
+test("AI tasks reuse quality-approved deterministic results and escalate cheaply", async () => {
+  const controlPlane = await source("lib/ai/control-plane.ts");
+  const tasks = await source("lib/ai/tasks.ts");
+  assert.match(controlPlane, /taskCacheKey/);
+  assert.match(controlPlane, /contains\("metadata", \{ cacheKey, cacheEligible: true \}\)/);
+  assert.match(controlPlane, /if \(cacheMode === "use"\)/);
+  assert.ok(controlPlane.indexOf('if (cacheMode === "use")') < controlPlane.indexOf("const budget = await enforceBudget"));
+  assert.match(controlPlane, /quality_gate_passed", true/);
+  assert.match(controlPlane, /cacheHit: true/);
+  assert.match(tasks, /zai\/glm-4\.7-flash/);
+  assert.match(tasks, /openai\/gpt-5\.6-luna/);
+  assert.match(tasks, /openai\/gpt-5\.6-sol/);
+  assert.match(tasks, /video\.concepts[\s\S]*tier: "balanced"[\s\S]*escalationTier: "premium"/);
+  assert.match(tasks, /video\.production_plan[\s\S]*tier: "balanced"[\s\S]*escalationTier: "premium"/);
+  assert.match(controlPlane, /for \(let index = 0; index < policy\.escalationModels\.length; index \+= 1\)/);
+});
+'''
+          if 'Zero Cost mode blocks specialist media at the provider boundary' not in text:
+              tests.write_text(text + addition)
+          PY
+
+      - name: Commit patch
+        run: |
+          if git diff --quiet; then
+            echo "Patch already applied"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/video-director/generation.ts lib/ai/control-plane.ts tests/ai-control-plane.test.mjs
+          git commit -m "feat: enforce Zero Cost across paid media"
+          git push
