@@ -9,8 +9,10 @@ import type { ExtendedMusicVideoProject, VideoDatabase } from "@/types/video-dat
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const MEDIA_WORKER_CALLBACK_HASH_KEY = "__atlas_callback_token_sha256";
+export const MEDIA_WORKER_SANDBOX_NAME = "atlas-media-worker-cache";
 const DEFAULT_SANDBOX_IMAGE = "atlas-media-worker:latest";
 const STALE_JOB_MS = 50 * 60 * 1000;
+const HOBBY_MAX_SANDBOX_MS = 45 * 60 * 1000;
 
 function sandboxImage() {
   return process.env.MEDIA_WORKER_IMAGE?.trim() || DEFAULT_SANDBOX_IMAGE;
@@ -51,11 +53,6 @@ function callbackCredential() {
   };
 }
 
-function sandboxTimeoutMs(jobType: WorkerJobType) {
-  if (jobType === "extract_frame") return 10 * 60 * 1000;
-  return 45 * 60 * 1000;
-}
-
 function sandboxDispatchError(error: unknown) {
   const detail = error instanceof Error ? error.message : String(error);
   if (/quota|limit|billing|payment|resource|429|hobby/i.test(detail)) {
@@ -70,6 +67,7 @@ export function mediaWorkerReadiness() {
     url: null,
     runtime: "vercel_sandbox" as const,
     image: sandboxImage(),
+    sandboxName: MEDIA_WORKER_SANDBOX_NAME,
   };
 }
 
@@ -190,23 +188,26 @@ export async function queueMediaWorkerJob(input: {
   if (job.status === "completed") return job;
 
   const callbackUrl = `${getSiteUrl()}/api/video-director/worker/callback`;
-  const sandboxName = `atlas-worker-${job.id.slice(0, 8)}-${randomBytes(4).toString("hex")}`;
   let sandbox: Sandbox | null = null;
 
   try {
-    sandbox = await Sandbox.create({
-      name: sandboxName,
+    // One named persistent Sandbox keeps the downloaded all-in-one/Demucs model cache
+    // between jobs. The VM itself is stopped after every terminal callback, so there is
+    // no idle CPU/memory burn. Keeping only one snapshot makes storage usage predictable.
+    sandbox = await Sandbox.getOrCreate({
+      name: MEDIA_WORKER_SANDBOX_NAME,
       image: sandboxImage(),
       resources: { vcpus: 4 },
-      timeout: sandboxTimeoutMs(input.jobType),
-      persistent: false,
+      timeout: HOBBY_MAX_SANDBOX_MS,
+      persistent: true,
+      keepLastSnapshots: { count: 1 },
       tags: {
         app: "atlas-irwin",
-        job: input.jobType,
+        role: "media-worker",
       },
     });
 
-    const requestPath = "/tmp/atlas-worker-request.json";
+    const requestPath = `/tmp/atlas-worker-${job.id}.json`;
     await sandbox.writeFile(requestPath, JSON.stringify({
       job_id: job.id,
       job_type: input.jobType,
@@ -218,7 +219,7 @@ export async function queueMediaWorkerJob(input: {
     const { data: queued, error: queueError } = await input.db.from("music_video_worker_jobs")
       .update({
         status: "queued",
-        external_job_id: sandboxName,
+        external_job_id: MEDIA_WORKER_SANDBOX_NAME,
         error: null,
       })
       .eq("id", job.id)
@@ -242,9 +243,8 @@ export async function queueMediaWorkerJob(input: {
     if (sandbox) {
       try {
         await sandbox.stop();
-        await sandbox.delete();
       } catch {
-        // The failed dispatch may already have stopped the ephemeral sandbox.
+        // The failed session may already have stopped. Preserve the named cache for retry.
       }
     }
     throw new Error(message);
