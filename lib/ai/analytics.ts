@@ -18,6 +18,16 @@ function average(values: number[]) {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
+function isCacheReuse(run: { provider: string; metadata: unknown }) {
+  if (run.provider === "atlas-cache") return true;
+  return Boolean(
+    run.metadata &&
+    typeof run.metadata === "object" &&
+    !Array.isArray(run.metadata) &&
+    (run.metadata as Record<string, unknown>).cacheHit === true,
+  );
+}
+
 export async function getAiControlSummary(ownerId: string) {
   const client = createMarketingServiceClient();
   const settings = await loadAiControlSettings(ownerId);
@@ -30,7 +40,9 @@ export async function getAiControlSummary(ownerId: string) {
   if (runsResult.error) throw new Error(runsResult.error.message);
   if (feedbackResult.error) throw new Error(feedbackResult.error.message);
 
-  const runs = runsResult.data ?? [];
+  const allRuns = runsResult.data ?? [];
+  const cacheRuns = allRuns.filter(isCacheReuse);
+  const runs = allRuns.filter((run) => !isCacheReuse(run));
   const feedback = feedbackResult.data ?? [];
   const completed = runs.filter((run) => run.status === "completed");
   const failed = runs.filter((run) => run.status === "failed");
@@ -110,6 +122,7 @@ export async function getAiControlSummary(ownerId: string) {
     budget,
     stats: {
       requests: runs.length,
+      cacheReuses: cacheRuns.length,
       completed: completed.length,
       failed: failed.length,
       successRate: completed.length + failed.length ? completed.length / (completed.length + failed.length) : null,
@@ -134,7 +147,7 @@ export async function getAiControlSummary(ownerId: string) {
       humanQuality: average(row.feedbackScores),
     })).sort((a, b) => b.costUsd - a.costUsd || b.requests - a.requests),
     models: [...modelMap.values()].map((row) => ({ ...row, costUsd: Number(row.costUsd.toFixed(6)) })).sort((a, b) => b.costUsd - a.costUsd || b.requests - a.requests),
-    recentRuns: runs.slice(0, 30),
+    recentRuns: allRuns.slice(0, 30),
     registry,
     learning,
   };
