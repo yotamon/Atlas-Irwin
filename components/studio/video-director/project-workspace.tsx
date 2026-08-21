@@ -5,10 +5,10 @@ import { RecoveryPanel } from "./recovery-panel";
 import { DeliveryPanel } from "./delivery-panel";
 import { LookDevelopmentPanel } from "./look-development-panel";
 import { ConceptRefinementPanel } from "./concept-refinement-panel";
+import { TrackIntelligenceInspector } from "./track-intelligence-inspector";
 import {
   ConceptsPanel,
   GenerationPanel,
-  MusicMapPanel,
   NextActionCard,
   ProductionPlanPanel,
   ServiceReadinessPanel,
@@ -36,7 +36,7 @@ export function VideoProjectWorkspace({ data }: { data: VideoWorkspaceData }) {
             hasArtwork={contextSignals.hasArtwork}
             hasReleaseIdentity={contextSignals.hasReleaseIdentity}
           />
-          <MusicMapPanel data={data} />
+          <TrackIntelligenceInspector data={data} />
           <ConceptsPanel data={data} />
           <ConceptRefinementPanel data={data} />
           <ProductionPlanPanel data={data} />

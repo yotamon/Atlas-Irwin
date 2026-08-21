@@ -22,6 +22,7 @@ export type VideoWorkspaceData = {
   project: ExtendedMusicVideoProject;
   release: Release;
   track: Track;
+  audioUrl: string | null;
   concepts: MusicVideoConcept[];
   scenes: MusicVideoScene[];
   shots: ExtendedMusicVideoShot[];

@@ -30,27 +30,29 @@ export function fallbackMusicMap(durationSeconds: number): MusicMap {
   const sectionFractions = durationMs < 90000
     ? [0, 0.22, 0.52, 0.78, 1]
     : [0, 0.12, 0.3, 0.5, 0.68, 0.86, 1];
-  const names = ["Intro", "Build", "Hook", "Development", "Breakdown", "Finale"];
-  const energy = [0.28, 0.52, 0.82, 0.68, 0.42, 0.92];
+  const names = ["Intro", "Section 2", "Section 3", "Section 4", "Section 5", "Outro"];
+  const energy = [0.28, 0.52, 0.74, 0.68, 0.42, 0.78];
   const sections = sectionFractions.slice(0, -1).map((fraction, index) => ({
     id: `fallback-${index + 1}`,
     label: names[index] ?? `Section ${index + 1}`,
-    type: (names[index] ?? "section").toLowerCase(),
+    type: index === 0 ? "intro" : index === sectionFractions.length - 2 ? "outro" : "section",
     start_ms: Math.round(fraction * durationMs),
     end_ms: Math.round(sectionFractions[index + 1] * durationMs),
     energy: energy[index] ?? 0.6,
+    confidence: null,
   }));
   const editPoints = sections.slice(1).map((section) => ({
     ms: section.start_ms,
-    confidence: 0.35,
-    reason: "Estimated structural boundary. Run real audio analysis to replace this fallback.",
+    confidence: 0.25,
+    reason: "Estimated boundary from track duration only. Run real audio analysis before using it as an edit decision.",
   }));
   return {
-    version: 1,
+    version: 2,
     duration_ms: durationMs,
     bpm: null,
     beat_confidence: 0,
     beats_ms: [],
+    beat_positions: [],
     downbeats_ms: [],
     sections,
     energy_curve: sections.flatMap((section) => [
@@ -58,7 +60,17 @@ export function fallbackMusicMap(durationSeconds: number): MusicMap {
       { ms: section.end_ms, value: section.energy },
     ]),
     edit_points: editPoints,
-    peaks_ms: sections.filter((section) => section.energy >= 0.8).map((section) => Math.round((section.start_ms + section.end_ms) / 2)),
+    peaks_ms: [],
+    hook_candidates: [],
+    social_cuts: { "6": null, "8": null, "15": null, "30": null },
+    analysis: {
+      engine: "duration-only-fallback",
+      model: null,
+      quality: "fallback",
+      semantic_structure: false,
+      real_downbeats: false,
+      warnings: ["This map was estimated without inspecting the audio."],
+    },
     source: "fallback",
   };
 }
@@ -104,6 +116,10 @@ export async function queueMediaWorkerJob(input: {
     .select("*")
     .single();
   if (error || !job) throw new Error(error?.message || "Could not create media-worker job.");
+
+  // A database trigger can resolve analyze_audio as a cache hit from the canonical
+  // track_music_intelligence row. Never dispatch paid/CPU work after that durable decision.
+  if (job.status === "completed") return job;
 
   const callbackUrl = `${getSiteUrl()}/api/video-director/worker/callback`;
   const response = await fetch(`${base}/v1/jobs`, {

@@ -9,6 +9,7 @@ import {
   saveGrowthSettings,
   saveVaultTrack,
 } from "@/app/studio/growth-actions";
+import { MusicIntelligencePreview } from "@/components/studio/music-intelligence-preview";
 import { PageHeader } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asGrowthClient } from "@/lib/studio/growth-db";
@@ -205,6 +206,7 @@ export default async function GrowthPage() {
             </summary>
             <div className="growth-vault-editor">
               {item.blocker ? <p className="notice">{item.blocker}</p> : <p className="v2-muted-copy">Ranking drivers: {item.reasons.join(" · ")}.</p>}
+              <MusicIntelligencePreview audioUrl={item.track.audio_url} musicMap={item.track.audio_profile} />
               <form action={saveVaultTrack} className="growth-vault-form">
                 <input type="hidden" name="id" value={item.track.id} />
                 <label><span>Title</span><input name="title" defaultValue={item.track.title} required /></label>
