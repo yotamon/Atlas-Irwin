@@ -7,6 +7,7 @@ export type MusicMapSection = {
   start_ms: number;
   end_ms: number;
   energy: number;
+  confidence?: number | null;
 };
 
 export type MusicMapEditPoint = {
@@ -15,17 +16,64 @@ export type MusicMapEditPoint = {
   reason: string;
 };
 
+export type MusicHookMetrics = {
+  energy: number;
+  energy_lift: number;
+  novelty: number;
+  onset_density: number;
+  melodic_salience: number;
+  boundary_fit: number;
+  loopability: number;
+  structure: number;
+  repetition: number;
+};
+
+export type MusicHookCandidate = {
+  id: string;
+  label: string;
+  kind: "instant_impact" | "groove" | "melodic" | "climax" | "build_and_drop" | string;
+  start_ms: number;
+  end_ms: number;
+  duration_ms: number;
+  target_duration_ms: number;
+  section_type: string;
+  section_label: string;
+  score: number;
+  reasons: string[];
+  metrics: MusicHookMetrics;
+};
+
+export type MusicSocialCut = {
+  candidate_id: string;
+  start_ms: number;
+  end_ms: number;
+  score: number;
+  kind: string;
+  label: string;
+};
+
 export type MusicMap = {
   version: number;
   duration_ms: number;
   bpm: number | null;
   beat_confidence: number;
   beats_ms: number[];
+  beat_positions?: number[];
   downbeats_ms: number[];
   sections: MusicMapSection[];
   energy_curve: Array<{ ms: number; value: number }>;
   edit_points: MusicMapEditPoint[];
   peaks_ms: number[];
+  hook_candidates?: MusicHookCandidate[];
+  social_cuts?: Record<string, MusicSocialCut | null>;
+  analysis?: {
+    engine: string;
+    model: string | null;
+    quality: "full" | "fallback";
+    semantic_structure: boolean;
+    real_downbeats: boolean;
+    warnings: string[];
+  };
   source: "worker" | "manual" | "fallback";
 };
 
