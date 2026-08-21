@@ -3,6 +3,7 @@ import { requireStudioAdmin } from "@/lib/auth/studio";
 import { createServiceClient } from "@/lib/supabase/service";
 import { openAIDirectorReadiness } from "@/lib/video-director/openai-director";
 import { mediaWorkerReadiness } from "@/lib/video-director/worker";
+import { resolveProjectAudioUrl } from "@/lib/video-director/context";
 import { higgsfieldReadiness } from "@/lib/video-providers/higgsfield/client";
 import { VideoProjectWorkspace } from "@/components/studio/video-director/project-workspace";
 import type { Json, MediaAsset } from "@/types/database";
@@ -110,6 +111,7 @@ export default async function VideoProjectPage({
   const roles = new Set((mediaLinksResult.data ?? []).map((link) => link.role));
   const hasAudio = Boolean(track.audio_url) || roles.has("master_audio") || roles.has("audio_preview");
   const hasArtwork = Boolean(release.artwork_url) || roles.has("cover") || roles.has("alternate_artwork");
+  const audioUrl = hasAudio ? await resolveProjectAudioUrl(db, project, user.id) : null;
 
   return (
     <VideoProjectWorkspace
@@ -117,6 +119,7 @@ export default async function VideoProjectPage({
         project,
         release,
         track,
+        audioUrl,
         concepts: conceptsResult.data ?? [],
         scenes: scenesResult.data ?? [],
         shots,
