@@ -47,14 +47,16 @@ function authorized(request: Request, requestPayload: Record<string, unknown>) {
 }
 
 function scheduleSandboxCleanup(externalJobId: string | null) {
-  if (!externalJobId?.startsWith("atlas-worker-")) return;
+  if (!externalJobId?.startsWith("atlas-media-worker")) return;
   after(async () => {
     try {
       const sandbox = await Sandbox.get({ name: externalJobId });
+      // Stopping ends CPU/memory usage immediately. Because this is a named persistent
+      // Sandbox, Vercel snapshots the filesystem so downloaded ML checkpoints are reused
+      // by the next job instead of consuming free CPU/network repeatedly.
       await sandbox.stop();
-      await sandbox.delete();
     } catch {
-      // A Hobby timeout or an earlier cleanup may already have removed the ephemeral VM.
+      // A Hobby timeout or a previous terminal callback may already have stopped the session.
     }
   });
 }
