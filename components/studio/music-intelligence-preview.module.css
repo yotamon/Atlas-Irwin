@@ -1,0 +1,88 @@
+.preview {
+  display: grid;
+  gap: 10px;
+  margin: 4px 0 18px;
+  padding: 14px;
+  border: 1px solid var(--studio-border, rgba(255,255,255,.12));
+  border-radius: 15px;
+  background: rgba(255,255,255,.025);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.head small,
+.head strong { display: block; }
+.head small { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; opacity: .55; }
+.head strong { margin-top: 2px; }
+.head > span {
+  padding: 4px 8px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 999px;
+  font-size: 10px;
+  opacity: .72;
+}
+
+.sections {
+  display: flex;
+  min-width: 0;
+  overflow-x: auto;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 11px;
+}
+.sections button {
+  min-width: 88px;
+  min-height: 54px;
+  padding: 8px;
+  border: 0;
+  border-right: 1px solid rgba(255,255,255,.07);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sections button:last-child { border-right: 0; }
+.sections button:hover:not(:disabled),
+.sections .active { background: rgba(255,255,255,.07); }
+.sections button:disabled { cursor: default; opacity: .52; }
+.sections strong,
+.sections small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sections strong { font-size: 10px; }
+.sections small { margin-top: 4px; font-size: 9px; opacity: .48; }
+
+.hooks { display: grid; gap: 6px; }
+.hooks button {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 9px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.hooks button:hover:not(:disabled),
+.hooks .activeHook { background: rgba(255,255,255,.06); }
+.hooks button:disabled { cursor: default; opacity: .52; }
+.hooks > button > span {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 50%;
+  font-size: 8px;
+}
+.hooks strong,
+.hooks small { display: block; }
+.hooks strong { font-size: 11px; }
+.hooks small { margin-top: 2px; font-size: 9px; opacity: .5; text-transform: capitalize; }
+.hooks b { font-size: 14px; }
+
+.note { margin: 0; font-size: 10px; opacity: .58; }
