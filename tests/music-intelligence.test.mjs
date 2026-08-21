@@ -76,18 +76,23 @@ test("production Media Worker is Vercel Sandbox native with no paid-cloud fallba
   assert.equal(requirements.includes("google-cloud-tasks"), false);
 
   assert.ok(dispatcher.includes('from "@vercel/sandbox"'));
+  assert.ok(dispatcher.includes("Sandbox.getOrCreate"));
+  assert.ok(dispatcher.includes('MEDIA_WORKER_SANDBOX_NAME = "atlas-media-worker-cache"'));
   assert.ok(dispatcher.includes("resources: { vcpus: 4 }"));
   assert.ok(dispatcher.includes("45 * 60 * 1000"));
-  assert.ok(dispatcher.includes("persistent: false"));
+  assert.ok(dispatcher.includes("persistent: true"));
+  assert.ok(dispatcher.includes("keepLastSnapshots: { count: 1 }"));
   assert.ok(dispatcher.includes("detached: true"));
   assert.ok(dispatcher.includes("Atlas did not use a paid fallback"));
   assert.ok(dispatcher.includes("MEDIA_WORKER_CALLBACK_HASH_KEY"));
 
   assert.ok(callback.includes("scheduleSandboxCleanup"));
   assert.ok(callback.includes("await sandbox.stop()"));
-  assert.ok(callback.includes("await sandbox.delete()"));
+  assert.equal(callback.includes("await sandbox.delete()"), false);
 
   assert.ok(deploy.includes('"vcr", "build", "docker"'));
+  assert.ok(deploy.includes("persistent: true"));
+  assert.ok(deploy.includes("keepLastSnapshots: { count: 1 }"));
   assert.equal(deploy.includes("gcloud"), false);
   assert.equal(deploy.includes("cloudtasks.googleapis.com"), false);
   assert.ok(health.includes('dispatch_mode: "vercel_sandbox"'));
