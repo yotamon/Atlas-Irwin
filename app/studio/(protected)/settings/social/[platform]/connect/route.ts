@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { isSocialPlatformKey } from "@/lib/marketing/social-platforms";
-import { createSocialAuthorizeUrl } from "@/lib/studio/social-connections";
+import { createAutomationSocialAuthorizeUrl } from "@/lib/marketing/social-oauth";
 
 function requestOrigin(request: NextRequest) {
   const url = new URL(request.url);
@@ -21,7 +21,7 @@ export async function GET(
   }
 
   try {
-    const { url, state } = createSocialAuthorizeUrl(platform, requestOrigin(request));
+    const { url, state } = createAutomationSocialAuthorizeUrl(platform, requestOrigin(request));
     const response = NextResponse.redirect(url);
     response.cookies.set(`atlas_social_${platform}_state`, state, {
       httpOnly: true,

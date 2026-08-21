@@ -5,7 +5,7 @@ import { createMarketingServiceClient } from "./db";
 import { getSiteUrl } from "@/lib/site-url";
 import type { Json } from "@/types/database";
 
-function payloadObject(value: Json) {
+function payloadObject(value: Json): Record<string, Json | undefined> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, Json | undefined>
     : {};
@@ -54,6 +54,7 @@ export async function processDuePublicationJobs(limit = 20) {
       }
       const adapter = channelAdapter(job.platform);
       const result = await adapter.publish({
+        ownerId: job.owner_id,
         platform: job.platform,
         caption: text(requestPayload.caption),
         hookText: text(requestPayload.hookText),
@@ -86,19 +87,32 @@ export async function processDuePublicationJobs(limit = 20) {
       }).eq("id", job.id);
       if (publishError) throw new Error(publishError.message);
       if (job.content_variant_id) {
-        await client.from("content_variants").update({ status: "published", published_at: publishedAt }).eq("id", job.content_variant_id);
+        await client.from("content_variants").update({ status: "published", published_at: publishedAt, external_post_id: result.externalPostId ?? null }).eq("id", job.content_variant_id);
       }
       if (job.content_item_id) {
         await client.from("content_items").update({ status: "Published", published_at: publishedAt }).eq("id", job.content_item_id);
       }
+      await client.from("marketing_events").insert({
+        owner_id: job.owner_id,
+        campaign_id: job.campaign_id,
+        event_type: "content.published",
+        entity_type: "content_item",
+        entity_id: job.content_item_id,
+        payload: {
+          publicationJobId: job.id,
+          externalPostId: result.externalPostId ?? null,
+          externalUrl: result.externalUrl ?? null,
+          platform: job.platform,
+        },
+      });
       published += 1;
     } catch (error) {
       const attempts = job.attempt_count + 1;
       const terminal = attempts >= job.max_attempts;
-      const backoffHours = Math.min(24, 2 ** Math.max(0, attempts - 1));
+      const backoffMinutes = Math.min(360, 5 * (2 ** Math.max(0, attempts - 1)));
       await client.from("publication_jobs").update({
         status: terminal ? "failed" : "scheduled",
-        scheduled_at: terminal ? job.scheduled_at : new Date(Date.now() + backoffHours * 60 * 60 * 1000).toISOString(),
+        scheduled_at: terminal ? job.scheduled_at : new Date(Date.now() + backoffMinutes * 60 * 1000).toISOString(),
         last_error: error instanceof Error ? error.message : "Publication failed.",
       }).eq("id", job.id);
       failed += 1;
