@@ -1,5 +1,6 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
 import { generateGatewayStructured } from "./gateway";
 import { learnedRouteForTask } from "./learning";
 import { atlasAiTaskPolicy, type AtlasAiTaskType } from "./tasks";
@@ -8,13 +9,15 @@ import { createMarketingServiceClient } from "@/lib/marketing/db";
 import type { Json } from "@/types/database";
 import type { AiControlSettings } from "@/types/marketing-database";
 
+export const ZERO_COST_TEXT_BUDGET_USD = 4.5;
+
 const DEFAULT_SETTINGS: Omit<AiControlSettings, "created_at" | "updated_at"> = {
   owner_id: "",
   routing_mode: "auto",
-  monthly_budget_usd: 30,
-  text_budget_usd: 10,
-  image_budget_usd: 8,
-  video_budget_usd: 12,
+  monthly_budget_usd: ZERO_COST_TEXT_BUDGET_USD,
+  text_budget_usd: ZERO_COST_TEXT_BUDGET_USD,
+  image_budget_usd: 0,
+  video_budget_usd: 0,
   hard_stop: true,
   quality_escalation: true,
   provider_sort: "cost",
@@ -33,6 +36,31 @@ function numeric(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
+function stableValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stableValue);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, item]) => item !== undefined)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, item]) => [key, stableValue(item)]),
+    );
+  }
+  return value;
+}
+
+function taskCacheKey(input: RunTaskInput<unknown>) {
+  const fingerprint = stableValue({
+    task: input.task,
+    promptVersion: input.promptVersion,
+    schema: input.schema,
+    instructions: input.instructions,
+    input: input.input,
+    inputContext: input.inputContext ?? {},
+  });
+  return createHash("sha256").update(JSON.stringify(fingerprint)).digest("hex");
+}
+
 export type AiBudgetSnapshot = {
   monthStart: string;
   totalSpentUsd: number;
@@ -42,6 +70,10 @@ export type AiBudgetSnapshot = {
   monthlyRemainingUsd: number;
   textRemainingUsd: number;
 };
+
+export function isZeroCostPolicy(settings: AiControlSettings) {
+  return settings.hard_stop && Number(settings.image_budget_usd) <= 0 && Number(settings.video_budget_usd) <= 0;
+}
 
 export async function loadAiControlSettings(ownerId: string): Promise<AiControlSettings> {
   const client = createMarketingServiceClient();
@@ -75,7 +107,6 @@ export async function getAiBudgetSnapshot(ownerId: string, settings?: AiControlS
   for (const run of data ?? []) {
     const cost = numeric(run.actual_cost_usd ?? run.estimated_cost_usd);
     totalSpentUsd += cost;
-    // Control Plane v1 only routes language/reasoning tasks. Specialist media keeps its own hard-credit envelope.
     if (run.task_type) textSpentUsd += cost;
   }
   totalSpentUsd = Number(totalSpentUsd.toFixed(6));
@@ -119,6 +150,55 @@ async function enforceBudget(ownerId: string, settings: AiControlSettings) {
   return budget;
 }
 
+export async function assertSpecialistMediaSpendAllowed(input: {
+  ownerId: string;
+  kind: "image" | "video";
+  estimatedUsd?: number | null;
+}) {
+  const settings = await loadAiControlSettings(input.ownerId);
+  if (!settings.hard_stop) return settings;
+
+  const limit = Number(input.kind === "image" ? settings.image_budget_usd : settings.video_budget_usd);
+  if (limit <= 0) {
+    throw new AtlasAiBudgetError(
+      `Atlas Zero Cost guard blocks paid ${input.kind} generation. Increase the ${input.kind} budget explicitly in AI & Generation before approving spend.`,
+    );
+  }
+
+  const budget = await getAiBudgetSnapshot(input.ownerId, settings);
+  const requested = numeric(input.estimatedUsd ?? 0);
+  if (budget.monthlyBudgetUsd <= 0 || budget.totalSpentUsd + requested > budget.monthlyBudgetUsd + 0.000001) {
+    throw new AtlasAiBudgetError(
+      `This ${input.kind} generation would exceed the monthly AI budget ($${budget.totalSpentUsd.toFixed(2)} + $${requested.toFixed(2)} > $${budget.monthlyBudgetUsd.toFixed(2)}).`,
+    );
+  }
+
+  if (requested > 0) {
+    const client = createMarketingServiceClient();
+    const { data, error } = await client.from("generation_runs")
+      .select("actual_cost_usd,estimated_cost_usd,input_context")
+      .eq("owner_id", input.ownerId)
+      .gte("created_at", monthStartIso())
+      .like("purpose", "content_asset:%")
+      .in("status", ["running", "completed"]);
+    if (error) throw new Error(error.message);
+    const spent = (data ?? []).reduce((sum, run) => {
+      const context = run.input_context && typeof run.input_context === "object" && !Array.isArray(run.input_context)
+        ? run.input_context as Record<string, unknown>
+        : {};
+      if (context.outputKind !== input.kind) return sum;
+      return sum + numeric(run.actual_cost_usd ?? run.estimated_cost_usd);
+    }, 0);
+    if (spent + requested > limit + 0.000001) {
+      throw new AtlasAiBudgetError(
+        `This ${input.kind} generation would exceed its budget ($${spent.toFixed(2)} + $${requested.toFixed(2)} > $${limit.toFixed(2)}).`,
+      );
+    }
+  }
+
+  return settings;
+}
+
 export type AtlasAiTaskResult<T> = {
   value: T;
   provider: "vercel-gateway";
@@ -134,6 +214,7 @@ export type AtlasAiTaskResult<T> = {
   rootRunId: string;
   escalated: boolean;
   learnedRoutingApplied: boolean;
+  cacheHit: boolean;
   quality: AtlasQualityResult;
 };
 
@@ -152,11 +233,59 @@ type RunTaskInput<T> = {
   qualityGate?: AtlasQualityGate<T>;
   timeoutMs?: number;
   metadata?: unknown;
+  cacheMode?: "use" | "refresh" | "off";
 };
+
+async function cachedTaskResult<T>(ownerId: string, cacheKey: string): Promise<AtlasAiTaskResult<T> | null> {
+  const client = createMarketingServiceClient();
+  const { data, error } = await client.from("generation_runs")
+    .select("id,parent_run_id,output,model,requested_model,routed_provider,provider_request_id,gateway_generation_id,estimated_cost_usd,input_tokens,output_tokens,quality_score,quality_failures")
+    .eq("owner_id", ownerId)
+    .eq("cache_key", cacheKey)
+    .eq("status", "completed")
+    .eq("quality_gate_passed", true)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  const failures = Array.isArray(data.quality_failures)
+    ? data.quality_failures.filter((item): item is string => typeof item === "string")
+    : [];
+  return {
+    value: data.output as T,
+    provider: "vercel-gateway",
+    model: data.model,
+    requestedModel: data.requested_model || data.model,
+    routedProvider: data.routed_provider,
+    requestId: data.provider_request_id,
+    generationId: data.gateway_generation_id,
+    estimatedCostUsd: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    runId: data.id,
+    rootRunId: data.parent_run_id || data.id,
+    escalated: Boolean(data.parent_run_id),
+    learnedRoutingApplied: false,
+    cacheHit: true,
+    quality: {
+      passed: true,
+      score: typeof data.quality_score === "number" ? data.quality_score : 1,
+      failures,
+    },
+  };
+}
 
 export async function runAtlasAiTask<T>(input: RunTaskInput<T>): Promise<AtlasAiTaskResult<T>> {
   const client = createMarketingServiceClient();
   const settings = await loadAiControlSettings(input.ownerId);
+  const cacheMode = input.cacheMode ?? "use";
+  const cacheKey = taskCacheKey(input as RunTaskInput<unknown>);
+  if (cacheMode === "use") {
+    const cached = await cachedTaskResult<T>(input.ownerId, cacheKey);
+    if (cached) return cached;
+  }
+
   const budget = await enforceBudget(input.ownerId, settings);
   const policy = atlasAiTaskPolicy(input.task, settings);
   if (!policy.models.length) throw new Error(`Atlas AI task ${input.task} has no configured models.`);
@@ -199,12 +328,16 @@ export async function runAtlasAiTask<T>(input: RunTaskInput<T>): Promise<AtlasAi
       attempt_index: attemptIndex,
       started_at: started.toISOString(),
       escalation_reason: escalationReason ?? null,
+      cache_key: null,
       metadata: asJson({
         policyTier: policy.tier,
         configuredRoute: policy.models,
         route: models,
+        semanticEscalationRoute: policy.escalationModels,
         providerSort: settings.provider_sort,
         budgetAtStart: budget,
+        cacheKey,
+        cacheMode,
         adaptiveLearning: {
           applied: learnedRouting.applied,
           reason: learnedRouting.reason,
@@ -252,6 +385,7 @@ export async function runAtlasAiTask<T>(input: RunTaskInput<T>): Promise<AtlasAi
         quality_gate_passed: quality.passed,
         quality_score: quality.score,
         quality_failures: asJson(quality.failures),
+        cache_key: quality.passed && cacheMode !== "off" ? cacheKey : null,
       }).eq("id", run.id);
       if (updateError) throw new Error(updateError.message);
       return { gateway, quality, runId: run.id };
@@ -267,62 +401,60 @@ export async function runAtlasAiTask<T>(input: RunTaskInput<T>): Promise<AtlasAi
     }
   };
 
-  const first = await runAttempt({ models: primaryModels, attemptIndex: 0, parentRunId: null });
-  if (first.quality.passed) {
-    return {
-      value: first.gateway.value,
-      provider: "vercel-gateway",
-      model: first.gateway.model,
-      requestedModel: first.gateway.requestedModel,
-      routedProvider: first.gateway.routedProvider,
-      requestId: first.gateway.requestId,
-      generationId: first.gateway.generationId,
-      estimatedCostUsd: first.gateway.estimatedCostUsd,
-      inputTokens: first.gateway.inputTokens,
-      outputTokens: first.gateway.outputTokens,
-      runId: first.runId,
-      rootRunId: first.runId,
-      escalated: false,
-      learnedRoutingApplied: learnedRouting.applied,
-      quality: first.quality,
-    };
-  }
+  const result = (
+    attempt: Awaited<ReturnType<typeof runAttempt>>,
+    rootRunId: string,
+    escalated: boolean,
+  ): AtlasAiTaskResult<T> => ({
+    value: attempt.gateway.value,
+    provider: "vercel-gateway",
+    model: attempt.gateway.model,
+    requestedModel: attempt.gateway.requestedModel,
+    routedProvider: attempt.gateway.routedProvider,
+    requestId: attempt.gateway.requestId,
+    generationId: attempt.gateway.generationId,
+    estimatedCostUsd: attempt.gateway.estimatedCostUsd,
+    inputTokens: attempt.gateway.inputTokens,
+    outputTokens: attempt.gateway.outputTokens,
+    runId: attempt.runId,
+    rootRunId,
+    escalated,
+    learnedRoutingApplied: learnedRouting.applied,
+    cacheHit: false,
+    quality: attempt.quality,
+  });
 
+  const first = await runAttempt({ models: primaryModels, attemptIndex: 0, parentRunId: null });
+  if (first.quality.passed) return result(first, first.runId, false);
   if (!settings.quality_escalation || !policy.escalationModels.length) {
     throw new AtlasAiQualityError(input.task, first.quality);
   }
 
-  const reason = first.quality.failures.join("; ") || `quality score ${first.quality.score.toFixed(2)}`;
-  const { error: escalationUpdateError } = await client.from("generation_runs").update({
+  let last = first;
+  let reason = first.quality.failures.join("; ") || `quality score ${first.quality.score.toFixed(2)}`;
+  const { error: firstEscalationError } = await client.from("generation_runs").update({
     escalated: true,
     escalation_reason: reason,
   }).eq("id", first.runId);
-  if (escalationUpdateError) throw new Error(escalationUpdateError.message);
+  if (firstEscalationError) throw new Error(firstEscalationError.message);
 
-  await enforceBudget(input.ownerId, settings);
-  const second = await runAttempt({
-    models: policy.escalationModels,
-    attemptIndex: 1,
-    parentRunId: first.runId,
-    escalationReason: reason,
-  });
-  if (!second.quality.passed) throw new AtlasAiQualityError(input.task, second.quality);
+  for (let index = 0; index < policy.escalationModels.length; index += 1) {
+    await enforceBudget(input.ownerId, settings);
+    const attempt = await runAttempt({
+      models: [policy.escalationModels[index]],
+      attemptIndex: index + 1,
+      parentRunId: first.runId,
+      escalationReason: reason,
+    });
+    if (attempt.quality.passed) return result(attempt, first.runId, true);
+    last = attempt;
+    reason = attempt.quality.failures.join("; ") || `quality score ${attempt.quality.score.toFixed(2)}`;
+    const { error: escalationUpdateError } = await client.from("generation_runs").update({
+      escalated: true,
+      escalation_reason: reason,
+    }).eq("id", attempt.runId);
+    if (escalationUpdateError) throw new Error(escalationUpdateError.message);
+  }
 
-  return {
-    value: second.gateway.value,
-    provider: "vercel-gateway",
-    model: second.gateway.model,
-    requestedModel: second.gateway.requestedModel,
-    routedProvider: second.gateway.routedProvider,
-    requestId: second.gateway.requestId,
-    generationId: second.gateway.generationId,
-    estimatedCostUsd: second.gateway.estimatedCostUsd,
-    inputTokens: second.gateway.inputTokens,
-    outputTokens: second.gateway.outputTokens,
-    runId: second.runId,
-    rootRunId: first.runId,
-    escalated: true,
-    learnedRoutingApplied: learnedRouting.applied,
-    quality: second.quality,
-  };
+  throw new AtlasAiQualityError(input.task, last.quality);
 }
