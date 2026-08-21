@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
+import { assertSpecialistMediaSpendAllowed } from "@/lib/ai/control-plane";
 import { getSiteUrl } from "@/lib/site-url";
 import type { Json, MusicVideoGeneration } from "@/types/database";
 import type { ExtendedMusicVideoGeneration, ExtendedMusicVideoProject, ExtendedMusicVideoShot, VideoDatabase } from "@/types/video-database";
@@ -229,6 +230,8 @@ export async function createApprovalEnvelope(input: {
   if (maxCredits > available + 0.0001) throw new Error(`This batch reserves ${maxCredits.toFixed(2)} credits but only ${available.toFixed(2)} remain in the project budget.`);
   const shotIds = [...new Set((generations ?? []).flatMap((generation) => generation.shot_id ? [generation.shot_id] : []))];
   const operationTypes = [...new Set((generations ?? []).map((generation) => generation.operation_type))];
+  const mediaKind = operationTypes.every((operation) => operation === "look_image") ? "image" : "video";
+  await assertSpecialistMediaSpendAllowed({ ownerId: input.ownerId, kind: mediaKind });
   const models = [...new Set((generations ?? []).map((generation) => generation.model))];
   const approvalType = operationTypes.every((operation) => operation === "look_image") ? "look" : "generation_batch";
   const { data: approval, error: approvalError } = await input.db.from("music_video_approvals").insert({
@@ -447,7 +450,7 @@ async function persistProviderSubmission(
   }
   const message =
     `Higgsfield accepted request ${submission.requestId}, but Atlas could not persist the provider request id after retries: ${lastError}. ` +
-    "The credit reserve is intentionally still locked. Do not resubmit this generation until the provider request is reconciled.";
+    "The credit reserve is intentionally still locked. Do not resubmit this generation until the provider request is reconciled first.";
   await db.from("music_video_generations").update({
     error: message,
     provider_metadata: json({
@@ -465,6 +468,10 @@ export async function submitGeneration(input: {
 }) {
   const generation = input.generation;
   if (!generation.approval_id) throw new Error("Generation has no approval envelope.");
+  await assertSpecialistMediaSpendAllowed({
+    ownerId: generation.owner_id,
+    kind: generation.operation_type === "look_image" ? "image" : "video",
+  });
   const readiness = higgsfieldReadiness();
   if (!readiness.hasCredentials) throw new Error("Higgsfield credentials are not configured.");
   resolveHiggsfieldEndpoint(generation.model);
@@ -487,8 +494,6 @@ export async function submitGeneration(input: {
     throw error;
   }
 
-  // From this point on the provider has acknowledged the request. Never release the reserve merely
-  // because our own persistence fails. An ambiguous provider submission must be reconciled first.
   const updated = await persistProviderSubmission(input.db, generation, submission);
   if (submission.status === "completed") {
     await applyProviderStatus({ db: input.db, generation: updated, status: submission });
