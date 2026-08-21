@@ -83,3 +83,51 @@ test("specialist paid media remains outside semantic retry transport", async () 
   assert.match(generation, /reserved_credits/);
   assert.match(generation, /approval_id/);
 });
+
+test("Zero Cost mode blocks specialist media at the provider boundary", async () => {
+  const controlPlane = await source("lib/ai/control-plane.ts");
+  const actions = await source("app/studio/ai-control-actions.ts");
+  const page = await source("app/studio/(protected)/settings/ai/page.tsx");
+  const marketingCreative = await source("app/studio/marketing-creative-actions.ts");
+  const videoGeneration = await source("lib/video-director/generation.ts");
+  assert.match(controlPlane, /ZERO_COST_TEXT_BUDGET_USD = 2\.25/);
+  assert.match(controlPlane, /assertSpecialistMediaSpendAllowed/);
+  assert.match(actions, /applyZeroCostPreset/);
+  assert.match(actions, /image_budget_usd: 0/);
+  assert.match(actions, /video_budget_usd: 0/);
+  assert.match(page, /Zero Cost mode/);
+  assert.match(page, /Image hard cap/);
+  const marketingGuard = marketingCreative.indexOf("await assertSpecialistMediaSpendAllowed({");
+  const marketingSubmit = marketingCreative.indexOf("provider.submit(");
+  assert.ok(marketingGuard >= 0 && marketingSubmit > marketingGuard);
+  const videoApprovalGuard = videoGeneration.indexOf("await assertSpecialistMediaSpendAllowed({");
+  const videoApprovalInsert = videoGeneration.indexOf('from("music_video_approvals").insert');
+  assert.ok(videoApprovalGuard >= 0 && videoApprovalInsert > videoApprovalGuard);
+  const videoSubmit = videoGeneration.indexOf("export async function submitGeneration");
+  const videoSubmitGuard = videoGeneration.indexOf("await assertSpecialistMediaSpendAllowed({", videoSubmit);
+  const reserve = videoGeneration.indexOf("reserve_music_video_generation", videoSubmit);
+  assert.ok(videoSubmit >= 0 && videoSubmitGuard > videoSubmit && reserve > videoSubmitGuard);
+  assert.match(videoGeneration, /HIGGSFIELD_USD_PER_CREDIT/);
+  assert.match(videoGeneration, /videoDirectorSpendSnapshot/);
+  assert.match(controlPlane, /externalTotalSpentUsd/);
+  assert.match(controlPlane, /no reliable USD estimate/);
+});
+
+test("AI tasks reuse quality-approved deterministic results and escalate cheaply", async () => {
+  const controlPlane = await source("lib/ai/control-plane.ts");
+  const tasks = await source("lib/ai/tasks.ts");
+  assert.match(controlPlane, /taskCacheKey/);
+  assert.match(controlPlane, /contains\("metadata", \{ cacheKey, cacheEligible: true \}\)/);
+  assert.match(controlPlane, /if \(cacheMode === "use"\)/);
+  assert.ok(controlPlane.indexOf('if (cacheMode === "use")') < controlPlane.indexOf("const budget = await enforceBudget"));
+  assert.match(controlPlane, /quality_gate_passed", true/);
+  assert.match(controlPlane, /cacheHit: true/);
+  assert.match(controlPlane, /provider: "atlas-cache"/);
+  assert.match(controlPlane, /cacheSourceRunId/);
+  assert.match(tasks, /zai\/glm-4\.7-flash/);
+  assert.match(tasks, /openai\/gpt-5\.6-luna/);
+  assert.match(tasks, /openai\/gpt-5\.6-sol/);
+  assert.match(tasks, /"video\.concepts"[\s\S]*tier: "balanced"[\s\S]*escalationTier: "premium"/);
+  assert.match(tasks, /"video\.production_plan"[\s\S]*tier: "balanced"[\s\S]*escalationTier: "premium"/);
+  assert.match(controlPlane, /for \(let index = 0; index < policy\.escalationModels\.length; index \+= 1\)/);
+});

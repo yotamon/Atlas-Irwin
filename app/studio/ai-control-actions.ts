@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { ZERO_COST_TEXT_BUDGET_USD } from "@/lib/ai/control-plane";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMarketingClient } from "@/lib/marketing/db";
 
@@ -9,7 +10,38 @@ function value(form: FormData, key: string) {
   return String(form.get(key) ?? "").trim();
 }
 
+function revalidateAiSettings() {
+  revalidatePath("/studio/settings/ai");
+  revalidatePath("/studio/settings");
+}
+
 const money = z.coerce.number().finite().min(0).max(10000);
+
+export async function applyZeroCostPreset() {
+  const { supabase, user } = await requireStudioAdmin();
+  const client = asMarketingClient(supabase);
+  const { data: current, error: currentError } = await client
+    .from("ai_control_settings")
+    .select("task_overrides")
+    .eq("owner_id", user.id)
+    .maybeSingle();
+  if (currentError) throw new Error(currentError.message);
+
+  const { error } = await client.from("ai_control_settings").upsert({
+    owner_id: user.id,
+    routing_mode: "auto",
+    provider_sort: "cost",
+    monthly_budget_usd: ZERO_COST_TEXT_BUDGET_USD,
+    text_budget_usd: ZERO_COST_TEXT_BUDGET_USD,
+    image_budget_usd: 0,
+    video_budget_usd: 0,
+    hard_stop: true,
+    quality_escalation: true,
+    task_overrides: current?.task_overrides ?? {},
+  }, { onConflict: "owner_id" });
+  if (error) throw new Error(error.message);
+  revalidateAiSettings();
+}
 
 export async function saveAiControlSettings(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
@@ -46,6 +78,5 @@ export async function saveAiControlSettings(form: FormData) {
   }, { onConflict: "owner_id" });
   if (error) throw new Error(error.message);
 
-  revalidatePath("/studio/settings/ai");
-  revalidatePath("/studio/settings");
+  revalidateAiSettings();
 }

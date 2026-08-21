@@ -41,28 +41,19 @@ function premiumModel() {
 function tierModels(tier: AtlasAiTier) {
   if (tier === "economy") {
     const configured = parseGatewayModelList(process.env.ATLAS_MARKETING_ECONOMY_MODELS);
-    return configured.length ? configured : [
-      "zai/glm-4.7-flash",
-      "zai/glm-4.7-flashx",
-      "google/gemini-3.7-flash",
-    ];
+    return configured.length ? configured : ["zai/glm-4.7-flash"];
   }
   if (tier === "premium") {
     const configured = parseGatewayModelList(process.env.ATLAS_MARKETING_PREMIUM_MODELS);
-    return configured.length ? configured : [
-      premiumModel(),
-      "google/gemini-3.7-flash",
-    ];
+    return configured.length ? configured : [premiumModel()];
   }
   const configured = parseGatewayModelList(process.env.ATLAS_MARKETING_BALANCED_MODELS);
-  return configured.length ? configured : [
-    "google/gemini-3.7-flash",
-    "zai/glm-4.7-flashx",
-  ];
+  return configured.length ? configured : ["openai/gpt-5.6-luna"];
 }
 
-function videoModels() {
-  const primary = normalizeGatewayModel(process.env.VIDEO_DIRECTOR_LLM_MODEL?.trim() || "openai/gpt-5.6-sol");
+function videoModels(tier: AtlasAiTier) {
+  if (tier !== "premium") return tierModels(tier);
+  const primary = normalizeGatewayModel(process.env.VIDEO_DIRECTOR_LLM_MODEL?.trim() || premiumModel());
   const fallbacks = parseGatewayModelList(process.env.VIDEO_DIRECTOR_LLM_FALLBACK_MODELS);
   return Array.from(new Set([primary, ...fallbacks].filter(Boolean)));
 }
@@ -72,8 +63,8 @@ const BASE_TASKS: Record<AtlasAiTaskType, Omit<AtlasAiTaskPolicy, "models" | "es
   "marketing.caption": { task: "marketing.caption", label: "Caption writing", modality: "text", tier: "economy", escalationTier: "balanced", qualityThreshold: 0.85 },
   "marketing.strategy": { task: "marketing.strategy", label: "Marketing strategy", modality: "text", tier: "balanced", escalationTier: "premium", qualityThreshold: 0.9 },
   "metadata.extraction": { task: "metadata.extraction", label: "Metadata extraction", modality: "text", tier: "economy", escalationTier: "balanced", qualityThreshold: 1 },
-  "video.concepts": { task: "video.concepts", label: "Video concepts", modality: "text", tier: "premium", escalationTier: null, qualityThreshold: 0.9 },
-  "video.production_plan": { task: "video.production_plan", label: "Video production plan", modality: "text", tier: "premium", escalationTier: null, qualityThreshold: 1 },
+  "video.concepts": { task: "video.concepts", label: "Video concepts", modality: "text", tier: "balanced", escalationTier: "premium", qualityThreshold: 0.9 },
+  "video.production_plan": { task: "video.production_plan", label: "Video production plan", modality: "text", tier: "balanced", escalationTier: "premium", qualityThreshold: 1 },
   "video.shot_revision": { task: "video.shot_revision", label: "Video shot revision", modality: "text", tier: "balanced", escalationTier: "premium", qualityThreshold: 1 },
 };
 
@@ -97,24 +88,33 @@ function cleanModels(models: unknown) {
     .filter(Boolean)));
 }
 
+function semanticEscalationModels(tier: AtlasAiTier, escalationTier: AtlasAiTier | null, video: boolean) {
+  if (!escalationTier) return [];
+  const target = video ? videoModels(escalationTier) : tierModels(escalationTier);
+  if (tier === "economy" && escalationTier === "balanced") {
+    const premium = video ? videoModels("premium") : tierModels("premium");
+    return [...target, ...premium];
+  }
+  return target;
+}
+
 export function atlasAiTaskPolicy(task: AtlasAiTaskType, settings: AiControlSettings | null = null): AtlasAiTaskPolicy {
   const base = BASE_TASKS[task];
   const override = overrideFor(settings, task);
   const tier = tierFromRoutingMode(settings?.routing_mode ?? "auto", override.tier ?? base.tier);
-  const escalationTier = settings?.routing_mode && settings.routing_mode !== "auto"
+  const forcedMode = Boolean(settings?.routing_mode && settings.routing_mode !== "auto");
+  const escalationTier = forcedMode
     ? null
     : override.escalationTier !== undefined ? override.escalationTier : base.escalationTier;
 
   const isVideoDirector = task.startsWith("video.");
-  const defaultModels = isVideoDirector ? videoModels() : tierModels(tier);
+  const defaultModels = isVideoDirector ? videoModels(tier) : tierModels(tier);
   const overriddenModels = cleanModels(override.models);
   const models = overriddenModels.length ? overriddenModels : defaultModels;
   const explicitEscalation = cleanModels(override.escalationModels);
   const escalationModels = explicitEscalation.length
-    ? explicitEscalation
-    : escalationTier
-      ? tierModels(escalationTier).filter((model) => !models.includes(model))
-      : [];
+    ? explicitEscalation.filter((model) => !models.includes(model))
+    : semanticEscalationModels(tier, escalationTier, isVideoDirector).filter((model) => !models.includes(model));
 
   const threshold = typeof override.qualityThreshold === "number" && Number.isFinite(override.qualityThreshold)
     ? Math.max(0, Math.min(1, override.qualityThreshold))
@@ -126,7 +126,7 @@ export function atlasAiTaskPolicy(task: AtlasAiTaskType, settings: AiControlSett
     escalationTier,
     qualityThreshold: threshold,
     models,
-    escalationModels,
+    escalationModels: Array.from(new Set(escalationModels)),
   };
 }
 

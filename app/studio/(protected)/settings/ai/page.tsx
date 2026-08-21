@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { saveAiControlSettings } from "@/app/studio/ai-control-actions";
+import { applyZeroCostPreset, saveAiControlSettings } from "@/app/studio/ai-control-actions";
 import { Field, PageHeader, Panel, Status, Submit } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { isZeroCostPolicy } from "@/lib/ai/control-plane";
 import { atlasAiGatewayConfigured } from "@/lib/ai/gateway";
 import { getAiControlSummary } from "@/lib/ai/analytics";
 
@@ -28,6 +29,7 @@ export default async function AiControlCenterPage() {
   const summary = await getAiControlSummary(user.id);
   const { settings, budget, stats } = summary;
   const budgetPercent = budget.monthlyBudgetUsd > 0 ? Math.min(1, budget.totalSpentUsd / budget.monthlyBudgetUsd) : 1;
+  const zeroCost = isZeroCostPolicy(settings);
 
   return (
     <>
@@ -38,11 +40,24 @@ export default async function AiControlCenterPage() {
       />
 
       <div className="studio-grid">
+        <Panel title="Spend mode">{zeroCost ? "Zero Cost" : "Custom budget"}</Panel>
         <Panel title="Control Plane">{atlasAiGatewayConfigured() ? "Healthy" : "Not configured"}</Panel>
         <Panel title="Month spend">{money(budget.totalSpentUsd)}</Panel>
         <Panel title="AI requests">{stats.requests.toLocaleString()}</Panel>
+        <Panel title="Cache reuses">{stats.cacheReuses.toLocaleString()}</Panel>
         <Panel title="First-pass quality">{percent(stats.firstPassSuccessRate)}</Panel>
       </div>
+
+      <section className="studio-panel feature">
+        <div className="panel-head">
+          <div><span className="section-label">Zero Cost mode</span><h2>{zeroCost ? "Paid media is locked" : "One click back to $0 media spend"}</h2></div>
+          <Status>{zeroCost ? "active" : "custom"}</Status>
+        </div>
+        <p><small>Zero Cost keeps routing on cost-first Auto, caps text/reasoning at $2.25, and sets paid image and video budgets to $0. Provider submission is blocked server-side until you deliberately raise the relevant media budget.</small></p>
+        <form action={applyZeroCostPreset}>
+          <Submit>{zeroCost ? "Re-apply Zero Cost" : "Enable Zero Cost"}</Submit>
+        </form>
+      </section>
 
       <section className="studio-panel feature">
         <div className="panel-head">
@@ -52,7 +67,7 @@ export default async function AiControlCenterPage() {
         <div className="ai-budget-track" aria-label={`${Math.round(budgetPercent * 100)} percent of monthly AI budget used`}>
           <span style={{ width: `${Math.round(budgetPercent * 100)}%` }} />
         </div>
-        <p><small>Text/reasoning: {money(budget.textSpentUsd)} of {money(budget.textBudgetUsd)}. Specialist image/video generation keeps its existing quote, approval and hard-credit envelopes; the image/video amounts below are policy targets rather than a replacement for those safeguards.</small></p>
+        <p><small>Text/reasoning: {money(budget.textSpentUsd)} of {money(budget.textBudgetUsd)}. Under hard-stop, image/video limits are enforced before specialist provider submission in addition to each Video Director project&apos;s quote, approval and credit envelope.</small></p>
       </section>
 
       <section className="studio-panel feature">
@@ -162,13 +177,13 @@ export default async function AiControlCenterPage() {
             </Field>
             <Field label="Monthly AI budget ($)"><input type="number" min="0" step="0.01" name="monthly_budget_usd" defaultValue={Number(settings.monthly_budget_usd)} required /></Field>
             <Field label="Text / reasoning ($)"><input type="number" min="0" step="0.01" name="text_budget_usd" defaultValue={Number(settings.text_budget_usd)} required /></Field>
-            <Field label="Image policy target ($)"><input type="number" min="0" step="0.01" name="image_budget_usd" defaultValue={Number(settings.image_budget_usd)} required /></Field>
-            <Field label="Video policy target ($)"><input type="number" min="0" step="0.01" name="video_budget_usd" defaultValue={Number(settings.video_budget_usd)} required /></Field>
+            <Field label="Image hard cap ($)"><input type="number" min="0" step="0.01" name="image_budget_usd" defaultValue={Number(settings.image_budget_usd)} required /></Field>
+            <Field label="Video hard cap ($)"><input type="number" min="0" step="0.01" name="video_budget_usd" defaultValue={Number(settings.video_budget_usd)} required /></Field>
             <Field label="Budget enforcement" wide>
-              <label className="studio-checkbox"><input type="checkbox" name="hard_stop" defaultChecked={settings.hard_stop} /> Stop new Control Plane calls when the monthly or text budget is exhausted</label>
+              <label className="studio-checkbox"><input type="checkbox" name="hard_stop" defaultChecked={settings.hard_stop} /> Block new text and paid media submissions when their configured budgets would be exceeded</label>
             </Field>
             <Field label="Quality escalation" wide>
-              <label className="studio-checkbox"><input type="checkbox" name="quality_escalation" defaultChecked={settings.quality_escalation} /> Escalate to a stronger task route only after a deterministic quality gate fails</label>
+              <label className="studio-checkbox"><input type="checkbox" name="quality_escalation" defaultChecked={settings.quality_escalation} /> Escalate GLM → Luna → Sol only after deterministic quality gates require it</label>
             </Field>
           </div>
           <Submit>Save AI policy</Submit>
