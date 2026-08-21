@@ -13,6 +13,9 @@ def main() -> None:
 
     request_path = Path(sys.argv[1])
     request = WorkerRequest.model_validate_json(request_path.read_text(encoding="utf-8"))
+    # The request contains the one-time callback credential. Remove it before any persistent
+    # Sandbox snapshot can be created; the validated in-memory model is all the worker needs.
+    request_path.unlink(missing_ok=True)
     asyncio.run(execute(request))
 
 
