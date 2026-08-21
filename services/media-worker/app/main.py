@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import os
+import re
 import secrets
 import socket
 import tempfile
@@ -11,13 +12,17 @@ from typing import Any, Literal
 from urllib.parse import urljoin, urlparse
 
 import httpx
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
+from google.api_core.exceptions import AlreadyExists
+from google.cloud import tasks_v2
+from google.protobuf import duration_pb2
 from pydantic import BaseModel, Field
 
-from music_intelligence import analyze_music
+from .music_intelligence import allin1_infer, analyze_music
 
-app = FastAPI(title="Atlas Media Worker", version="2.0.0")
+app = FastAPI(title="Atlas Media Worker", version="2.1.0")
 _RUNNING: set[asyncio.Task[Any]] = set()
+_ACTIVE_JOB_IDS: set[str] = set()
 
 
 class WorkerRequest(BaseModel):
@@ -47,6 +52,21 @@ def authenticate(authorization: str | None) -> None:
     expected = f"Bearer {worker_secret()}"
     if not authorization or not secrets.compare_digest(authorization, expected):
         raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+def authenticate_task(value: str | None) -> None:
+    expected = worker_secret()
+    if not value or not secrets.compare_digest(value, expected):
+        raise HTTPException(status_code=401, detail="Unauthorized task delivery")
+
+
+def cloud_tasks_config() -> tuple[str, str, str] | None:
+    project = os.getenv("GCP_PROJECT_ID", "").strip()
+    location = os.getenv("CLOUD_TASKS_LOCATION", "").strip()
+    queue = os.getenv("CLOUD_TASKS_QUEUE", "").strip()
+    if project and location and queue:
+        return project, location, queue
+    return None
 
 
 def _reject_private_address(address: str) -> None:
@@ -327,54 +347,104 @@ async def callback(
         response.raise_for_status()
 
 
-async def execute(request: WorkerRequest) -> None:
+async def execute(request: WorkerRequest) -> str:
+    _ACTIVE_JOB_IDS.add(request.job_id)
     try:
         await callback(request, "running")
-        with tempfile.TemporaryDirectory(prefix="atlas-video-") as directory:
-            workdir = Path(directory)
-            if request.job_type == "analyze_audio":
-                result = await analyze_job(request.payload, workdir)
-            elif request.job_type == "extract_frame":
-                result = await extract_frame_job(request.payload, workdir)
-            elif request.job_type in {"render_master", "render_social", "render_promo", "render_hook"}:
-                result = await render_job(request.payload, workdir)
-            else:
-                raise ValueError(f"Unsupported worker job type: {request.job_type}")
-        await callback(request, "completed", result=result)
-    except Exception as exc:
         try:
+            with tempfile.TemporaryDirectory(prefix="atlas-video-") as directory:
+                workdir = Path(directory)
+                if request.job_type == "analyze_audio":
+                    result = await analyze_job(request.payload, workdir)
+                elif request.job_type == "extract_frame":
+                    result = await extract_frame_job(request.payload, workdir)
+                elif request.job_type in {"render_master", "render_social", "render_promo", "render_hook"}:
+                    result = await render_job(request.payload, workdir)
+                else:
+                    raise ValueError(f"Unsupported worker job type: {request.job_type}")
+        except Exception as exc:
+            # The media operation failed. A successful failed-callback is terminal from Cloud
+            # Tasks' perspective; only callback transport failure should trigger a queue retry.
             await callback(request, "failed", error=str(exc)[:4000])
-        except Exception:
-            pass
+            return "failed"
+
+        # If this callback cannot be delivered, propagate the exception so Cloud Tasks retries
+        # the delivery. Atlas callback reconciliation is idempotent for duplicate terminal calls.
+        await callback(request, "completed", result=result)
+        return "completed"
+    finally:
+        _ACTIVE_JOB_IDS.discard(request.job_id)
+
+
+def enqueue_cloud_task(request: WorkerRequest, execution_url: str) -> str:
+    config = cloud_tasks_config()
+    if not config:
+        raise RuntimeError("Cloud Tasks is not configured")
+    project, location, queue = config
+    validate_remote_url(execution_url)
+    client = tasks_v2.CloudTasksClient()
+    parent = client.queue_path(project, location, queue)
+    safe_id = re.sub(r"[^a-zA-Z0-9_-]", "-", request.job_id)[:400]
+    task_name = client.task_path(project, location, queue, f"atlas-{safe_id}")
+    task = tasks_v2.Task(
+        name=task_name,
+        http_request=tasks_v2.HttpRequest(
+            http_method=tasks_v2.HttpMethod.POST,
+            url=execution_url,
+            headers={
+                "Content-Type": "application/json",
+                "X-Atlas-Worker-Task": worker_secret(),
+            },
+            body=request.model_dump_json().encode("utf-8"),
+        ),
+        dispatch_deadline=duration_pb2.Duration(seconds=1800),
+    )
+    try:
+        created = client.create_task(parent=parent, task=task)
+        return created.name
+    except AlreadyExists:
+        # Explicit task IDs make Vercel retries safe. The existing Cloud Task owns delivery.
+        return task_name
 
 
 @app.get("/health")
 async def health() -> dict[str, Any]:
     return {
         "ok": True,
-        "version": 2,
+        "version": 2.1,
+        "dispatch_mode": "cloud_tasks" if cloud_tasks_config() else "local_background",
         "music_intelligence": {
-            "semantic_analyzer_available": allin1_available(),
+            "semantic_analyzer_available": allin1_infer is not None,
         },
-        "active_jobs": len(_RUNNING),
+        "active_jobs": len(_ACTIVE_JOB_IDS),
     }
 
 
-def allin1_available() -> bool:
-    try:
-        from music_intelligence import allin1_infer
-        return allin1_infer is not None
-    except Exception:
-        return False
+@app.post("/v1/execute")
+async def execute_task(
+    job: WorkerRequest,
+    x_atlas_worker_task: str | None = Header(default=None),
+) -> dict[str, str]:
+    authenticate_task(x_atlas_worker_task)
+    status = await execute(job)
+    return {"job_id": job.job_id, "status": status}
 
 
 @app.post("/v1/jobs", status_code=202)
 async def submit_job(
-    request: WorkerRequest,
+    job: WorkerRequest,
+    http_request: Request,
     authorization: str | None = Header(default=None),
 ) -> dict[str, str]:
     authenticate(authorization)
-    task = asyncio.create_task(execute(request))
+    if cloud_tasks_config():
+        execution_url = f"{str(http_request.base_url).rstrip('/')}/v1/execute"
+        task_name = await asyncio.to_thread(enqueue_cloud_task, job, execution_url)
+        return {"job_id": job.job_id, "status": "queued", "task": task_name}
+
+    # Local/dev compatibility only. Production deploys configure Cloud Tasks so work remains
+    # attached to a durable HTTP request and Cloud Run can safely scale to zero when idle.
+    task = asyncio.create_task(execute(job))
     _RUNNING.add(task)
     task.add_done_callback(_RUNNING.discard)
-    return {"job_id": request.job_id, "status": "queued"}
+    return {"job_id": job.job_id, "status": "queued"}
