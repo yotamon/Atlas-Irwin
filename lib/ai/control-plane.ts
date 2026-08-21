@@ -235,11 +235,12 @@ type RunTaskInput<T> = {
   cacheMode?: "use" | "refresh" | "off";
 };
 
-async function cachedTaskResult<T>(ownerId: string, cacheKey: string): Promise<AtlasAiTaskResult<T> | null> {
+async function cachedTaskResult<T>(input: RunTaskInput<T>, cacheKey: string): Promise<AtlasAiTaskResult<T> | null> {
   const client = createMarketingServiceClient();
-  const { data, error } = await client.from("generation_runs")
-    .select("id,parent_run_id,output,model,requested_model,routed_provider,provider_request_id,gateway_generation_id,quality_score,quality_failures")
-    .eq("owner_id", ownerId)
+  const { data: source, error } = await client.from("generation_runs")
+    .select("id,output,model,requested_model,routed_provider,quality_score,quality_failures")
+    .eq("owner_id", input.ownerId)
+    .eq("provider", "vercel-gateway")
     .contains("metadata", { cacheKey, cacheEligible: true })
     .eq("status", "completed")
     .eq("quality_gate_passed", true)
@@ -247,29 +248,70 @@ async function cachedTaskResult<T>(ownerId: string, cacheKey: string): Promise<A
     .limit(1)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  if (!data) return null;
-  const failures = Array.isArray(data.quality_failures)
-    ? data.quality_failures.filter((item): item is string => typeof item === "string")
+  if (!source) return null;
+
+  const now = new Date().toISOString();
+  const { data: alias, error: aliasError } = await client.from("generation_runs").insert({
+    owner_id: input.ownerId,
+    campaign_id: input.campaignId ?? null,
+    release_id: input.releaseId ?? null,
+    video_project_id: input.videoProjectId ?? null,
+    parent_run_id: null,
+    purpose: input.purpose ?? input.task,
+    task_type: input.task,
+    provider: "atlas-cache",
+    model: source.model,
+    requested_model: source.requested_model || source.model,
+    routed_provider: source.routed_provider,
+    prompt_version: input.promptVersion,
+    input_context: asJson(input.inputContext ?? {}),
+    output: source.output,
+    status: "completed",
+    attempt_index: 0,
+    started_at: now,
+    completed_at: now,
+    latency_ms: 0,
+    input_tokens: 0,
+    output_tokens: 0,
+    estimated_cost_usd: 0,
+    actual_cost_usd: 0,
+    fallback_used: false,
+    fallback_count: 0,
+    escalated: false,
+    quality_gate_passed: true,
+    quality_score: source.quality_score,
+    quality_failures: source.quality_failures,
+    metadata: asJson({
+      cacheHit: true,
+      cacheSourceRunId: source.id,
+      cacheKey,
+      cacheEligible: false,
+    }),
+  }).select("id").single();
+  if (aliasError || !alias) throw new Error(aliasError?.message || "Could not persist AI cache provenance.");
+
+  const failures = Array.isArray(source.quality_failures)
+    ? source.quality_failures.filter((item): item is string => typeof item === "string")
     : [];
   return {
-    value: data.output as T,
+    value: source.output as T,
     provider: "vercel-gateway",
-    model: data.model,
-    requestedModel: data.requested_model || data.model,
-    routedProvider: data.routed_provider,
-    requestId: data.provider_request_id,
-    generationId: data.gateway_generation_id,
+    model: source.model,
+    requestedModel: source.requested_model || source.model,
+    routedProvider: source.routed_provider,
+    requestId: null,
+    generationId: null,
     estimatedCostUsd: 0,
     inputTokens: 0,
     outputTokens: 0,
-    runId: data.id,
-    rootRunId: data.parent_run_id || data.id,
-    escalated: Boolean(data.parent_run_id),
+    runId: alias.id,
+    rootRunId: alias.id,
+    escalated: false,
     learnedRoutingApplied: false,
     cacheHit: true,
     quality: {
       passed: true,
-      score: typeof data.quality_score === "number" ? data.quality_score : 1,
+      score: typeof source.quality_score === "number" ? source.quality_score : 1,
       failures,
     },
   };
@@ -281,7 +323,7 @@ export async function runAtlasAiTask<T>(input: RunTaskInput<T>): Promise<AtlasAi
   const cacheMode = input.cacheMode ?? "use";
   const cacheKey = taskCacheKey(input as RunTaskInput<unknown>);
   if (cacheMode === "use") {
-    const cached = await cachedTaskResult<T>(input.ownerId, cacheKey);
+    const cached = await cachedTaskResult<T>(input, cacheKey);
     if (cached) return cached;
   }
 
@@ -309,7 +351,11 @@ export async function runAtlasAiTask<T>(input: RunTaskInput<T>): Promise<AtlasAi
   }) => {
     const [model, ...fallbackModels] = models;
     const started = new Date();
+    const extraMetadata = input.metadata && typeof input.metadata === "object" && !Array.isArray(input.metadata)
+      ? input.metadata as Record<string, unknown>
+      : {};
     const runMetadata = {
+      ...extraMetadata,
       policyTier: policy.tier,
       configuredRoute: policy.models,
       route: models,
@@ -324,7 +370,6 @@ export async function runAtlasAiTask<T>(input: RunTaskInput<T>): Promise<AtlasAi
         reason: learnedRouting.reason,
         route: learnedRouting.route,
       },
-      ...(input.metadata && typeof input.metadata === "object" && !Array.isArray(input.metadata) ? input.metadata as Record<string, unknown> : {}),
     };
     const { data: run, error: createError } = await client.from("generation_runs").insert({
       owner_id: input.ownerId,
