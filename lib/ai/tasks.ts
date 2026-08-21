@@ -52,10 +52,10 @@ function tierModels(tier: AtlasAiTier) {
 }
 
 function videoModels(tier: AtlasAiTier) {
-  const primary = process.env.VIDEO_DIRECTOR_LLM_MODEL?.trim();
+  if (tier !== "premium") return tierModels(tier);
+  const primary = normalizeGatewayModel(process.env.VIDEO_DIRECTOR_LLM_MODEL?.trim() || premiumModel());
   const fallbacks = parseGatewayModelList(process.env.VIDEO_DIRECTOR_LLM_FALLBACK_MODELS);
-  if (primary) return Array.from(new Set([normalizeGatewayModel(primary), ...fallbacks].filter(Boolean)));
-  return tierModels(tier);
+  return Array.from(new Set([primary, ...fallbacks].filter(Boolean)));
 }
 
 const BASE_TASKS: Record<AtlasAiTaskType, Omit<AtlasAiTaskPolicy, "models" | "escalationModels">> = {
@@ -88,12 +88,14 @@ function cleanModels(models: unknown) {
     .filter(Boolean)));
 }
 
-function semanticEscalationModels(tier: AtlasAiTier, escalationTier: AtlasAiTier | null) {
+function semanticEscalationModels(tier: AtlasAiTier, escalationTier: AtlasAiTier | null, video: boolean) {
   if (!escalationTier) return [];
+  const target = video ? videoModels(escalationTier) : tierModels(escalationTier);
   if (tier === "economy" && escalationTier === "balanced") {
-    return [...tierModels("balanced"), ...tierModels("premium")];
+    const premium = video ? videoModels("premium") : tierModels("premium");
+    return [...target, ...premium];
   }
-  return tierModels(escalationTier);
+  return target;
 }
 
 export function atlasAiTaskPolicy(task: AtlasAiTaskType, settings: AiControlSettings | null = null): AtlasAiTaskPolicy {
@@ -112,7 +114,7 @@ export function atlasAiTaskPolicy(task: AtlasAiTaskType, settings: AiControlSett
   const explicitEscalation = cleanModels(override.escalationModels);
   const escalationModels = explicitEscalation.length
     ? explicitEscalation.filter((model) => !models.includes(model))
-    : semanticEscalationModels(tier, escalationTier).filter((model) => !models.includes(model));
+    : semanticEscalationModels(tier, escalationTier, isVideoDirector).filter((model) => !models.includes(model));
 
   const threshold = typeof override.qualityThreshold === "number" && Number.isFinite(override.qualityThreshold)
     ? Math.max(0, Math.min(1, override.qualityThreshold))
