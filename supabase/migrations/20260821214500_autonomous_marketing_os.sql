@@ -59,6 +59,15 @@ create table public.next_best_actions (
   unique(owner_id, idempotency_key)
 );
 
+-- Service-only runtime credentials store hashes only. The corresponding raw cron
+-- token is generated and encrypted in Supabase Vault by the production provisioning SQL.
+create table public.automation_runtime_secrets (
+  key text primary key,
+  secret_hash text not null check (secret_hash ~ '^[0-9a-f]{64}$'),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create index audience_interactions_owner_status_occurred_idx
   on public.audience_interactions(owner_id, status, occurred_at desc);
 create index audience_interactions_post_idx
@@ -71,6 +80,7 @@ create index next_best_actions_owner_status_score_idx
 alter table public.audience_interactions enable row level security;
 alter table public.marketing_opportunities enable row level security;
 alter table public.next_best_actions enable row level security;
+alter table public.automation_runtime_secrets enable row level security;
 
 create policy "admins manage own audience interactions"
   on public.audience_interactions for all to authenticated
@@ -94,7 +104,12 @@ create trigger set_marketing_opportunities_updated_at
 create trigger set_next_best_actions_updated_at
   before update on public.next_best_actions
   for each row execute function private.set_updated_at();
+create trigger set_automation_runtime_secrets_updated_at
+  before update on public.automation_runtime_secrets
+  for each row execute function private.set_updated_at();
 
 grant select, insert, update, delete on public.audience_interactions to authenticated;
 grant select, insert, update, delete on public.marketing_opportunities to authenticated;
 grant select, insert, update, delete on public.next_best_actions to authenticated;
+revoke all on public.automation_runtime_secrets from anon, authenticated;
+grant select, insert, update, delete on public.automation_runtime_secrets to service_role;
