@@ -31,7 +31,10 @@ test("first-party channel adapters replace the fake universal manual adapter", a
   assert.ok(channels.includes("tiktok:draft-upload"));
   assert.ok(channels.includes("instagram_business_manage_insights"));
   assert.ok(channels.includes("youtube.upload"));
-  assert.notEqual(channels.trim().endsWith("return new ManualHandoffAdapter(platform);\n}"), false);
+  assert.ok(channels.includes('if (key === "instagram") return new InstagramChannelAdapter();'));
+  assert.ok(channels.includes('if (key === "tiktok") return new TikTokChannelAdapter();'));
+  assert.ok(channels.includes('if (key === "youtube") return new YouTubeChannelAdapter();'));
+  assert.ok(channels.includes("return new ManualHandoffAdapter(platform);"));
 });
 
 test("social OAuth asks only for automation capabilities Atlas can actually use", async () => {
