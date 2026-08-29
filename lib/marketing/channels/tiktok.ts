@@ -31,6 +31,7 @@ async function uploadTikTokBytes(uploadUrl: string, asset: SocialAsset, chunkSiz
     const isFinalChunk = index === totalChunks - 1;
     const endExclusive = isFinalChunk ? size : start + chunkSize;
     const chunk = asset.bytes.subarray(start, endExclusive);
+    const uploadBody = chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength) as ArrayBuffer;
     const response = await fetch(uploadUrl, {
       method: "PUT",
       headers: {
@@ -38,7 +39,7 @@ async function uploadTikTokBytes(uploadUrl: string, asset: SocialAsset, chunkSiz
         "content-length": String(chunk.length),
         "content-range": `bytes ${start}-${endExclusive - 1}/${size}`,
       },
-      body: chunk,
+      body: uploadBody,
     });
     if (!response.ok) throw new Error(`TikTok media upload failed (${response.status}).`);
   }
