@@ -1,5 +1,6 @@
 import { runMarketingAutomationCycle } from "@/lib/marketing/automation";
 import { syncAudienceInteractions } from "@/lib/marketing/audience";
+import { authorizeMarketingCron } from "@/lib/marketing/cron-auth";
 import { fillOneMissingScheduledAsset } from "@/lib/marketing/free-content-factory";
 import { refreshNextBestActions } from "@/lib/marketing/next-best-action";
 import { processDueOutreachEnrollments } from "@/lib/marketing/outreach";
@@ -23,11 +24,11 @@ async function runStep<T>(name: string, task: () => Promise<T>) {
 }
 
 export async function GET(request: Request) {
-  const secret = process.env.CRON_SECRET?.trim();
-  if (!secret) {
-    return Response.json({ error: "CRON_SECRET is not configured." }, { status: 503 });
-  }
-  if (request.headers.get("authorization") !== `Bearer ${secret}`) {
+  const auth = await authorizeMarketingCron(request);
+  if (!auth.authorized) {
+    if (!auth.configured) {
+      return Response.json({ error: "Marketing cron authentication is not provisioned." }, { status: 503 });
+    }
     return new Response("Unauthorized", { status: 401 });
   }
 
@@ -47,6 +48,7 @@ export async function GET(request: Request) {
   return Response.json({
     ok: failures.length === 0,
     partial: failures.length > 0,
+    authSource: auth.source,
     failures,
     ...results,
   });
