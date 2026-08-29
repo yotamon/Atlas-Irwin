@@ -49,6 +49,10 @@ function filterFor(template: Template) {
   return `${base};[bg][cover]overlay=(W-w)/2:(H-h)/2,drawbox=x=74:y=434:w=932:h=932:color=white@0.16:t=2,format=yuv420p[v]`;
 }
 
+async function commandError(command: Awaited<ReturnType<Sandbox["runCommand"]>>) {
+  return (await command.stderr()).trim();
+}
+
 async function composerSandbox() {
   if (!sandboxAvailable()) throw new Error("Vercel Sandbox is unavailable outside a Vercel deployment. Atlas did not use a paid fallback.");
   return Sandbox.getOrCreate({
@@ -64,7 +68,7 @@ async function composerSandbox() {
         cmd: "bash",
         args: ["-lc", "mkdir -p /workspace && cd /workspace && npm init -y >/dev/null 2>&1 && npm install ffmpeg-static@5.2.0 --omit=dev >/dev/null 2>&1"],
       });
-      if (setup.exitCode !== 0) throw new Error(`Could not initialize the free content composer: ${setup.stderr}`);
+      if (setup.exitCode !== 0) throw new Error(`Could not initialize the free content composer: ${await commandError(setup)}`);
     },
   });
 }
@@ -75,13 +79,14 @@ async function ffmpegPath(sandbox: Sandbox) {
     args: ["-e", "process.stdout.write(require('ffmpeg-static'))"],
     cwd: "/workspace",
   });
-  if (result.exitCode !== 0 || !result.stdout.trim()) throw new Error("ffmpeg-static is unavailable in the persistent composer Sandbox.");
-  return result.stdout.trim();
+  const stdout = (await result.stdout()).trim();
+  if (result.exitCode !== 0 || !stdout) throw new Error("ffmpeg-static is unavailable in the persistent composer Sandbox.");
+  return stdout;
 }
 
 async function downloadInput(sandbox: Sandbox, url: string, path: string) {
   const result = await sandbox.runCommand({ cmd: "curl", args: ["-L", "--fail", "--silent", "--show-error", "-o", path, url] });
-  if (result.exitCode !== 0) throw new Error(`Could not download a source asset for free composition: ${result.stderr}`);
+  if (result.exitCode !== 0) throw new Error(`Could not download a source asset for free composition: ${await commandError(result)}`);
 }
 
 async function render({
@@ -99,7 +104,7 @@ async function render({
   const work = `/tmp/atlas-compose-${crypto.randomUUID()}`;
   try {
     const mkdir = await sandbox.runCommand("mkdir", ["-p", work]);
-    if (mkdir.exitCode !== 0) throw new Error(mkdir.stderr || "Could not initialize composition workspace.");
+    if (mkdir.exitCode !== 0) throw new Error((await commandError(mkdir)) || "Could not initialize composition workspace.");
     await Promise.all([
       downloadInput(sandbox, artworkUrl, `${work}/artwork`),
       downloadInput(sandbox, audioUrl, `${work}/audio`),
@@ -129,9 +134,13 @@ async function render({
       ],
       cwd: work,
     });
-    if (command.exitCode !== 0) throw new Error(`FFmpeg composition failed: ${command.stderr.slice(-1200)}`);
-    const result = await sandbox.readFile(`${work}/output.mp4`);
-    return Buffer.isBuffer(result) ? result : Buffer.from(result);
+    if (command.exitCode !== 0) {
+      const stderr = await commandError(command);
+      throw new Error(`FFmpeg composition failed: ${stderr.slice(-1200)}`);
+    }
+    const result = await sandbox.readFileToBuffer({ path: `${work}/output.mp4` });
+    if (!result) throw new Error("FFmpeg did not produce an output file.");
+    return result;
   } finally {
     try { await sandbox.runCommand("rm", ["-rf", work]); } catch { /* best effort */ }
     try { await sandbox.stop(); } catch { /* persistent snapshot may already be stopping */ }
