@@ -19,7 +19,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test:studio": "node --test tests/studio-v2-contract.test.mjs tests/studio-v2-workflow.test.mjs tests/marketing-creative-lineage.test.mjs tests/ai-provider-presets.test.mjs tests/ai-control-plane.test.mjs tests/social-channel-planning.test.mjs tests/music-intelligence.test.mjs",
+    "test:studio": "node --test tests/studio-v2-contract.test.mjs tests/studio-v2-workflow.test.mjs tests/marketing-creative-lineage.test.mjs tests/ai-provider-presets.test.mjs tests/ai-control-plane.test.mjs tests/social-channel-planning.test.mjs tests/music-intelligence.test.mjs tests/autonomous-marketing.test.mjs",
     "postinstall": "node scripts/ensure-lightningcss-native.mjs",
     "studio:import": "node --env-file=.env.local scripts/import-legacy-releases.mjs",
     "studio:import:dry-run": "node --env-file=.env.local scripts/import-legacy-releases.mjs --dry-run",
@@ -31,6 +31,7 @@
   "dependencies": {
     "@supabase/ssr": "0.12.0",
     "@supabase/supabase-js": "^2.110.1",
+    "@vercel/sandbox": "2.9.2",
     "framer-motion": "^12.42.2",
     "next": "^16.3.0",
     "nodemailer": "^9.0.3",

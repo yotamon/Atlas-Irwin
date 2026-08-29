@@ -7,6 +7,7 @@ export type AtlasAiTaskType =
   | "marketing.campaign_plan"
   | "marketing.caption"
   | "marketing.strategy"
+  | "community.reply"
   | "metadata.extraction"
   | "video.concepts"
   | "video.production_plan"
@@ -62,6 +63,7 @@ const BASE_TASKS: Record<AtlasAiTaskType, Omit<AtlasAiTaskPolicy, "models" | "es
   "marketing.campaign_plan": { task: "marketing.campaign_plan", label: "Campaign planning", modality: "text", tier: "balanced", escalationTier: "premium", qualityThreshold: 0.9 },
   "marketing.caption": { task: "marketing.caption", label: "Caption writing", modality: "text", tier: "economy", escalationTier: "balanced", qualityThreshold: 0.85 },
   "marketing.strategy": { task: "marketing.strategy", label: "Marketing strategy", modality: "text", tier: "balanced", escalationTier: "premium", qualityThreshold: 0.9 },
+  "community.reply": { task: "community.reply", label: "Community reply", modality: "text", tier: "economy", escalationTier: "balanced", qualityThreshold: 0.88 },
   "metadata.extraction": { task: "metadata.extraction", label: "Metadata extraction", modality: "text", tier: "economy", escalationTier: "balanced", qualityThreshold: 1 },
   "video.concepts": { task: "video.concepts", label: "Video concepts", modality: "text", tier: "balanced", escalationTier: "premium", qualityThreshold: 0.9 },
   "video.production_plan": { task: "video.production_plan", label: "Video production plan", modality: "text", tier: "balanced", escalationTier: "premium", qualityThreshold: 1 },

@@ -1,42 +1,13 @@
 import "server-only";
 
 import type { Json } from "@/types/database";
+import { socialPlatformForPlannerPlatform, type SocialPlatformKey } from "./social-platforms";
+import type { ChannelCapability, MarketingChannelAdapter, PublishRequest, PublishResult } from "./channel-types";
+import { InstagramChannelAdapter } from "./channels/instagram";
+import { TikTokChannelAdapter } from "./channels/tiktok";
+import { YouTubeChannelAdapter } from "./channels/youtube";
 
-export type ChannelCapability = {
-  id: string;
-  label: string;
-  automatedPublishing: boolean;
-  automatedMetrics: boolean;
-  reason?: string;
-};
-
-export type PublishRequest = {
-  platform: string;
-  caption: string | null;
-  hookText: string | null;
-  cta: string | null;
-  assetUrl: string | null;
-  scheduledAt: string | null;
-  attributionUrl: string | null;
-  metadata: Json;
-};
-
-export type PublishResult = {
-  status: "published" | "manual_handoff";
-  externalPostId?: string;
-  externalUrl?: string;
-  details?: Json;
-};
-
-export type ChannelMetrics = Record<string, number> & {
-  externalObjectId?: never;
-};
-
-export interface MarketingChannelAdapter {
-  capability(): ChannelCapability;
-  publish(request: PublishRequest): Promise<PublishResult>;
-  fetchMetrics(externalPostId: string): Promise<ChannelMetrics | null>;
-}
+export type { ChannelCapability, ChannelMetrics, MarketingChannelAdapter, PublishRequest, PublishResult } from "./channel-types";
 
 class ManualHandoffAdapter implements MarketingChannelAdapter {
   constructor(private readonly platform: string) {}
@@ -47,7 +18,7 @@ class ManualHandoffAdapter implements MarketingChannelAdapter {
       label: `${this.platform} manual handoff`,
       automatedPublishing: false,
       automatedMetrics: false,
-      reason: "No authenticated first-party publishing connection is configured for this channel yet.",
+      reason: "No first-party publishing adapter exists for this channel.",
     };
   }
 
@@ -61,7 +32,7 @@ class ManualHandoffAdapter implements MarketingChannelAdapter {
         cta: request.cta,
         assetUrl: request.assetUrl,
         attributionUrl: request.attributionUrl,
-      },
+      } as Json,
     };
   }
 
@@ -71,6 +42,10 @@ class ManualHandoffAdapter implements MarketingChannelAdapter {
 }
 
 export function channelAdapter(platform: string): MarketingChannelAdapter {
+  const key: SocialPlatformKey | null = socialPlatformForPlannerPlatform(platform);
+  if (key === "instagram") return new InstagramChannelAdapter();
+  if (key === "tiktok") return new TikTokChannelAdapter();
+  if (key === "youtube") return new YouTubeChannelAdapter();
   return new ManualHandoffAdapter(platform);
 }
 
