@@ -205,7 +205,7 @@ export async function composeFreeSocialAsset(ownerId: string, contentItemId: str
     bucket_name: BUCKET,
     storage_path: storagePath,
     public_url: publicUrl,
-    asset_type: "social_cut",
+    asset_type: "content_video",
     mime_type: "video/mp4",
     file_size: output.length,
     content_hash: hash,
@@ -222,7 +222,7 @@ export async function composeFreeSocialAsset(ownerId: string, contentItemId: str
     media_asset_id: asset.id,
     release_id: item.release_id,
     content_item_id: item.id,
-    role: "primary_social_asset",
+    role: "content_video",
     display_order: 0,
     is_primary: true,
   });
