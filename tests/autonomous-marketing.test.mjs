@@ -8,6 +8,9 @@ const files = [
   "lib/marketing/audience.ts",
   "lib/marketing/radar.ts",
   "lib/marketing/next-best-action.ts",
+  "lib/marketing/channels/instagram.ts",
+  "lib/marketing/channels/tiktok.ts",
+  "lib/marketing/channels/youtube.ts",
   "app/studio/(protected)/audience/page.tsx",
   "app/studio/(protected)/autopilot/page.tsx",
   "supabase/migrations/20260821214500_autonomous_marketing_os.sql",
@@ -23,18 +26,24 @@ test("autonomous marketing surfaces and durable state exist", async () => {
 });
 
 test("first-party channel adapters replace the fake universal manual adapter", async () => {
-  const channels = await readFile("lib/marketing/channels.ts", "utf8");
-  for (const adapter of ["InstagramChannelAdapter", "TikTokChannelAdapter", "YouTubeChannelAdapter"]) {
-    assert.ok(channels.includes(`class ${adapter}`));
-  }
-  assert.ok(channels.includes("TIKTOK_DIRECT_POST_AUDITED"));
-  assert.ok(channels.includes("tiktok:draft-upload"));
-  assert.ok(channels.includes("instagram_business_manage_insights"));
-  assert.ok(channels.includes("youtube.upload"));
-  assert.ok(channels.includes('if (key === "instagram") return new InstagramChannelAdapter();'));
-  assert.ok(channels.includes('if (key === "tiktok") return new TikTokChannelAdapter();'));
-  assert.ok(channels.includes('if (key === "youtube") return new YouTubeChannelAdapter();'));
-  assert.ok(channels.includes("return new ManualHandoffAdapter(platform);"));
+  const router = await readFile("lib/marketing/channels.ts", "utf8");
+  const instagram = await readFile("lib/marketing/channels/instagram.ts", "utf8");
+  const tiktok = await readFile("lib/marketing/channels/tiktok.ts", "utf8");
+  const youtube = await readFile("lib/marketing/channels/youtube.ts", "utf8");
+
+  assert.ok(instagram.includes("class InstagramChannelAdapter"));
+  assert.ok(tiktok.includes("class TikTokChannelAdapter"));
+  assert.ok(youtube.includes("class YouTubeChannelAdapter"));
+  assert.ok(tiktok.includes("TIKTOK_DIRECT_POST_AUDITED"));
+  assert.ok(tiktok.includes("tiktok:draft-upload"));
+  assert.ok(instagram.includes("instagram_business_manage_insights"));
+  assert.ok(youtube.includes("youtube.upload"));
+  assert.ok(tiktok.includes("Math.floor(size / chunkSize)"));
+  assert.ok(tiktok.includes("isFinalChunk ? size : start + chunkSize"));
+  assert.ok(router.includes('if (key === "instagram") return new InstagramChannelAdapter();'));
+  assert.ok(router.includes('if (key === "tiktok") return new TikTokChannelAdapter();'));
+  assert.ok(router.includes('if (key === "youtube") return new YouTubeChannelAdapter();'));
+  assert.ok(router.includes("return new ManualHandoffAdapter(platform);"));
 });
 
 test("social OAuth asks only for automation capabilities Atlas can actually use", async () => {
