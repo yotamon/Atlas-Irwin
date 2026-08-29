@@ -32,7 +32,7 @@ select cron.schedule(
         limit 1
       )
     ),
-    timeout_milliseconds := 5000
+    timeout_milliseconds := 300000
   );
   $$
 );
