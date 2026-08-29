@@ -1,7 +1,6 @@
 import { runMarketingAutomationCycle } from "@/lib/marketing/automation";
 import { syncAudienceInteractions } from "@/lib/marketing/audience";
 import { authorizeMarketingCron } from "@/lib/marketing/cron-auth";
-import { fillOneMissingScheduledAsset } from "@/lib/marketing/free-content-factory";
 import { refreshNextBestActions } from "@/lib/marketing/next-best-action";
 import { processDueOutreachEnrollments } from "@/lib/marketing/outreach";
 import { processDuePublicationJobs } from "@/lib/marketing/publications";
@@ -9,7 +8,8 @@ import { refreshMarketingRadarIfDue } from "@/lib/marketing/radar";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 300;
+// Keep the lightweight heartbeat comfortably inside Hobby function limits.
+export const maxDuration = 55;
 
 async function runStep<T>(name: string, task: () => Promise<T>) {
   try {
@@ -32,7 +32,8 @@ export async function GET(request: Request) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  const freeAsset = await runStep("free content factory", () => fillOneMissingScheduledAsset());
+  // Publishing is first because it is the most time-sensitive external effect.
+  // Heavy FFmpeg composition runs on its own low-frequency endpoint.
   const publications = await runStep("publication queue", () => processDuePublicationJobs());
   const outreach = await runStep("outreach queue", () => processDueOutreachEnrollments());
   const automation = await runStep("marketing event automation", () => runMarketingAutomationCycle());
@@ -40,7 +41,7 @@ export async function GET(request: Request) {
   const radar = await runStep("marketing radar", () => refreshMarketingRadarIfDue());
   const nextBestActions = await runStep("next best actions", () => refreshNextBestActions());
 
-  const results = { freeAsset, publications, outreach, automation, audience, radar, nextBestActions };
+  const results = { publications, outreach, automation, audience, radar, nextBestActions };
   const failures = Object.entries(results)
     .filter(([, result]) => !result.ok)
     .map(([name, result]) => ({ name, error: "error" in result ? result.error : "Unknown failure." }));
@@ -48,6 +49,7 @@ export async function GET(request: Request) {
   return Response.json({
     ok: failures.length === 0,
     partial: failures.length > 0,
+    mode: "free-tier-safe-heartbeat",
     authSource: auth.source,
     failures,
     ...results,
