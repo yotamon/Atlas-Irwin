@@ -10,6 +10,7 @@ const TIKTOK_API_URL = "https://open.tiktokapis.com/v2";
 const YOUTUBE_API_URL = "https://www.googleapis.com/youtube/v3";
 const YOUTUBE_UPLOAD_URL = "https://www.googleapis.com/upload/youtube/v3/videos";
 const MAX_SOCIAL_ASSET_BYTES = 256 * 1024 * 1024;
+const TIKTOK_CHUNK_BYTES = 10 * 1024 * 1024;
 
 export type ChannelCapability = {
   id: string;
@@ -226,11 +227,19 @@ async function tiktokJson<T>(response: Response, label: string): Promise<T> {
   return payload as T;
 }
 
-async function uploadTikTokBytes(uploadUrl: string, asset: Asset) {
+function tiktokUploadPlan(size: number) {
+  if (!Number.isInteger(size) || size <= 0) throw new Error("TikTok publishing requires a non-empty video asset.");
+  const chunkSize = Math.min(size, TIKTOK_CHUNK_BYTES);
+  const totalChunks = Math.max(1, Math.floor(size / chunkSize));
+  return { chunkSize, totalChunks };
+}
+
+async function uploadTikTokBytes(uploadUrl: string, asset: Asset, chunkSize: number, totalChunks: number) {
   const size = asset.bytes.length;
-  const maxChunk = 10 * 1024 * 1024;
-  for (let start = 0; start < size; start += maxChunk) {
-    const endExclusive = Math.min(size, start + maxChunk);
+  for (let index = 0; index < totalChunks; index += 1) {
+    const start = index * chunkSize;
+    const isFinalChunk = index === totalChunks - 1;
+    const endExclusive = isFinalChunk ? size : Math.min(size, start + chunkSize);
     const chunk = asset.bytes.subarray(start, endExclusive);
     const response = await fetch(uploadUrl, {
       method: "PUT",
@@ -274,8 +283,7 @@ class TikTokChannelAdapter implements MarketingChannelAdapter {
     const scope = audited ? "video.publish" : "video.upload";
     const access = await requireSocialAccess(request.ownerId, "tiktok", [scope]);
     const asset = await readAsset(request.assetUrl);
-    const chunkSize = Math.min(asset.bytes.length, 10 * 1024 * 1024);
-    const totalChunks = Math.max(1, Math.ceil(asset.bytes.length / chunkSize));
+    const { chunkSize, totalChunks } = tiktokUploadPlan(asset.bytes.length);
     const title = captionFor(request).slice(0, 2200);
 
     let endpoint = `${TIKTOK_API_URL}/post/publish/inbox/video/init/`;
@@ -318,7 +326,7 @@ class TikTokChannelAdapter implements MarketingChannelAdapter {
     });
     const initialized = await tiktokJson<{ data?: { publish_id?: string; upload_url?: string } }>(initResponse, audited ? "TikTok Direct Post init" : "TikTok draft upload init");
     if (!initialized.data?.publish_id || !initialized.data.upload_url) throw new Error("TikTok did not return an upload URL and publish ID.");
-    await uploadTikTokBytes(initialized.data.upload_url, asset);
+    await uploadTikTokBytes(initialized.data.upload_url, asset, chunkSize, totalChunks);
 
     if (!audited) {
       return {
