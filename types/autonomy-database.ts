@@ -65,12 +65,20 @@ export type NextBestAction = {
   updated_at: string;
 };
 
+export type AutomationRuntimeSecret = {
+  key: string;
+  secret_hash: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type AutonomyDatabase = {
   public: {
     Tables: {
       audience_interactions: Table<AudienceInteraction>;
       marketing_opportunities: Table<MarketingOpportunity>;
       next_best_actions: Table<NextBestAction>;
+      automation_runtime_secrets: Table<AutomationRuntimeSecret>;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
