@@ -9,9 +9,11 @@ const files = [
   "lib/marketing/radar.ts",
   "lib/marketing/next-best-action.ts",
   "lib/marketing/cron-auth.ts",
+  "lib/marketing/free-content-factory.ts",
   "lib/marketing/channels/instagram.ts",
   "lib/marketing/channels/tiktok.ts",
   "lib/marketing/channels/youtube.ts",
+  "app/api/cron/content-factory/route.ts",
   "app/studio/(protected)/audience/page.tsx",
   "app/studio/(protected)/autopilot/page.tsx",
   "supabase/migrations/20260821214500_autonomous_marketing_os.sql",
@@ -73,29 +75,49 @@ test("published content feeds the measurement and learning loop", async () => {
   assert.ok(automation.includes("generate_winner_derivatives"));
 });
 
-test("the automation cycle senses before ranking next actions", async () => {
+test("the lightweight automation cycle senses before ranking next actions", async () => {
   const cron = await readFile("app/api/cron/marketing/route.ts", "utf8");
+  const publication = cron.indexOf("processDuePublicationJobs()");
   const audience = cron.indexOf("syncAudienceInteractions()");
   const radar = cron.indexOf("refreshMarketingRadarIfDue()");
   const decision = cron.indexOf("refreshNextBestActions()");
-  assert.ok(audience > 0 && radar > audience && decision > radar);
+  assert.ok(publication > 0 && audience > publication && radar > audience && decision > radar);
+  assert.equal(cron.includes("fillOneMissingScheduledAsset"), false);
+  assert.ok(cron.includes("export const maxDuration = 55"));
+
   const audienceCode = await readFile("lib/marketing/audience.ts", "utf8");
   assert.ok(audienceCode.includes("Replies are never auto-sent") === false);
   assert.ok(audienceCode.includes("sendAudienceReply"));
   assert.ok(audienceCode.includes("MAX_REPLY_DRAFTS_PER_CYCLE"));
 });
 
-test("five-minute scheduler self-provisions a Vault secret without requiring Vercel env", async () => {
+test("Hobby-safe scheduler self-provisions a Vault secret and separates heavy work", async () => {
   const route = await readFile("app/api/cron/marketing/route.ts", "utf8");
+  const factoryRoute = await readFile("app/api/cron/content-factory/route.ts", "utf8");
   const auth = await readFile("lib/marketing/cron-auth.ts", "utf8");
   const provisioning = await readFile("supabase/cron/marketing-automation.sql", "utf8");
+  const factory = await readFile("lib/marketing/free-content-factory.ts", "utf8");
+
   assert.ok(route.includes("authorizeMarketingCron(request)"));
+  assert.ok(factoryRoute.includes("authorizeMarketingCron(request)"));
+  assert.ok(factoryRoute.includes("fillOneMissingScheduledAsset()"));
+  assert.ok(factoryRoute.includes("export const maxDuration = 55"));
   assert.ok(auth.includes('from("automation_runtime_secrets")'));
   assert.ok(auth.includes('process.env.CRON_SECRET'));
   assert.ok(provisioning.includes("vault.create_secret"));
   assert.ok(provisioning.includes("vault.update_secret"));
   assert.ok(provisioning.includes("extensions.digest(v_secret, 'sha256')"));
-  assert.ok(provisioning.includes("'*/5 * * * *'"));
-  assert.ok(provisioning.includes("timeout_milliseconds := 300000"));
+  assert.ok(provisioning.includes("'*/15 * * * *'"));
+  assert.ok(provisioning.includes("'17 */6 * * *'"));
+  assert.ok(provisioning.includes("timeout_milliseconds := 50000"));
+  assert.ok(provisioning.includes("atlas-marketing-every-5-min"));
+  assert.equal(provisioning.includes("'*/5 * * * *'"), false);
   assert.equal(provisioning.includes("the same value as Vercel CRON_SECRET"), false);
+
+  assert.ok(factory.includes("const DAILY_RENDER_LIMIT = 2"));
+  assert.ok(factory.includes("const MONTHLY_RENDER_LIMIT = 40"));
+  assert.ok(factory.includes("const COMPOSITION_HORIZON_HOURS = 36"));
+  assert.ok(factory.includes('provider: "atlas-free-composer"'));
+  assert.ok(factory.includes('outcome: "free_quota_exhausted"'));
+  assert.ok(factory.includes("Atlas will not use a paid fallback"));
 });
