@@ -7,9 +7,12 @@ import { createServiceClient } from "@/lib/supabase/service";
 import type { Json } from "@/types/database";
 
 const SANDBOX_NAME = "atlas-free-content-factory";
-const SANDBOX_TIMEOUT_MS = 10 * 60 * 1000;
+const SANDBOX_TIMEOUT_MS = 55 * 1000;
 const OUTPUT_SECONDS = 15;
 const BUCKET = "public-media";
+const DAILY_RENDER_LIMIT = 2;
+const MONTHLY_RENDER_LIMIT = 40;
+const COMPOSITION_HORIZON_HOURS = 36;
 
 const TEMPLATES = [
   "deep_zoom",
@@ -47,6 +50,40 @@ function filterFor(template: Template) {
   if (template === "club_flash") return `${base};[bg][cover]overlay=(W-w)/2:(H-h)/2,eq=brightness='if(lt(mod(t,2),0.08),0.08,0)':eval=frame:saturation=1.15,format=yuv420p[v]`;
   if (template === "soft_focus") return `${base};[bg]gblur=sigma=18[bg2];[cover]eq=saturation=.92:contrast=.98[art];[bg2][art]overlay=(W-w)/2:(H-h)/2,vignette=PI/4,format=yuv420p[v]`;
   return `${base};[bg][cover]overlay=(W-w)/2:(H-h)/2,drawbox=x=74:y=434:w=932:h=932:color=white@0.16:t=2,format=yuv420p[v]`;
+}
+
+function utcDayStart(now = new Date()) {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
+}
+
+function utcMonthStart(now = new Date()) {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+}
+
+async function composerQuota() {
+  const marketing = createMarketingServiceClient();
+  const now = new Date();
+  const base = () => marketing.from("generation_runs")
+    .select("id", { count: "exact", head: true })
+    .eq("provider", "atlas-free-composer")
+    .eq("status", "completed");
+
+  const [daily, monthly] = await Promise.all([
+    base().gte("created_at", utcDayStart(now)),
+    base().gte("created_at", utcMonthStart(now)),
+  ]);
+  if (daily.error) throw new Error(daily.error.message);
+  if (monthly.error) throw new Error(monthly.error.message);
+
+  const dailyUsed = daily.count ?? 0;
+  const monthlyUsed = monthly.count ?? 0;
+  return {
+    dailyUsed,
+    monthlyUsed,
+    dailyLimit: DAILY_RENDER_LIMIT,
+    monthlyLimit: MONTHLY_RENDER_LIMIT,
+    allowed: dailyUsed < DAILY_RENDER_LIMIT && monthlyUsed < MONTHLY_RENDER_LIMIT,
+  };
 }
 
 async function commandError(command: Awaited<ReturnType<Sandbox["runCommand"]>>) {
@@ -148,6 +185,11 @@ async function render({
 }
 
 export async function composeFreeSocialAsset(ownerId: string, contentItemId: string) {
+  const quota = await composerQuota();
+  if (!quota.allowed) {
+    throw new Error(`Free composer quota exhausted (${quota.dailyUsed}/${quota.dailyLimit} today, ${quota.monthlyUsed}/${quota.monthlyLimit} this month). Atlas will not use a paid fallback.`);
+  }
+
   const marketing = createMarketingServiceClient();
   const db = createServiceClient();
   const { data: item, error: itemError } = await marketing.from("content_items")
@@ -205,7 +247,11 @@ export async function composeFreeSocialAsset(ownerId: string, contentItemId: str
     quality_gate_passed: true,
     quality_score: 1,
     quality_failures: [],
-    metadata: asJson({ freeComposition: true, sandbox: SANDBOX_NAME }),
+    metadata: asJson({
+      freeComposition: true,
+      sandbox: SANDBOX_NAME,
+      freeTierPolicy: { dailyLimit: DAILY_RENDER_LIMIT, monthlyLimit: MONTHLY_RENDER_LIMIT },
+    }),
   }).select("id").single();
   if (runError || !run) throw new Error(runError?.message || "Could not record free composition provenance.");
 
@@ -254,8 +300,14 @@ export async function composeFreeSocialAsset(ownerId: string, contentItemId: str
 
 export async function fillOneMissingScheduledAsset() {
   if (!sandboxAvailable()) return { outcome: "sandbox_unavailable" as const };
+
+  const quota = await composerQuota();
+  if (!quota.allowed) {
+    return { outcome: "free_quota_exhausted" as const, ...quota };
+  }
+
   const marketing = createMarketingServiceClient();
-  const horizon = new Date(Date.now() + 7 * 86_400_000).toISOString();
+  const horizon = new Date(Date.now() + COMPOSITION_HORIZON_HOURS * 3_600_000).toISOString();
   const { data, error } = await marketing.from("content_items")
     .select("id,owner_id,release_id,scheduled_at,asset_url,status")
     .is("asset_url", null)
@@ -267,7 +319,7 @@ export async function fillOneMissingScheduledAsset() {
     .limit(1)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  if (!data) return { outcome: "nothing_missing" as const };
+  if (!data) return { outcome: "nothing_missing" as const, ...quota };
   try {
     const result = await composeFreeSocialAsset(data.owner_id, data.id);
     return { outcome: "composed" as const, contentItemId: data.id, ...result };
