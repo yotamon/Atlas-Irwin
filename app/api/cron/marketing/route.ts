@@ -10,6 +10,18 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
+async function runStep<T>(name: string, task: () => Promise<T>) {
+  try {
+    return { ok: true as const, value: await task() };
+  } catch (error) {
+    console.error(`[marketing-cron] ${name} failed`, error);
+    return {
+      ok: false as const,
+      error: error instanceof Error ? error.message : `${name} failed.`,
+    };
+  }
+}
+
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET?.trim();
   if (!secret) {
@@ -19,19 +31,23 @@ export async function GET(request: Request) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  try {
-    const freeAsset = await fillOneMissingScheduledAsset();
-    const publications = await processDuePublicationJobs();
-    const outreach = await processDueOutreachEnrollments();
-    const automation = await runMarketingAutomationCycle();
-    const audience = await syncAudienceInteractions();
-    const radar = await refreshMarketingRadarIfDue();
-    const nextBestActions = await refreshNextBestActions();
-    return Response.json({ ok: true, freeAsset, publications, outreach, automation, audience, radar, nextBestActions });
-  } catch (error) {
-    return Response.json(
-      { ok: false, error: error instanceof Error ? error.message : "Marketing automation failed." },
-      { status: 500 },
-    );
-  }
+  const freeAsset = await runStep("free content factory", () => fillOneMissingScheduledAsset());
+  const publications = await runStep("publication queue", () => processDuePublicationJobs());
+  const outreach = await runStep("outreach queue", () => processDueOutreachEnrollments());
+  const automation = await runStep("marketing event automation", () => runMarketingAutomationCycle());
+  const audience = await runStep("audience sync", () => syncAudienceInteractions());
+  const radar = await runStep("marketing radar", () => refreshMarketingRadarIfDue());
+  const nextBestActions = await runStep("next best actions", () => refreshNextBestActions());
+
+  const results = { freeAsset, publications, outreach, automation, audience, radar, nextBestActions };
+  const failures = Object.entries(results)
+    .filter(([, result]) => !result.ok)
+    .map(([name, result]) => ({ name, error: "error" in result ? result.error : "Unknown failure." }));
+
+  return Response.json({
+    ok: failures.length === 0,
+    partial: failures.length > 0,
+    failures,
+    ...results,
+  });
 }
