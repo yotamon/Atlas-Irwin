@@ -33,10 +33,10 @@ jobs:
       - run: npm run lint
 
       - name: Validate media worker Python
-        run: python -m py_compile services/media-worker/app/main.py services/media-worker/app/music_intelligence.py
+        run: python -m py_compile services/media-worker/app/main.py services/media-worker/app/music_intelligence.py services/media-worker/app/runner.py
 
-      - name: Validate Media Worker deploy script
-        run: node --check scripts/deploy-media-worker.mjs
+      - name: Validate Media Worker check script
+        run: node --check scripts/check-media-worker.mjs
 
       - name: Build
         run: npm run build

@@ -1,19 +1,38 @@
-import { timingSafeEqual } from "node:crypto";
-import { NextResponse } from "next/server";
+import { createHash, timingSafeEqual } from "node:crypto";
+import { after, NextResponse } from "next/server";
+import {
+  MEDIA_WORKER_CALLBACK_HASH_KEY,
+  scheduleMediaWorkerSandboxCleanup,
+} from "@/lib/media-worker/sandbox";
 import { createServiceClient } from "@/lib/supabase/service";
 import { asGrowthClient } from "@/lib/studio/growth-db";
 import type { Json } from "@/types/database";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
-function authorized(request: Request) {
-  const secret = process.env.MEDIA_WORKER_SECRET?.trim();
+function safeEqual(actual: string, expected: string) {
+  const actualBuffer = Buffer.from(actual);
+  const expectedBuffer = Buffer.from(expected);
+  return actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer);
+}
+
+function authorized(request: Request, analysis: Record<string, unknown>) {
   const authorization = request.headers.get("authorization") || "";
-  if (!secret || !authorization.startsWith("Bearer ")) return false;
-  const actual = Buffer.from(authorization.slice(7));
-  const expected = Buffer.from(secret);
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
+  if (!authorization.startsWith("Bearer ")) return false;
+  const token = authorization.slice(7);
+  if (!token) return false;
+  const expectedHash = analysis[MEDIA_WORKER_CALLBACK_HASH_KEY];
+  if (typeof expectedHash !== "string" || expectedHash.length !== 64) return false;
+  const actualHash = createHash("sha256").update(token).digest("hex");
+  return safeEqual(actualHash, expectedHash);
+}
+
+function withoutCallbackCredential(value: Record<string, unknown>) {
+  const result = { ...value };
+  delete result[MEDIA_WORKER_CALLBACK_HASH_KEY];
+  return result;
 }
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -29,6 +48,9 @@ function clamp(value: number, min = 0, max = 100) {
 }
 function json(value: unknown) {
   return value as Json;
+}
+function scheduleCleanup() {
+  after(scheduleMediaWorkerSandboxCleanup());
 }
 
 function topHook(musicMap: Record<string, unknown>) {
@@ -58,8 +80,6 @@ function topHook(musicMap: Record<string, unknown>) {
     };
   }
 
-  // Legacy v1 compatibility only. New v2 analysis never creates a section whose label is
-  // simply the loudest part, so this path disappears after old maps are upgraded.
   const sections = array(musicMap.sections).map(record);
   const legacy = sections.find((section) => section.type === "hook")
     ?? sections.reduce<Record<string, unknown> | null>(
@@ -76,14 +96,15 @@ function topHook(musicMap: Record<string, unknown>) {
 }
 
 export async function POST(request: Request) {
-  if (!authorized(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const payload = record(await request.json().catch(() => null));
   const jobId = typeof payload.job_id === "string" ? payload.job_id : "";
   const separator = jobId.indexOf(":");
   const trackId = separator >= 0 ? jobId.slice(0, separator) : jobId;
   const requestId = separator >= 0 ? jobId.slice(separator + 1) : null;
   const status = typeof payload.status === "string" ? payload.status : "";
-  if (!trackId || !["running","completed","failed"].includes(status)) return NextResponse.json({ error: "Invalid callback" }, { status: 400 });
+  if (!trackId || !["running", "completed", "failed"].includes(status)) {
+    return NextResponse.json({ error: "Invalid callback" }, { status: 400 });
+  }
 
   const db = createServiceClient();
   const growth = asGrowthClient(db);
@@ -94,6 +115,9 @@ export async function POST(request: Request) {
   const currentRequestId = typeof currentAnalysis.request_id === "string" ? currentAnalysis.request_id : null;
   if (currentRequestId && requestId !== currentRequestId) {
     return NextResponse.json({ ok: true, stale: true });
+  }
+  if (!authorized(request, currentAnalysis)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const callbackRequestId = requestId ?? currentRequestId;
 
@@ -107,9 +131,17 @@ export async function POST(request: Request) {
   if (status === "failed") {
     const message = typeof payload.error === "string" ? payload.error : "Audio analysis failed";
     const { error } = await growth.from("track_vault").update({
-      analysis: json({ ...currentAnalysis, status: "failed", request_id: callbackRequestId, message, completed_at: new Date().toISOString() }),
+      analysis: json({
+        ...withoutCallbackCredential(currentAnalysis),
+        status: "failed",
+        request_id: callbackRequestId,
+        message,
+        completed_at: new Date().toISOString(),
+      }),
     }).eq("id", track.id);
-    return error ? NextResponse.json({ error: error.message }, { status: 500 }) : NextResponse.json({ ok: true });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    scheduleCleanup();
+    return NextResponse.json({ ok: true });
   }
 
   const result = record(payload.result);
@@ -159,6 +191,7 @@ export async function POST(request: Request) {
       request_id: callbackRequestId,
       completed_at: new Date().toISOString(),
       source: "media_worker",
+      runtime: "vercel_sandbox",
       music_intelligence_version: number(musicMap.version, 1),
       analysis_engine: record(musicMap.analysis).engine ?? null,
       semantic_structure: semanticStructure,
@@ -178,5 +211,6 @@ export async function POST(request: Request) {
     }),
   }).eq("id", track.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  scheduleCleanup();
   return NextResponse.json({ ok: true });
 }

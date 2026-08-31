@@ -1,42 +1,28 @@
 import "server-only";
 
+import { dispatchMediaWorkerJob, mediaWorkerReadiness } from "@/lib/media-worker/sandbox";
 import { getSiteUrl } from "@/lib/site-url";
 
-function workerUrl() {
-  return process.env.MEDIA_WORKER_URL?.trim().replace(/\/$/, "") || null;
-}
-
-function workerSecret() {
-  return process.env.MEDIA_WORKER_SECRET?.trim() || null;
-}
-
 export function vaultAnalysisReadiness() {
-  return { configured: Boolean(workerUrl() && workerSecret()) };
+  return { configured: mediaWorkerReadiness().configured };
 }
 
-export async function queueVaultAudioAnalysis(input: { trackId: string; audioUrl: string; requestId?: string }) {
-  const base = workerUrl();
-  const secret = workerSecret();
-  if (!base || !secret) throw new Error("Media Worker is not configured.");
+export async function queueVaultAudioAnalysis(input: {
+  trackId: string;
+  audioUrl: string;
+  callbackToken: string;
+  requestId?: string;
+}) {
+  if (!vaultAnalysisReadiness().configured) {
+    throw new Error("Media Worker is not available in this deployment.");
+  }
   const callbackUrl = `${getSiteUrl()}/api/studio/growth/audio-callback`;
   const jobId = input.requestId ? `${input.trackId}:${input.requestId}` : input.trackId;
-  const response = await fetch(`${base}/v1/jobs`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${secret}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      job_id: jobId,
-      job_type: "analyze_audio",
-      payload: { audio_url: input.audioUrl },
-      callback_url: callbackUrl,
-      callback_token: secret,
-    }),
+  return dispatchMediaWorkerJob({
+    jobId,
+    jobType: "analyze_audio",
+    payload: { audio_url: input.audioUrl },
+    callbackUrl,
+    callbackToken: input.callbackToken,
   });
-  const result = await response.json().catch(() => ({})) as Record<string, unknown>;
-  if (!response.ok) {
-    throw new Error(typeof result.detail === "string" ? result.detail : `Media Worker dispatch failed (${response.status}).`);
-  }
-  return result;
 }

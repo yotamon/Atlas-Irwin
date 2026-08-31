@@ -1,5 +1,9 @@
-import { timingSafeEqual } from "node:crypto";
-import { NextResponse } from "next/server";
+import { createHash, timingSafeEqual } from "node:crypto";
+import { after, NextResponse } from "next/server";
+import {
+  MEDIA_WORKER_CALLBACK_HASH_KEY,
+  scheduleMediaWorkerSandboxCleanup,
+} from "@/lib/media-worker/sandbox";
 import { createServiceClient } from "@/lib/supabase/service";
 import {
   registerWorkerRenderAsset,
@@ -9,14 +13,23 @@ import type { Json } from "@/types/database";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
-function authorized(request: Request) {
-  const secret = process.env.MEDIA_WORKER_SECRET?.trim();
+function safeEqual(actual: string, expected: string) {
+  const actualBuffer = Buffer.from(actual);
+  const expectedBuffer = Buffer.from(expected);
+  return actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer);
+}
+
+function authorized(request: Request, requestPayload: Record<string, unknown>) {
   const authorization = request.headers.get("authorization") || "";
-  if (!secret || !authorization.startsWith("Bearer ")) return false;
-  const actual = Buffer.from(authorization.slice(7));
-  const expected = Buffer.from(secret);
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
+  if (!authorization.startsWith("Bearer ")) return false;
+  const token = authorization.slice(7);
+  if (!token) return false;
+  const expectedHash = requestPayload[MEDIA_WORKER_CALLBACK_HASH_KEY];
+  if (typeof expectedHash !== "string" || expectedHash.length !== 64) return false;
+  const actualHash = createHash("sha256").update(token).digest("hex");
+  return safeEqual(actualHash, expectedHash);
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -27,6 +40,10 @@ function record(value: unknown): Record<string, unknown> {
 
 function json(value: unknown): Json {
   return value as Json;
+}
+
+function scheduleCleanup() {
+  after(scheduleMediaWorkerSandboxCleanup());
 }
 
 async function markWorkerTerminal(
@@ -46,7 +63,6 @@ async function markWorkerTerminal(
 }
 
 export async function POST(request: Request) {
-  if (!authorized(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const body = await request.json().catch(() => null) as unknown;
   const payload = record(body);
   const jobId = typeof payload.job_id === "string" ? payload.job_id : "";
@@ -64,9 +80,13 @@ export async function POST(request: Request) {
     .single();
   if (jobError || !job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
 
-  // Ignore late/out-of-order callbacks only after the full terminal reconciliation has
-  // completed. Terminal worker state is the durable commit marker.
+  const requestPayload = record(job.request_payload);
+  if (!authorized(request, requestPayload)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   if (["completed", "failed"].includes(job.status)) {
+    scheduleCleanup();
     return NextResponse.json({ ok: true, duplicate: true });
   }
 
@@ -78,8 +98,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  const requestPayload = record(job.request_payload);
-
   if (status === "failed") {
     try {
       if (job.job_type === "analyze_audio") {
@@ -90,8 +108,6 @@ export async function POST(request: Request) {
         }).eq("id", job.project_id);
         if (error) throw new Error(error.message);
       } else if (job.job_type === "extract_frame") {
-        // Thumbnail extraction is derived, free worker work. It must never demote a completed
-        // master; preserve the error for retry/diagnostics only.
         const { error } = await db.from("music_video_projects")
           .update({ last_error: callbackError || "Thumbnail extraction failed" })
           .eq("id", job.project_id);
@@ -124,6 +140,7 @@ export async function POST(request: Request) {
         }
       }
       await markWorkerTerminal(db, job.id, "failed", result, callbackError || "Worker job failed");
+      scheduleCleanup();
       return NextResponse.json({ ok: true });
     } catch (error) {
       return NextResponse.json({ error: error instanceof Error ? error.message : "Worker failure reconciliation failed" }, { status: 500 });
@@ -143,6 +160,7 @@ export async function POST(request: Request) {
       }).eq("id", job.project_id);
       if (projectError) throw new Error(projectError.message);
       await markWorkerTerminal(db, job.id, "completed", result, null);
+      scheduleCleanup();
       return NextResponse.json({ ok: true });
     } catch (error) {
       return NextResponse.json({ error: error instanceof Error ? error.message : "Audio analysis reconciliation failed" }, { status: 500 });
@@ -177,6 +195,7 @@ export async function POST(request: Request) {
         .eq("id", job.project_id);
       if (projectError) throw new Error(projectError.message);
       await markWorkerTerminal(db, job.id, "completed", { ...result, media_asset_id: asset.id }, null);
+      scheduleCleanup();
       return NextResponse.json({ ok: true });
     } catch (error) {
       return NextResponse.json({ error: error instanceof Error ? error.message : "Thumbnail reconciliation failed" }, { status: 500 });
@@ -230,6 +249,7 @@ export async function POST(request: Request) {
     }
 
     await markWorkerTerminal(db, job.id, "completed", result, null);
+    scheduleCleanup();
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Render reconciliation failed" }, { status: 500 });

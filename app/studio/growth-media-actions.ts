@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { createMediaWorkerCallbackCredential, MEDIA_WORKER_CALLBACK_HASH_KEY } from "@/lib/media-worker/sandbox";
 import { asGrowthClient } from "@/lib/studio/growth-db";
 import { queueVaultAudioAnalysis, vaultAnalysisReadiness } from "@/lib/studio/vault-analysis";
 import type { Json } from "@/types/database";
@@ -26,16 +27,22 @@ async function dispatchAnalysis(trackId: string, audioUrl: string) {
   const growth = asGrowthClient(supabase);
   if (!vaultAnalysisReadiness().configured) {
     await growth.from("track_vault").update({
-      analysis: json({ status: "unavailable", message: "Media Worker is not configured." }),
+      analysis: json({ status: "unavailable", message: "Vercel Sandbox is unavailable in this deployment." }),
     }).eq("id", trackId).eq("owner_id", user.id);
     return { queued: false };
   }
   const requestId = randomUUID();
+  const credential = createMediaWorkerCallbackCredential();
   await growth.from("track_vault").update({
-    analysis: json({ status: "queued", request_id: requestId, requested_at: new Date().toISOString() }),
+    analysis: json({
+      status: "queued",
+      request_id: requestId,
+      requested_at: new Date().toISOString(),
+      [MEDIA_WORKER_CALLBACK_HASH_KEY]: credential.hash,
+    }),
   }).eq("id", trackId).eq("owner_id", user.id);
   try {
-    await queueVaultAudioAnalysis({ trackId, audioUrl, requestId });
+    await queueVaultAudioAnalysis({ trackId, audioUrl, requestId, callbackToken: credential.token });
     return { queued: true };
   } catch (error) {
     await growth.from("track_vault").update({
