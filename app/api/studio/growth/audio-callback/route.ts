@@ -78,7 +78,10 @@ function topHook(musicMap: Record<string, unknown>) {
 export async function POST(request: Request) {
   if (!authorized(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const payload = record(await request.json().catch(() => null));
-  const trackId = typeof payload.job_id === "string" ? payload.job_id : "";
+  const jobId = typeof payload.job_id === "string" ? payload.job_id : "";
+  const separator = jobId.indexOf(":");
+  const trackId = separator >= 0 ? jobId.slice(0, separator) : jobId;
+  const requestId = separator >= 0 ? jobId.slice(separator + 1) : null;
   const status = typeof payload.status === "string" ? payload.status : "";
   if (!trackId || !["running","completed","failed"].includes(status)) return NextResponse.json({ error: "Invalid callback" }, { status: 400 });
 
@@ -87,14 +90,25 @@ export async function POST(request: Request) {
   const { data: track, error: lookupError } = await growth.from("track_vault").select("*").eq("id", trackId).maybeSingle();
   if (lookupError || !track) return NextResponse.json({ error: "Vault track not found" }, { status: 404 });
 
+  const currentAnalysis = record(track.analysis);
+  const currentRequestId = typeof currentAnalysis.request_id === "string" ? currentAnalysis.request_id : null;
+  if (currentRequestId && requestId !== currentRequestId) {
+    return NextResponse.json({ ok: true, stale: true });
+  }
+  const callbackRequestId = requestId ?? currentRequestId;
+
   if (status === "running") {
-    const { error } = await growth.from("track_vault").update({ analysis: json({ status: "running", started_at: new Date().toISOString() }) }).eq("id", track.id);
+    const { error } = await growth.from("track_vault").update({
+      analysis: json({ ...currentAnalysis, status: "running", request_id: callbackRequestId, started_at: new Date().toISOString() }),
+    }).eq("id", track.id);
     return error ? NextResponse.json({ error: error.message }, { status: 500 }) : NextResponse.json({ ok: true });
   }
 
   if (status === "failed") {
     const message = typeof payload.error === "string" ? payload.error : "Audio analysis failed";
-    const { error } = await growth.from("track_vault").update({ analysis: json({ status: "failed", message, completed_at: new Date().toISOString() }) }).eq("id", track.id);
+    const { error } = await growth.from("track_vault").update({
+      analysis: json({ ...currentAnalysis, status: "failed", request_id: callbackRequestId, message, completed_at: new Date().toISOString() }),
+    }).eq("id", track.id);
     return error ? NextResponse.json({ error: error.message }, { status: 500 }) : NextResponse.json({ ok: true });
   }
 
@@ -142,6 +156,7 @@ export async function POST(request: Request) {
     audio_profile: json(musicMap),
     analysis: json({
       status: "completed",
+      request_id: callbackRequestId,
       completed_at: new Date().toISOString(),
       source: "media_worker",
       music_intelligence_version: number(musicMap.version, 1),
