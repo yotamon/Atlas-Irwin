@@ -5,46 +5,46 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const EXISTING_SMOKE_SANDBOX = "atlas-media-worker-bootstrap-smoke-b7a402cd84";
-
-function revision() {
-  const value = process.env.VERCEL_GIT_COMMIT_SHA?.trim() || "";
-  return /^[a-f0-9]{40}$/i.test(value) ? value : "main";
-}
-
-async function readInference(sandbox: Sandbox) {
-  const command = await sandbox.runCommand({
-    cmd: "bash",
-    args: ["-lc", `ROOT=/workspace/atlas-bootstrap-smoke
-status=$(cat "$ROOT/inference-status" 2>/dev/null || echo not_started)
-printf '%s\n' "$status"
-tail -c 9000 "$ROOT/inference.log" 2>/dev/null || true`],
-  });
-  const output = await command.stdout();
-  const [status = "unknown", ...logLines] = output.trim().split("\n");
-  return { status, log: logLines.join("\n") };
-}
-
 export async function GET() {
   if (process.env.VERCEL_ENV !== "preview") {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  const sandbox = await Sandbox.create({
+    image: "vercel/sandbox/ubuntu",
+    resources: { vcpus: 1 },
+    timeout: 60_000,
+    persistent: false,
+  });
+
   try {
-    const sandbox = await Sandbox.get({ name: EXISTING_SMOKE_SANDBOX });
-    const result = await readInference(sandbox);
-    if (result.status !== "running") await sandbox.stop();
-    console.log("Atlas semantic inference smoke result", JSON.stringify(result));
+    const command = await sandbox.runCommand({
+      cmd: "bash",
+      args: ["-lc", `set -e
+printf 'python='; command -v python3
+python3 --version
+python3 - <<'PY'
+import bz2
+import lzma
+import sqlite3
+import ssl
+print('SYSTEM_LIBS_READY')
+print('bz2', bz2.__file__)
+PY
+printf 'pip='; command -v pip3 || true
+printf 'uv='; command -v uv || true
+python3 -m ensurepip --version || true`],
+    });
+    const stdout = await command.stdout();
+    const stderr = await command.stderr();
     return NextResponse.json({
-      ok: result.status === "ready" && result.log.includes("INFERENCE_READY"),
-      action: result.status === "running" ? "still_running" : "verified_and_stopped",
-      sandbox: EXISTING_SMOKE_SANDBOX,
-      revision: revision(),
-      ...result,
-    }, { status: result.status === "failed" ? 500 : 200 });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error("Atlas semantic inference smoke read failed", message);
-    return NextResponse.json({ ok: false, status: "unavailable", error: message }, { status: 500 });
+      ok: command.exitCode === 0 && stdout.includes("SYSTEM_LIBS_READY"),
+      exitCode: command.exitCode,
+      stdout,
+      stderr,
+      image: sandbox.image,
+    }, { status: command.exitCode === 0 ? 200 : 500 });
+  } finally {
+    await sandbox.stop().catch(() => undefined);
   }
 }
