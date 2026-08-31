@@ -4,9 +4,9 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { createMediaWorkerCallbackCredential, MEDIA_WORKER_CALLBACK_HASH_KEY } from "@/lib/media-worker/sandbox";
+import { kickMediaWorkerQueue } from "@/lib/media-worker/queue";
 import { asGrowthClient } from "@/lib/studio/growth-db";
-import { queueVaultAudioAnalysis, vaultAnalysisReadiness } from "@/lib/studio/vault-analysis";
+import { vaultAnalysisReadiness } from "@/lib/studio/vault-analysis";
 import type { Json } from "@/types/database";
 
 function value(form: FormData, key: string) {
@@ -15,14 +15,25 @@ function value(form: FormData, key: string) {
 function json(value: unknown) {
   return value as Json;
 }
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
 function fileTitle(input: string) {
   return input.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
 }
 function hasMusicMap(value: Json) {
   return Boolean(value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length);
 }
+function analysisMatchesAsset(profile: Json, asset: { id: string; public_url: string }) {
+  if (!hasMusicMap(profile)) return false;
+  const map = record(profile);
+  if (typeof map.version !== "number" || map.version < 3 || map.source !== "worker") return false;
+  const source = record(map.source_audio);
+  if (typeof source.media_asset_id === "string") return source.media_asset_id === asset.id;
+  return typeof source.url === "string" && source.url === asset.public_url;
+}
 
-async function dispatchAnalysis(trackId: string, audioUrl: string) {
+async function dispatchAnalysis(trackId: string, audioUrl: string, mediaAssetId: string | null) {
   const { supabase, user } = await requireStudioAdmin();
   const growth = asGrowthClient(supabase);
   if (!vaultAnalysisReadiness().configured) {
@@ -32,24 +43,22 @@ async function dispatchAnalysis(trackId: string, audioUrl: string) {
     return { queued: false };
   }
   const requestId = randomUUID();
-  const credential = createMediaWorkerCallbackCredential();
-  await growth.from("track_vault").update({
+  const { error } = await growth.from("track_vault").update({
     analysis: json({
       status: "queued",
       request_id: requestId,
       requested_at: new Date().toISOString(),
-      [MEDIA_WORKER_CALLBACK_HASH_KEY]: credential.hash,
+      source_audio_url: audioUrl,
+      source_media_asset_id: mediaAssetId,
+      music_intelligence_version: 3,
     }),
   }).eq("id", trackId).eq("owner_id", user.id);
-  try {
-    await queueVaultAudioAnalysis({ trackId, audioUrl, requestId, callbackToken: credential.token });
-    return { queued: true };
-  } catch (error) {
-    await growth.from("track_vault").update({
-      analysis: json({ status: "failed", request_id: requestId, message: error instanceof Error ? error.message : "Audio analysis dispatch failed." }),
-    }).eq("id", trackId).eq("owner_id", user.id);
-    throw error;
-  }
+  if (error) throw new Error(error.message);
+
+  // The request is durable before dispatch. A busy worker leaves it queued and the next
+  // terminal callback drains it automatically rather than turning contention into failure.
+  await kickMediaWorkerQueue().catch(() => undefined);
+  return { queued: true };
 }
 
 export async function createVaultTrackFromMedia(form: FormData) {
@@ -84,7 +93,7 @@ export async function createVaultTrackFromMedia(form: FormData) {
     analysis: json({ status: "pending" }),
   }).select("*").single();
   if (error || !track) throw new Error(error?.message || "Could not add the master to the Vault.");
-  await dispatchAnalysis(track.id, asset.public_url);
+  await dispatchAnalysis(track.id, asset.public_url, asset.id);
   revalidatePath("/studio/growth");
   revalidatePath("/studio");
   return { id: track.id, deduplicated: false };
@@ -159,7 +168,7 @@ export async function attachReleaseMasterFromMedia(form: FormData) {
     if (error) throw new Error(error.message);
   }
 
-  const reusableAnalysis = Boolean(assetVault && hasMusicMap(assetVault.audio_profile));
+  const reusableAnalysis = Boolean(assetVault && analysisMatchesAsset(assetVault.audio_profile, asset));
   const vaultStatus = release.publish_state === "live" || release.status === "Live" ? "released" : release.status === "Scheduled" ? "scheduled" : "release_candidate";
   const vaultValues = {
     linked_release_id: release.id,
@@ -171,7 +180,7 @@ export async function attachReleaseMasterFromMedia(form: FormData) {
     duration_seconds: durationSeconds ?? canonicalTrack.duration,
     notes: canonicalTrack.notes,
     source: "import" as const,
-    release_readiness: reusableAnalysis && assetVault ? Math.max(90, assetVault.release_readiness) : 90,
+    release_readiness: reusableAnalysis && assetVault ? assetVault.release_readiness : 72,
     hook_start_seconds: reusableAnalysis && assetVault ? assetVault.hook_start_seconds : null,
     hook_end_seconds: reusableAnalysis && assetVault ? assetVault.hook_end_seconds : null,
     hook_strength: reusableAnalysis && assetVault ? assetVault.hook_strength : 50,
@@ -180,7 +189,7 @@ export async function attachReleaseMasterFromMedia(form: FormData) {
     audio_profile: reusableAnalysis && assetVault ? assetVault.audio_profile : json({}),
     analysis: reusableAnalysis && assetVault
       ? assetVault.analysis
-      : json({ status: "pending", requested_from: "release_workspace" }),
+      : json({ status: "pending", requested_from: "release_workspace", music_intelligence_version: 3 }),
   };
 
   const { data: vaultTrack, error: vaultError } = existingVault
@@ -190,7 +199,7 @@ export async function attachReleaseMasterFromMedia(form: FormData) {
 
   const analysisResult = reusableAnalysis
     ? { queued: false }
-    : await dispatchAnalysis(vaultTrack.id, asset.public_url).catch(() => ({ queued: false }));
+    : await dispatchAnalysis(vaultTrack.id, asset.public_url, asset.id);
   revalidatePath(`/studio/releases/${release.id}`);
   revalidatePath("/studio/releases");
   revalidatePath("/studio/growth");
@@ -203,10 +212,10 @@ export async function analyzeVaultTrack(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
   const growth = asGrowthClient(supabase);
   const id = z.uuid().parse(value(form, "id"));
-  const { data: track, error } = await growth.from("track_vault").select("id,audio_url,linked_release_id").eq("id", id).eq("owner_id", user.id).single();
+  const { data: track, error } = await growth.from("track_vault").select("id,audio_url,media_asset_id,linked_release_id").eq("id", id).eq("owner_id", user.id).single();
   if (error || !track) throw new Error(error?.message || "Vault track not found.");
   if (!track.audio_url) throw new Error("Add an audio URL or upload a master before analysis.");
-  await dispatchAnalysis(track.id, track.audio_url);
+  await dispatchAnalysis(track.id, track.audio_url, track.media_asset_id);
   revalidatePath("/studio/growth");
   if (track.linked_release_id) revalidatePath(`/studio/releases/${track.linked_release_id}`);
 }
