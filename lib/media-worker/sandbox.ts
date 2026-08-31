@@ -4,7 +4,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { Sandbox } from "@vercel/sandbox";
 
 export const MEDIA_WORKER_CALLBACK_HASH_KEY = "__atlas_callback_token_sha256";
-const MEDIA_WORKER_RUNTIME_VERSION = 3;
+const MEDIA_WORKER_RUNTIME_VERSION = 4;
 const HOBBY_MAX_SANDBOX_MS = 45 * 60 * 1000;
 const WORKDIR = "/workspace/atlas-media-worker";
 const LOCKDIR = "/tmp/atlas-media-worker.lock";
@@ -31,7 +31,7 @@ export function mediaWorkerReadiness() {
     configured: mediaWorkerSandboxAvailable(),
     runtime: "vercel_sandbox" as const,
     sandboxName: mediaWorkerSandboxName(),
-    workerVersion: 3,
+    workerVersion: 4,
   };
 }
 
@@ -41,10 +41,6 @@ export function createMediaWorkerCallbackCredential() {
     token,
     hash: createHash("sha256").update(token).digest("hex"),
   };
-}
-
-export function mediaWorkerCallbackHash(token: string) {
-  return createHash("sha256").update(token).digest("hex");
 }
 
 async function commandError(command: Awaited<ReturnType<Sandbox["runCommand"]>>) {
@@ -58,54 +54,6 @@ function sandboxDispatchError(error: unknown) {
   }
   if (/already processing|worker is busy/i.test(detail)) return detail;
   return `Vercel Sandbox dispatch failed: ${detail}`;
-}
-
-async function bootstrapWorker(sandbox: Sandbox) {
-  const systemPackages = await sandbox.runCommand({
-    cmd: "bash",
-    args: ["-lc", "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ffmpeg libsndfile1 >/dev/null"],
-    sudo: true,
-  });
-  if (systemPackages.exitCode !== 0) {
-    throw new Error(`Could not install Media Worker system packages: ${(await commandError(systemPackages)).slice(-2000)}`);
-  }
-
-  const revision = sourceRevision();
-  const base = `https://raw.githubusercontent.com/yotamon/Atlas-Irwin/${revision}/services/media-worker`;
-  const bootstrap = await sandbox.runCommand({
-    cmd: "bash",
-    args: ["-lc", `set -euo pipefail
-mkdir -p ${WORKDIR}/app
-python - <<'PY'
-from pathlib import Path
-from urllib.request import urlopen
-
-base = ${JSON.stringify(base)}
-root = Path(${JSON.stringify(WORKDIR)})
-files = {
-    "app/main.py": f"{base}/app/main.py",
-    "app/music_intelligence.py": f"{base}/app/music_intelligence.py",
-    "app/runner.py": f"{base}/app/runner.py",
-    "requirements.txt": f"{base}/requirements.txt",
-}
-for relative, url in files.items():
-    target = root / relative
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(urlopen(url, timeout=30).read())
-PY
-python -m venv ${WORKDIR}/.venv
-${WORKDIR}/.venv/bin/python -m pip install --disable-pip-version-check --upgrade pip setuptools wheel
-${WORKDIR}/.venv/bin/python -m pip install --disable-pip-version-check -r ${WORKDIR}/requirements.txt
-${WORKDIR}/.venv/bin/python - <<'PY'
-import allin1_infer
-print("Atlas Media Worker ready", getattr(allin1_infer, "__version__", "unknown"))
-PY
-ffmpeg -version | head -n 1
-`],
-  });
-  if (bootstrap.exitCode !== 0) {
-    throw new Error(`Could not initialize the Media Worker Sandbox: ${(await commandError(bootstrap)).slice(-3000)}`);
-  }
 }
 
 export async function getMediaWorkerSandbox() {
@@ -125,7 +73,6 @@ export async function getMediaWorkerSandbox() {
       environment: environmentName(),
       version: String(MEDIA_WORKER_RUNTIME_VERSION),
     },
-    onCreate: bootstrapWorker,
   });
 }
 
@@ -156,6 +103,103 @@ async function releaseWorkerLock(sandbox: Sandbox) {
   await sandbox.runCommand("rm", ["-rf", LOCKDIR]).catch(() => undefined);
 }
 
+function detachedWorkerScript(requestPath: string) {
+  const revision = sourceRevision();
+  const base = `https://raw.githubusercontent.com/yotamon/Atlas-Irwin/${revision}/services/media-worker`;
+  return `set -uo pipefail
+REQUEST=${JSON.stringify(requestPath)}
+WORKDIR=${JSON.stringify(WORKDIR)}
+LOCKDIR=${JSON.stringify(LOCKDIR)}
+BASE=${JSON.stringify(base)}
+LOG=/tmp/atlas-media-worker-bootstrap.log
+
+cleanup() {
+  rm -rf "$LOCKDIR"
+}
+trap cleanup EXIT
+
+notify_failed() {
+  detail=$(tail -c 2500 "$LOG" 2>/dev/null || echo "Media Worker bootstrap failed")
+  python - "$REQUEST" "$detail" <<'PY'
+import json
+import sys
+from urllib.request import Request, urlopen
+
+path, detail = sys.argv[1], sys.argv[2]
+try:
+    payload = json.loads(open(path, "r", encoding="utf-8").read())
+    body = json.dumps({
+        "job_id": payload.get("job_id"),
+        "status": "failed",
+        "result": {},
+        "error": f"Media Worker bootstrap failed: {detail[-2200:]}",
+    }).encode("utf-8")
+    request = Request(
+        payload["callback_url"],
+        data=body,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {payload['callback_token']}",
+            "Content-Type": "application/json",
+        },
+    )
+    urlopen(request, timeout=30).read()
+except Exception:
+    pass
+PY
+  rm -f "$REQUEST"
+}
+
+bootstrap() {
+  mkdir -p "$WORKDIR/app"
+  python - "$BASE" "$WORKDIR" <<'PY'
+from pathlib import Path
+import sys
+from urllib.request import urlopen
+
+base, root_value = sys.argv[1], sys.argv[2]
+root = Path(root_value)
+files = {
+    "app/main.py": f"{base}/app/main.py",
+    "app/music_intelligence.py": f"{base}/app/music_intelligence.py",
+    "app/runner.py": f"{base}/app/runner.py",
+    "requirements.txt": f"{base}/requirements.txt",
+}
+for relative, url in files.items():
+    target = root / relative
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(urlopen(url, timeout=30).read())
+PY
+
+  required=$(sha256sum "$WORKDIR/requirements.txt" | cut -d' ' -f1)
+  installed=$(cat "$WORKDIR/.requirements.sha" 2>/dev/null || true)
+  if [ ! -x "$WORKDIR/.venv/bin/python" ] || [ "$required" != "$installed" ]; then
+    rm -rf "$WORKDIR/.venv"
+    python -m venv "$WORKDIR/.venv"
+    "$WORKDIR/.venv/bin/python" -m pip install --disable-pip-version-check --upgrade pip setuptools wheel
+    "$WORKDIR/.venv/bin/python" -m pip install --disable-pip-version-check -r "$WORKDIR/requirements.txt"
+    printf '%s' "$required" > "$WORKDIR/.requirements.sha"
+  fi
+
+  "$WORKDIR/.venv/bin/python" - <<'PY'
+import allin1_infer
+import imageio_ffmpeg
+print("Atlas Media Worker ready", imageio_ffmpeg.get_ffmpeg_exe())
+PY
+}
+
+if ! bootstrap >"$LOG" 2>&1; then
+  notify_failed
+  exit 1
+fi
+
+if ! "$WORKDIR/.venv/bin/python" -m app.runner "$REQUEST" >>"$LOG" 2>&1; then
+  notify_failed
+  exit 1
+fi
+`;
+}
+
 export async function dispatchMediaWorkerJob(input: {
   jobId: string;
   jobType: "analyze_audio" | "extract_frame" | "render_master" | "render_social" | "render_promo" | "render_hook";
@@ -183,9 +227,8 @@ export async function dispatchMediaWorkerJob(input: {
     }]);
 
     const command = await sandbox.runCommand({
-      cmd: `${WORKDIR}/.venv/bin/python`,
-      args: ["-m", "app.runner", requestPath],
-      cwd: WORKDIR,
+      cmd: "bash",
+      args: ["-lc", detachedWorkerScript(requestPath)],
       detached: true,
     });
     if (command.exitCode !== 0) {
