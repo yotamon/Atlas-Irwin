@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import importlib.util
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,10 +9,14 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
-from services.media_worker_import import load_music_intelligence
 
-
-music_intelligence = load_music_intelligence()
+MODULE_PATH = Path(__file__).resolve().parents[1] / "app" / "music_intelligence.py"
+SPEC = importlib.util.spec_from_file_location("atlas_music_intelligence_test_module", MODULE_PATH)
+if SPEC is None or SPEC.loader is None:
+    raise RuntimeError("Could not load Atlas music intelligence module")
+music_intelligence = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = music_intelligence
+SPEC.loader.exec_module(music_intelligence)
 
 
 class TrackIntelligenceV3Test(unittest.TestCase):
