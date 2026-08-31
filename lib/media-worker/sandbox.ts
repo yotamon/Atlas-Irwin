@@ -10,8 +10,7 @@ const WORKDIR = "/workspace/atlas-media-worker";
 const LOCKDIR = "/tmp/atlas-media-worker.lock";
 
 function environmentName() {
-  const env = process.env.VERCEL_ENV?.trim();
-  return env === "production" ? "production" : "preview";
+  return process.env.VERCEL_ENV?.trim() === "production" ? "production" : "preview";
 }
 
 export function mediaWorkerSandboxName() {
@@ -48,8 +47,8 @@ export function mediaWorkerCallbackHash(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
 
-function commandError(command: Awaited<ReturnType<Sandbox["runCommand"]>>) {
-  return command.stderr().then((value) => value.trim());
+async function commandError(command: Awaited<ReturnType<Sandbox["runCommand"]>>) {
+  return (await command.stderr()).trim();
 }
 
 function sandboxDispatchError(error: unknown) {
@@ -62,6 +61,15 @@ function sandboxDispatchError(error: unknown) {
 }
 
 async function bootstrapWorker(sandbox: Sandbox) {
+  const systemPackages = await sandbox.runCommand({
+    cmd: "bash",
+    args: ["-lc", "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ffmpeg libsndfile1 >/dev/null"],
+    sudo: true,
+  });
+  if (systemPackages.exitCode !== 0) {
+    throw new Error(`Could not install Media Worker system packages: ${(await commandError(systemPackages)).slice(-2000)}`);
+  }
+
   const revision = sourceRevision();
   const base = `https://raw.githubusercontent.com/yotamon/Atlas-Irwin/${revision}/services/media-worker`;
   const bootstrap = await sandbox.runCommand({
@@ -90,9 +98,9 @@ ${WORKDIR}/.venv/bin/python -m pip install --disable-pip-version-check --upgrade
 ${WORKDIR}/.venv/bin/python -m pip install --disable-pip-version-check -r ${WORKDIR}/requirements.txt
 ${WORKDIR}/.venv/bin/python - <<'PY'
 import allin1_infer
-import imageio_ffmpeg
-print("Atlas Media Worker ready", getattr(allin1_infer, "__version__", "unknown"), imageio_ffmpeg.get_ffmpeg_exe())
+print("Atlas Media Worker ready", getattr(allin1_infer, "__version__", "unknown"))
 PY
+ffmpeg -version | head -n 1
 `],
   });
   if (bootstrap.exitCode !== 0) {
