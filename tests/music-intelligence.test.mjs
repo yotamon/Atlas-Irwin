@@ -63,14 +63,15 @@ test("master QC measures release-critical audio properties", async () => {
   assert.ok(analyzer.includes("technical_ready"));
 });
 
-test("Studio exposes a playable, explainable track intelligence inspector", async () => {
+test("Studio exposes a playable, explainable v3 production review inspector", async () => {
   const inspector = await readFile("components/studio/video-director/track-intelligence-inspector.tsx", "utf8");
   const workspace = await readFile("components/studio/video-director/project-workspace.tsx", "utf8");
   assert.ok(inspector.includes("<audio"));
-  assert.ok(inspector.includes("hook score"));
-  assert.ok(inspector.includes("Why this hook"));
-  assert.ok(inspector.includes("Social cuts"));
-  assert.ok(inspector.includes("Analysis diagnostics"));
+  assert.ok(inspector.includes("Production intent"));
+  assert.ok(inspector.includes("Master QC"));
+  assert.ok(inspector.includes("Alternate social cuts"));
+  assert.ok(inspector.includes("Analysis confidence"));
+  assert.ok(inspector.includes("Upgrade this track to v3"));
   assert.ok(workspace.includes("TrackIntelligenceInspector"));
 });
 
