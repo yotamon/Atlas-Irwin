@@ -4,6 +4,7 @@ import {
   MEDIA_WORKER_CALLBACK_HASH_KEY,
   scheduleMediaWorkerSandboxCleanup,
 } from "@/lib/media-worker/sandbox";
+import { sanitizeMusicIntelligenceMap } from "@/lib/music-intelligence/sanitize";
 import { createServiceClient } from "@/lib/supabase/service";
 import { asGrowthClient } from "@/lib/studio/growth-db";
 import type { Json } from "@/types/database";
@@ -154,12 +155,13 @@ export async function POST(request: Request) {
   }
 
   const result = record(payload.result);
-  const musicMap = record(result.music_map);
-  if (!Object.keys(musicMap).length) return NextResponse.json({ error: "Worker returned no music map" }, { status: 422 });
-  if (number(musicMap.version, 1) < 3 || !sourceMatchesTrack(musicMap, track)) {
+  const rawMusicMap = record(result.music_map);
+  if (!Object.keys(rawMusicMap).length) return NextResponse.json({ error: "Worker returned no music map" }, { status: 422 });
+  if (number(rawMusicMap.version, 1) < 3 || !sourceMatchesTrack(rawMusicMap, track)) {
     scheduleCleanup();
     return NextResponse.json({ ok: true, stale: true, reason: "source_master_mismatch" });
   }
+  const musicMap = sanitizeMusicIntelligenceMap(rawMusicMap);
 
   const sections = array(musicMap.sections).map(record);
   const hook = topHook(musicMap);
