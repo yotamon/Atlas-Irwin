@@ -1,155 +1,248 @@
-# Atlas Music Intelligence v2
+# Atlas Track Intelligence v3
 
-Music Intelligence is the shared musical understanding layer for Atlas Studio. A track should be analyzed once, inspected by the artist, and then reused by Growth OS, Marketing, Video Director and derived renders.
+Track Intelligence is the canonical musical understanding layer for Atlas Studio. A master is analyzed once, tied to the exact audio that produced the analysis, inspected by the artist, and then reused by Growth OS, Marketing, Content Lab, Video Director and derived renders.
 
-## Goals
+## Production contract
 
-Atlas should answer these questions without asking the artist to manually type timestamps:
+Atlas should answer these questions without requiring manual timestamp hunting:
 
-- What is the real musical structure of this track?
-- Where are the beats and downbeats?
-- Which moments are recurring / memorable rather than merely loud?
-- Which windows work best for 6s, 8s, 15s and 30s short-form content?
-- Where should visual edits land?
-- Can the artist hear every detected section/candidate and verify the system's interpretation?
+- What is the musical structure of this exact master?
+- Where are beats, downbeats, bars and useful phrase boundaries?
+- Which musical ideas recur semantically rather than merely sharing the same chords?
+- Which moment is best for an instant hook, musical identity, groove loop, build/drop, climax or story arc?
+- Which alternatives work best for 6s, 8s, 15s and 30s media?
+- How trustworthy is each part of that interpretation?
+- Is there a technical master problem that should block production?
+- Can the artist audition every decision before Atlas spends generation budget?
 
 ## Pipeline
 
 ```text
 Master / Vault audio
-  -> Media Worker
-  -> standardized PCM WAV timeline
-  -> all-in-one-infer semantic structure + beats + downbeats
-  -> librosa energy / onset / chroma features
-  -> Atlas hook-candidate scoring
-  -> social-cut selection
+  -> durable Media Worker queue (concurrency 1)
+  -> source SHA-256
+  -> lossless 44.1 kHz PCM analysis decode
+  -> All-In-One
+       |-> semantic sections
+       |-> beats / downbeats
+       |-> frame activations
+       `-> semantic embeddings
+  -> librosa temporal / harmonic / rhythm features
+  -> bars + phrase grid with provenance
+  -> purpose-specific candidate ranking
+  -> 6s / 8s / 15s / 30s primary + alternate cuts
+  -> master QC
   -> canonical track_music_intelligence cache
-       |-> Growth OS / Track Vault inspector
-       |-> Marketing audio_timestamp_start/end
-       |-> Video Director music map + storyboard timing
-       `-> hook_15 / promo_30 render windows
+       |-> Growth OS / Vault
+       |-> Content Lab timestamps
+       |-> Marketing creative context
+       |-> Video Director timing
+       `-> derived renders
 ```
 
-## Structural analyzer
+The Media Worker runs only in Vercel Sandbox. Heavy work is serialized through durable Atlas state rather than rejected when the free worker is busy. Terminal callbacks drain the next queued job.
 
-The worker uses `all-in-one-infer` with its default `harmonix-all` ensemble when available. It returns semantic segments such as intro, verse, chorus, bridge, instrumental and solo along with BPM, beats and downbeats.
+## Exact-master identity
 
-Atlas always normalizes source media to a PCM WAV before inference. This keeps timing stable across MP3/AAC decoder implementations and makes the semantic analyzer and Atlas feature extractor operate on the same sample timeline.
-
-If semantic inference fails, the worker degrades to a librosa audio fallback. The fallback can still return energy, onset information, generic structural boundaries and an editing grid, but its metadata explicitly says:
+A v3 result contains:
 
 ```json
 {
-  "quality": "fallback",
-  "semantic_structure": false,
-  "real_downbeats": false
+  "source_audio": {
+    "url": "https://.../master.wav",
+    "media_asset_id": "...",
+    "audio_sha256": "...",
+    "analysis_pcm_sha256": "..."
+  }
 }
 ```
 
-A duration-only estimate is even stricter: it does not invent a hook or claim audio-derived structure.
+The raw source hash identifies the bytes Atlas downloaded. The PCM hash identifies the standardized decode used by the analyzer.
 
-## Hook scoring
+The canonical cache accepts a result only when its source URL matches the track's current master. Vault-linked results additionally use `media_asset_id` when available. Both callback paths reject late results if the master changed while a job was running.
 
-A `chorus` is evidence, not the answer. Atlas ranks multiple candidate windows using:
+Replacing `tracks.audio_url` invalidates:
 
-- recurrence / musical similarity
-- semantic structural importance
-- energy lift into the window
-- absolute energy
-- novelty versus the preceding material
-- rhythmic onset density
-- melodic/harmonic salience
-- alignment to edit boundaries
-- loopability of start/end
+- canonical Track Intelligence for that track
+- worker-derived Video Director maps
+- only Content Lab timestamps whose provenance is `music_intelligence`
 
-The current score is intentionally deterministic and explainable. Each candidate stores its component metrics and short human-readable reasons so the Inspector can explain why it was ranked.
+Manual timestamps are preserved.
 
-Candidate kinds currently include:
+## Rhythm provenance
 
-- `instant_impact`
-- `groove`
-- `melodic`
+Downbeats are no longer represented as a misleading boolean. The map records:
+
+- `model` — actual downbeats returned by the semantic model
+- `inferred_from_beats` — an editing/bar grid inferred from beat timing
+- `synthetic_grid` — reserved for explicit synthetic timing
+- `none`
+
+`analysis.real_downbeats` remains as a compatibility field and is true **only** for `downbeat_source = model`.
+
+This matters because storyboard alignment may trust verified downbeats more strongly than an inferred grid.
+
+## Structure, bars and phrases
+
+All-In-One runs with activations and embeddings enabled. Atlas uses its segment/label activations to expose section confidence instead of assigning a generic confidence to every semantic result.
+
+Bars use downbeat provenance. Phrase boundaries are currently a transparent four-bar inference constrained by semantic sections, with provenance recorded on every phrase. Atlas does not claim inferred four-bar groups are model-detected phrases.
+
+If All-In-One cannot complete, librosa produces explicit fallback structure and rhythm. A duration-only estimate still never invents hooks.
+
+## Semantic recurrence
+
+v2 compared averaged 12-bin chroma fingerprints. That remains useful as `harmonic_recurrence`, but it cannot reliably distinguish two passages that share harmony while carrying different musical ideas.
+
+v3 summarizes All-In-One embeddings inside each candidate window and compares non-overlapping windows of similar duration. This produces `semantic_recurrence`, which is the preferred repetition/identity signal.
+
+Compatibility aliases remain temporarily available:
+
+- `repetition` -> semantic recurrence
+- `melodic_salience` -> harmonic distinctiveness
+- `loopability` -> boundary loop fit
+
+New code should use the explicit metric names.
+
+## Purpose-specific moments
+
+There is no single universal hook objective. Every candidate receives a score for:
+
+- `instant_hook`
+- `musical_identity`
+- `groove_loop`
+- `build_drop`
 - `climax`
-- `build_and_drop`
+- `story_arc`
+
+The canonical `score` remains for backward-compatible overall ranking, but production systems should prefer the intent that matches the creative job.
+
+For example, `instant_hook` emphasizes immediate lift, rhythmic activity and recurrence, while `story_arc` emphasizes internal development, structural position, novelty and payoff.
 
 ## Social cuts
 
-Music Intelligence stores preferred windows for:
+v3 stores both:
 
-- 6 seconds
-- 8 seconds
-- 15 seconds
-- 30 seconds
+- `social_cuts` — the backward-compatible primary choice
+- `social_cut_options` — up to three musically distinct alternatives per duration
 
-The selected duration is musically aligned, so its exact length may differ slightly from the nominal target when a nearby downbeat produces a cleaner edit.
+Objectives differ by duration:
 
-Marketing converts those millisecond windows to Content Lab's integer-second fields with `floor(start)` / `ceil(end)`. Existing manual timestamps are never overwritten.
+| Target | Primary objective |
+| --- | --- |
+| 6s | immediate impact + clean loop |
+| 8s | impact + identity + groove |
+| 15s | identity + hook/payoff |
+| 30s | mini narrative / story arc |
 
-Video Director derived renders use the millisecond window directly.
+Cuts stay near musically meaningful boundaries, so exact duration can differ slightly from the nominal target.
 
-## Canonical track cache
+## Candidate metrics
 
-`public.track_music_intelligence` stores one canonical analysis per released-catalog `tracks.id`.
+The explainable v3 feature set includes:
 
-A real v2 result can arrive through either path:
+- energy
+- energy lift
+- onset / rhythmic activity
+- groove stability
+- semantic recurrence
+- harmonic recurrence
+- harmonic distinctiveness
+- novelty versus preceding context
+- structural importance
+- section confidence
+- boundary / edit-grid fit
+- boundary loop fit
+- internal arc strength
 
-1. Video Director `analyze_audio`
-2. Growth OS / Track Vault `analyze_audio` for a release-linked vault entry
+The Inspector exposes these values rather than presenting a score as unexplained AI judgment.
 
-Both paths converge into the same canonical row. New Video Director projects prefer that row immediately. Duplicate analysis jobs can become durable cache hits without dispatching the heavy worker again.
+## Confidence
 
-Legacy v1 completed jobs have their old idempotency keys moved aside by migration so the track can be upgraded once to v2.
+`analysis.confidence` contains separate normalized signals for:
 
-A canonical v2 worker map always wins over a local duration estimate.
+- `rhythm`
+- `downbeats`
+- `structure`
+- `hooks`
+- `overall`
 
-## Artist inspection
+Where All-In-One activations are available, confidence uses model evidence. Fallback analysis reports lower confidence and honest provenance. These values are ranking/review confidence, not statistical probabilities of correctness.
 
-### Video Director
+## Master QC
 
-The Track Intelligence Inspector shows:
+The analysis decode is also inspected for production-critical technical issues:
 
-- BPM / duration / section / hook / downbeat summary
-- energy timeline with playback playhead
-- clickable semantic sections
-- ranked hook candidates
-- hook score and reasons
-- detailed metric breakdown
-- 6s / 8s / 15s / 30s ready windows
-- analyzer engine / model / quality flags
-- warnings / diagnostics
+- integrated LUFS
+- sample peak
+- estimated 4x-oversampled true peak
+- RMS and crest factor
+- clipping sample count / ratio
+- stereo correlation
+- DC offset
+- leading / trailing silence
+- decoded sample rate and channel count
 
-Clicking a section or hook seeks the original master to the exact start and automatically stops at the selected end.
+`technical_ready` becomes false only for a blocking defect such as clipping. Other suspicious conditions are warnings so Atlas does not pretend one mastering target fits every genre or distributor.
 
-### Growth OS
+QC is calculated from Atlas's standardized lossless PCM analysis decode. It does not currently claim to report the original container's bit depth or codec metadata.
 
-Every analyzed Vault track exposes a compact Music Intelligence preview inside its expanded editor. Sections and the top hook candidates can be auditioned even before a release or Video Director project exists.
+## Production review UI
 
-## Storyboard timing
+The Video Director inspector lets the artist hear:
 
-The Creative Director still owns the visual narrative. Atlas then applies a deterministic timing pass before persistence:
+- every detected section
+- ranked candidates
+- the best candidate for each production intent
+- primary social cuts
+- alternate social cuts
 
-- if real downbeats are verified, nearby internal shot boundaries can snap to downbeats or structural transitions
-- without verified downbeats, only structural edit points are trusted
-- the snap is bounded by a tolerance
-- a minimum shot length guard prevents broken micro-shots
-- scene boundaries are recomputed from the aligned shots
+It also displays:
 
-Each persisted shot receives `music_context` including its section, energy, whether it starts on a downbeat, and overlapping hook-candidate information.
+- detected vs inferred rhythm provenance
+- bars and phrases
+- semantic-embedding use
+- component confidence
+- explicit ranking metrics and reasons
+- master QC and warnings
 
-## Rendering
+This review surface is intentionally upstream of expensive image/video generation.
 
-`hook_15` and `promo_30` no longer center themselves around the highest-energy section. Their render manifests prefer:
+## Canonical cache and queue
 
-1. the matching Music Intelligence social cut
-2. the closest ranked hook candidate
-3. legacy highest-energy fallback only for old maps
+`public.track_music_intelligence` stores one canonical analysis per `tracks.id`, plus exact-master provenance columns.
 
-The original Atlas master remains the final audio source.
+A v3 result can arrive from either Video Director or a release-linked Vault entry. Both converge into the same canonical row only when they refer to the current master.
 
-## Operational notes
+Worker contention is not an error. Video jobs remain `planned`; Vault analyses remain `queued`; Atlas dispatches the oldest eligible job and keeps Sandbox concurrency at one.
 
-The semantic analyzer uses PyTorch plus source separation and is significantly heavier than the old librosa-only worker. Keep this workload in the Cloud Run Media Worker, not Vercel.
+## Storyboard and rendering
 
-A recommended starting point is 4 vCPU / 8 GiB with one warm instance. Tune using real Atlas tracks rather than reducing resources pre-emptively.
+The Creative Director owns visual narrative. Deterministic timing alignment then uses Track Intelligence:
 
-See `services/media-worker/README.md` for deployment details.
+- verified model downbeats may be used for precise musical snapping
+- inferred grids are treated as lower-confidence timing
+- structural edit points remain useful even without verified downbeats
+- minimum-shot guards prevent micro-cuts
+
+`hook_15` and `promo_30` use the duration-specific primary social cut first, then ranked candidates, with legacy energy fallback only for older maps.
+
+The original Atlas master remains the final render audio source.
+
+## Quality calibration
+
+A strong MIR system still needs artist-specific evaluation. Atlas therefore treats Track Intelligence quality as a measurable product surface rather than something declared "perfect" by code review.
+
+The benchmark corpus should contain representative Atlas tracks with human labels for:
+
+- BPM
+- meaningful section boundaries
+- preferred windows per production intent
+- preferred 6s / 8s / 15s / 30s cuts
+- known master-QC conditions when relevant
+
+Track improvements should be evaluated on boundary error, BPM error, top-1 / top-3 preferred-window recall and artist preference, not just whether the worker returned JSON.
+
+The CI synthetic-audio test protects deterministic v3 behavior. A private real-track benchmark remains the gate for tuning ranking weights against Atlas's actual catalog.
+
+See `services/media-worker/README.md` for runtime details and `docs/track-intelligence-benchmark.md` for the calibration workflow.
