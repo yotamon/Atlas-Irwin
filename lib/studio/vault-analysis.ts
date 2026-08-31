@@ -14,11 +14,12 @@ export function vaultAnalysisReadiness() {
   return { configured: Boolean(workerUrl() && workerSecret()) };
 }
 
-export async function queueVaultAudioAnalysis(input: { trackId: string; audioUrl: string }) {
+export async function queueVaultAudioAnalysis(input: { trackId: string; audioUrl: string; requestId?: string }) {
   const base = workerUrl();
   const secret = workerSecret();
   if (!base || !secret) throw new Error("Media Worker is not configured.");
   const callbackUrl = `${getSiteUrl()}/api/studio/growth/audio-callback`;
+  const jobId = input.requestId ? `${input.trackId}:${input.requestId}` : input.trackId;
   const response = await fetch(`${base}/v1/jobs`, {
     method: "POST",
     headers: {
@@ -26,7 +27,7 @@ export async function queueVaultAudioAnalysis(input: { trackId: string; audioUrl
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      job_id: input.trackId,
+      job_id: jobId,
       job_type: "analyze_audio",
       payload: { audio_url: input.audioUrl },
       callback_url: callbackUrl,
