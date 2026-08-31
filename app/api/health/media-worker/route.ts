@@ -11,6 +11,8 @@ export async function GET() {
       configured: false,
       reachable: false,
       worker_version: readiness.workerVersion,
+      bootstrap_version: readiness.bootstrapVersion,
+      python_version: readiness.pythonVersion,
       dispatch_mode: readiness.runtime,
       durable_dispatch: false,
       music_intelligence_v2: true,
@@ -23,11 +25,14 @@ export async function GET() {
     configured: true,
     reachable: true,
     worker_version: readiness.workerVersion,
+    bootstrap_version: readiness.bootstrapVersion,
+    python_version: readiness.pythonVersion,
     dispatch_mode: readiness.runtime,
     durable_dispatch: true,
     music_intelligence_v2: true,
     semantic_analyzer_available: true,
     zero_idle_compute: true,
     sandbox_name: readiness.sandboxName,
+    sandbox_image: readiness.sandboxImage,
   });
 }
