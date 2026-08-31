@@ -12,17 +12,57 @@ function revision() {
   return /^[a-f0-9]{40}$/i.test(value) ? value : "main";
 }
 
-async function readStatus(sandbox: Sandbox) {
-  const statusCommand = await sandbox.runCommand({
-    cmd: "bash",
-    args: ["-lc", `ROOT=/workspace/atlas-bootstrap-smoke
-status=$(cat "$ROOT/status" 2>/dev/null || echo not_started)
-printf '%s\n' "$status"
-tail -c 7000 "$ROOT/bootstrap.log" 2>/dev/null || true`],
-  });
-  const output = await statusCommand.stdout();
-  const [status = "unknown", ...logLines] = output.trim().split("\n");
-  return { status, log: logLines.join("\n") };
+function inferenceScript() {
+  return `set -uo pipefail
+ROOT=/workspace/atlas-bootstrap-smoke
+STATUS="$ROOT/inference-status"
+LOG="$ROOT/inference.log"
+VENV="$ROOT/.venv"
+printf 'running' > "$STATUS"
+(
+  "$VENV/bin/python" - <<'PY'
+from pathlib import Path
+import math
+import struct
+import wave
+
+path = Path('/workspace/atlas-bootstrap-smoke/synthetic.wav')
+sr = 22050
+duration = 32
+with wave.open(str(path), 'wb') as handle:
+    handle.setnchannels(1)
+    handle.setsampwidth(2)
+    handle.setframerate(sr)
+    frames = bytearray()
+    for i in range(sr * duration):
+        t = i / sr
+        beat = int(t * 2) % 8
+        section = int(t // 8) % 4
+        fundamental = (220.0, 246.94, 261.63, 293.66)[section]
+        envelope = 0.55 + (0.35 if (t % 0.5) < 0.075 else 0.0)
+        harmonic = math.sin(2 * math.pi * fundamental * t)
+        harmonic += 0.35 * math.sin(2 * math.pi * fundamental * 1.5 * t)
+        if beat in (0, 4):
+            harmonic += 0.25 * math.sin(2 * math.pi * 110 * t)
+        value = max(-1.0, min(1.0, harmonic * envelope * 0.35))
+        frames.extend(struct.pack('<h', int(value * 32767)))
+    handle.writeframes(frames)
+print(path)
+PY
+
+  "$VENV/bin/python" - <<'PY'
+import allin1_infer
+path = '/workspace/atlas-bootstrap-smoke/synthetic.wav'
+result = allin1_infer.analyze(path)
+print('INFERENCE_READY')
+print('bpm', getattr(result, 'bpm', None))
+print('beats', len(list(getattr(result, 'beats', []) or [])))
+print('downbeats', len(list(getattr(result, 'downbeats', []) or [])))
+print('segments', [(str(s.label), round(float(s.start), 3), round(float(s.end), 3)) for s in list(getattr(result, 'segments', []) or [])[:8]])
+PY
+  printf 'ready' > "$STATUS"
+) >"$LOG" 2>&1 || printf 'failed' > "$STATUS"
+`;
 }
 
 export async function GET() {
@@ -32,25 +72,19 @@ export async function GET() {
 
   try {
     const sandbox = await Sandbox.get({ name: EXISTING_SMOKE_SANDBOX });
-    const result = await readStatus(sandbox);
-    await sandbox.stop();
-    console.log("Atlas bootstrap smoke final result", JSON.stringify(result));
+    const command = await sandbox.runCommand({
+      cmd: "bash",
+      args: ["-lc", inferenceScript()],
+      detached: true,
+    });
     return NextResponse.json({
-      ok: result.status === "ready" && result.log.includes("BOOTSTRAP_READY"),
-      action: "verified_and_stopped",
+      ok: command.exitCode === null || command.exitCode === 0,
+      action: "semantic_inference_started",
       sandbox: EXISTING_SMOKE_SANDBOX,
       revision: revision(),
-      ...result,
-    }, { status: result.status === "failed" ? 500 : 200 });
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error("Atlas bootstrap smoke final read failed", message);
-    return NextResponse.json({
-      ok: false,
-      status: "unavailable",
-      sandbox: EXISTING_SMOKE_SANDBOX,
-      revision: revision(),
-      error: message,
-    }, { status: 500 });
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }
