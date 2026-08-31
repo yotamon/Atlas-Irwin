@@ -9,13 +9,12 @@ from typing import Any, Literal
 from urllib.parse import urljoin, urlparse
 
 import httpx
-from fastapi import FastAPI
+import imageio_ffmpeg
 from pydantic import BaseModel, Field
 
-from .music_intelligence import allin1_infer, analyze_music
+from .music_intelligence import analyze_music
 
-app = FastAPI(title="Atlas Media Worker", version="3.0.0")
-_ACTIVE_JOB_IDS: set[str] = set()
+FFMPEG_BINARY = imageio_ffmpeg.get_ffmpeg_exe()
 
 
 class WorkerRequest(BaseModel):
@@ -105,7 +104,7 @@ async def upload_file(upload_url: str, path: Path, content_type: str) -> None:
 
 async def ffmpeg(*args: str) -> None:
     process = await asyncio.create_subprocess_exec(
-        "ffmpeg",
+        FFMPEG_BINARY,
         "-hide_banner",
         "-loglevel",
         "error",
@@ -316,38 +315,21 @@ async def callback(
 
 
 async def execute(request: WorkerRequest) -> str:
-    _ACTIVE_JOB_IDS.add(request.job_id)
+    await callback(request, "running")
     try:
-        await callback(request, "running")
-        try:
-            with tempfile.TemporaryDirectory(prefix="atlas-media-") as directory:
-                workdir = Path(directory)
-                if request.job_type == "analyze_audio":
-                    result = await analyze_job(request.payload, workdir)
-                elif request.job_type == "extract_frame":
-                    result = await extract_frame_job(request.payload, workdir)
-                elif request.job_type in {"render_master", "render_social", "render_promo", "render_hook"}:
-                    result = await render_job(request.payload, workdir)
-                else:
-                    raise ValueError(f"Unsupported worker job type: {request.job_type}")
-        except Exception as exc:
-            await callback(request, "failed", error=str(exc)[:4000])
-            return "failed"
+        with tempfile.TemporaryDirectory(prefix="atlas-media-") as directory:
+            workdir = Path(directory)
+            if request.job_type == "analyze_audio":
+                result = await analyze_job(request.payload, workdir)
+            elif request.job_type == "extract_frame":
+                result = await extract_frame_job(request.payload, workdir)
+            elif request.job_type in {"render_master", "render_social", "render_promo", "render_hook"}:
+                result = await render_job(request.payload, workdir)
+            else:
+                raise ValueError(f"Unsupported worker job type: {request.job_type}")
+    except Exception as exc:
+        await callback(request, "failed", error=str(exc)[:4000])
+        return "failed"
 
-        await callback(request, "completed", result=result)
-        return "completed"
-    finally:
-        _ACTIVE_JOB_IDS.discard(request.job_id)
-
-
-@app.get("/health")
-async def health() -> dict[str, Any]:
-    return {
-        "ok": True,
-        "version": 3.0,
-        "dispatch_mode": "vercel_sandbox_runner",
-        "music_intelligence": {
-            "semantic_analyzer_available": allin1_infer is not None,
-        },
-        "active_jobs": len(_ACTIVE_JOB_IDS),
-    }
+    await callback(request, "completed", result=result)
+    return "completed"
