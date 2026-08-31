@@ -131,7 +131,7 @@ cleanup() {
 trap cleanup EXIT
 
 notify_failed() {
-  detail=$(tail -c 2500 "$LOG" 2>/dev/null || echo "Media Worker bootstrap failed")
+  detail=$(tail -c 2500 "$LOG" 2>/dev/null || echo "Media Worker job failed")
   python3 - "$REQUEST" "$detail" <<'PY'
 import json
 import sys
@@ -144,7 +144,7 @@ try:
         "job_id": payload.get("job_id"),
         "status": "failed",
         "result": {},
-        "error": f"Media Worker bootstrap failed: {detail[-2200:]}",
+        "error": f"Media Worker job failed: {detail[-2200:]}",
     }).encode("utf-8")
     request = Request(
         payload["callback_url"],
@@ -192,9 +192,6 @@ PY
     uv venv --python "$PYTHON_VERSION" "$WORKDIR/.venv"
     uv pip install --python "$WORKDIR/.venv/bin/python" -r "$WORKDIR/requirements.txt"
 
-    # The dedicated Vercel Python runtime omits some stdlib extension modules.
-    # The pinned Universal image plus uv-managed CPython is verified to include
-    # the full stdlib needed by librosa/pooch and to run real all-in-one inference.
     "$WORKDIR/.venv/bin/python" - <<'PY'
 import bz2
 import lzma
@@ -221,6 +218,7 @@ if ! bootstrap >"$LOG" 2>&1; then
   exit 1
 fi
 
+cd "$WORKDIR"
 if ! "$WORKDIR/.venv/bin/python" -m app.runner "$REQUEST" >>"$LOG" 2>&1; then
   notify_failed
   exit 1

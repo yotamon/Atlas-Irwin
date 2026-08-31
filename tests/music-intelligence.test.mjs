@@ -107,6 +107,8 @@ test("production Media Worker is self-bootstrapping, zero-idle and Sandbox-nativ
   assert.ok(bridge.includes('uv venv --python "$PYTHON_VERSION"'));
   assert.ok(bridge.includes('uv pip install --python "$WORKDIR/.venv/bin/python"'));
   assert.ok(bridge.includes("import bz2"));
+  assert.ok(bridge.includes('cd "$WORKDIR"'));
+  assert.ok(bridge.indexOf('cd "$WORKDIR"') < bridge.indexOf('-m app.runner "$REQUEST"'));
   assert.equal(bridge.includes("bootstrap.pypa.io/get-pip.py"), false);
   assert.equal(bridge.includes('runtime: "python3.13"'), false);
   assert.ok(bridge.includes(".requirements.sha"));
