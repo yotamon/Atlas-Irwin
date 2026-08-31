@@ -45,6 +45,8 @@ test("release workspace owns master upload and reuses the same music intelligenc
   assert.ok(panel.includes("MusicIntelligencePreview"));
   assert.ok(panel.includes("AnalysisAutoRefresh"));
   assert.ok(panel.includes("Replace master audio"));
+  assert.ok(panel.includes("analysisFailureCopy"));
+  assert.equal(panel.includes('analysis.message ? `: ${analysis.message}`'), false);
   assert.ok(uploader.includes("releaseMasterMode"));
   assert.ok(uploader.includes("attachReleaseMasterFromMedia"));
   assert.ok(actions.includes("analysisReused"));
@@ -98,7 +100,14 @@ test("production Media Worker is self-bootstrapping, zero-idle and Sandbox-nativ
   assert.ok(bridge.includes("detached: true"));
   assert.ok(bridge.includes("MEDIA_WORKER_CALLBACK_HASH_KEY"));
   assert.ok(bridge.includes("atlas-media-worker-${environmentName()}"));
+  assert.ok(bridge.includes("MEDIA_WORKER_RUNTIME_VERSION = 5"));
+  assert.ok(bridge.includes("MEDIA_WORKER_BOOTSTRAP_VERSION = 2"));
+  assert.ok(bridge.includes("venv --without-pip"));
+  assert.ok(bridge.includes("https://bootstrap.pypa.io/get-pip.py"));
+  assert.ok(bridge.includes('"pip==25.2"'));
+  assert.equal(bridge.includes("-m ensurepip"), false);
   assert.ok(bridge.includes(".requirements.sha"));
+  assert.ok(bridge.indexOf('printf \'%s\' "$required" > "$WORKDIR/.requirements.sha"') > bridge.indexOf("import allin1_infer"));
   assert.ok(vaultBridge.includes('jobType: "analyze_audio"'));
   assert.ok(health.includes('dispatch_mode: readiness.runtime'));
   assert.ok(health.includes("zero_idle_compute: true"));
