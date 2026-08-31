@@ -8,30 +8,51 @@ export type MusicMapSection = {
   end_ms: number;
   energy: number;
   confidence?: number | null;
+  label_confidence?: number | null;
+  boundary_confidence?: number | null;
 };
 
 export type MusicMapEditPoint = {
   ms: number;
   confidence: number;
   reason: string;
+  provenance?: string;
 };
+
+export type MusicMomentIntent =
+  | "instant_hook"
+  | "musical_identity"
+  | "groove_loop"
+  | "build_drop"
+  | "climax"
+  | "story_arc";
+
+export type MusicHookIntentScores = Record<MusicMomentIntent, number>;
 
 export type MusicHookMetrics = {
   energy: number;
   energy_lift: number;
   novelty: number;
   onset_density: number;
-  melodic_salience: number;
   boundary_fit: number;
-  loopability: number;
   structure: number;
+  // v2 compatibility aliases. v3 consumers should prefer the explicit metrics below.
+  melodic_salience: number;
+  loopability: number;
   repetition: number;
+  groove_stability?: number;
+  harmonic_distinctiveness?: number;
+  boundary_loop_fit?: number;
+  segment_confidence?: number;
+  harmonic_recurrence?: number;
+  semantic_recurrence?: number;
+  arc_strength?: number;
 };
 
 export type MusicHookCandidate = {
   id: string;
   label: string;
-  kind: "instant_impact" | "groove" | "melodic" | "climax" | "build_and_drop" | string;
+  kind: MusicMomentIntent | "instant_impact" | "groove" | "melodic" | "build_and_drop" | string;
   start_ms: number;
   end_ms: number;
   duration_ms: number;
@@ -41,6 +62,7 @@ export type MusicHookCandidate = {
   score: number;
   reasons: string[];
   metrics: MusicHookMetrics;
+  intent_scores?: MusicHookIntentScores;
 };
 
 export type MusicSocialCut = {
@@ -48,8 +70,63 @@ export type MusicSocialCut = {
   start_ms: number;
   end_ms: number;
   score: number;
+  hook_score?: number;
   kind: string;
   label: string;
+  intent_scores?: MusicHookIntentScores;
+};
+
+export type MusicMomentReference = {
+  candidate_id: string;
+  start_ms: number;
+  end_ms: number;
+  score: number;
+  label: string;
+};
+
+export type MusicBar = {
+  index: number;
+  start_ms: number;
+  end_ms: number;
+  section_id: string | null;
+  confidence: number;
+  provenance: string;
+};
+
+export type MusicPhrase = {
+  id: string;
+  start_ms: number;
+  end_ms: number;
+  section_id: string;
+  bar_start: number | null;
+  bar_end: number | null;
+  confidence: number;
+  provenance: string;
+};
+
+export type MusicMasterQcIssue = {
+  severity: "critical" | "warning" | string;
+  code: string;
+  message: string;
+};
+
+export type MusicMasterQc = {
+  technical_ready: boolean;
+  integrated_lufs?: number | null;
+  sample_peak_dbfs?: number | null;
+  true_peak_dbtp?: number | null;
+  rms_dbfs?: number | null;
+  crest_factor_db?: number | null;
+  clipping_samples?: number;
+  clipping_ratio?: number;
+  stereo_correlation?: number | null;
+  dc_offset?: number;
+  leading_silence_ms?: number;
+  trailing_silence_ms?: number;
+  sample_rate_hz?: number;
+  channels?: number;
+  analysis_note?: string;
+  issues: MusicMasterQcIssue[];
 };
 
 export type MusicMap = {
@@ -60,18 +137,42 @@ export type MusicMap = {
   beats_ms: number[];
   beat_positions?: number[];
   downbeats_ms: number[];
+  downbeat_source?: "model" | "inferred_from_beats" | "synthetic_grid" | "none";
+  bars?: MusicBar[];
+  phrases?: MusicPhrase[];
   sections: MusicMapSection[];
   energy_curve: Array<{ ms: number; value: number }>;
   edit_points: MusicMapEditPoint[];
   peaks_ms: number[];
   hook_candidates?: MusicHookCandidate[];
+  moments?: Partial<Record<MusicMomentIntent, MusicMomentReference[]>>;
   social_cuts?: Record<string, MusicSocialCut | null>;
+  social_cut_options?: Record<string, MusicSocialCut[]>;
+  master_qc?: MusicMasterQc;
+  source_audio?: {
+    url?: string;
+    media_asset_id?: string | null;
+    audio_sha256?: string;
+    analysis_pcm_sha256?: string;
+    analysis_config?: string;
+  };
   analysis?: {
     engine: string;
     model: string | null;
     quality: "full" | "fallback";
     semantic_structure: boolean;
     real_downbeats: boolean;
+    downbeat_source?: "model" | "inferred_from_beats" | "synthetic_grid" | "none";
+    embeddings_used?: boolean;
+    activation_fps?: number | null;
+    config?: string;
+    confidence?: {
+      overall: number;
+      rhythm: number;
+      downbeats: number;
+      structure: number;
+      hooks: number;
+    };
     warnings: string[];
   };
   source: "worker" | "manual" | "fallback";
