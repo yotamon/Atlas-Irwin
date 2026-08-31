@@ -4,8 +4,10 @@ import { createHash, randomBytes } from "node:crypto";
 import { Sandbox } from "@vercel/sandbox";
 
 export const MEDIA_WORKER_CALLBACK_HASH_KEY = "__atlas_callback_token_sha256";
-const MEDIA_WORKER_RUNTIME_VERSION = 5;
-const MEDIA_WORKER_BOOTSTRAP_VERSION = 2;
+const MEDIA_WORKER_RUNTIME_VERSION = 6;
+const MEDIA_WORKER_BOOTSTRAP_VERSION = 3;
+const MEDIA_WORKER_PYTHON_VERSION = "3.13.14";
+const MEDIA_WORKER_SANDBOX_IMAGE = "vercel/sandbox/universal@sha256:0e3e3617e824397f170fc7c43ccaa565dd7ac36518e83ead3d41e077cd9f6ec7";
 const HOBBY_MAX_SANDBOX_MS = 45 * 60 * 1000;
 const WORKDIR = "/workspace/atlas-media-worker";
 const LOCKDIR = "/tmp/atlas-media-worker.lock";
@@ -32,6 +34,8 @@ export function mediaWorkerReadiness() {
     configured: mediaWorkerSandboxAvailable(),
     runtime: "vercel_sandbox" as const,
     sandboxName: mediaWorkerSandboxName(),
+    sandboxImage: MEDIA_WORKER_SANDBOX_IMAGE,
+    pythonVersion: MEDIA_WORKER_PYTHON_VERSION,
     workerVersion: MEDIA_WORKER_RUNTIME_VERSION,
     bootstrapVersion: MEDIA_WORKER_BOOTSTRAP_VERSION,
   };
@@ -64,7 +68,7 @@ export async function getMediaWorkerSandbox() {
   }
   return Sandbox.getOrCreate({
     name: mediaWorkerSandboxName(),
-    runtime: "python3.13",
+    image: MEDIA_WORKER_SANDBOX_IMAGE,
     resources: { vcpus: 4 },
     timeout: HOBBY_MAX_SANDBOX_MS,
     persistent: true,
@@ -114,9 +118,12 @@ WORKDIR=${JSON.stringify(WORKDIR)}
 LOCKDIR=${JSON.stringify(LOCKDIR)}
 BASE=${JSON.stringify(base)}
 BOOTSTRAP_VERSION=${MEDIA_WORKER_BOOTSTRAP_VERSION}
-GET_PIP_URL=https://bootstrap.pypa.io/get-pip.py
-GET_PIP_PATH=/tmp/atlas-get-pip.py
+PYTHON_VERSION=${JSON.stringify(MEDIA_WORKER_PYTHON_VERSION)}
 LOG=/tmp/atlas-media-worker-bootstrap.log
+export UV_PYTHON_INSTALL_DIR="$WORKDIR/.uv-python"
+export UV_CACHE_DIR="$WORKDIR/.uv-cache"
+export TORCH_HOME="$WORKDIR/.torch"
+export HF_HOME="$WORKDIR/.huggingface"
 
 cleanup() {
   rm -rf "$LOCKDIR"
@@ -125,7 +132,7 @@ trap cleanup EXIT
 
 notify_failed() {
   detail=$(tail -c 2500 "$LOG" 2>/dev/null || echo "Media Worker bootstrap failed")
-  python - "$REQUEST" "$detail" <<'PY'
+  python3 - "$REQUEST" "$detail" <<'PY'
 import json
 import sys
 from urllib.request import Request, urlopen
@@ -157,7 +164,7 @@ PY
 
 bootstrap() {
   mkdir -p "$WORKDIR/app"
-  python - "$BASE" "$WORKDIR" <<'PY'
+  python3 - "$BASE" "$WORKDIR" <<'PY'
 from pathlib import Path
 import sys
 from urllib.request import urlopen
@@ -177,37 +184,32 @@ for relative, url in files.items():
 PY
 
   requirements_sha=$(sha256sum "$WORKDIR/requirements.txt" | cut -d' ' -f1)
-  required=$(printf '%s:%s' "$BOOTSTRAP_VERSION" "$requirements_sha" | sha256sum | cut -d' ' -f1)
+  required=$(printf '%s:%s:%s' "$BOOTSTRAP_VERSION" "$PYTHON_VERSION" "$requirements_sha" | sha256sum | cut -d' ' -f1)
   installed=$(cat "$WORKDIR/.requirements.sha" 2>/dev/null || true)
   if [ ! -x "$WORKDIR/.venv/bin/python" ] || [ "$required" != "$installed" ]; then
     rm -rf "$WORKDIR/.venv"
-    # Vercel's Python 3.13 Sandbox image does not include ensurepip. Creating
-    # the venv without pip avoids Python's implicit ensurepip subprocess.
-    python -m venv --without-pip "$WORKDIR/.venv"
-    python - "$GET_PIP_URL" "$GET_PIP_PATH" <<'PY'
-from pathlib import Path
-import sys
-from urllib.request import urlopen
+    uv python install "$PYTHON_VERSION"
+    uv venv --python "$PYTHON_VERSION" "$WORKDIR/.venv"
+    uv pip install --python "$WORKDIR/.venv/bin/python" -r "$WORKDIR/requirements.txt"
 
-url, target = sys.argv[1], Path(sys.argv[2])
-target.write_bytes(urlopen(url, timeout=30).read())
-PY
-    "$WORKDIR/.venv/bin/python" "$GET_PIP_PATH" "pip==25.2"
-    "$WORKDIR/.venv/bin/python" -m pip install --disable-pip-version-check "setuptools==80.9.0" "wheel==0.45.1"
-    "$WORKDIR/.venv/bin/python" -m pip install --disable-pip-version-check -r "$WORKDIR/requirements.txt"
-    rm -f "$GET_PIP_PATH"
-
-    # Never persist a ready marker until the environment can actually import
-    # the semantic analyzer and the bundled FFmpeg provider.
+    # The dedicated Vercel Python runtime omits some stdlib extension modules.
+    # The pinned Universal image plus uv-managed CPython is verified to include
+    # the full stdlib needed by librosa/pooch and to run real all-in-one inference.
     "$WORKDIR/.venv/bin/python" - <<'PY'
+import bz2
+import lzma
+import sqlite3
+import ssl
 import allin1_infer
 import imageio_ffmpeg
 print("Atlas Media Worker dependencies ready", imageio_ffmpeg.get_ffmpeg_exe())
 PY
     printf '%s' "$required" > "$WORKDIR/.requirements.sha"
+    rm -rf "$UV_CACHE_DIR"
   fi
 
   "$WORKDIR/.venv/bin/python" - <<'PY'
+import bz2
 import allin1_infer
 import imageio_ffmpeg
 print("Atlas Media Worker ready", imageio_ffmpeg.get_ffmpeg_exe())
