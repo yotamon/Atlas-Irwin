@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import ipaddress
 import socket
 import tempfile
@@ -86,6 +87,14 @@ async def download(url: str, target: Path, limit_bytes: int = 600 * 1024 * 1024)
         raise ValueError("Remote media exceeded redirect limit")
 
 
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 async def upload_file(upload_url: str, path: Path, content_type: str) -> None:
     validate_remote_url(upload_url)
     async with httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=20.0)) as client:
@@ -126,6 +135,7 @@ async def analyze_job(payload: dict[str, Any], workdir: Path) -> dict[str, Any]:
     source_path = workdir / "source-audio"
     analysis_path = workdir / "analysis-source.wav"
     await download(audio_url, source_path)
+    source_sha256 = await asyncio.to_thread(sha256_file, source_path)
     await ffmpeg(
         "-i",
         str(source_path),
@@ -138,7 +148,15 @@ async def analyze_job(payload: dict[str, Any], workdir: Path) -> dict[str, Any]:
         "pcm_s16le",
         str(analysis_path),
     )
-    return {"music_map": await asyncio.to_thread(analyze_music, analysis_path)}
+    analysis_sha256 = await asyncio.to_thread(sha256_file, analysis_path)
+    source_audio = {
+        "url": str(payload.get("source_audio_url") or audio_url),
+        "media_asset_id": payload.get("source_media_asset_id") if isinstance(payload.get("source_media_asset_id"), str) else None,
+        "audio_sha256": source_sha256,
+        "analysis_pcm_sha256": analysis_sha256,
+    }
+    music_map = await asyncio.to_thread(analyze_music, analysis_path, source_audio)
+    return {"music_map": music_map}
 
 
 def crop_filter(width: int, height: int, fps: int, focus_x: float) -> str:
