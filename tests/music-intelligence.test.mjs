@@ -79,16 +79,28 @@ test("track-level analysis is cached and can drive Content Lab timestamps", asyn
   assert.ok(migration.includes("audio_timestamp_end"));
 });
 
-test("production Media Worker uses package-safe imports and durable Cloud Tasks dispatch", async () => {
+test("production Media Worker is self-bootstrapping, zero-idle and Sandbox-native", async () => {
   const worker = await readFile("services/media-worker/app/main.py", "utf8");
-  const deploy = await readFile("scripts/deploy-media-worker.mjs", "utf8");
+  const runner = await readFile("services/media-worker/app/runner.py", "utf8");
+  const bridge = await readFile("lib/media-worker/sandbox.ts", "utf8");
+  const vaultBridge = await readFile("lib/studio/vault-analysis.ts", "utf8");
   const health = await readFile("app/api/health/media-worker/route.ts", "utf8");
+  const callback = await readFile("app/api/studio/growth/audio-callback/route.ts", "utf8");
+
   assert.ok(worker.includes("from .music_intelligence import"));
-  assert.ok(worker.includes("CloudTasksClient"));
-  assert.ok(worker.includes('dispatch_mode": "cloud_tasks"'));
-  assert.ok(worker.includes("/v1/execute"));
-  assert.ok(deploy.includes('"--min-instances", "0"'));
-  assert.ok(deploy.includes("cloudtasks.googleapis.com"));
-  assert.ok(deploy.includes("roles/cloudtasks.enqueuer"));
-  assert.ok(health.includes('dispatchMode === "cloud_tasks"'));
+  assert.ok(runner.includes("request_path.unlink"));
+  assert.ok(runner.includes("shutil.rmtree(LOCK_PATH"));
+  assert.ok(bridge.includes('runtime: "python3.13"'));
+  assert.ok(bridge.includes("resources: { vcpus: 4 }"));
+  assert.ok(bridge.includes("persistent: true"));
+  assert.ok(bridge.includes("keepLastSnapshots: { count: 1 }"));
+  assert.ok(bridge.includes("detached: true"));
+  assert.ok(bridge.includes("MEDIA_WORKER_CALLBACK_HASH_KEY"));
+  assert.ok(bridge.includes("atlas-media-worker-${environmentName()}"));
+  assert.ok(vaultBridge.includes('jobType: "analyze_audio"'));
+  assert.equal(vaultBridge.includes("MEDIA_WORKER_URL"), false);
+  assert.equal(vaultBridge.includes("MEDIA_WORKER_SECRET"), false);
+  assert.ok(health.includes('dispatch_mode: readiness.runtime'));
+  assert.ok(health.includes("zero_idle_compute: true"));
+  assert.ok(callback.includes("scheduleMediaWorkerSandboxCleanup"));
 });
