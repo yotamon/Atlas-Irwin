@@ -2,9 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
-import os
-import re
-import secrets
 import socket
 import tempfile
 from pathlib import Path
@@ -12,16 +9,12 @@ from typing import Any, Literal
 from urllib.parse import urljoin, urlparse
 
 import httpx
-from fastapi import FastAPI, Header, HTTPException, Request
-from google.api_core.exceptions import AlreadyExists
-from google.cloud import tasks_v2
-from google.protobuf import duration_pb2
+from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
 from .music_intelligence import allin1_infer, analyze_music
 
-app = FastAPI(title="Atlas Media Worker", version="2.1.0")
-_RUNNING: set[asyncio.Task[Any]] = set()
+app = FastAPI(title="Atlas Media Worker", version="3.0.0")
 _ACTIVE_JOB_IDS: set[str] = set()
 
 
@@ -29,7 +22,6 @@ class WorkerRequest(BaseModel):
     job_id: str
     job_type: Literal[
         "analyze_audio",
-        "extract_audio_segment",
         "extract_frame",
         "render_master",
         "render_social",
@@ -39,34 +31,6 @@ class WorkerRequest(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
     callback_url: str
     callback_token: str
-
-
-def worker_secret() -> str:
-    value = os.getenv("MEDIA_WORKER_SECRET", "").strip()
-    if not value:
-        raise RuntimeError("MEDIA_WORKER_SECRET is required")
-    return value
-
-
-def authenticate(authorization: str | None) -> None:
-    expected = f"Bearer {worker_secret()}"
-    if not authorization or not secrets.compare_digest(authorization, expected):
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-
-def authenticate_task(value: str | None) -> None:
-    expected = worker_secret()
-    if not value or not secrets.compare_digest(value, expected):
-        raise HTTPException(status_code=401, detail="Unauthorized task delivery")
-
-
-def cloud_tasks_config() -> tuple[str, str, str] | None:
-    project = os.getenv("GCP_PROJECT_ID", "").strip()
-    location = os.getenv("CLOUD_TASKS_LOCATION", "").strip()
-    queue = os.getenv("CLOUD_TASKS_QUEUE", "").strip()
-    if project and location and queue:
-        return project, location, queue
-    return None
 
 
 def _reject_private_address(address: str) -> None:
@@ -80,7 +44,7 @@ def validate_remote_url(value: str) -> str:
     if parsed.scheme not in {"https", "http"} or not parsed.hostname:
         raise ValueError("Only HTTP(S) media URLs are supported")
     hostname = parsed.hostname.lower().rstrip(".")
-    if hostname in {"localhost", "metadata.google.internal"} or hostname.endswith(".internal"):
+    if hostname == "localhost" or hostname.endswith(".internal"):
         raise ValueError("Local or metadata URLs are not allowed")
     try:
         _reject_private_address(hostname)
@@ -163,9 +127,6 @@ async def analyze_job(payload: dict[str, Any], workdir: Path) -> dict[str, Any]:
     source_path = workdir / "source-audio"
     analysis_path = workdir / "analysis-source.wav"
     await download(audio_url, source_path)
-    # Standardize the decoder/timing domain before beat tracking. Lossy formats can differ
-    # by tens of milliseconds between decoders; PCM WAV makes every downstream analyzer
-    # operate on the exact same sample timeline.
     await ffmpeg(
         "-i",
         str(source_path),
@@ -250,10 +211,7 @@ async def render_job(payload: dict[str, Any], workdir: Path) -> dict[str, Any]:
     output = workdir / "output.mp4"
     await download(audio_url, audio)
     start_ms = max(0, int(payload.get("audio_start_ms") or 0))
-    target_duration_ms = int(
-        payload.get("duration_ms")
-        or sum(int(clip.get("duration_ms") or 0) for clip in clips)
-    )
+    target_duration_ms = int(payload.get("duration_ms") or sum(int(clip.get("duration_ms") or 0) for clip in clips))
     await ffmpeg(
         "-i",
         str(picture),
@@ -333,18 +291,28 @@ async def callback(
     error: str | None = None,
 ) -> None:
     validate_remote_url(request.callback_url)
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.post(
-            request.callback_url,
-            json={
-                "job_id": request.job_id,
-                "status": status,
-                "result": result or {},
-                "error": error,
-            },
-            headers={"Authorization": f"Bearer {request.callback_token}"},
-        )
-        response.raise_for_status()
+    delays = (0, 1, 3, 7, 15)
+    last_error: Exception | None = None
+    for delay in delays:
+        if delay:
+            await asyncio.sleep(delay)
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    request.callback_url,
+                    json={
+                        "job_id": request.job_id,
+                        "status": status,
+                        "result": result or {},
+                        "error": error,
+                    },
+                    headers={"Authorization": f"Bearer {request.callback_token}"},
+                )
+                response.raise_for_status()
+                return
+        except (httpx.HTTPError, OSError) as exc:
+            last_error = exc
+    raise RuntimeError(f"Atlas callback could not be delivered after retries: {last_error}")
 
 
 async def execute(request: WorkerRequest) -> str:
@@ -352,7 +320,7 @@ async def execute(request: WorkerRequest) -> str:
     try:
         await callback(request, "running")
         try:
-            with tempfile.TemporaryDirectory(prefix="atlas-video-") as directory:
+            with tempfile.TemporaryDirectory(prefix="atlas-media-") as directory:
                 workdir = Path(directory)
                 if request.job_type == "analyze_audio":
                     result = await analyze_job(request.payload, workdir)
@@ -363,88 +331,23 @@ async def execute(request: WorkerRequest) -> str:
                 else:
                     raise ValueError(f"Unsupported worker job type: {request.job_type}")
         except Exception as exc:
-            # The media operation failed. A successful failed-callback is terminal from Cloud
-            # Tasks' perspective; only callback transport failure should trigger a queue retry.
             await callback(request, "failed", error=str(exc)[:4000])
             return "failed"
 
-        # If this callback cannot be delivered, propagate the exception so Cloud Tasks retries
-        # the delivery. Atlas callback reconciliation is idempotent for duplicate terminal calls.
         await callback(request, "completed", result=result)
         return "completed"
     finally:
         _ACTIVE_JOB_IDS.discard(request.job_id)
 
 
-def enqueue_cloud_task(request: WorkerRequest, execution_url: str) -> str:
-    config = cloud_tasks_config()
-    if not config:
-        raise RuntimeError("Cloud Tasks is not configured")
-    project, location, queue = config
-    validate_remote_url(execution_url)
-    client = tasks_v2.CloudTasksClient()
-    parent = client.queue_path(project, location, queue)
-    safe_id = re.sub(r"[^a-zA-Z0-9_-]", "-", request.job_id)[:400]
-    task_name = client.task_path(project, location, queue, f"atlas-{safe_id}")
-    task = tasks_v2.Task(
-        name=task_name,
-        http_request=tasks_v2.HttpRequest(
-            http_method=tasks_v2.HttpMethod.POST,
-            url=execution_url,
-            headers={
-                "Content-Type": "application/json",
-                "X-Atlas-Worker-Task": worker_secret(),
-            },
-            body=request.model_dump_json().encode("utf-8"),
-        ),
-        dispatch_deadline=duration_pb2.Duration(seconds=1800),
-    )
-    try:
-        created = client.create_task(parent=parent, task=task)
-        return created.name
-    except AlreadyExists:
-        # Explicit task IDs make Vercel retries safe. The existing Cloud Task owns delivery.
-        return task_name
-
-
 @app.get("/health")
 async def health() -> dict[str, Any]:
     return {
         "ok": True,
-        "version": 2.1,
-        "dispatch_mode": "cloud_tasks" if cloud_tasks_config() else "local_background",
+        "version": 3.0,
+        "dispatch_mode": "vercel_sandbox_runner",
         "music_intelligence": {
             "semantic_analyzer_available": allin1_infer is not None,
         },
         "active_jobs": len(_ACTIVE_JOB_IDS),
     }
-
-
-@app.post("/v1/execute")
-async def execute_task(
-    job: WorkerRequest,
-    x_atlas_worker_task: str | None = Header(default=None),
-) -> dict[str, str]:
-    authenticate_task(x_atlas_worker_task)
-    status = await execute(job)
-    return {"job_id": job.job_id, "status": status}
-
-
-@app.post("/v1/jobs", status_code=202)
-async def submit_job(
-    job: WorkerRequest,
-    http_request: Request,
-    authorization: str | None = Header(default=None),
-) -> dict[str, str]:
-    authenticate(authorization)
-    if cloud_tasks_config():
-        execution_url = f"{str(http_request.base_url).rstrip('/')}/v1/execute"
-        task_name = await asyncio.to_thread(enqueue_cloud_task, job, execution_url)
-        return {"job_id": job.job_id, "status": "queued", "task": task_name}
-
-    # Local/dev compatibility only. Production deploys configure Cloud Tasks so work remains
-    # attached to a durable HTTP request and Cloud Run can safely scale to zero when idle.
-    task = asyncio.create_task(execute(job))
-    _RUNNING.add(task)
-    task.add_done_callback(_RUNNING.discard)
-    return {"job_id": job.job_id, "status": "queued"}
