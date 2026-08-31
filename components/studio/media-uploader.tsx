@@ -138,6 +138,8 @@ export function MediaUploader({
       }
       setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, state: "uploading", message: releaseMasterMode ? "Uploading master and preparing Music Intelligence…" : vaultMode ? "Uploading master…" : "Uploading securely…" } : entry));
       let uploadTarget: Awaited<ReturnType<typeof createMediaUploadTarget>> | null = null;
+      let registered = false;
+      let releaseMasterResult: Awaited<ReturnType<typeof attachReleaseMasterFromMedia>> | null = null;
       try {
         const [contentHash, dimensions] = await Promise.all([sha256(item.file), mediaDimensions(item.file).catch(() => ({ width: "", height: "", duration_ms: "" }))]);
         const targetForm = new FormData();
@@ -169,6 +171,7 @@ export function MediaUploader({
           ...dimensions,
         }).forEach(([key, value]) => form.set(key, value));
         const result = await registerMediaUpload(form);
+        registered = true;
         if (contentItemId) {
           const attachForm = new FormData();
           attachForm.set("content_item_id", contentItemId);
@@ -186,13 +189,17 @@ export function MediaUploader({
           const masterForm = new FormData();
           masterForm.set("media_asset_id", result.id);
           masterForm.set("release_id", releaseId);
-          await attachReleaseMasterFromMedia(masterForm);
+          releaseMasterResult = await attachReleaseMasterFromMedia(masterForm);
         }
         setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? {
           ...entry,
           state: "done",
           message: releaseMasterMode
-            ? "Master attached to the release. Music Intelligence analysis was queued when the media worker is available."
+            ? releaseMasterResult?.analysisReused
+              ? "Master attached. Existing Music Intelligence was reused instantly."
+              : releaseMasterResult?.analysisQueued
+                ? "Master attached. Atlas is analyzing its structure and strongest hooks."
+                : "Master attached. Analysis can be retried from the release when the media worker is available."
             : vaultMode
               ? "Master is in the Vault. Free audio analysis was queued when the media worker is available."
               : result.deduplicated
@@ -202,7 +209,7 @@ export function MediaUploader({
                   : "Added to the library.",
         } : entry));
       } catch (error) {
-        if (uploadTarget) {
+        if (uploadTarget && !registered) {
           const discardForm = new FormData();
           discardForm.set("bucket_name", uploadTarget.bucketName);
           discardForm.set("storage_path", uploadTarget.storagePath);
