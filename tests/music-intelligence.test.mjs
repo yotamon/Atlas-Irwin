@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 
 test("audio analysis uses semantic structure with an explicit fallback instead of a loudest-section hook", async () => {
   const analyzer = await readFile("services/media-worker/app/music_intelligence.py", "utf8");
@@ -88,6 +88,7 @@ test("production Media Worker is self-bootstrapping, zero-idle and Sandbox-nativ
   const callback = await readFile("app/api/studio/growth/audio-callback/route.ts", "utf8");
 
   assert.ok(worker.includes("from .music_intelligence import"));
+  assert.ok(worker.includes("imageio_ffmpeg.get_ffmpeg_exe"));
   assert.ok(runner.includes("request_path.unlink"));
   assert.ok(runner.includes("shutil.rmtree(LOCK_PATH"));
   assert.ok(bridge.includes('runtime: "python3.13"'));
@@ -97,10 +98,46 @@ test("production Media Worker is self-bootstrapping, zero-idle and Sandbox-nativ
   assert.ok(bridge.includes("detached: true"));
   assert.ok(bridge.includes("MEDIA_WORKER_CALLBACK_HASH_KEY"));
   assert.ok(bridge.includes("atlas-media-worker-${environmentName()}"));
+  assert.ok(bridge.includes(".requirements.sha"));
   assert.ok(vaultBridge.includes('jobType: "analyze_audio"'));
-  assert.equal(vaultBridge.includes("MEDIA_WORKER_URL"), false);
-  assert.equal(vaultBridge.includes("MEDIA_WORKER_SECRET"), false);
   assert.ok(health.includes('dispatch_mode: readiness.runtime'));
   assert.ok(health.includes("zero_idle_compute: true"));
   assert.ok(callback.includes("scheduleMediaWorkerSandboxCleanup"));
+});
+
+test("active Media Worker code cannot regress to Google Cloud infrastructure", async () => {
+  const activePaths = [
+    ".env.example",
+    "package.json",
+    ".github/workflows/ci.yml",
+    "lib/media-worker/sandbox.ts",
+    "lib/studio/vault-analysis.ts",
+    "lib/video-director/worker.ts",
+    "app/studio/growth-media-actions.ts",
+    "app/api/studio/growth/audio-callback/route.ts",
+    "app/api/video-director/worker/callback/route.ts",
+    "app/api/health/media-worker/route.ts",
+    "services/media-worker/app/main.py",
+    "services/media-worker/app/runner.py",
+    "services/media-worker/requirements.txt",
+  ];
+  const sources = await Promise.all(activePaths.map(async (path) => [path, await readFile(path, "utf8")]));
+  const banned = [
+    "GCP_PROJECT_ID",
+    "CLOUD_TASKS_",
+    "google-cloud-tasks",
+    "google.cloud",
+    "gcloud ",
+    "MEDIA_WORKER_URL",
+    "MEDIA_WORKER_SECRET",
+  ];
+
+  for (const [path, source] of sources) {
+    for (const token of banned) {
+      assert.equal(source.includes(token), false, `${path} contains obsolete external-worker token ${token}`);
+    }
+  }
+
+  await assert.rejects(access("scripts/deploy-media-worker.mjs"));
+  await assert.rejects(access("services/media-worker/Dockerfile"));
 });
