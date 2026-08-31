@@ -24,13 +24,13 @@ function fileTitle(input: string) {
 function hasMusicMap(value: Json) {
   return Boolean(value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length);
 }
-function analysisMatchesAsset(profile: Json, asset: { id: string; public_url: string }) {
+function analysisMatchesAsset(profile: Json, asset: { id: string; public_url: string | null }) {
   if (!hasMusicMap(profile)) return false;
   const map = record(profile);
   if (typeof map.version !== "number" || map.version < 3 || map.source !== "worker") return false;
   const source = record(map.source_audio);
   if (typeof source.media_asset_id === "string") return source.media_asset_id === asset.id;
-  return typeof source.url === "string" && source.url === asset.public_url;
+  return Boolean(asset.public_url) && typeof source.url === "string" && source.url === asset.public_url;
 }
 
 async function dispatchAnalysis(trackId: string, audioUrl: string, mediaAssetId: string | null) {
