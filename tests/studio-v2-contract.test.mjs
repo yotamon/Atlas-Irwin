@@ -54,15 +54,20 @@ test("Growth OS keeps planning and diagnosis deterministic before paid creative"
   assert.ok(migration.includes("detect_growth_from_metric"));
 });
 
-test("unreleased masters are independent from releases and reuse the media worker", async () => {
+test("unreleased masters are independent from releases and reuse the shared durable media worker", async () => {
   const migration = await readFile("supabase/migrations/20260819183500_artist_growth_os.sql", "utf8");
   const mediaAction = await readFile("app/studio/growth-media-actions.ts", "utf8");
-  const workerBridge = await readFile("lib/studio/vault-analysis.ts", "utf8");
+  const workerReadiness = await readFile("lib/studio/vault-analysis.ts", "utf8");
+  const workerQueue = await readFile("lib/media-worker/queue.ts", "utf8");
   assert.ok(migration.includes("create table public.track_vault"));
   assert.ok(migration.includes("linked_release_id uuid references public.releases"));
   assert.ok(mediaAction.includes("createVaultTrackFromMedia"));
-  assert.ok(workerBridge.includes('jobType: "analyze_audio"'));
-  assert.ok(workerBridge.includes("dispatchMediaWorkerJob"));
+  assert.ok(mediaAction.includes("kickMediaWorkerQueue"));
+  assert.ok(workerReadiness.includes("mediaWorkerReadiness"));
+  assert.equal(workerReadiness.includes("dispatchMediaWorkerJob"), false);
+  assert.ok(workerQueue.includes('jobType: "analyze_audio"'));
+  assert.ok(workerQueue.includes("dispatchMediaWorkerJob"));
+  assert.ok(workerQueue.includes('status: "queued"'));
 });
 
 test("Create keeps specialist creation outcomes discoverable", async () => {
