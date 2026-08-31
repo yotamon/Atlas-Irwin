@@ -61,7 +61,8 @@ test("unreleased masters are independent from releases and reuse the media worke
   assert.ok(migration.includes("create table public.track_vault"));
   assert.ok(migration.includes("linked_release_id uuid references public.releases"));
   assert.ok(mediaAction.includes("createVaultTrackFromMedia"));
-  assert.ok(workerBridge.includes('job_type: "analyze_audio"'));
+  assert.ok(workerBridge.includes('jobType: "analyze_audio"'));
+  assert.ok(workerBridge.includes("dispatchMediaWorkerJob"));
 });
 
 test("Create keeps specialist creation outcomes discoverable", async () => {
