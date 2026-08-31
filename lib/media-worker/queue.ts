@@ -5,7 +5,6 @@ import {
   dispatchMediaWorkerJob,
   MEDIA_WORKER_CALLBACK_HASH_KEY,
   mediaWorkerReadiness,
-  scheduleMediaWorkerSandboxCleanup,
 } from "@/lib/media-worker/sandbox";
 import { getSiteUrl } from "@/lib/site-url";
 import { asGrowthClient } from "@/lib/studio/growth-db";
@@ -15,9 +14,16 @@ import type { MusicVideoWorkerJob, VideoDatabase } from "@/types/video-database"
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const STALE_JOB_MS = 50 * 60 * 1000;
-const CONTINUATION_DELAY_MS = 1400;
+const SUPPORTED_VIDEO_JOB_TYPES = new Set<MusicVideoWorkerJob["job_type"]>([
+  "analyze_audio",
+  "extract_frame",
+  "render_master",
+  "render_social",
+  "render_promo",
+  "render_hook",
+]);
 
-type WorkerJobType = "analyze_audio" | "extract_frame" | "render_master" | "render_social" | "render_promo" | "render_hook";
+type DispatchableWorkerJobType = "analyze_audio" | "extract_frame" | "render_master" | "render_social" | "render_promo" | "render_hook";
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -120,7 +126,18 @@ async function oldestVideoPlanned(db: SupabaseClient<VideoDatabase>) {
     .limit(20);
   if (error) throw new Error(error.message);
   if (!data?.length) return null;
-  return [...data].sort((a, b) => {
+
+  const unsupported = data.filter((job) => !SUPPORTED_VIDEO_JOB_TYPES.has(job.job_type));
+  for (const job of unsupported) {
+    await db.from("music_video_worker_jobs").update({
+      status: "failed",
+      error: `Unsupported Media Worker job type: ${job.job_type}`,
+      completed_at: new Date().toISOString(),
+    }).eq("id", job.id).eq("status", "planned");
+  }
+  const supported = data.filter((job) => SUPPORTED_VIDEO_JOB_TYPES.has(job.job_type));
+  if (!supported.length) return null;
+  return [...supported].sort((a, b) => {
     const analysisPriority = Number(b.job_type === "analyze_audio") - Number(a.job_type === "analyze_audio");
     if (analysisPriority) return analysisPriority;
     return timestamp(a.created_at) - timestamp(b.created_at);
@@ -133,6 +150,7 @@ function vaultRequestedAt(track: { analysis: Json; updated_at: string }) {
 }
 
 async function dispatchVideoJob(db: SupabaseClient<VideoDatabase>, job: MusicVideoWorkerJob) {
+  if (!SUPPORTED_VIDEO_JOB_TYPES.has(job.job_type)) return false;
   const requestPayload = withoutCredential(record(job.request_payload));
   const credential = createMediaWorkerCallbackCredential();
   const { data: claimed, error: claimError } = await db.from("music_video_worker_jobs")
@@ -154,7 +172,7 @@ async function dispatchVideoJob(db: SupabaseClient<VideoDatabase>, job: MusicVid
   try {
     const dispatch = await dispatchMediaWorkerJob({
       jobId: claimed.id,
-      jobType: claimed.job_type as WorkerJobType,
+      jobType: claimed.job_type as DispatchableWorkerJobType,
       payload: requestPayload,
       callbackUrl: `${getSiteUrl()}/api/video-director/worker/callback`,
       callbackToken: credential.token,
@@ -274,13 +292,4 @@ export async function kickMediaWorkerQueue() {
       ? await dispatchVideoJob(db, video)
       : false;
   return { dispatched, reason: dispatched ? "started" as const : "busy" as const };
-}
-
-export function continueMediaWorkerQueue() {
-  return async () => {
-    await new Promise((resolve) => setTimeout(resolve, CONTINUATION_DELAY_MS));
-    await scheduleMediaWorkerSandboxCleanup()();
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    await kickMediaWorkerQueue().catch(() => undefined);
-  };
 }
