@@ -1,40 +1,14 @@
 import "server-only";
 
-import {
-  createMediaWorkerCallbackCredential,
-  dispatchMediaWorkerJob,
-  MEDIA_WORKER_CALLBACK_HASH_KEY,
-  mediaWorkerReadiness as sharedMediaWorkerReadiness,
-} from "@/lib/media-worker/sandbox";
-import { getSiteUrl } from "@/lib/site-url";
+import { kickMediaWorkerQueue } from "@/lib/media-worker/queue";
+import { mediaWorkerReadiness as sharedMediaWorkerReadiness } from "@/lib/media-worker/sandbox";
 import type { Json } from "@/types/database";
 import type { MusicMap } from "./creative-director";
 import type { ExtendedMusicVideoProject, VideoDatabase } from "@/types/video-database";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-const STALE_JOB_MS = 50 * 60 * 1000;
-
 function json(value: unknown): Json {
   return value as Json;
-}
-
-function workerJobTimestamp(job: unknown) {
-  if (!job || typeof job !== "object") return 0;
-  const value = job as Record<string, unknown>;
-  for (const key of ["started_at", "updated_at", "created_at"]) {
-    if (typeof value[key] !== "string") continue;
-    const timestamp = Date.parse(value[key]);
-    if (Number.isFinite(timestamp)) return timestamp;
-  }
-  return 0;
-}
-
-function activeWorkerJob(job: unknown) {
-  if (!job || typeof job !== "object") return false;
-  const value = job as Record<string, unknown>;
-  if (!["queued", "running"].includes(String(value.status || ""))) return false;
-  const timestamp = workerJobTimestamp(job);
-  return timestamp > 0 && Date.now() - timestamp < STALE_JOB_MS;
 }
 
 export function mediaWorkerReadiness() {
@@ -67,15 +41,19 @@ export function fallbackMusicMap(durationSeconds: number): MusicMap {
     ms: section.start_ms,
     confidence: 0.25,
     reason: "Estimated boundary from track duration only. Run real audio analysis before using it as an edit decision.",
+    provenance: "duration_only" as const,
   }));
   return {
-    version: 2,
+    version: 3,
     duration_ms: durationMs,
     bpm: null,
     beat_confidence: 0,
     beats_ms: [],
     beat_positions: [],
     downbeats_ms: [],
+    downbeat_source: "none",
+    bars: [],
+    phrases: [],
     sections,
     energy_curve: sections.flatMap((section) => [
       { ms: section.start_ms, value: Math.max(0, section.energy - 0.12) },
@@ -84,13 +62,27 @@ export function fallbackMusicMap(durationSeconds: number): MusicMap {
     edit_points: editPoints,
     peaks_ms: [],
     hook_candidates: [],
+    moments: {
+      instant_hook: [],
+      musical_identity: [],
+      groove_loop: [],
+      build_drop: [],
+      climax: [],
+      story_arc: [],
+    },
     social_cuts: { "6": null, "8": null, "15": null, "30": null },
+    social_cut_options: { "6": [], "8": [], "15": [], "30": [] },
     analysis: {
       engine: "duration-only-fallback",
       model: null,
       quality: "fallback",
       semantic_structure: false,
       real_downbeats: false,
+      downbeat_source: "none",
+      embeddings_used: false,
+      activation_fps: null,
+      config: "duration-only",
+      confidence: { overall: 0, rhythm: 0, downbeats: 0, structure: 0, hooks: 0 },
       warnings: ["This map was estimated without inspecting the audio."],
     },
     source: "fallback",
@@ -123,23 +115,14 @@ export async function queueMediaWorkerJob(input: {
     .maybeSingle();
   if (existing.error) throw new Error(existing.error.message);
   if (existing.data?.status === "completed") return existing.data;
-  if (existing.data && activeWorkerJob(existing.data)) return existing.data;
-
-  const busyJobs = await input.db.from("music_video_worker_jobs")
-    .select("id,status,created_at,started_at")
-    .eq("owner_id", input.ownerId)
-    .in("status", ["queued", "running"])
-    .limit(10);
-  if (busyJobs.error) throw new Error(busyJobs.error.message);
-  if ((busyJobs.data || []).some((candidate) => candidate.id !== existing.data?.id && activeWorkerJob(candidate))) {
-    throw new Error("The free Media Worker is already processing another job. Atlas keeps concurrency at 1 to protect the Hobby quota.");
+  if (existing.data && ["planned", "queued", "running"].includes(existing.data.status)) {
+    await kickMediaWorkerQueue();
+    const refreshed = await input.db.from("music_video_worker_jobs")
+      .select("*").eq("id", existing.data.id).single();
+    if (refreshed.error || !refreshed.data) throw new Error(refreshed.error?.message || "Could not reload media-worker job.");
+    return refreshed.data;
   }
 
-  const credential = createMediaWorkerCallbackCredential();
-  const storedPayload = {
-    ...input.payload,
-    [MEDIA_WORKER_CALLBACK_HASH_KEY]: credential.hash,
-  };
   const { data: job, error } = await input.db.from("music_video_worker_jobs")
     .upsert({
       owner_id: input.ownerId,
@@ -147,7 +130,7 @@ export async function queueMediaWorkerJob(input: {
       job_type: input.jobType,
       status: "planned",
       idempotency_key: input.idempotencyKey,
-      request_payload: json(storedPayload),
+      request_payload: json(input.payload),
       result_payload: {},
       error: null,
       external_job_id: null,
@@ -157,36 +140,13 @@ export async function queueMediaWorkerJob(input: {
     .select("*")
     .single();
   if (error || !job) throw new Error(error?.message || "Could not create media-worker job.");
-
   if (job.status === "completed") return job;
 
-  const callbackUrl = `${getSiteUrl()}/api/video-director/worker/callback`;
-  try {
-    const dispatch = await dispatchMediaWorkerJob({
-      jobId: job.id,
-      jobType: input.jobType,
-      payload: input.payload,
-      callbackUrl,
-      callbackToken: credential.token,
-    });
-    const { data: queued, error: queueError } = await input.db.from("music_video_worker_jobs")
-      .update({
-        status: "queued",
-        external_job_id: dispatch.sandboxName,
-        error: null,
-      })
-      .eq("id", job.id)
-      .select("*")
-      .single();
-    if (queueError || !queued) throw new Error(queueError?.message || "Could not mark worker job queued.");
-    return queued;
-  } catch (dispatchError) {
-    const message = dispatchError instanceof Error ? dispatchError.message : "Media Worker dispatch failed.";
-    await input.db.from("music_video_worker_jobs")
-      .update({ status: "failed", error: message, completed_at: new Date().toISOString() })
-      .eq("id", job.id);
-    throw new Error(message);
-  }
+  await kickMediaWorkerQueue();
+  const refreshed = await input.db.from("music_video_worker_jobs")
+    .select("*").eq("id", job.id).single();
+  if (refreshed.error || !refreshed.data) throw new Error(refreshed.error?.message || "Could not reload queued media-worker job.");
+  return refreshed.data;
 }
 
 async function createWorkerUploadTarget(
