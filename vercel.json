@@ -3,8 +3,7 @@
   "git": {
     "deploymentEnabled": {
       "**": false,
-      "main": true,
-      "fix/vercel-sandbox-python-bootstrap-20260831": true
+      "main": true
     }
   },
   "crons": [
