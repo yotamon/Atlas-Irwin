@@ -23,16 +23,10 @@ function authorized(request: Request, analysis: Record<string, unknown>) {
   if (!authorization.startsWith("Bearer ")) return false;
   const token = authorization.slice(7);
   if (!token) return false;
-
   const expectedHash = analysis[MEDIA_WORKER_CALLBACK_HASH_KEY];
-  if (typeof expectedHash === "string" && expectedHash.length === 64) {
-    const actualHash = createHash("sha256").update(token).digest("hex");
-    return safeEqual(actualHash, expectedHash);
-  }
-
-  // Compatibility only for an analysis queued by the old external worker before migration.
-  const legacySecret = process.env.MEDIA_WORKER_SECRET?.trim();
-  return Boolean(legacySecret && safeEqual(token, legacySecret));
+  if (typeof expectedHash !== "string" || expectedHash.length !== 64) return false;
+  const actualHash = createHash("sha256").update(token).digest("hex");
+  return safeEqual(actualHash, expectedHash);
 }
 
 function withoutCallbackCredential(value: Record<string, unknown>) {
@@ -120,8 +114,6 @@ export async function POST(request: Request) {
   const currentAnalysis = record(track.analysis);
   const currentRequestId = typeof currentAnalysis.request_id === "string" ? currentAnalysis.request_id : null;
   if (currentRequestId && requestId !== currentRequestId) {
-    // A stale callback cannot mutate current release intelligence. This is intentionally
-    // checked before credential validation because the replacement analysis owns a new token.
     return NextResponse.json({ ok: true, stale: true });
   }
   if (!authorized(request, currentAnalysis)) {
