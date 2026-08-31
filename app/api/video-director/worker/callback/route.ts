@@ -4,6 +4,7 @@ import {
   MEDIA_WORKER_CALLBACK_HASH_KEY,
   scheduleMediaWorkerSandboxCleanup,
 } from "@/lib/media-worker/sandbox";
+import { sanitizeMusicIntelligenceMap } from "@/lib/music-intelligence/sanitize";
 import { createServiceClient } from "@/lib/supabase/service";
 import {
   registerWorkerRenderAsset,
@@ -170,14 +171,16 @@ export async function POST(request: Request) {
   }
 
   if (job.job_type === "analyze_audio") {
-    const musicMap = record(result.music_map);
-    if (!Object.keys(musicMap).length) return NextResponse.json({ error: "Worker returned no music map" }, { status: 422 });
+    const rawMusicMap = record(result.music_map);
+    if (!Object.keys(rawMusicMap).length) return NextResponse.json({ error: "Worker returned no music map" }, { status: 422 });
     try {
-      if (!await analysisMatchesCurrentMaster(db, job.project_id, musicMap)) {
+      if (!await analysisMatchesCurrentMaster(db, job.project_id, rawMusicMap)) {
         await markWorkerTerminal(db, job.id, "failed", result, "Analysis result belongs to a previous track master and was discarded.");
         scheduleCleanup();
         return NextResponse.json({ ok: true, stale: true, reason: "source_master_mismatch" });
       }
+      const musicMap = sanitizeMusicIntelligenceMap(rawMusicMap);
+      const sanitizedResult = { ...result, music_map: musicMap };
       const { error: projectError } = await db.from("music_video_projects").update({
         music_map: json(musicMap),
         status: "concept_review",
@@ -186,7 +189,7 @@ export async function POST(request: Request) {
         analysis_completed_at: new Date().toISOString(),
       }).eq("id", job.project_id);
       if (projectError) throw new Error(projectError.message);
-      await markWorkerTerminal(db, job.id, "completed", result, null);
+      await markWorkerTerminal(db, job.id, "completed", sanitizedResult, null);
       scheduleCleanup();
       return NextResponse.json({ ok: true });
     } catch (error) {
