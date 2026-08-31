@@ -19,20 +19,20 @@ function total(rows: MetricSnapshot[], key: keyof MetricSnapshot) {
 }
 function healthScore({
   release,
-  primaryTrack,
+  hasMasterAudio,
   campaign,
   contentItems,
   missingAssets,
 }: {
   release: Release;
-  primaryTrack: Track | null;
+  hasMasterAudio: boolean;
   campaign: CampaignSummary;
   contentItems: ContentItem[];
   missingAssets: ContentItem[];
 }) {
   let score = 0;
   if (release.release_date) score += 15;
-  if (primaryTrack?.audio_url) score += 20;
+  if (hasMasterAudio) score += 20;
   if (release.artwork_url || release.cover_asset) score += 15;
   if (campaign) score += 15;
   if (contentItems.length >= 4) score += 15;
@@ -53,13 +53,12 @@ export function ReleaseWorkspaceV2({ release, tracks, mediaLinks, mediaAssets, c
   const releaseAssets = mediaAssets.filter((asset) => releaseMediaIds.has(asset.id));
   const planned = contentItems.filter((item) => item.scheduled_at).sort((a,b) => Date.parse(a.scheduled_at!) - Date.parse(b.scheduled_at!));
   const scheduled = contentItems.filter((item) => item.status === "Scheduled");
-  const published = contentItems.filter((item) => item.status === "Published");
   const missingAsset = contentItems.filter((item) => item.scheduled_at && !item.asset_url && item.status !== "Published");
   const primaryTrack = tracks.find((track) => track.is_primary) ?? tracks[0] ?? null;
   const hasMasterAudio = Boolean(primaryTrack?.audio_url || vaultTrack?.audio_url);
   const releaseDateLocked = providerScheduledCount > 0;
   const openPlaybook = playbookTasks.filter((task) => task.status !== "Done");
-  const score = healthScore({ release, primaryTrack: hasMasterAudio ? primaryTrack ?? ({ audio_url: vaultTrack?.audio_url } as Track) : null, campaign, contentItems, missingAssets: missingAsset });
+  const score = healthScore({ release, hasMasterAudio, campaign, contentItems, missingAssets: missingAsset });
   const needsYou = [
     ...(!release.release_date ? [{ title:"Choose a release date", detail:"Atlas needs one anchor date to move the whole plan.", href:"#release-details" }] : []),
     ...(releaseDateLocked ? [{ title:"External schedule is active", detail:`${providerScheduledCount} post${providerScheduledCount === 1 ? " is" : "s are"} already scheduled at a provider, so the release date is locked against drift.`, href:"?stage=publish" }] : []),
@@ -95,7 +94,7 @@ export function ReleaseWorkspaceV2({ release, tracks, mediaLinks, mediaAssets, c
 
     {activeStage === "plan" ? <div className="release-prepare-grid">
       <section className="v2-section"><div className="v2-section-heading"><div><span className="section-label">Prepare</span><h2>One growth plan, anchored to release day</h2></div></div>
-        {campaign ? <div className="v2-plan-card"><div><span>{campaign.status}</span><h3>{campaign.name}</h3><p>Objective: {campaign.objective} · Primary signal: {campaign.primary_kpi}</p></div><Link className="button" href={`/studio/campaigns/${campaign.id}`}>Advanced campaign brain</Link></div> : <div className="v2-calm-state compact"><strong>No campaign brain yet.</strong><p>Create one objective-led system so Atlas can connect content, experiments, publishing and learnings.</p><Link className="button primary" href="/studio/campaigns">Create growth plan</Link></div>}
+        {campaign ? <div className="v2-plan-card"><div><span>{campaign.status}</span><h3>{campaign.name}</h3><p>Objective: {campaign.objective} · Primary signal: {campaign.primary_kpi}</p></div><Link className="button" href={`/studio/campaigns/${campaign.id}`}>Advanced campaign brain</Link></div> : <div className="v2-calm-state compact"><strong>No campaign brain yet.</strong><p>Create one objective-led system so Atlas can connect content, experiments and attribution share one objective.</p><Link className="button primary" href="/studio/campaigns">Create growth plan</Link></div>}
         <div className="v2-plan-timeline">{planned.length ? planned.slice(0,12).map((item) => <Link href={`/studio/production?edit=${item.id}`} key={item.id}><span>{shortDate(item.scheduled_at)}</span><strong>{item.title}</strong><small>{item.platform} · {item.status}</small></Link>) : <p className="v2-muted-copy">The release playbook handles free internal preparation even before you spend on finished creative.</p>}</div>
       </section>
       <section className="v2-section"><div className="v2-section-heading"><div><span className="section-label">Release playbook</span><h2>{openPlaybook.length} open checkpoint{openPlaybook.length === 1 ? "" : "s"}</h2></div><Link href="/studio/calendar">Calendar</Link></div>
