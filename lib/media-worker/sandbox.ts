@@ -277,5 +277,14 @@ export function scheduleMediaWorkerSandboxCleanup() {
     } catch {
       // The Sandbox may already be stopped or have reached its Hobby timeout.
     }
+    // Terminal callbacks invoke this only after durable state has been reconciled. Give the
+    // detached runner a moment to release its lock, then dispatch the oldest queued job.
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    try {
+      const { kickMediaWorkerQueue } = await import("@/lib/media-worker/queue");
+      await kickMediaWorkerQueue();
+    } catch {
+      // Queue work is durable. A later enqueue/callback/request will kick it again.
+    }
   };
 }
