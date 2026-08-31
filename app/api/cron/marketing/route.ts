@@ -1,3 +1,4 @@
+import { kickMediaWorkerQueue } from "@/lib/media-worker/queue";
 import { runMarketingAutomationCycle } from "@/lib/marketing/automation";
 import { syncAudienceInteractions } from "@/lib/marketing/audience";
 import { authorizeMarketingCron } from "@/lib/marketing/cron-auth";
@@ -32,7 +33,11 @@ export async function GET(request: Request) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  // Publishing is first because it is the most time-sensitive external effect.
+  // The same authenticated 15-minute heartbeat also recovers durable Media Worker jobs after
+  // an interrupted dispatch/callback window. Healthy callbacks still drain the queue immediately.
+  const mediaWorker = await runStep("media worker queue", () => kickMediaWorkerQueue());
+
+  // Publishing is first among marketing effects because it is the most time-sensitive external effect.
   // Heavy FFmpeg composition runs on its own low-frequency endpoint.
   const publications = await runStep("publication queue", () => processDuePublicationJobs());
   const outreach = await runStep("outreach queue", () => processDueOutreachEnrollments());
@@ -41,7 +46,7 @@ export async function GET(request: Request) {
   const radar = await runStep("marketing radar", () => refreshMarketingRadarIfDue());
   const nextBestActions = await runStep("next best actions", () => refreshNextBestActions());
 
-  const results = { publications, outreach, automation, audience, radar, nextBestActions };
+  const results = { mediaWorker, publications, outreach, automation, audience, radar, nextBestActions };
   const failures = Object.entries(results)
     .filter(([, result]) => !result.ok)
     .map(([name, result]) => ({ name, error: "error" in result ? result.error : "Unknown failure." }));
