@@ -25,7 +25,7 @@
     "studio:import:dry-run": "node --env-file=.env.local scripts/import-legacy-releases.mjs --dry-run",
     "studio:seed": "node --env-file=.env.local scripts/seed-studio.mjs",
     "studio:media:public": "node --env-file=.env.local scripts/migrate-media-to-public.mjs",
-    "media-worker:deploy": "node scripts/deploy-media-worker.mjs",
+    "media-worker:check": "node scripts/check-media-worker.mjs --remote",
     "env:restore": "node scripts/restore-vercel-env.mjs"
   },
   "dependencies": {
