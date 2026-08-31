@@ -62,6 +62,28 @@ async function markWorkerTerminal(
   if (terminalError) throw new Error(terminalError.message);
 }
 
+async function analysisMatchesCurrentMaster(
+  db: ReturnType<typeof createServiceClient>,
+  projectId: string,
+  musicMap: Record<string, unknown>,
+) {
+  if (typeof musicMap.version !== "number" || musicMap.version < 3) return false;
+  const source = record(musicMap.source_audio);
+  const sourceUrl = typeof source.url === "string" ? source.url : null;
+  if (!sourceUrl) return false;
+  const { data: project, error: projectError } = await db.from("music_video_projects")
+    .select("track_id")
+    .eq("id", projectId)
+    .single();
+  if (projectError || !project) throw new Error(projectError?.message || "Video project not found while validating analysis source.");
+  const { data: track, error: trackError } = await db.from("tracks")
+    .select("audio_url")
+    .eq("id", project.track_id)
+    .single();
+  if (trackError || !track) throw new Error(trackError?.message || "Track not found while validating analysis source.");
+  return Boolean(track.audio_url && track.audio_url === sourceUrl);
+}
+
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as unknown;
   const payload = record(body);
@@ -151,6 +173,11 @@ export async function POST(request: Request) {
     const musicMap = record(result.music_map);
     if (!Object.keys(musicMap).length) return NextResponse.json({ error: "Worker returned no music map" }, { status: 422 });
     try {
+      if (!await analysisMatchesCurrentMaster(db, job.project_id, musicMap)) {
+        await markWorkerTerminal(db, job.id, "failed", result, "Analysis result belongs to a previous track master and was discarded.");
+        scheduleCleanup();
+        return NextResponse.json({ ok: true, stale: true, reason: "source_master_mismatch" });
+      }
       const { error: projectError } = await db.from("music_video_projects").update({
         music_map: json(musicMap),
         status: "concept_review",
