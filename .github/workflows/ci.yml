@@ -46,6 +46,9 @@ jobs:
       - name: Run Track Intelligence behavioral regression tests
         run: python -m unittest discover -s services/media-worker/tests -p 'test_*.py' -v
 
+      - name: Validate Track Intelligence benchmark evaluator
+        run: node --check scripts/evaluate-track-intelligence.mjs
+
       - name: Validate Media Worker check script
         run: node --check scripts/check-media-worker.mjs
 
