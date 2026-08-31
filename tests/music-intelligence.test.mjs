@@ -33,6 +33,25 @@ test("Studio exposes a playable, explainable track intelligence inspector", asyn
   assert.ok(workspace.includes("TrackIntelligenceInspector"));
 });
 
+test("release workspace owns master upload and reuses the same music intelligence pipeline", async () => {
+  const releaseWorkspace = await readFile("components/studio/release-workspace-v2.tsx", "utf8");
+  const panel = await readFile("components/studio/release-master-audio-panel.tsx", "utf8");
+  const uploader = await readFile("components/studio/media-uploader.tsx", "utf8");
+  const actions = await readFile("app/studio/growth-media-actions.ts", "utf8");
+  const callback = await readFile("app/api/studio/growth/audio-callback/route.ts", "utf8");
+
+  assert.ok(releaseWorkspace.includes("ReleaseMasterAudioPanel"));
+  assert.ok(releaseWorkspace.includes('href:"#master-audio"'));
+  assert.ok(panel.includes("MusicIntelligencePreview"));
+  assert.ok(panel.includes("AnalysisAutoRefresh"));
+  assert.ok(panel.includes("Replace master audio"));
+  assert.ok(uploader.includes("releaseMasterMode"));
+  assert.ok(uploader.includes("attachReleaseMasterFromMedia"));
+  assert.ok(actions.includes("analysisReused"));
+  assert.ok(actions.includes("request_id"));
+  assert.ok(callback.includes("stale: true"));
+});
+
 test("storyboard persistence snaps only to trustworthy musical timing", async () => {
   const planner = await readFile("lib/video-director/planner.ts", "utf8");
   assert.ok(planner.includes("alignProductionPlanToMusicMap"));
