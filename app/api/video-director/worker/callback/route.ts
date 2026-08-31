@@ -26,15 +26,10 @@ function authorized(request: Request, requestPayload: Record<string, unknown>) {
   if (!authorization.startsWith("Bearer ")) return false;
   const token = authorization.slice(7);
   if (!token) return false;
-
   const expectedHash = requestPayload[MEDIA_WORKER_CALLBACK_HASH_KEY];
-  if (typeof expectedHash === "string" && expectedHash.length === 64) {
-    const actualHash = createHash("sha256").update(token).digest("hex");
-    return safeEqual(actualHash, expectedHash);
-  }
-
-  const legacySecret = process.env.MEDIA_WORKER_SECRET?.trim();
-  return Boolean(legacySecret && safeEqual(token, legacySecret));
+  if (typeof expectedHash !== "string" || expectedHash.length !== 64) return false;
+  const actualHash = createHash("sha256").update(token).digest("hex");
+  return safeEqual(actualHash, expectedHash);
 }
 
 function record(value: unknown): Record<string, unknown> {
