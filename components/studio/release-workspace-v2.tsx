@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { MediaUploader } from "@/components/studio/media-uploader";
 import { ReleaseForm } from "@/components/studio/release-form";
+import { ReleaseMasterAudioPanel } from "@/components/studio/release-master-audio-panel";
 import type { ContentItem, MediaAsset, MediaLink, MetricSnapshot, Release, Track } from "@/types/database";
+import type { VaultTrack } from "@/types/growth-database";
 
 const STAGES = [["overview","Select"],["plan","Prepare"],["create","Build hype"],["publish","Release"],["learn","Sustain"]] as const;
 type Stage = (typeof STAGES)[number][0];
@@ -30,7 +32,7 @@ function healthScore({
 }) {
   let score = 0;
   if (release.release_date) score += 15;
-  if (primaryTrack) score += 20;
+  if (primaryTrack?.audio_url) score += 20;
   if (release.artwork_url || release.cover_asset) score += 15;
   if (campaign) score += 15;
   if (contentItems.length >= 4) score += 15;
@@ -42,8 +44,8 @@ function healthScore({
   return Math.min(100, score);
 }
 
-export function ReleaseWorkspaceV2({ release, tracks, mediaLinks, mediaAssets, contentItems, metrics, campaign, stage, playbookTasks = [], providerScheduledCount = 0 }: {
-  release: Release; tracks: Track[]; mediaLinks: MediaLink[]; mediaAssets: MediaAsset[]; contentItems: ContentItem[]; metrics: MetricSnapshot[]; campaign: CampaignSummary; stage: string; playbookTasks?: PlaybookTask[]; providerScheduledCount?: number;
+export function ReleaseWorkspaceV2({ release, tracks, mediaLinks, mediaAssets, contentItems, metrics, campaign, stage, playbookTasks = [], providerScheduledCount = 0, vaultTrack = null }: {
+  release: Release; tracks: Track[]; mediaLinks: MediaLink[]; mediaAssets: MediaAsset[]; contentItems: ContentItem[]; metrics: MetricSnapshot[]; campaign: CampaignSummary; stage: string; playbookTasks?: PlaybookTask[]; providerScheduledCount?: number; vaultTrack?: VaultTrack | null;
 }) {
   const activeStage: Stage = STAGES.some(([key]) => key === stage) ? stage as Stage : "overview";
   const activeStageIndex = STAGES.findIndex(([key]) => key === activeStage);
@@ -54,13 +56,14 @@ export function ReleaseWorkspaceV2({ release, tracks, mediaLinks, mediaAssets, c
   const published = contentItems.filter((item) => item.status === "Published");
   const missingAsset = contentItems.filter((item) => item.scheduled_at && !item.asset_url && item.status !== "Published");
   const primaryTrack = tracks.find((track) => track.is_primary) ?? tracks[0] ?? null;
+  const hasMasterAudio = Boolean(primaryTrack?.audio_url || vaultTrack?.audio_url);
   const releaseDateLocked = providerScheduledCount > 0;
   const openPlaybook = playbookTasks.filter((task) => task.status !== "Done");
-  const score = healthScore({ release, primaryTrack, campaign, contentItems, missingAssets: missingAsset });
+  const score = healthScore({ release, primaryTrack: hasMasterAudio ? primaryTrack ?? ({ audio_url: vaultTrack?.audio_url } as Track) : null, campaign, contentItems, missingAssets: missingAsset });
   const needsYou = [
     ...(!release.release_date ? [{ title:"Choose a release date", detail:"Atlas needs one anchor date to move the whole plan.", href:"#release-details" }] : []),
     ...(releaseDateLocked ? [{ title:"External schedule is active", detail:`${providerScheduledCount} post${providerScheduledCount === 1 ? " is" : "s are"} already scheduled at a provider, so the release date is locked against drift.`, href:"?stage=publish" }] : []),
-    ...(!primaryTrack ? [{ title:"Add the master track", detail:"The release has no canonical audio yet.", href:"?view=advanced&tab=music" }] : []),
+    ...(!hasMasterAudio ? [{ title:"Add the release master", detail:"Upload the canonical audio so Atlas can analyze sections and hooks for this release.", href:"#master-audio" }] : []),
     ...(!release.artwork_url && !release.cover_asset ? [{ title:"Choose cover artwork", detail:"Upload it here and Atlas will attach it as the release cover automatically.", href:"#cover-upload" }] : []),
     ...(!campaign ? [{ title:"Create the growth plan", detail:"Connect this release to Campaign Brain so content, experiments and attribution share one objective.", href:"/studio/campaigns" }] : []),
     ...missingAsset.slice(0,2).map((item) => ({ title:`Finish ${item.title}`, detail:`${item.platform} has a planned date but still needs the creative asset.`, href:`/studio/production?edit=${item.id}` })),
@@ -85,6 +88,7 @@ export function ReleaseWorkspaceV2({ release, tracks, mediaLinks, mediaAssets, c
         {needsYou.length ? <div className="v2-inbox">{needsYou.map((item) => <Link className="v2-inbox-item" href={item.href} key={`${item.title}-${item.href}`}><div><strong>{item.title}</strong><small>{item.detail}</small></div><b aria-hidden>→</b></Link>)}</div> : <div className="v2-calm-state compact"><strong>Atlas has what it needs.</strong><p>The track, release identity and operating context are coherent enough to continue.</p></div>}
       </section>
       <aside className="v2-release-summary-card"><div className="v2-release-artwork">{release.artwork_url ? <img src={release.artwork_url} alt={release.cover_alt || `${release.title} artwork`} /> : <div aria-hidden>{release.title.slice(0,1).toUpperCase()}</div>}</div><dl><div><dt>Tracks</dt><dd>{tracks.length}</dd></div><div><dt>Assets</dt><dd>{releaseAssets.length}</dd></div><div><dt>Content</dt><dd>{contentItems.length}</dd></div><div><dt>Health</dt><dd>{score}%</dd></div></dl></aside>
+      <ReleaseMasterAudioPanel releaseId={release.id} primaryTrack={primaryTrack} vaultTrack={vaultTrack} />
       {!release.artwork_url && !release.cover_asset ? <section className="v2-section v2-full-column" id="cover-upload"><div className="v2-section-heading"><div><span className="section-label">Identity</span><h2>Drop the cover artwork here</h2></div></div><MediaUploader releaseId={release.id} defaultRole="cover" /></section> : null}
       <section className="v2-section v2-full-column" id="release-details"><div className="v2-section-heading"><div><span className="section-label">Source of truth</span><h2>Only the release facts Atlas must anchor around</h2></div></div><ReleaseForm release={release} releaseDateLocked={releaseDateLocked} /></section>
     </div> : null}
