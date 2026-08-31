@@ -4,6 +4,7 @@ import { createMediaPreviewMap } from "@/lib/studio/media-previews";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { getPublicReleases } from "@/lib/public-catalog";
 import { asMarketingClient } from "@/lib/marketing/db";
+import { asGrowthClient } from "@/lib/studio/growth-db";
 import { ReleaseCockpit } from "@/components/studio/release-cockpit";
 import { ReleaseCampaignBridge } from "@/components/studio/release-campaign-bridge";
 import { ReleaseWorkspaceV2 } from "@/components/studio/release-workspace-v2";
@@ -21,6 +22,7 @@ export default async function ReleaseDetail({
   const advanced = view === "advanced";
   const { supabase, user } = await requireStudioAdmin();
   const marketing = asMarketingClient(supabase);
+  const growth = asGrowthClient(supabase);
 
   const [
     { data: release },
@@ -36,6 +38,7 @@ export default async function ReleaseDetail({
     { data: soundCloudPending },
     { data: spotifyPending },
     campaignResult,
+    vaultResult,
   ] = await Promise.all([
     supabase.from("releases").select("*").eq("id", id).eq("owner_id", user.id).single(),
     supabase.from("tracks").select("*").eq("release_id", id).order("display_order").order("is_primary", { ascending: false }),
@@ -50,9 +53,11 @@ export default async function ReleaseDetail({
     supabase.from("soundcloud_tracks").select("*").eq("reconcile_status", "pending"),
     supabase.from("spotify_tracks").select("*").eq("reconcile_status", "pending"),
     marketing.from("campaigns").select("id,name,status,mode,objective,primary_kpi").eq("owner_id", user.id).eq("release_id", id).not("status", "in", '("archived")').order("updated_at", { ascending: false }).limit(1).maybeSingle(),
+    growth.from("track_vault").select("*").eq("owner_id", user.id).eq("linked_release_id", id).order("updated_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
   if (!release) notFound();
   if (campaignResult.error) throw new Error(campaignResult.error.message);
+  if (vaultResult.error) throw new Error(vaultResult.error.message);
 
   const trackIds = (tracks ?? []).map((track) => track.id);
   const { data: externalTrackIds } = trackIds.length ? await supabase.from("track_external_ids").select("*").in("track_id", trackIds) : { data: [] };
@@ -65,7 +70,7 @@ export default async function ReleaseDetail({
   if (providerScheduleError) throw new Error(providerScheduleError.message);
 
   if (!advanced) {
-    return <ReleaseWorkspaceV2 release={release} tracks={tracks ?? []} mediaLinks={mediaLinks ?? []} mediaAssets={mediaAssets ?? []} contentItems={contentItems ?? []} metrics={metrics ?? []} campaign={campaignResult.data} stage={stage} playbookTasks={playbookTasks ?? []} providerScheduledCount={providerScheduledCount ?? 0} />;
+    return <ReleaseWorkspaceV2 release={release} tracks={tracks ?? []} mediaLinks={mediaLinks ?? []} mediaAssets={mediaAssets ?? []} contentItems={contentItems ?? []} metrics={metrics ?? []} campaign={campaignResult.data} stage={stage} playbookTasks={playbookTasks ?? []} providerScheduledCount={providerScheduledCount ?? 0} vaultTrack={vaultResult.data} />;
   }
 
   const mediaPreviewUrls = await createMediaPreviewMap(supabase, mediaAssets ?? []);
