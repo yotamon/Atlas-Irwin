@@ -1,4 +1,5 @@
 import { analyzeVaultTrack } from "@/app/studio/growth-media-actions";
+import { AnalysisAutoRefresh } from "@/components/studio/analysis-auto-refresh";
 import { MediaUploader } from "@/components/studio/media-uploader";
 import { MusicIntelligencePreview } from "@/components/studio/music-intelligence-preview";
 import type { Track } from "@/types/database";
@@ -19,8 +20,8 @@ function duration(seconds: number | null | undefined) {
 }
 
 function statusLabel(status: string) {
-  if (status === "queued" || status === "pending") return "Analyzing";
-  if (status === "completed" || status === "ready" || status === "analyzed") return "Intelligence ready";
+  if (["queued", "pending", "running"].includes(status)) return "Analyzing";
+  if (["completed", "ready", "analyzed"].includes(status)) return "Intelligence ready";
   if (status === "failed") return "Analysis failed";
   if (status === "unavailable") return "Worker unavailable";
   return "Master attached";
@@ -39,6 +40,7 @@ export function ReleaseMasterAudioPanel({
   const currentDuration = vaultTrack?.duration_seconds ?? primaryTrack?.duration ?? null;
   const analysis = analysisState(vaultTrack?.analysis);
   const hasMaster = Boolean(audioUrl);
+  const analyzing = ["queued", "pending", "running"].includes(analysis.status);
   const hasMusicMap = Boolean(
     vaultTrack?.audio_profile &&
     typeof vaultTrack.audio_profile === "object" &&
@@ -48,12 +50,13 @@ export function ReleaseMasterAudioPanel({
 
   return (
     <section className="v2-section v2-full-column" id="master-audio">
+      <AnalysisAutoRefresh active={analyzing} />
       <div className="v2-section-heading">
         <div>
           <span className="section-label">Master & Music Intelligence</span>
           <h2>{hasMaster ? primaryTrack?.title || vaultTrack?.title || "Release master" : "Add the audio Atlas should understand"}</h2>
         </div>
-        <span className={`v2-count ${hasMaster ? "" : "has-items"}`}>{hasMaster ? statusLabel(analysis.status) : "Missing"}</span>
+        <span className={hasMaster ? "growth-active-label" : "v2-count has-items"}>{hasMaster ? statusLabel(analysis.status) : "Missing"}</span>
       </div>
 
       {!hasMaster ? (
@@ -71,8 +74,8 @@ export function ReleaseMasterAudioPanel({
 
           {hasMusicMap && vaultTrack ? (
             <MusicIntelligencePreview audioUrl={audioUrl} musicMap={vaultTrack.audio_profile} />
-          ) : analysis.status === "queued" || analysis.status === "pending" ? (
-            <div className="v2-calm-state compact"><strong>Atlas is analyzing the master.</strong><p>Structure, sections and ranked hook candidates will appear here as soon as the media worker finishes.</p></div>
+          ) : analyzing ? (
+            <div className="v2-calm-state compact"><strong>Atlas is analyzing the master.</strong><p>Structure, sections and ranked hook candidates will appear here automatically as soon as the media worker finishes.</p></div>
           ) : analysis.status === "failed" ? (
             <div className="notice">Music Intelligence could not finish this analysis{analysis.message ? `: ${analysis.message}` : "."}</div>
           ) : analysis.status === "unavailable" ? (
@@ -81,19 +84,20 @@ export function ReleaseMasterAudioPanel({
             <div className="v2-calm-state compact"><strong>Master attached, intelligence not generated yet.</strong><p>Run the analysis to map sections and rank the strongest hook windows.</p></div>
           )}
 
-          <div className="actions">
-            {vaultTrack && analysis.status !== "queued" && analysis.status !== "pending" ? (
+          {vaultTrack && !analyzing ? (
+            <div className="actions">
               <form action={analyzeVaultTrack}>
                 <input type="hidden" name="id" value={vaultTrack.id} />
                 <button className="button" type="submit">Re-analyze master</button>
               </form>
-            ) : null}
-            <details className="workspace-drawer">
-              <summary>Replace master audio</summary>
-              <p className="v2-muted-copy">The new file becomes the canonical master and gets a fresh analysis. The previous asset remains in Media Library history instead of being deleted.</p>
-              <MediaUploader releaseId={releaseId} defaultRole="master_audio" releaseMasterMode />
-            </details>
-          </div>
+            </div>
+          ) : null}
+
+          <details className="workspace-drawer">
+            <summary>Replace master audio</summary>
+            <p className="v2-muted-copy">The new file becomes the canonical master and gets a fresh analysis. The previous asset remains in Media Library history instead of being deleted.</p>
+            <MediaUploader releaseId={releaseId} defaultRole="master_audio" releaseMasterMode />
+          </details>
         </>
       )}
     </section>
