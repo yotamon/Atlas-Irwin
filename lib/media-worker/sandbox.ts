@@ -43,7 +43,7 @@ export function createMediaWorkerCallbackCredential() {
   };
 }
 
-async function commandError(command: Awaited<ReturnType<Sandbox["runCommand"]>>) {
+async function commandError(command: { stderr: () => Promise<string> }) {
   return (await command.stderr()).trim();
 }
 
@@ -231,7 +231,7 @@ export async function dispatchMediaWorkerJob(input: {
       args: ["-lc", detachedWorkerScript(requestPath)],
       detached: true,
     });
-    if (command.exitCode !== 0) {
+    if (command.exitCode !== null && command.exitCode !== 0) {
       throw new Error((await commandError(command)) || "Could not start the Media Worker runner.");
     }
     return { sandboxName: mediaWorkerSandboxName() };
