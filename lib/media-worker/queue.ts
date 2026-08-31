@@ -14,6 +14,7 @@ import type { MusicVideoWorkerJob, VideoDatabase } from "@/types/video-database"
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const STALE_JOB_MS = 50 * 60 * 1000;
+const DISPATCH_CLAIM_MS = 2 * 60 * 1000;
 const SUPPORTED_VIDEO_JOB_TYPES = new Set<MusicVideoWorkerJob["job_type"]>([
   "analyze_audio",
   "extract_frame",
@@ -66,12 +67,29 @@ async function freshVideoActive(db: SupabaseClient<VideoDatabase>) {
   let active = false;
   for (const job of data ?? []) {
     const lastActivity = timestamp(job.started_at) || timestamp(job.updated_at) || timestamp(job.created_at);
-    if (lastActivity && Date.now() - lastActivity < STALE_JOB_MS) {
+    const age = lastActivity ? Date.now() - lastActivity : Number.POSITIVE_INFINITY;
+
+    // `queued` is also the short dispatch-claim state. If the request process died before
+    // Sandbox returned its external id there is no worker to call us back, so recover quickly.
+    if (job.status === "queued" && !job.external_job_id && age > DISPATCH_CLAIM_MS) {
+      const { error: recoverError } = await db.from("music_video_worker_jobs").update({
+        status: "planned",
+        request_payload: json(withoutCredential(record(job.request_payload))),
+        error: null,
+        started_at: null,
+        completed_at: null,
+      }).eq("id", job.id).eq("status", "queued").is("external_job_id", null);
+      if (recoverError) throw new Error(recoverError.message);
+      continue;
+    }
+
+    if (lastActivity && age < STALE_JOB_MS) {
       active = true;
       continue;
     }
     await db.from("music_video_worker_jobs").update({
       status: "failed",
+      request_payload: json(withoutCredential(record(job.request_payload))),
       error: "Media Worker job became stale before a terminal callback was received.",
       completed_at: new Date().toISOString(),
     }).eq("id", job.id).in("status", ["queued", "running"]);
@@ -102,7 +120,23 @@ async function vaultQueueState() {
       || timestamp(analysis.dispatched_at)
       || timestamp(analysis.requested_at)
       || timestamp(track.updated_at);
-    if (lastActivity && Date.now() - lastActivity < STALE_JOB_MS) {
+    const age = lastActivity ? Date.now() - lastActivity : Number.POSITIVE_INFINITY;
+
+    // A Vault row can likewise be claimed as `dispatched` before the Sandbox request exists.
+    // Absence of started_at plus an old claim means it is safe to put the durable request back.
+    if (status === "dispatched" && !timestamp(analysis.started_at) && age > DISPATCH_CLAIM_MS) {
+      const recovered = {
+        ...withoutCredential(analysis),
+        status: "queued",
+        dispatched_at: null,
+      };
+      const { error: recoverError } = await growth.from("track_vault").update({ analysis: json(recovered) }).eq("id", track.id);
+      if (recoverError) throw new Error(recoverError.message);
+      queued.push({ ...track, analysis: json(recovered) });
+      continue;
+    }
+
+    if (lastActivity && age < STALE_JOB_MS) {
       active = true;
       continue;
     }
