@@ -2,7 +2,7 @@
   "name": "atlas-irwin-website",
   "version": "0.1.0",
   "private": true,
-  "description": "Atlas Irwin — artist website and Atlas Release Engine studio (Next.js, Supabase, SoundCloud/Spotify OAuth)",
+  "description": "Atlas Irwin — artist website and Atlas Release Engine studio (Next.js, Supabase catalog, SoundCloud/Spotify OAuth)",
   "homepage": "https://atlasirwin.com",
   "repository": {
     "type": "git",
@@ -19,7 +19,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test:studio": "node --test tests/studio-v2-contract.test.mjs tests/studio-v2-workflow.test.mjs tests/marketing-creative-lineage.test.mjs tests/ai-provider-presets.test.mjs tests/ai-control-plane.test.mjs tests/social-channel-planning.test.mjs tests/music-intelligence.test.mjs tests/autonomous-marketing.test.mjs",
+    "test:studio": "node --test tests/studio-v2-contract.test.mjs tests/studio-v2-workflow.test.mjs tests/marketing-creative-lineage.test.mjs tests/ai-provider-presets.test.mjs tests/ai-control-plane.test.mjs tests/social-channel-planning.test.mjs tests/music-intelligence.test.mjs tests/music-intelligence-sentinel.test.mjs tests/autonomous-marketing.test.mjs",
     "postinstall": "node scripts/ensure-lightningcss-native.mjs",
     "studio:import": "node --env-file=.env.local scripts/import-legacy-releases.mjs",
     "studio:import:dry-run": "node --env-file=.env.local scripts/import-legacy-releases.mjs --dry-run",
