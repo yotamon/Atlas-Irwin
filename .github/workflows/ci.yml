@@ -20,6 +20,11 @@ jobs:
           node-version: "22"
           cache: npm
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
       - run: npm ci
 
       - name: Audit production dependencies
@@ -34,6 +39,12 @@ jobs:
 
       - name: Validate media worker Python
         run: python -m py_compile services/media-worker/app/main.py services/media-worker/app/music_intelligence.py services/media-worker/app/runner.py
+
+      - name: Install Track Intelligence test DSP dependencies
+        run: python -m pip install numpy==2.2.6 librosa==0.11.0 soundfile==0.13.1 pyloudnorm==0.1.1
+
+      - name: Run Track Intelligence behavioral regression tests
+        run: python -m unittest discover -s services/media-worker/tests -p 'test_*.py' -v
 
       - name: Validate Media Worker check script
         run: node --check scripts/check-media-worker.mjs
