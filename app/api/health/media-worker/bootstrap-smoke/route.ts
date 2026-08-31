@@ -11,7 +11,7 @@ export async function GET() {
   }
 
   const sandbox = await Sandbox.create({
-    image: "vercel/sandbox/ubuntu",
+    image: "vercel/sandbox/universal",
     resources: { vcpus: 1 },
     timeout: 60_000,
     persistent: false,
