@@ -2,6 +2,7 @@ import "server-only";
 
 import { runAtlasAiTask } from "@/lib/ai/control-plane";
 import { conciseLyricsPromptContext } from "@/lib/lyrics-intelligence/context";
+import { loadAtlasCreativeDna, type AtlasCreativeDna } from "./creative-dna";
 import type { CreativeReferenceContext } from "./creative-context";
 import { socialPlatformPackage, type SocialOutputKind, type SocialPlatformPackage } from "./platform-packages";
 
@@ -121,6 +122,8 @@ Your job is not to make "AI content". Your job is to design a production-grade s
 
 NON-NEGOTIABLE RULES:
 - Start from the supplied music, release world, visual references and content objective. Do not invent a new aesthetic for every post.
+- Treat creativeDna as evidence. Approved patterns are useful continuity signals, not templates to clone. Rejected patterns are negative evidence and must not be repeated merely because they look on-brand.
+- The hardAntiPatterns inside creativeDna are mandatory exclusions and should be reflected in antiPatterns whenever relevant to the concept.
 - Prefer real Atlas source material and existing artwork when available. Generative imagery is supporting production material, not the default identity.
 - One strong visual idea is better than five unrelated spectacular ideas.
 - Avoid generic cyberpunk, random neon cities, chrome humanoids, anonymous fashion models, fake festival crowds, floating particles, meaningless holograms, synthetic luxury, motivational copy and generic "OUT NOW" advertising.
@@ -157,7 +160,7 @@ function durationHint(content: ContentInput, outputKind: SocialOutputKind, platf
   return Math.min(platformPackage.maxDurationSeconds ?? 15, 12);
 }
 
-function contextPayload(content: ContentInput, context: CreativeReferenceContext, platformPackage: SocialPlatformPackage, outputKind: SocialOutputKind) {
+function contextPayload(content: ContentInput, context: CreativeReferenceContext, creativeDna: AtlasCreativeDna, platformPackage: SocialPlatformPackage, outputKind: SocialOutputKind) {
   return {
     content: {
       title: content.title,
@@ -178,6 +181,7 @@ function contextPayload(content: ContentInput, context: CreativeReferenceContext
       durationHintSeconds: durationHint(content, outputKind, platformPackage),
       package: platformPackage,
     },
+    creativeDna,
     release: context.release,
     brand: context.brand,
     references: {
@@ -203,7 +207,8 @@ export async function directContentCreative(input: {
   outputKind: SocialOutputKind;
 }): Promise<{ treatment: CreativeTreatment; generationRunId: string }> {
   const platformPackage = socialPlatformPackage(input.content.platform, input.content.format, input.outputKind);
-  const payload = contextPayload(input.content, input.context, platformPackage, input.outputKind);
+  const creativeDna = await loadAtlasCreativeDna({ ownerId: input.ownerId, context: input.context });
+  const payload = contextPayload(input.content, input.context, creativeDna, platformPackage, input.outputKind);
   const generated = await runAtlasAiTask<Omit<CreativeTreatment, "version" | "platformPackage">>({
     ownerId: input.ownerId,
     task: "marketing.creative_direction",
@@ -214,7 +219,13 @@ export async function directContentCreative(input: {
     schema: treatmentSchema,
     instructions: DIRECTOR_INSTRUCTIONS,
     input: JSON.stringify(payload),
-    inputContext: { contentItemId: input.content.id, platformPackage, referenceSummary: input.context.referenceSummary },
+    inputContext: {
+      contentItemId: input.content.id,
+      platformPackage,
+      creativeDnaVersion: creativeDna.version,
+      creativeDnaEvidence: creativeDna.evidenceSummary,
+      referenceSummary: input.context.referenceSummary,
+    },
     qualityGate: treatmentQuality,
     cacheMode: "refresh",
   });
