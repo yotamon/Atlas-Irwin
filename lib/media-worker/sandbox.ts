@@ -5,7 +5,7 @@ import { Sandbox } from "@vercel/sandbox";
 
 export const MEDIA_WORKER_CALLBACK_HASH_KEY = "__atlas_callback_token_sha256";
 const MEDIA_WORKER_RUNTIME_VERSION = 8;
-const MEDIA_WORKER_BOOTSTRAP_VERSION = 4;
+const MEDIA_WORKER_BOOTSTRAP_VERSION = 5;
 const MEDIA_WORKER_PYTHON_VERSION = "3.13.14";
 const MEDIA_WORKER_SANDBOX_IMAGE = "vercel/sandbox/universal@sha256:0e3e3617e824397f170fc7c43ccaa565dd7ac36518e83ead3d41e077cd9f6ec7";
 const HOBBY_MAX_SANDBOX_MS = 45 * 60 * 1000;
@@ -176,6 +176,7 @@ files = {
     "app/main.py": f"{base}/app/main.py",
     "app/music_intelligence.py": f"{base}/app/music_intelligence.py",
     "app/stem_intelligence.py": f"{base}/app/stem_intelligence.py",
+    "app/social_finishing.py": f"{base}/app/social_finishing.py",
     "app/runner.py": f"{base}/app/runner.py",
     "requirements.txt": f"{base}/requirements.txt",
 }
@@ -201,7 +202,8 @@ import sqlite3
 import ssl
 import allin1_infer
 import imageio_ffmpeg
-print("Atlas Media Worker dependencies ready", imageio_ffmpeg.get_ffmpeg_exe())
+from PIL import Image
+print("Atlas Media Worker dependencies ready", imageio_ffmpeg.get_ffmpeg_exe(), Image.__version__)
 PY
     printf '%s' "$required" > "$WORKDIR/.requirements.sha"
     rm -rf "$UV_CACHE_DIR"
@@ -211,8 +213,10 @@ PY
 import bz2
 import allin1_infer
 import imageio_ffmpeg
+from PIL import Image
 from app.stem_intelligence import ANALYSIS_VERSION
-print("Atlas Media Worker ready", imageio_ffmpeg.get_ffmpeg_exe(), "stem-analysis", ANALYSIS_VERSION)
+from app.social_finishing import SocialWorkerRequest
+print("Atlas Media Worker ready", imageio_ffmpeg.get_ffmpeg_exe(), "stem-analysis", ANALYSIS_VERSION, "social-finishing", SocialWorkerRequest.__name__)
 PY
 }
 
