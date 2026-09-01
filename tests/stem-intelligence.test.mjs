@@ -76,6 +76,8 @@ test("Stem jobs share the durable Media Worker queue and callback credential mod
   assert.ok(sandbox.includes('"analyze_stem"'));
   assert.ok(sandbox.includes('"render_audio_scene"'));
   assert.ok(sandbox.includes("stem_intelligence.py"));
+  assert.ok(sandbox.includes('export PYTHONPATH="$WORKDIR"'));
+  assert.ok(sandbox.indexOf('export PYTHONPATH="$WORKDIR"') < sandbox.indexOf("from app.stem_intelligence import ANALYSIS_VERSION"));
   assert.ok(callback.includes("MEDIA_WORKER_CALLBACK_HASH_KEY"));
   assert.ok(callback.includes("timingSafeEqual"));
 });
