@@ -69,3 +69,20 @@ test("TikTok photo posts use first-party Content Posting API with AIGC metadata"
   assert.match(tiktok, /DIRECT_POST/);
   assert.match(tiktok, /MEDIA_UPLOAD/);
 });
+
+test("YouTube receives private future uploads and Atlas reconciles provider-owned schedules", async () => {
+  const youtube = await source("lib/marketing/channels/youtube.ts");
+  const publications = await source("lib/marketing/publications.ts");
+  const migration = await source("supabase/migrations/20260901172000_provider_scheduled_publications.sql");
+  const types = await source("types/marketing-database.ts");
+  assert.match(youtube, /providerScheduling: configured/);
+  assert.match(youtube, /privacyStatus: scheduledAt \? "private"/);
+  assert.match(youtube, /publishAt: scheduledAt/);
+  assert.match(youtube, /status: scheduledAt \? "provider_scheduled"/);
+  assert.match(youtube, /fetchPublicationStatus/);
+  assert.match(publications, /PROVIDER_SCHEDULE_LEAD_MS/);
+  assert.match(publications, /reconcileProviderScheduledPublications/);
+  assert.match(publications, /publication\.provider_scheduled/);
+  assert.match(migration, /provider_scheduled/);
+  assert.match(types, /"provider_scheduled" \| "manual_ready"/);
+});
