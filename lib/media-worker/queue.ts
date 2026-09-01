@@ -301,6 +301,24 @@ async function dispatchVideoJob(db: SupabaseClient<VideoDatabase>, job: MusicVid
   }
 }
 
+async function prepareStemPayloadForDispatch(
+  db: SupabaseClient<StemDatabase>,
+  job: TrackStemJob,
+  payload: Record<string, unknown>,
+) {
+  if (job.job_type !== "render_audio_scene") return payload;
+  const bucket = typeof payload.upload_bucket === "string" ? payload.upload_bucket : "";
+  const path = typeof payload.upload_path === "string" ? payload.upload_path : "";
+  if (!bucket || !path) {
+    throw new Error("Audio Scene render job is missing its upload destination.");
+  }
+  const signed = await db.storage.from(bucket).createSignedUploadUrl(path);
+  if (signed.error || !signed.data?.signedUrl) {
+    throw new Error(signed.error?.message || "Could not create a fresh Audio Scene upload credential.");
+  }
+  return { ...payload, upload_url: signed.data.signedUrl };
+}
+
 async function dispatchStemJob(db: SupabaseClient<StemDatabase>, job: TrackStemJob) {
   const requestPayload = withoutCredential(record(job.request_payload));
   const credential = createMediaWorkerCallbackCredential();
@@ -321,10 +339,11 @@ async function dispatchStemJob(db: SupabaseClient<StemDatabase>, job: TrackStemJ
   if (!claimed) return false;
 
   try {
+    const dispatchPayload = await prepareStemPayloadForDispatch(db, claimed as TrackStemJob, requestPayload);
     const dispatch = await dispatchMediaWorkerJob({
       jobId: claimed.id,
       jobType: claimed.job_type as DispatchableWorkerJobType,
-      payload: requestPayload,
+      payload: dispatchPayload,
       callbackUrl: `${getSiteUrl()}/api/studio/stems/callback`,
       callbackToken: credential.token,
     });
