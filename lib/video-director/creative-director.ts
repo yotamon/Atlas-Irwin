@@ -1,4 +1,5 @@
 import type { Json, MediaAsset, MusicVideoProject, Release, Track } from "@/types/database";
+import type { TrackLyricsContext } from "@/lib/lyrics-intelligence/context";
 
 export type MusicMapSection = {
   id: string;
@@ -36,7 +37,6 @@ export type MusicHookMetrics = {
   onset_density: number;
   boundary_fit: number;
   structure: number;
-  // v2 compatibility aliases. v3 consumers should prefer the explicit metrics below.
   melodic_salience: number;
   loopability: number;
   repetition: number;
@@ -268,6 +268,7 @@ export type VideoProjectContext = {
   release: Release;
   track: Track;
   musicMap: MusicMap | null;
+  lyrics: TrackLyricsContext;
   brandSettings: Json[];
   media: Array<Pick<MediaAsset, "id" | "asset_type" | "mime_type" | "metadata" | "public_url">>;
   preferences: DirectorPreferences;
