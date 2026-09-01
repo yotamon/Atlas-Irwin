@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createServiceClient } from "@/lib/supabase/service";
 import { createMarketingServiceClient } from "./db";
 import type { CreativeReferenceContext } from "./creative-context";
 import type { CreativeTreatment } from "./creative-treatment";
@@ -72,10 +73,11 @@ export async function enqueueMarketingVideoFinishing(input: {
   audioWindow?: { startSeconds: number | null; endSeconds: number | null } | null;
 }): Promise<MarketingMediaJob> {
   const marketing = client();
+  const service = createServiceClient();
   const durationMs = clampedDurationMs(input.request, input.treatment);
   const bucket = "public-media";
   const outputPath = `${input.ownerId}/library/marketing/finished/${input.generationRunId}.mp4`;
-  const outputPublicUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "")}/storage/v1/object/public/${bucket}/${outputPath}`;
+  const outputPublicUrl = service.storage.from(bucket).getPublicUrl(outputPath).data.publicUrl;
   const frameUploads = reviewFrameTimestamps(durationMs).map((timestampMs, index) => {
     const path = `${input.ownerId}/library/marketing/qc/${input.generationRunId}/frame-${String(index + 1).padStart(2, "0")}.jpg`;
     return {
@@ -83,10 +85,23 @@ export async function enqueueMarketingVideoFinishing(input: {
       timestamp_ms: timestampMs,
       upload_bucket: bucket,
       upload_path: path,
-      public_url: `${process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "")}/storage/v1/object/public/${bucket}/${path}`,
+      public_url: service.storage.from(bucket).getPublicUrl(path).data.publicUrl,
     };
   });
-  const audio = audioPlan({ context: input.context, audioWindow: input.audioWindow });
+
+  let audioWindow = input.audioWindow;
+  if (!audioWindow) {
+    const { data: content, error: contentError } = await marketing.from("content_items")
+      .select("audio_timestamp_start,audio_timestamp_end")
+      .eq("id", input.contentItemId)
+      .eq("owner_id", input.ownerId)
+      .maybeSingle();
+    if (contentError) throw new Error(contentError.message);
+    audioWindow = content
+      ? { startSeconds: content.audio_timestamp_start, endSeconds: content.audio_timestamp_end }
+      : null;
+  }
+  const audio = audioPlan({ context: input.context, audioWindow });
   const payload = {
     source_url: input.rawAssetUrl,
     source_asset_id: input.rawAssetId,
@@ -152,10 +167,10 @@ export async function enqueueMarketingVideoFinishing(input: {
   }).eq("id", input.generationRunId);
 
   try {
-    const { kickMediaWorkerQueue } = await import("@/lib/media-worker/queue");
-    await kickMediaWorkerQueue();
+    const { kickMarketingMediaWorkerQueue } = await import("@/lib/marketing/media-worker-queue");
+    await kickMarketingMediaWorkerQueue();
   } catch {
-    // The job is durable. The media-worker cron or next callback will dispatch it.
+    // The job is durable. A terminal Media Worker callback will give this queue another chance.
   }
   return job;
 }
