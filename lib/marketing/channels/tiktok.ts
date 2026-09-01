@@ -45,6 +45,127 @@ async function uploadTikTokBytes(uploadUrl: string, asset: SocialAsset, chunkSiz
   }
 }
 
+function textList(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && /^https:\/\//i.test(item)).slice(0, 35)
+    : [];
+}
+
+function photoUrls(request: PublishRequest) {
+  const metadata = record(request.metadata);
+  const configured = textList(metadata.assetUrls ?? metadata.photoImages);
+  if (configured.length) return configured;
+  return request.assetUrl && /^https:\/\//i.test(request.assetUrl) ? [request.assetUrl] : [];
+}
+
+function photoCoverIndex(request: PublishRequest, count: number) {
+  const metadata = record(request.metadata);
+  const requested = Number(metadata.photoCoverIndex ?? 0);
+  return Number.isInteger(requested) && requested >= 0 && requested < count ? requested : 0;
+}
+
+function isAiGenerated(request: PublishRequest) {
+  const metadata = record(request.metadata);
+  return metadata.aiGenerated === true || metadata.isAigc === true || metadata.source === "ai";
+}
+
+async function creatorInfo(accessToken: string) {
+  return tiktokJson<{ data?: { privacy_level_options?: string[]; comment_disabled?: boolean; duet_disabled?: boolean; stitch_disabled?: boolean } }>(
+    await fetch(`${TIKTOK_API_URL}/post/publish/creator_info/query/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}`, "content-type": "application/json; charset=UTF-8" },
+      body: "{}",
+      cache: "no-store",
+    }),
+    "TikTok creator info",
+  );
+}
+
+function creatorPrivacy(creator: Awaited<ReturnType<typeof creatorInfo>>) {
+  const options = creator.data?.privacy_level_options ?? [];
+  const preferred = process.env.TIKTOK_DEFAULT_PRIVACY?.trim() || "PUBLIC_TO_EVERYONE";
+  const privacy = options.includes(preferred) ? preferred : options[0];
+  if (!privacy) throw new Error("TikTok did not return an available privacy level.");
+  return privacy;
+}
+
+async function publishTikTokPhotos(request: PublishRequest, audited: boolean): Promise<PublishResult> {
+  const photos = photoUrls(request);
+  if (!photos.length) throw new Error("TikTok photo publishing requires at least one HTTPS photo URL.");
+  const scope = audited ? "video.publish" : "video.upload";
+  const access = await requireSocialAccess(request.ownerId, "tiktok", [scope]);
+  const fullCaption = captionFor(request);
+  const title = (request.hookText || fullCaption.split("\n")[0] || "Atlas Irwin").trim().slice(0, 90);
+  const description = fullCaption.trim().slice(0, 4000);
+  const postInfo: Record<string, unknown> = { title, description };
+
+  if (audited) {
+    const creator = await creatorInfo(access.accessToken);
+    postInfo.privacy_level = creatorPrivacy(creator);
+    postInfo.disable_comment = Boolean(creator.data?.comment_disabled);
+    postInfo.auto_add_music = false;
+    postInfo.brand_content_toggle = false;
+    postInfo.brand_organic_toggle = false;
+  }
+
+  const initialized = await tiktokJson<{ data?: { publish_id?: string } }>(
+    await fetch(`${TIKTOK_API_URL}/post/publish/content/init/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${access.accessToken}`, "content-type": "application/json; charset=UTF-8" },
+      body: JSON.stringify({
+        media_type: "PHOTO",
+        post_mode: audited ? "DIRECT_POST" : "MEDIA_UPLOAD",
+        post_info: postInfo,
+        source_info: {
+          source: "PULL_FROM_URL",
+          photo_images: photos,
+          photo_cover_index: photoCoverIndex(request, photos.length),
+        },
+        is_aigc: isAiGenerated(request),
+      }),
+      cache: "no-store",
+    }),
+    audited ? "TikTok photo Direct Post init" : "TikTok photo draft upload init",
+  );
+  if (!initialized.data?.publish_id) throw new Error("TikTok did not return a photo publish ID.");
+
+  if (!audited) {
+    return {
+      status: "manual_handoff",
+      details: {
+        adapter: "tiktok:photo-draft-upload",
+        draftUploaded: true,
+        publishId: initialized.data.publish_id,
+        photoCount: photos.length,
+        instruction: "Open the TikTok inbox notification to review and complete the prepared photo post.",
+      } as Json,
+    };
+  }
+
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    const status = await tiktokJson<{ data?: { status?: string; fail_reason?: string; publicaly_available_post_id?: Array<string | number> } }>(
+      await fetch(`${TIKTOK_API_URL}/post/publish/status/fetch/`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${access.accessToken}`, "content-type": "application/json; charset=UTF-8" },
+        body: JSON.stringify({ publish_id: initialized.data.publish_id }),
+        cache: "no-store",
+      }),
+      "TikTok photo publish status",
+    );
+    if (status.data?.status === "FAILED") throw new Error(`TikTok photo publishing failed: ${status.data.fail_reason || "unknown reason"}.`);
+    if (status.data?.status === "PUBLISH_COMPLETE") {
+      const postId = status.data.publicaly_available_post_id?.[0];
+      return {
+        status: "published",
+        externalPostId: postId ? String(postId) : `tiktok-publish:${initialized.data.publish_id}`,
+        details: { adapter: "tiktok:photo-direct-post", publishId: initialized.data.publish_id, photoCount: photos.length } as Json,
+      };
+    }
+  }
+  throw new Error("TikTok is still processing the photo post. Atlas will retry the publication job.");
+}
+
 export class TikTokChannelAdapter implements MarketingChannelAdapter {
   capability(): ChannelCapability {
     const configured = Boolean(process.env.TIKTOK_CLIENT_KEY?.trim() && process.env.TIKTOK_CLIENT_SECRET?.trim());
@@ -63,15 +184,10 @@ export class TikTokChannelAdapter implements MarketingChannelAdapter {
   }
 
   async publish(request: PublishRequest): Promise<PublishResult> {
-    if (!request.assetUrl) throw new Error("TikTok publishing requires an attached video asset.");
-    if (!isVideoRequest(request)) {
-      return {
-        status: "manual_handoff",
-        details: { reason: "Atlas currently sends TikTok image posts through manual handoff because photo URLs must use a verified TikTok domain prefix." } as Json,
-      };
-    }
-
     const audited = truthyEnv("TIKTOK_DIRECT_POST_AUDITED");
+    if (!isVideoRequest(request)) return publishTikTokPhotos(request, audited);
+    if (!request.assetUrl) throw new Error("TikTok video publishing requires an attached video asset.");
+
     const scope = audited ? "video.publish" : "video.upload";
     const access = await requireSocialAccess(request.ownerId, "tiktok", [scope]);
     const asset = await readAsset(request.assetUrl);
@@ -81,23 +197,11 @@ export class TikTokChannelAdapter implements MarketingChannelAdapter {
     let endpoint = `${TIKTOK_API_URL}/post/publish/inbox/video/init/`;
     let postInfo: Record<string, unknown> | undefined;
     if (audited) {
-      const creator = await tiktokJson<{ data?: { privacy_level_options?: string[]; comment_disabled?: boolean; duet_disabled?: boolean; stitch_disabled?: boolean } }>(
-        await fetch(`${TIKTOK_API_URL}/post/publish/creator_info/query/`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${access.accessToken}`, "content-type": "application/json; charset=UTF-8" },
-          body: "{}",
-          cache: "no-store",
-        }),
-        "TikTok creator info",
-      );
-      const options = creator.data?.privacy_level_options ?? [];
-      const preferred = process.env.TIKTOK_DEFAULT_PRIVACY?.trim() || "PUBLIC_TO_EVERYONE";
-      const privacy = options.includes(preferred) ? preferred : options[0];
-      if (!privacy) throw new Error("TikTok did not return an available privacy level.");
+      const creator = await creatorInfo(access.accessToken);
       endpoint = `${TIKTOK_API_URL}/post/publish/video/init/`;
       postInfo = {
         title,
-        privacy_level: privacy,
+        privacy_level: creatorPrivacy(creator),
         disable_comment: Boolean(creator.data?.comment_disabled),
         disable_duet: Boolean(creator.data?.duet_disabled),
         disable_stitch: Boolean(creator.data?.stitch_disabled),
