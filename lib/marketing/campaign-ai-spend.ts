@@ -112,3 +112,17 @@ export async function settleCampaignSpendForGeneration(input: {
     basis: input.basis,
   });
 }
+
+export async function releaseCampaignSpendForGeneration(input: {
+  ownerId: string;
+  generationRunId: string;
+  reason: string;
+}) {
+  const reservation = await reservationForGeneration(input.ownerId, input.generationRunId);
+  if (!reservation || reservation.status !== "reserved") return reservation;
+  return releaseCampaignAiSpend({
+    ownerId: input.ownerId,
+    reservationId: reservation.id,
+    reason: input.reason,
+  });
+}
