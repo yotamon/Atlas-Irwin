@@ -1,0 +1,74 @@
+.player {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.75rem;
+  border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, currentColor 3%, transparent);
+}
+
+.compact {
+  padding: 0.65rem;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.05rem;
+  line-height: 1.15;
+}
+
+.status strong {
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.status small {
+  font-size: 0.7rem;
+  opacity: 0.62;
+}
+
+.range {
+  width: 100%;
+  margin: 0;
+  accent-color: currentColor;
+  cursor: pointer;
+}
+
+.range:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.time {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.72rem;
+  opacity: 0.66;
+}
+
+@media (max-width: 640px) {
+  .controls {
+    align-items: stretch;
+  }
+
+  .controls > button {
+    flex: 1 1 auto;
+  }
+
+  .status {
+    align-items: flex-start;
+    flex: 1 1 100%;
+  }
+}
