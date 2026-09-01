@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { mediaKind, mediaMetadata } from "@/lib/studio/media";
 import type { Json, MediaAsset, MediaLink } from "@/types/database";
+import type { AudioScene, StemDatabase } from "@/types/stem-database";
 import type { VideoDatabase } from "@/types/video-database";
 
 export type CreativeReferenceSource = "release" | "brand" | "content" | "approved_library";
@@ -17,6 +18,21 @@ export type CreativeReference = {
   reason: string;
   score: number;
   isPrimary: boolean;
+};
+
+export type CreativeAudioSceneReference = {
+  id: string;
+  name: string;
+  type: AudioScene["scene_type"];
+  description: string;
+  startMs: number | null;
+  endMs: number | null;
+  score: number;
+  objectiveTags: string[];
+  platformHints: string[];
+  previewUrl: string | null;
+  isPinned: boolean;
+  selectionReason: string;
 };
 
 export type CreativeReferenceContext = {
@@ -37,6 +53,8 @@ export type CreativeReferenceContext = {
   videoReferences: CreativeReference[];
   identityAssets: CreativeReference[];
   audioReferenceUrl: string | null;
+  audioScenes: CreativeAudioSceneReference[];
+  selectedAudioScene: CreativeAudioSceneReference | null;
   cohesionScore: number;
   referenceSummary: string;
 };
@@ -57,7 +75,7 @@ const APPROVED_REFERENCE_TAGS = new Set([
   "approved-creative",
 ]);
 
-function record(value: Json): Record<string, Json | undefined> {
+function record(value: Json | unknown): Record<string, Json | undefined> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, Json | undefined>
     : {};
@@ -123,17 +141,79 @@ function dedupeAndLimit(references: CreativeReference[], limit: number) {
     .slice(0, limit);
 }
 
-function summarizeReferences(imageReferences: CreativeReference[], videoReferences: CreativeReference[], artworkUrl: string | null) {
+function summarizeReferences(
+  imageReferences: CreativeReference[],
+  videoReferences: CreativeReference[],
+  artworkUrl: string | null,
+  audioScene: CreativeAudioSceneReference | null,
+) {
   const parts = [
     artworkUrl ? "release artwork locked as primary anchor" : "no release artwork available",
     imageReferences.length ? `${imageReferences.length} image reference${imageReferences.length === 1 ? "" : "s"}` : "no reusable image references",
     videoReferences.length ? `${videoReferences.length} motion reference${videoReferences.length === 1 ? "" : "s"}` : "no motion reference",
+    audioScene ? `${audioScene.name} selected as the musical treatment` : "canonical master remains the audio reference",
   ];
   return parts.join("; ");
 }
 
+function sceneDescription(scene: AudioScene) {
+  const reason = record(scene.rationale).reason;
+  return typeof reason === "string" ? reason : scene.description || "Stem-aware musical treatment.";
+}
+
+function sceneFit(scene: AudioScene, contextText: string, platform: string) {
+  const text = contextText.toLowerCase();
+  const sceneType = scene.scene_type;
+  let score = (scene.score ?? 0.5) * 100;
+  if (scene.is_pinned) score += 28;
+  if (scene.platform_hints.some((hint) => platform.toLowerCase().includes(hint.toLowerCase()))) score += 14;
+  if (/voiceover|voice over|talking|explain|explainer|tutorial|announcement|behind.?the.?scenes|process|storytime/.test(text)) {
+    if (sceneType === "voiceover_bed") score += 48;
+    if (sceneType === "atmosphere") score += 16;
+    if (sceneType === "full_impact") score -= 18;
+  }
+  if (/lyric|lyrics|vocal|voice|sing|singer|phrase/.test(text)) {
+    if (sceneType === "vocal_spotlight") score += 42;
+    if (sceneType === "vocal_to_drop") score += 18;
+  }
+  if (/breakdown|making|production|producer|layer|stem|arrangement|inside the track/.test(text)) {
+    if (sceneType === "progressive_reveal") score += 46;
+    if (sceneType === "instrument_spotlight") score += 32;
+  }
+  if (/dance|groove|bass|drum|rhythm|movement|club|loop/.test(text)) {
+    if (sceneType === "groove") score += 38;
+    if (sceneType === "instrument_spotlight") score += 12;
+  }
+  if (/drop|hook|teaser|reveal|transition|payoff|launch|release day/.test(text)) {
+    if (sceneType === "vocal_to_drop") score += 36;
+    if (sceneType === "full_impact") score += 20;
+    if (sceneType === "progressive_reveal") score += 14;
+  }
+  if (/mood|cinematic|visual|text|quote|artwork|world/.test(text) && sceneType === "atmosphere") score += 26;
+  if (sceneType === "full_impact") score += 5;
+  return score;
+}
+
+function toAudioSceneReference(scene: AudioScene, previewUrl: string | null, selectionReason: string): CreativeAudioSceneReference {
+  return {
+    id: scene.id,
+    name: scene.name,
+    type: scene.scene_type,
+    description: sceneDescription(scene),
+    startMs: scene.recommended_start_ms,
+    endMs: scene.recommended_end_ms,
+    score: scene.score ?? 0.5,
+    objectiveTags: scene.objective_tags,
+    platformHints: scene.platform_hints,
+    previewUrl,
+    isPinned: scene.is_pinned,
+    selectionReason,
+  };
+}
+
 export async function loadCreativeReferenceContext({ db, ownerId, releaseId, contentItemId }: ContextInput): Promise<CreativeReferenceContext> {
-  const [releaseResult, brandResult, assetResult, linkResult, tracksResult] = await Promise.all([
+  const stemDb = db as unknown as SupabaseClient<StemDatabase>;
+  const [releaseResult, brandResult, assetResult, linkResult, tracksResult, contentResult] = await Promise.all([
     releaseId
       ? db.from("releases")
           .select("id,title,artwork_url,visual_direction,color_palette")
@@ -147,8 +227,15 @@ export async function loadCreativeReferenceContext({ db, ownerId, releaseId, con
     releaseId
       ? db.from("tracks").select("id,title,audio_url,is_primary").eq("owner_id", ownerId).eq("release_id", releaseId).order("is_primary", { ascending: false })
       : Promise.resolve({ data: [], error: null }),
+    contentItemId
+      ? stemDb.from("content_items")
+          .select("id,title,platform,format,hook_text,content_angle,production_notes,audio_scene_id")
+          .eq("id", contentItemId)
+          .eq("owner_id", ownerId)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
   ]);
-  const firstError = [releaseResult, brandResult, assetResult, linkResult, tracksResult].find((result) => result.error)?.error;
+  const firstError = [releaseResult, brandResult, assetResult, linkResult, tracksResult, contentResult].find((result) => result.error)?.error;
   if (firstError) throw new Error(firstError.message);
 
   const release = releaseResult.data;
@@ -227,8 +314,49 @@ export async function loadCreativeReferenceContext({ db, ownerId, releaseId, con
     .map((link) => assetById.get(link.media_asset_id))
     .find((asset) => httpUrl(asset?.public_url));
   const primaryTrack = (tracksResult.data ?? []).find((track) => track.is_primary) ?? tracksResult.data?.[0];
-  const audioReferenceUrl = httpUrl(linkedMaster?.public_url) || httpUrl(primaryTrack?.audio_url);
+  const canonicalAudioUrl = httpUrl(linkedMaster?.public_url) || httpUrl(primaryTrack?.audio_url);
 
+  let audioScenes: CreativeAudioSceneReference[] = [];
+  let selectedAudioScene: CreativeAudioSceneReference | null = null;
+  if (primaryTrack?.id) {
+    const sceneResult = await stemDb.from("audio_scenes")
+      .select("*")
+      .eq("owner_id", ownerId)
+      .eq("track_id", primaryTrack.id)
+      .eq("status", "ready")
+      .order("is_pinned", { ascending: false })
+      .order("score", { ascending: false, nullsFirst: false });
+    if (sceneResult.error) throw new Error(sceneResult.error.message);
+    const scenes = (sceneResult.data ?? []) as AudioScene[];
+    const content = contentResult.data;
+    const contextText = [
+      content?.title,
+      content?.format,
+      content?.platform,
+      content?.hook_text,
+      content?.content_angle,
+      content?.production_notes,
+    ].filter((value): value is string => typeof value === "string" && Boolean(value.trim())).join(" ");
+    const platform = typeof content?.platform === "string" ? content.platform : "";
+    const explicitId = typeof content?.audio_scene_id === "string" ? content.audio_scene_id : null;
+    const ranked = scenes
+      .map((scene) => ({ scene, fit: sceneFit(scene, contextText, platform) }))
+      .sort((a, b) => b.fit - a.fit);
+    const selected = (explicitId ? ranked.find((candidate) => candidate.scene.id === explicitId) : null) ?? ranked[0] ?? null;
+    audioScenes = ranked.slice(0, 8).map(({ scene, fit }) => {
+      const preview = scene.preview_asset_id ? assetById.get(scene.preview_asset_id) : null;
+      const reason = explicitId === scene.id
+        ? "Artist-selected Audio Scene for this content item."
+        : `Atlas content-fit score ${Math.round(fit)} based on the brief, format, platform and musical intent.`;
+      return toAudioSceneReference(scene, httpUrl(preview?.public_url), reason);
+    });
+    if (selected) {
+      selectedAudioScene = audioScenes.find((scene) => scene.id === selected.scene.id)
+        ?? toAudioSceneReference(selected.scene, null, `Atlas content-fit score ${Math.round(selected.fit)}.`);
+    }
+  }
+
+  const audioReferenceUrl = selectedAudioScene?.previewUrl || canonicalAudioUrl;
   const visualDirection = release?.visual_direction?.trim() || "";
   const colorPalette = Array.isArray(release?.color_palette)
     ? release.color_palette.filter((value): value is string => typeof value === "string" && Boolean(value.trim()))
@@ -259,8 +387,10 @@ export async function loadCreativeReferenceContext({ db, ownerId, releaseId, con
     videoReferences,
     identityAssets,
     audioReferenceUrl,
+    audioScenes,
+    selectedAudioScene,
     cohesionScore,
-    referenceSummary: summarizeReferences(imageReferences, videoReferences, artworkUrl),
+    referenceSummary: summarizeReferences(imageReferences, videoReferences, artworkUrl, selectedAudioScene),
   };
 }
 
@@ -284,6 +414,17 @@ export function buildCohesiveVisualPrompt(input: {
   const outputRule = input.outputKind === "video"
     ? "Create a short, editorial music visual with believable motion, intentional camera behavior, tactile detail, and no fake crowd or stock-footage feeling. The motion should feel directed rather than generated."
     : "Create an editorial campaign image with intentional composition, believable material detail, restrained retouching, and a finish that could plausibly come from a professional art director and photographer/designer.";
+  const audioScene = context.selectedAudioScene;
+  const audioDirection = audioScene
+    ? [
+        `Selected musical treatment: ${audioScene.name} (${audioScene.type.replaceAll("_", " ")}).`,
+        audioScene.startMs !== null && audioScene.endMs !== null
+          ? `Primary musical window: ${(audioScene.startMs / 1000).toFixed(1)}s to ${(audioScene.endMs / 1000).toFixed(1)}s.`
+          : "",
+        `Musical intent: ${audioScene.description}`,
+        "For video, let shot density, movement, reveals and transitions follow this treatment. Do not simply put unrelated motion over the track. For a progressive reveal, visually add complexity as musical layers enter; for a vocal spotlight, simplify the frame and protect lyrical focus; for groove, make motion feel rhythm-led; for vocal-to-drop or full-impact, reserve the strongest visual change for the payoff.",
+      ].filter(Boolean).join("\n")
+    : "No derived Audio Scene is selected. Use the canonical master and Track Intelligence timing as the musical reference.";
 
   return [
     `Create one ${input.outputKind} asset for Atlas Irwin: ${input.contentTitle}.`,
@@ -299,6 +440,8 @@ export function buildCohesiveVisualPrompt(input: {
     `Continuity rule: ${context.brand.continuityRules}`,
     referenceManifest,
     motionManifest,
+    "MUSICAL DIRECTION:",
+    audioDirection,
     "REFERENCE HANDLING:",
     "Use the supplied references as concrete art-direction evidence, not as loose inspiration. Do not average them into generic cyberpunk. Do not make a collage unless the brief explicitly asks for one. Do not redraw or approximate the Atlas Irwin logo. If an exact logo treatment is required, leave clean composition space for deterministic placement later.",
     "HUMAN-MADE QUALITY BAR:",
