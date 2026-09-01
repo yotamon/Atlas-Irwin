@@ -9,6 +9,7 @@ export type AtlasAiTaskType =
   | "marketing.strategy"
   | "community.reply"
   | "metadata.extraction"
+  | "music.lyrics_analysis"
   | "video.concepts"
   | "video.production_plan"
   | "video.shot_revision";
@@ -65,6 +66,7 @@ const BASE_TASKS: Record<AtlasAiTaskType, Omit<AtlasAiTaskPolicy, "models" | "es
   "marketing.strategy": { task: "marketing.strategy", label: "Marketing strategy", modality: "text", tier: "balanced", escalationTier: "premium", qualityThreshold: 0.9 },
   "community.reply": { task: "community.reply", label: "Community reply", modality: "text", tier: "economy", escalationTier: "balanced", qualityThreshold: 0.88 },
   "metadata.extraction": { task: "metadata.extraction", label: "Metadata extraction", modality: "text", tier: "economy", escalationTier: "balanced", qualityThreshold: 1 },
+  "music.lyrics_analysis": { task: "music.lyrics_analysis", label: "Lyrics Intelligence", modality: "text", tier: "balanced", escalationTier: "premium", qualityThreshold: 1 },
   "video.concepts": { task: "video.concepts", label: "Video concepts", modality: "text", tier: "balanced", escalationTier: "premium", qualityThreshold: 0.9 },
   "video.production_plan": { task: "video.production_plan", label: "Video production plan", modality: "text", tier: "balanced", escalationTier: "premium", qualityThreshold: 1 },
   "video.shot_revision": { task: "video.shot_revision", label: "Video shot revision", modality: "text", tier: "balanced", escalationTier: "premium", qualityThreshold: 1 },
