@@ -80,6 +80,25 @@ test("Stem jobs share the durable Media Worker queue and callback credential mod
   assert.ok(callback.includes("timingSafeEqual"));
 });
 
+test("queued scene renders refresh credentials and stem reclassification refreshes analysis", async () => {
+  const queue = await source("lib/media-worker/queue.ts");
+  const actions = await source("app/studio/stem-actions.ts");
+
+  assert.ok(queue.includes("prepareStemPayloadForDispatch"));
+  assert.ok(queue.includes("createSignedUploadUrl(path)"));
+  assert.ok(queue.includes("Audio Scene render job is missing its upload destination"));
+  assert.equal(actions.includes("createSignedUploadUrl(path)"), false);
+
+  const identityStart = actions.indexOf("export async function updateStemIdentity");
+  const identityEnd = actions.indexOf("export async function removeTrackStem");
+  assert.ok(identityStart >= 0 && identityEnd > identityStart);
+  const identityAction = actions.slice(identityStart, identityEnd);
+  assert.ok(identityAction.includes("categoryChanged"));
+  assert.ok(identityAction.includes('status: "cancelled"'));
+  assert.ok(identityAction.includes("analysis: json({})"));
+  assert.ok(identityAction.includes("await enqueueStemAnalysis"));
+});
+
 test("Stem Intelligence is integrated into release UX, campaign creative context, and Video Director", async () => {
   const masterPanel = await source("components/studio/release-master-audio-panel.tsx");
   const stemPanel = await source("components/studio/stem-intelligence-panel.tsx");
