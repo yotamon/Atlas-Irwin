@@ -1,5 +1,7 @@
 import "server-only";
 
+import { headers as nextHeaders } from "next/headers";
+
 export const AI_GATEWAY_RESPONSES_URL = "https://ai-gateway.vercel.sh/v1/responses";
 
 export type AtlasGatewayProviderSort = "cost" | "ttft" | "tps";
@@ -45,8 +47,20 @@ function envToken() {
   return process.env.AI_GATEWAY_API_KEY?.trim() || process.env.VERCEL_OIDC_TOKEN?.trim() || "";
 }
 
+async function gatewayToken() {
+  const explicit = envToken();
+  if (explicit) return explicit;
+
+  try {
+    const requestHeaders = await nextHeaders();
+    return requestHeaders.get("x-vercel-oidc-token")?.trim() || "";
+  } catch {
+    return "";
+  }
+}
+
 export function atlasAiGatewayConfigured() {
-  return Boolean(envToken());
+  return Boolean(envToken()) || Boolean(process.env.VERCEL);
 }
 
 export function normalizeGatewayModel(model: string, defaultProvider?: string) {
@@ -159,10 +173,10 @@ export async function generateGatewayStructured<T>({
   timeoutMs?: number;
   providerSort?: AtlasGatewayProviderSort;
 }): Promise<GatewayStructuredResult<T>> {
-  const token = envToken();
+  const token = await gatewayToken();
   if (!token) {
     throw new Error(
-      "Vercel AI Gateway is not configured. Production uses VERCEL_OIDC_TOKEN automatically; set AI_GATEWAY_API_KEY for local or non-Vercel runtimes.",
+      "Vercel AI Gateway authentication is unavailable. On Vercel, enable Secure Backend Access with OIDC Federation; otherwise set AI_GATEWAY_API_KEY.",
     );
   }
 
@@ -178,20 +192,20 @@ export async function generateGatewayStructured<T>({
   const gatewayOptions: Record<string, unknown> = { sort: providerSort ?? gatewayProviderSort() };
   if (fallbacks.length) gatewayOptions.models = fallbacks;
 
-  const headers: Record<string, string> = {
+  const requestHeaders: Record<string, string> = {
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
     "X-Client-Request-Id": clientRequestId,
     "x-title": "Atlas Irwin",
   };
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  if (siteUrl?.startsWith("https://") || siteUrl?.startsWith("http://")) headers["http-referer"] = siteUrl;
+  if (siteUrl?.startsWith("https://") || siteUrl?.startsWith("http://")) requestHeaders["http-referer"] = siteUrl;
 
   let response: Response;
   try {
     response = await fetch(AI_GATEWAY_RESPONSES_URL, {
       method: "POST",
-      headers,
+      headers: requestHeaders,
       body: JSON.stringify({
         model: requestedModel,
         store: false,

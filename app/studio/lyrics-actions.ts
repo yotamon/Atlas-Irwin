@@ -56,36 +56,49 @@ async function persistLyrics(form: FormData, status: LyricsStatus = "verified") 
   return { ...context, lyricsId, allowAiContext };
 }
 
+async function analyzeWithoutBreakingSavedLyrics(context: Awaited<ReturnType<typeof persistLyrics>>, cacheMode: "use" | "refresh") {
+  if (!context.allowAiContext) return;
+  try {
+    await analyzeTrackLyrics({
+      db: context.db,
+      ownerId: context.user.id,
+      trackId: context.trackId,
+      releaseId: context.releaseId,
+      cacheMode,
+    });
+  } catch (error) {
+    console.error("Lyrics Intelligence analysis failed after canonical lyrics were saved", {
+      trackId: context.trackId,
+      releaseId: context.releaseId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 export async function saveTrackLyricsAction(form: FormData) {
   await persistLyrics(form);
 }
 
 export async function saveAndAnalyzeTrackLyricsAction(form: FormData) {
   const context = await persistLyrics(form);
-  if (context.allowAiContext) {
-    await analyzeTrackLyrics({
-      db: context.db,
-      ownerId: context.user.id,
-      trackId: context.trackId,
-      releaseId: context.releaseId,
-      cacheMode: "use",
-    });
-  }
+  await analyzeWithoutBreakingSavedLyrics(context, "use");
   revalidatePath(`/studio/releases/${context.releaseId}`);
   revalidatePath("/studio/production");
   revalidatePath("/studio/video");
 }
 
 export async function analyzeTrackLyricsAction(form: FormData) {
-  const context = await studioLyricsContext(form);
-  await analyzeTrackLyrics({
-    db: context.db,
-    ownerId: context.user.id,
-    trackId: context.trackId,
-    releaseId: context.releaseId,
-    cacheMode: "refresh",
-  });
-  revalidatePath(`/studio/releases/${context.releaseId}`);
+  const base = await studioLyricsContext(form);
+  const { data: lyrics, error } = await base.db.from("track_lyrics")
+    .select("id,allow_ai_context")
+    .eq("track_id", base.trackId)
+    .eq("owner_id", base.user.id)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!lyrics) throw new Error("Save official lyrics before analyzing them.");
+
+  await analyzeWithoutBreakingSavedLyrics({ ...base, lyricsId: lyrics.id, allowAiContext: lyrics.allow_ai_context }, "refresh");
+  revalidatePath(`/studio/releases/${base.releaseId}`);
   revalidatePath("/studio/production");
   revalidatePath("/studio/video");
 }
