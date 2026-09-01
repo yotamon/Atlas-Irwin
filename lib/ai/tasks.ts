@@ -7,6 +7,8 @@ export type AtlasAiTaskType =
   | "marketing.campaign_plan"
   | "marketing.caption"
   | "marketing.strategy"
+  | "marketing.creative_direction"
+  | "marketing.creative_quality"
   | "community.reply"
   | "metadata.extraction"
   | "music.lyrics_analysis"
@@ -64,6 +66,8 @@ const BASE_TASKS: Record<AtlasAiTaskType, Omit<AtlasAiTaskPolicy, "models" | "es
   "marketing.campaign_plan": { task: "marketing.campaign_plan", label: "Campaign planning", modality: "text", tier: "balanced", escalationTier: "premium", qualityThreshold: 0.9 },
   "marketing.caption": { task: "marketing.caption", label: "Caption writing", modality: "text", tier: "economy", escalationTier: "balanced", qualityThreshold: 0.85 },
   "marketing.strategy": { task: "marketing.strategy", label: "Marketing strategy", modality: "text", tier: "balanced", escalationTier: "premium", qualityThreshold: 0.9 },
+  "marketing.creative_direction": { task: "marketing.creative_direction", label: "Creative direction", modality: "text", tier: "balanced", escalationTier: "premium", qualityThreshold: 0.92 },
+  "marketing.creative_quality": { task: "marketing.creative_quality", label: "Creative quality review", modality: "text", tier: "premium", escalationTier: null, qualityThreshold: 0.94 },
   "community.reply": { task: "community.reply", label: "Community reply", modality: "text", tier: "economy", escalationTier: "balanced", qualityThreshold: 0.88 },
   "metadata.extraction": { task: "metadata.extraction", label: "Metadata extraction", modality: "text", tier: "economy", escalationTier: "balanced", qualityThreshold: 1 },
   "music.lyrics_analysis": { task: "music.lyrics_analysis", label: "Lyrics Intelligence", modality: "text", tier: "balanced", escalationTier: "premium", qualityThreshold: 1 },
