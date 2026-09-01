@@ -38,6 +38,17 @@ test("Audio Scenes are non-destructive recipes with canonical-master Full Impact
   assert.ok(scenes.includes("The canonical mastered track"));
 });
 
+test("stored system scenes automatically upgrade when recipe semantics change", async () => {
+  const persistence = await source("lib/music-intelligence/stem-scenes.ts");
+
+  assert.ok(persistence.includes("AUDIO_SCENE_RECIPE_VERSION = 2"));
+  assert.ok(persistence.includes("needsRecipeUpgrade"));
+  assert.ok(persistence.includes("scene.recipe_version < AUDIO_SCENE_RECIPE_VERSION"));
+  assert.ok(persistence.includes("await regenerateSystemAudioScenes"));
+  assert.ok(persistence.includes("recipe_version: AUDIO_SCENE_RECIPE_VERSION"));
+  assert.ok(persistence.includes("fingerprintChanged || recipeVersionChanged ? null"));
+});
+
 test("vocal scenes preserve the complete vocal stack instead of selecting one vocal stem", async () => {
   const scenes = await source("lib/music-intelligence/stems.ts");
 
