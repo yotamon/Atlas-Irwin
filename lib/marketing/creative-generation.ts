@@ -146,6 +146,10 @@ export async function applyMarketingCreativeProviderStatus(input: {
     assetType: assetType as "social_image" | "content_video",
     context: storedContext as unknown as CreativeReferenceContext,
   });
+  const storedAssetUrl = stored.asset.public_url;
+  if (!storedAssetUrl) {
+    throw new Error("Generated marketing asset was stored without a public Media Library URL.");
+  }
 
   let visualQuality: Record<string, unknown>;
   let stage: string;
@@ -158,7 +162,7 @@ export async function applyMarketingCreativeProviderStatus(input: {
         campaignId: run.campaign_id,
         releaseId: run.release_id,
         contentItemId,
-        assetUrl: stored.asset.public_url,
+        assetUrl: storedAssetUrl,
         treatment: storedTreatment as unknown as CreativeTreatment,
         context: storedContext as unknown as CreativeReferenceContext,
       });
@@ -194,7 +198,7 @@ export async function applyMarketingCreativeProviderStatus(input: {
         contentItemId,
         generationRunId: run.id,
         rawAssetId: stored.asset.id,
-        rawAssetUrl: stored.asset.public_url,
+        rawAssetUrl: storedAssetUrl,
         treatment: storedTreatment as unknown as CreativeTreatment,
         context: storedContext as unknown as CreativeReferenceContext,
         request,
@@ -227,9 +231,9 @@ export async function applyMarketingCreativeProviderStatus(input: {
     stage,
     providerStatus: "completed",
     providerRaw: input.status.raw,
-    rawResultUrl: stored.asset.public_url,
+    rawResultUrl: storedAssetUrl,
     rawMediaAssetId: stored.asset.id,
-    resultUrl: outputKind === "image" ? stored.asset.public_url : null,
+    resultUrl: outputKind === "image" ? storedAssetUrl : null,
     mediaAssetId: outputKind === "image" ? stored.asset.id : null,
     contentStatus: stored.status,
     visualQuality,
@@ -264,7 +268,7 @@ export async function applyMarketingCreativeProviderStatus(input: {
   return {
     completed: true as const,
     mediaAssetId: outputKind === "image" ? stored.asset.id : null,
-    assetUrl: outputKind === "image" ? stored.asset.public_url : null,
+    assetUrl: outputKind === "image" ? storedAssetUrl : null,
     qualityPassed,
     qualityFailed,
     stage,
