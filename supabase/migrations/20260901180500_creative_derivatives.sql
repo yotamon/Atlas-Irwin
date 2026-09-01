@@ -3,7 +3,7 @@ create table public.creative_derivatives (
   owner_id uuid not null references public.profiles(id) on delete cascade,
   campaign_id uuid references public.campaigns(id) on delete cascade,
   master_content_item_id uuid not null references public.content_items(id) on delete cascade,
-  derivative_content_item_id uuid not null references public.content_items(id) on delete cascade,
+  derivative_content_item_id uuid references public.content_items(id) on delete cascade,
   master_generation_run_id uuid not null references public.generation_runs(id) on delete cascade,
   derivative_generation_run_id uuid references public.generation_runs(id) on delete set null,
   target_platform text not null,
@@ -15,13 +15,15 @@ create table public.creative_derivatives (
   error text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique(owner_id, master_content_item_id, target_package_id)
+  unique(owner_id, master_content_item_id, target_package_id),
+  check ((status = 'planned' and derivative_content_item_id is null) or status <> 'planned')
 );
 
 create index creative_derivatives_master_idx
   on public.creative_derivatives(owner_id, master_content_item_id, created_at desc);
 create index creative_derivatives_child_idx
-  on public.creative_derivatives(owner_id, derivative_content_item_id);
+  on public.creative_derivatives(owner_id, derivative_content_item_id)
+  where derivative_content_item_id is not null;
 create index creative_derivatives_status_idx
   on public.creative_derivatives(status, created_at);
 
