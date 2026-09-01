@@ -7,7 +7,7 @@ async function source(path) {
 }
 
 test("Stem Intelligence is exact-master bound and invalidates derived state", async () => {
-  const migration = await source("supabase/migrations/20260901173000_stem_intelligence.sql");
+  const migration = await source("supabase/migrations/20260901112545_stem_intelligence.sql");
   const callback = await source("app/api/studio/stems/callback/route.ts");
 
   assert.ok(migration.includes("source_master_url text not null"));
