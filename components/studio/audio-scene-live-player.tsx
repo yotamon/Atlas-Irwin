@@ -82,14 +82,16 @@ export function AudioSceneLivePlayer({
   compact = false,
 }: {
   recipe: Json;
-  startMs: number;
-  endMs: number;
+  startMs: number | null;
+  endMs: number | null;
   masterUrl?: string | null;
   stems: AudioSceneLiveStem[];
   compact?: boolean;
 }) {
   const instanceId = useId();
-  const durationMs = Math.max(1, endMs - startMs);
+  const resolvedStartMs = finite(startMs, 0);
+  const resolvedEndMs = Math.max(resolvedStartMs + 1, finite(endMs, resolvedStartMs + 15000));
+  const durationMs = resolvedEndMs - resolvedStartMs;
   const stemById = useMemo(() => new Map(stems.map((stem) => [stem.id, stem])), [stems]);
   const layers = useMemo<ResolvedLayer[]>(() => {
     const rows = record(recipe).layers;
@@ -141,7 +143,7 @@ export function AudioSceneLivePlayer({
   const [error, setError] = useState("");
 
   function expectedSourceMs(layer: ResolvedLayer, position: number) {
-    return startMs + position - layer.sourceOffsetMs;
+    return resolvedStartMs + position - layer.sourceOffsetMs;
   }
 
   function layerGain(layer: ResolvedLayer, position: number) {
@@ -330,7 +332,7 @@ export function AudioSceneLivePlayer({
     // Keep existing MediaElementSource nodes attached. Browsers allow only one source node per media element.
     // ensureGraph() reconnects only when React has actually replaced an element.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recipe, startMs, endMs]);
+  }, [recipe, resolvedStartMs, resolvedEndMs]);
 
   return (
     <div className={`${styles.player} audio-scene-live-player${compact ? ` ${styles.compact} compact` : ""}`}>
@@ -371,8 +373,8 @@ export function AudioSceneLivePlayer({
         disabled={!layers.length}
       />
       <div className={`${styles.time} audio-scene-live-time`}>
-        <span>{clock(startMs + positionMs)}</span>
-        <span>{clock(endMs)}</span>
+        <span>{clock(resolvedStartMs + positionMs)}</span>
+        <span>{clock(resolvedEndMs)}</span>
       </div>
       {error ? <div className="notice compact-notice">{error}</div> : null}
     </div>
