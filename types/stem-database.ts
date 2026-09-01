@@ -114,6 +114,24 @@ export type TrackStemJob = {
   updated_at: string;
 };
 
+export type TrackMusicIntelligence = {
+  track_id: string;
+  owner_id: string;
+  analysis_version: number;
+  engine: string;
+  quality: "full" | "fallback";
+  semantic_structure: boolean;
+  source_audio_url: string | null;
+  source_media_asset_id: string | null;
+  audio_sha256: string | null;
+  analysis_config: string | null;
+  downbeat_source: "model" | "inferred_from_beats" | "synthetic_grid" | "none";
+  analysis: Json;
+  analyzed_at: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type StemAwareContentItem = ContentItem & {
   audio_scene_id: string | null;
   audio_scene_source: "manual" | "stem_intelligence" | null;
@@ -136,6 +154,7 @@ export type StemDatabase = Omit<Database, "public"> & {
       content_items: Table<StemAwareContentItem>;
       music_video_projects: Table<StemAwareVideoProject>;
       music_video_renders: Table<StemAwareVideoRender>;
+      track_music_intelligence: Table<TrackMusicIntelligence>;
       track_stems: Table<TrackStem>;
       audio_scenes: Table<AudioScene>;
       track_stem_jobs: Table<TrackStemJob>;
