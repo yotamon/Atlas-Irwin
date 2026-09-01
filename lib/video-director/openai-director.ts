@@ -1,9 +1,9 @@
 import "server-only";
 
-import { atlasAiGatewayConfigured, normalizeGatewayModel } from "@/lib/ai/gateway";
+import { atlasAiGatewayConfigured } from "@/lib/ai/gateway";
 import { runAtlasAiTask } from "@/lib/ai/control-plane";
 import { strictQualityResult, type AtlasQualityGate } from "@/lib/ai/quality";
-import type { AtlasAiTaskType } from "@/lib/ai/tasks";
+import { atlasAiTaskPolicy, type AtlasAiTaskType } from "@/lib/ai/tasks";
 import { conciseLyricsPromptContext } from "@/lib/lyrics-intelligence/context";
 import type {
   MusicVideoCreativeDirector,
@@ -112,6 +112,14 @@ Creative requirements:
 - The first timeline shot must create its own source with reuse_strategy=unique. Later editorial reuse may only refer backward to an established source.
 - test_shot_indexes must refer only to unique or continuation source shots that can actually be generated and reviewed.
 - The final result must feel intentional, premium, strange enough to be memorable, and recognizably part of one Atlas Irwin world.`;
+
+export function openAIDirectorReadiness() {
+  const policy = atlasAiTaskPolicy("video.concepts");
+  return {
+    configured: atlasAiGatewayConfigured(),
+    model: policy.models[0] ?? "auto via Atlas AI Control Plane",
+  };
+}
 
 async function structuredResponse<T>({
   context,
