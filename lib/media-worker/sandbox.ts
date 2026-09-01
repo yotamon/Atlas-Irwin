@@ -124,6 +124,7 @@ export UV_PYTHON_INSTALL_DIR="$WORKDIR/.uv-python"
 export UV_CACHE_DIR="$WORKDIR/.uv-cache"
 export TORCH_HOME="$WORKDIR/.torch"
 export HF_HOME="$WORKDIR/.huggingface"
+export PYTHONPATH="$WORKDIR"
 
 cleanup() {
   rm -rf "$LOCKDIR"
