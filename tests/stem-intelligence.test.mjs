@@ -1,0 +1,115 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+
+async function source(path) {
+  return readFile(path, "utf8");
+}
+
+test("Stem Intelligence is exact-master bound and invalidates derived state", async () => {
+  const migration = await source("supabase/migrations/20260901173000_stem_intelligence.sql");
+  const callback = await source("app/api/studio/stems/callback/route.ts");
+
+  assert.ok(migration.includes("source_master_url text not null"));
+  assert.ok(migration.includes("Stem must be bound to the current canonical master"));
+  assert.ok(migration.includes("invalidate_stem_intelligence_on_audio_change"));
+  assert.ok(migration.includes("set status = 'stale'"));
+  assert.ok(migration.includes("preview_asset_id = null"));
+  assert.ok(migration.includes("status = 'cancelled'"));
+
+  assert.ok(callback.includes("trackAudioUrl !== expectedMasterUrl"));
+  assert.ok(callback.includes("previous canonical master and was discarded"));
+  assert.ok(callback.includes("stem_set_fingerprint"));
+  assert.ok(callback.includes("Stem set changed while the Audio Scene preview was rendering"));
+});
+
+test("Audio Scenes are non-destructive recipes with canonical-master Full Impact", async () => {
+  const scenes = await source("lib/music-intelligence/stems.ts");
+
+  assert.ok(scenes.includes('schema: "atlas.audio_scene.v1"'));
+  assert.ok(scenes.includes('sceneType: "vocal_spotlight"'));
+  assert.ok(scenes.includes('sceneType: "groove"'));
+  assert.ok(scenes.includes('sceneType: "atmosphere"'));
+  assert.ok(scenes.includes('sceneType: "voiceover_bed"'));
+  assert.ok(scenes.includes('sceneType: "progressive_reveal"'));
+  assert.ok(scenes.includes('sceneType: "vocal_to_drop"'));
+  assert.ok(scenes.includes('sceneType: "full_impact"'));
+  assert.ok(scenes.includes('{ source: "master", gain_db: 0 }'));
+  assert.ok(scenes.includes("The canonical mastered track"));
+});
+
+test("Stem analysis records musical usefulness and explicit alignment confidence", async () => {
+  const analyzer = await source("services/media-worker/app/stem_intelligence.py");
+  const worker = await source("services/media-worker/app/main.py");
+
+  for (const signal of [
+    "energy",
+    "active_ratio",
+    "rhythmic_activity",
+    "groove_score",
+    "loopability",
+    "hook_score",
+    "section_activity",
+    "best_moments",
+    "alignment",
+  ]) assert.ok(analyzer.includes(signal), `missing stem signal ${signal}`);
+
+  assert.ok(analyzer.includes('"method": "onset_cross_correlation"'));
+  assert.ok(analyzer.includes('"method": "duration_guard"'));
+  assert.ok(analyzer.includes("confidence < 0.28"));
+  assert.ok(worker.includes('elif request.job_type == "analyze_stem"'));
+  assert.ok(worker.includes('elif request.job_type == "render_audio_scene"'));
+  assert.ok(worker.includes("gain_reduction_db"));
+});
+
+test("Stem jobs share the durable Media Worker queue and callback credential model", async () => {
+  const queue = await source("lib/media-worker/queue.ts");
+  const sandbox = await source("lib/media-worker/sandbox.ts");
+  const callback = await source("app/api/studio/stems/callback/route.ts");
+
+  assert.ok(queue.includes('from("track_stem_jobs")'));
+  assert.ok(queue.includes('`${getSiteUrl()}/api/studio/stems/callback`'));
+  assert.ok(queue.includes("freshStemState"));
+  assert.ok(queue.includes("dispatchStemJob"));
+  assert.ok(queue.includes("videoActive || vaultState.active || stemState.active"));
+  assert.ok(sandbox.includes('"analyze_stem"'));
+  assert.ok(sandbox.includes('"render_audio_scene"'));
+  assert.ok(sandbox.includes("stem_intelligence.py"));
+  assert.ok(callback.includes("MEDIA_WORKER_CALLBACK_HASH_KEY"));
+  assert.ok(callback.includes("timingSafeEqual"));
+});
+
+test("Stem Intelligence is integrated into release UX, campaign creative context, and Video Director", async () => {
+  const masterPanel = await source("components/studio/release-master-audio-panel.tsx");
+  const stemPanel = await source("components/studio/stem-intelligence-panel.tsx");
+  const creative = await source("lib/marketing/creative-context.ts");
+  const videoContext = await source("lib/video-director/context.ts");
+
+  assert.ok(masterPanel.includes("<StemIntelligencePanel"));
+  assert.ok(stemPanel.includes("Import stems from Suno or your DAW"));
+  assert.ok(stemPanel.includes("Audio Scenes"));
+  assert.ok(stemPanel.includes("Advanced custom mixer"));
+
+  assert.ok(creative.includes("selectedAudioScene"));
+  assert.ok(creative.includes("sceneFit"));
+  assert.ok(creative.includes("Artist-selected Audio Scene for this content item"));
+  assert.ok(creative.includes("MUSICAL DIRECTION:"));
+  assert.ok(creative.includes("progressive reveal"));
+
+  assert.ok(videoContext.includes("stem_intelligence"));
+  assert.ok(videoContext.includes("full music video still follows the canonical master"));
+});
+
+test("Stem files remain first-class Media Library assets with explicit lineage", async () => {
+  const actions = await source("app/studio/stem-actions.ts");
+  const uploader = await source("components/studio/stem-uploader.tsx");
+  const callback = await source("app/api/studio/stems/callback/route.ts");
+
+  assert.ok(actions.includes('asset.asset_type !== "stem"'));
+  assert.ok(actions.includes('role: "stem"'));
+  assert.ok(uploader.includes('targetForm.set("asset_type", "stem")'));
+  assert.ok(uploader.includes("crypto.subtle.digest"));
+  assert.ok(callback.includes('source_kind: "audio_scene_render"'));
+  assert.ok(callback.includes("source_master_url"));
+  assert.ok(callback.includes("audio_scene_id"));
+});
