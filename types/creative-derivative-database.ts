@@ -12,7 +12,7 @@ export type CreativeDerivative = {
   owner_id: string;
   campaign_id: string | null;
   master_content_item_id: string;
-  derivative_content_item_id: string;
+  derivative_content_item_id: string | null;
   master_generation_run_id: string;
   derivative_generation_run_id: string | null;
   target_platform: string;
