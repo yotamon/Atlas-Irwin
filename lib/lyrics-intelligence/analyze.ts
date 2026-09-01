@@ -124,18 +124,23 @@ export async function analyzeTrackLyrics({
   releaseId: string;
   cacheMode?: "use" | "refresh" | "off";
 }) {
-  const [{ data: lyrics, error: lyricsError }, { data: sections, error: sectionsError }] = await Promise.all([
-    db.from("track_lyrics").select("*").eq("track_id", trackId).eq("owner_id", ownerId).single(),
-    db.from("track_lyric_sections").select("*").eq("owner_id", ownerId).order("display_order"),
-  ]);
+  const { data: lyrics, error: lyricsError } = await db.from("track_lyrics")
+    .select("*")
+    .eq("track_id", trackId)
+    .eq("owner_id", ownerId)
+    .single();
   if (lyricsError || !lyrics) throw new Error(lyricsError?.message || "Official lyrics not found.");
   const document = lyrics as TrackLyrics;
   if (document.status === "instrumental") throw new Error("Instrumental tracks do not need Lyrics Intelligence analysis.");
-  if (sectionsError) throw new Error(sectionsError.message);
 
-  const currentSections = ((sections ?? []) as TrackLyricSection[])
-    .filter((section) => section.lyrics_id === document.id && section.lyrics_version === document.version)
-    .sort((a, b) => a.display_order - b.display_order);
+  const { data: sections, error: sectionsError } = await db.from("track_lyric_sections")
+    .select("*")
+    .eq("lyrics_id", document.id)
+    .eq("lyrics_version", document.version)
+    .eq("owner_id", ownerId)
+    .order("display_order");
+  if (sectionsError) throw new Error(sectionsError.message);
+  const currentSections = (sections ?? []) as TrackLyricSection[];
   if (!currentSections.length) throw new Error("Lyrics structure is missing. Save the official lyrics again before analyzing.");
   const validKeys = new Set(currentSections.map((section) => section.section_key));
 
