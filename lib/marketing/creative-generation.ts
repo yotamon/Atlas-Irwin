@@ -5,6 +5,8 @@ import { createServiceClient } from "@/lib/supabase/service";
 import type { Json } from "@/types/database";
 import type { CreativeReferenceContext } from "./creative-context";
 import type { CreativeProviderStatus } from "./creative-provider-types";
+import type { CreativeTreatment } from "./creative-treatment";
+import { reviewGeneratedCreativeImage } from "./creative-visual-quality";
 import { storeRemoteMarketingAsset } from "./generated-assets";
 
 function record(value: Json | unknown): Record<string, unknown> {
@@ -70,11 +72,15 @@ export async function applyMarketingCreativeProviderStatus(input: {
   const outputKind = stringValue(inputContext.outputKind);
   const assetType = stringValue(inputContext.assetType);
   const storedContext = inputContext.referenceContext;
+  const storedTreatment = inputContext.treatment;
   if (!contentItemId || !["image", "video"].includes(outputKind) || !["social_image", "content_video"].includes(assetType)) {
     throw new Error("Stored marketing generation context is incomplete.");
   }
   if (!storedContext || typeof storedContext !== "object" || Array.isArray(storedContext)) {
     throw new Error("Stored creative reference context is missing.");
+  }
+  if (!storedTreatment || typeof storedTreatment !== "object" || Array.isArray(storedTreatment)) {
+    throw new Error("Stored Creative Director treatment is missing.");
   }
 
   const actualCostUsd = input.status.actualCostUsd ?? run.estimated_cost_usd ?? null;
@@ -98,15 +104,51 @@ export async function applyMarketingCreativeProviderStatus(input: {
     context: storedContext as unknown as CreativeReferenceContext,
   });
 
+  let visualQuality: Record<string, unknown>;
+  if (outputKind === "image") {
+    try {
+      const review = await reviewGeneratedCreativeImage({
+        ownerId: run.owner_id,
+        parentGenerationRunId: run.id,
+        campaignId: run.campaign_id,
+        releaseId: run.release_id,
+        contentItemId,
+        assetUrl: stored.asset.public_url,
+        treatment: storedTreatment as unknown as CreativeTreatment,
+        context: storedContext as unknown as CreativeReferenceContext,
+      });
+      visualQuality = { status: "reviewed", ...review };
+      if (!review.passed) {
+        await marketing.from("content_items").update({ approval_status: "rejected" }).eq("id", contentItemId).eq("owner_id", run.owner_id);
+      }
+    } catch (error) {
+      visualQuality = {
+        status: "unavailable",
+        passed: null,
+        error: error instanceof Error ? error.message : "Automated visual quality review was unavailable.",
+        humanReviewRequired: true,
+      };
+    }
+  } else {
+    visualQuality = {
+      status: "temporal_review_pending",
+      passed: null,
+      humanReviewRequired: true,
+      note: "Video temporal artifact review requires sampled frames across the finished edit; a single-frame vision check is intentionally not treated as sufficient.",
+    };
+  }
+
+  const qualityFailed = visualQuality.status === "reviewed" && visualQuality.passed === false;
   const completedOutput = {
     ...output,
-    stage: "creative_review",
+    stage: qualityFailed ? "creative_qc_failed" : "creative_review",
     providerStatus: "completed",
     providerRaw: input.status.raw,
     resultUrl: stored.asset.public_url,
     mediaAssetId: stored.asset.id,
     contentStatus: stored.status,
-    approvalRequired: true,
+    visualQuality,
+    approvalRequired: !qualityFailed,
     actualCostUsd,
   };
   const { error: updateError } = await marketing.from("generation_runs").update({
@@ -119,7 +161,7 @@ export async function applyMarketingCreativeProviderStatus(input: {
   const { error: eventError } = await marketing.from("marketing_events").insert({
     owner_id: run.owner_id,
     campaign_id: run.campaign_id,
-    event_type: "content.ai_asset_ready_for_review",
+    event_type: qualityFailed ? "content.ai_asset_qc_failed" : "content.ai_asset_ready_for_review",
     entity_type: "content_item",
     entity_id: contentItemId,
     payload: json({
@@ -129,8 +171,9 @@ export async function applyMarketingCreativeProviderStatus(input: {
       model: run.model,
       actualCostUsd,
       cohesionScore: (storedContext as unknown as CreativeReferenceContext).cohesionScore,
+      visualQuality,
     }),
   });
   if (eventError) throw new Error(eventError.message);
-  return { completed: true as const, mediaAssetId: stored.asset.id, assetUrl: stored.asset.public_url };
+  return { completed: true as const, mediaAssetId: stored.asset.id, assetUrl: stored.asset.public_url, qualityFailed };
 }
