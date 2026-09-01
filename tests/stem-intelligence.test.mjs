@@ -38,6 +38,40 @@ test("Audio Scenes are non-destructive recipes with canonical-master Full Impact
   assert.ok(scenes.includes("The canonical mastered track"));
 });
 
+test("vocal scenes preserve the complete vocal stack instead of selecting one vocal stem", async () => {
+  const scenes = await source("lib/music-intelligence/stems.ts");
+
+  assert.ok(scenes.includes("const used = [...vocals, ...supporting]"));
+  assert.ok(scenes.includes("...vocals.map((stem) => stemLayer(stem, 0))"));
+  assert.ok(scenes.includes("vocal_stem_ids: vocals.map((stem) => stem.id)"));
+  assert.ok(scenes.includes("const revealGroups"));
+  assert.ok(scenes.includes("...(vocals.length ? [vocals] : [])"));
+  assert.ok(scenes.includes("...vocals.map((stem) => ({ ...stemLayer(stem, 0), end_at_ms: transitionMs + 120"));
+  assert.ok(scenes.includes("complete vocal stack"));
+});
+
+test("Audio Scenes audition live from aligned sources and render only for portable files", async () => {
+  const player = await source("components/studio/audio-scene-live-player.tsx");
+  const panel = await source("components/studio/stem-intelligence-panel.tsx");
+  const mixer = await source("components/studio/stem-custom-mixer.tsx");
+
+  assert.ok(player.includes("createMediaElementSource"));
+  assert.ok(player.includes("sourceOffsetMs"));
+  assert.ok(player.includes("startAtMs"));
+  assert.ok(player.includes("fadeInMs"));
+  assert.ok(player.includes("fadeOutMs"));
+  assert.ok(player.includes('new CustomEvent("atlas-audio-scene-play"'));
+  assert.ok(player.includes("Play live mix"));
+  assert.ok(panel.includes("<AudioSceneLivePlayer"));
+  assert.ok(panel.includes("No preview render is required"));
+  assert.ok(panel.includes("Create audio file"));
+  assert.equal(panel.includes("Render preview"), false);
+  assert.ok(panel.includes('queued: "Waiting"'));
+  assert.ok(panel.includes('analyzing: "Analyzing now"'));
+  assert.ok(mixer.includes("<AudioSceneLivePlayer"));
+  assert.ok(mixer.includes("Audition is live"));
+});
+
 test("Stem analysis records musical usefulness and explicit alignment confidence", async () => {
   const analyzer = await source("services/media-worker/app/stem_intelligence.py");
   const worker = await source("services/media-worker/app/main.py");
