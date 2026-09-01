@@ -86,3 +86,68 @@ test("YouTube receives private future uploads and Atlas reconciles provider-owne
   assert.match(migration, /provider_scheduled/);
   assert.match(types, /"provider_scheduled" \| "manual_ready"/);
 });
+
+test("AI video cannot reach approval before deterministic finishing and temporal QC", async () => {
+  const generation = await source("lib/marketing/creative-generation.ts");
+  const production = await source("lib/marketing/media-production.ts");
+  const finishing = await source("services/media-worker/app/social_finishing.py");
+  const callback = await source("app/api/studio/marketing/media-worker/callback/route.ts");
+  const guard = await source("supabase/migrations/20260901175500_ai_creative_approval_guard.sql");
+
+  assert.match(generation, /enqueueMarketingVideoFinishing/);
+  assert.match(generation, /stage = "finishing_queued"/);
+  assert.match(generation, /Raw provider video is blocked from approval/);
+  assert.match(production, /reviewFrameTimestamps/);
+  assert.match(production, /audio_scene/);
+  assert.match(production, /canonical_master/);
+  assert.match(finishing, /libx264/);
+  assert.match(finishing, /"-c:a", "aac"/);
+  assert.match(finishing, /alimiter=limit=0\.98/);
+  assert.match(finishing, /Social video finishing requires at least three temporal QC frames/);
+  assert.match(callback, /reviewGeneratedCreativeVideo/);
+  assert.match(callback, /qualityPassed \? "creative_review"/);
+  assert.match(callback, /"creative_qc_pending"/);
+  assert.match(guard, /AI creative cannot be approved before deterministic finishing and automated quality control pass/);
+  assert.match(guard, /\{visualQuality,passed\}/);
+});
+
+test("approved masters expand only through native zero-generation-spend derivatives", async () => {
+  const derivatives = await source("lib/marketing/creative-derivatives.ts");
+  const events = await source("lib/marketing/creative-derivative-events.ts");
+  const migration = await source("supabase/migrations/20260901180500_creative_derivatives.sql");
+
+  assert.match(derivatives, /status", "connected"/);
+  assert.match(derivatives, /allowed\.add\("instagram-reel"\)/);
+  assert.match(derivatives, /allowed\.add\("instagram-story"\)/);
+  assert.match(derivatives, /allowed\.add\(kind === "video" \? "tiktok-video" : "tiktok-photo"\)/);
+  assert.match(derivatives, /allowed\.add\("youtube-short"\)/);
+  assert.match(derivatives, /allowed\.delete\(sourcePackageId\)/);
+  assert.match(derivatives, /estimated_cost_usd: 0/);
+  assert.match(derivatives, /actual_cost_usd: 0/);
+  assert.match(derivatives, /zeroGenerationSpend: true/);
+  assert.match(derivatives, /enqueueMarketingVideoFinishing/);
+  assert.match(derivatives, /reuse_approved_image/);
+  assert.match(derivatives, /deterministic_video_repackage/);
+  assert.match(events, /content\.ai_asset_approved/);
+  assert.match(migration, /unique\(owner_id, master_content_item_id, target_package_id\)/);
+});
+
+test("campaign Autopilot spend is atomically reserved and ambiguity never auto-retries", async () => {
+  const migration = await source("supabase/migrations/20260901183000_campaign_ai_spend_envelopes.sql");
+  const processor = await source("lib/marketing/autonomous-creative-spend.ts");
+  const card = await source("components/studio/campaign-ai-spend-card.tsx");
+
+  assert.match(migration, /c\.mode = 'autopilot'/);
+  assert.match(migration, /for update of e/);
+  assert.match(migration, /max_single_generation_usd/);
+  assert.match(migration, /reserved_usd \+ spent_usd \+ p_amount_usd/);
+  assert.match(migration, /overrun_usd/);
+  assert.match(processor, /reserveCampaignAiSpend/);
+  assert.match(processor, /assertSpecialistMediaSpendAllowed/);
+  assert.match(processor, /stage: "submission_ambiguous"/);
+  assert.match(processor, /will not retry automatically/);
+  assert.match(processor, /reserveLocked: true/);
+  assert.match(card, /AI Creative Budget/);
+  assert.match(card, /Campaign mode alone never authorizes spend/);
+  assert.match(card, /Pause autonomous creative spend/);
+});
