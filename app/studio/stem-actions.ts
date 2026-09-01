@@ -65,11 +65,12 @@ async function canonicalTrackContext(trackId: string) {
     throw new Error(trackResult.error?.message || "Track not found.");
   }
   const track = trackResult.data;
-  if (!track.audio_url) throw new Error("Attach the canonical master before importing stems.");
+  const audioUrl = track.audio_url;
+  if (!audioUrl) throw new Error("Attach the canonical master before importing stems.");
   if (intelligenceResult.error) throw new Error(intelligenceResult.error.message);
   const intelligence = intelligenceResult.data;
-  const musicMap = intelligence?.source_audio_url === track.audio_url ? intelligence.analysis : null;
-  return { supabase, db, user, track, intelligence, musicMap };
+  const musicMap = intelligence?.source_audio_url === audioUrl ? intelligence.analysis : null;
+  return { supabase, db, user, track: { ...track, audio_url: audioUrl }, intelligence, musicMap };
 }
 
 function analysisSections(musicMap: Json | null) {
@@ -196,7 +197,7 @@ export async function registerTrackStem(form: FormData) {
       label: requestedLabel || cleanStemLabel(sourceFilename),
       source_provider: sourceProvider,
       source_filename: sourceFilename,
-      source_master_url: track.audio_url!,
+      source_master_url: track.audio_url,
       source_master_media_asset_id: intelligence?.source_media_asset_id ?? null,
       status: "uploaded",
       error: null,
@@ -349,9 +350,8 @@ export async function removeTrackStem(form: FormData) {
 export async function regenerateAudioScenes(form: FormData) {
   const trackId = z.uuid().parse(value(form, "track_id"));
   const { db, user, track } = await canonicalTrackContext(trackId);
-  const scenes = await regenerateSystemAudioScenes({ client: db, ownerId: user.id, trackId });
+  await regenerateSystemAudioScenes({ client: db, ownerId: user.id, trackId });
   revalidatePath(`/studio/releases/${track.release_id}`);
-  return { sceneCount: scenes.length };
 }
 
 function sceneRecipeLayers(scene: AudioScene) {
@@ -436,9 +436,7 @@ export async function renderAudioScenePreview(form: FormData) {
     .eq("owner_id", user.id)
     .maybeSingle();
   if (existing.error) throw new Error(existing.error.message);
-  if (existing.data && ["planned", "queued", "running"].includes(existing.data.status)) {
-    return { queued: true, jobId: existing.data.id };
-  }
+  if (existing.data && ["planned", "queued", "running"].includes(existing.data.status)) return;
 
   const jobResult = await db.from("track_stem_jobs").insert({
     owner_id: user.id,
@@ -464,7 +462,6 @@ export async function renderAudioScenePreview(form: FormData) {
   if (sceneUpdate.error) throw new Error(sceneUpdate.error.message);
   await kickMediaWorkerQueue().catch(() => undefined);
   revalidatePath(`/studio/releases/${context.track.release_id}`);
-  return { queued: true, jobId: jobResult.data.id };
 }
 
 export async function toggleAudioScenePin(form: FormData) {
