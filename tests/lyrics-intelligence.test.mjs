@@ -1,10 +1,122 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import ts from "typescript";
 
 async function source(path) {
   return readFile(path, "utf8");
 }
+
+async function loadLyricsDomain() {
+  const domain = await source("lib/lyrics-intelligence/domain.ts");
+  const compiled = ts.transpileModule(domain, {
+    compilerOptions: {
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2022,
+    },
+  }).outputText;
+  const encoded = Buffer.from(compiled, "utf8").toString("base64");
+  return import(`data:text/javascript;base64,${encoded}`);
+}
+
+const REALISTIC_SUNO_LYRICS = String.raw`[Intro]
+My love
+My love
+My love
+
+[Verse]
+Saw you 'cross the room
+You see me lookin' too
+I'm like
+"Oh my God
+He's so damn fine"
+Wonderin' if you think the same
+Then I see you walk my way
+Ooh
+You're mine
+
+[Chorus]
+He said
+"Meet me at the dancefloor
+Meet me at the dancefloor
+Meet me at the dancefloor
+Meet me at the dancefloor
+I'll see you at the dancefloor
+Meet me at the dancefloor
+I'll see you at the dancefloor
+I'll see you at the dancefloor"
+Mm-mm
+My love
+
+[Verse 2]
+Oh
+I can't get enough of it
+The way that you move your hips
+Dancin' all up on me
+Boy
+You got me fallin'
+Oh
+And now you look into my eyes
+And I don't wanna say goodbye
+You know I don't wanna leave
+Baby
+Keep on callin' me
+
+[Chorus]
+He said
+"Meet me at the dancefloor
+Meet me at the dancefloor
+Meet me at the dancefloor
+Meet me at the dancefloor
+I'll see you at the dancefloor
+Meet me at the dancefloor
+I'll see you at the dancefloor
+I'll see you at the dancefloor"
+
+[Outro]
+He said
+"Meet me at the dancefloor
+Meet me at the dancefloor
+Meet me at the dancefloor
+Meet me at the dancefloor"
+Mm
+He said
+"Meet me at the dancefloor
+Meet me at the dancefloor
+Meet me at the dancefloor
+Meet me at the dancefloor"
+Mm-mm
+My love`;
+
+test("realistic Suno-style lyrics parse into stable sections without losing exact lines", async () => {
+  const { parseLyrics, excerptExists } = await loadLyricsDomain();
+  const sections = parseLyrics(REALISTIC_SUNO_LYRICS);
+
+  assert.deepEqual(
+    sections.map((section) => [section.section_key, section.section_type, section.label]),
+    [
+      ["intro_1", "intro", "Intro"],
+      ["verse_1", "verse", "Verse"],
+      ["chorus_1", "chorus", "Chorus"],
+      ["verse_2", "verse", "Verse 2"],
+      ["chorus_2", "chorus", "Chorus"],
+      ["outro_1", "outro", "Outro"],
+    ],
+  );
+  assert.equal(sections.length, 6);
+  assert.equal(sections[0].lines.length, 3);
+  assert.equal(sections[0].lines.every((line) => line.text === "My love"), true);
+  assert.equal(sections[1].lines.some((line) => line.text === '"Oh my God'), true);
+  assert.equal(sections[1].lines.some((line) => line.text === 'He\'s so damn fine"'), true);
+  assert.equal(sections[3].lines.some((line) => line.text === "Oh"), true);
+  assert.equal(sections[3].lines.some((line) => line.text === "Boy"), true);
+  assert.equal(sections[5].lines.at(-1)?.text, "My love");
+
+  assert.equal(excerptExists("Meet me at the dancefloor", REALISTIC_SUNO_LYRICS), true);
+  assert.equal(excerptExists("I'll see you at the dancefloor", REALISTIC_SUNO_LYRICS), true);
+  assert.equal(excerptExists("Saw you 'cross the room", REALISTIC_SUNO_LYRICS), true);
+  assert.equal(excerptExists("Meet me under neon lights", REALISTIC_SUNO_LYRICS), false);
+});
 
 test("canonical lyrics are versioned human truth with immutable revision history and least privilege", async () => {
   const migration = await source("supabase/migrations/20260901130402_lyrics_intelligence.sql");
