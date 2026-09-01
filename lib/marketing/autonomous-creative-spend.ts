@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { assertSpecialistMediaSpendAllowed } from "@/lib/ai/control-plane";
 import { getSiteUrl } from "@/lib/site-url";
 import { createMarketingServiceClient } from "./db";
@@ -20,6 +21,7 @@ import {
   type CreativeProviderId,
 } from "./creative-provider-types";
 import type { Json } from "@/types/database";
+import type { CreativeSpendDatabase } from "@/types/creative-spend-database";
 
 function record(value: Json | unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -29,6 +31,10 @@ function record(value: Json | unknown): Record<string, unknown> {
 
 function json(value: unknown) {
   return value as Json;
+}
+
+function spendClient() {
+  return createMarketingServiceClient() as unknown as SupabaseClient<CreativeSpendDatabase>;
 }
 
 function providerId(value: string): CreativeProviderId | null {
@@ -58,7 +64,7 @@ function quoteFromOutput(output: Record<string, unknown>) {
 }
 
 async function eligibleCampaignIds(ownerId?: string) {
-  const client = createMarketingServiceClient();
+  const client = spendClient();
   let query = client.from("campaign_ai_spend_envelopes")
     .select("campaign_id,owner_id")
     .eq("enabled", true)
@@ -71,7 +77,7 @@ async function eligibleCampaignIds(ownerId?: string) {
 }
 
 export async function processAutonomousCreativeSpend(limit = 4, ownerId?: string) {
-  const client = createMarketingServiceClient();
+  const client = spendClient();
   const envelopes = await eligibleCampaignIds(ownerId);
   if (!envelopes.length) return { considered: 0, submitted: 0, blocked: 0, ambiguous: 0 };
   const campaignIds = Array.from(new Set(envelopes.map((item) => item.campaign_id)));
