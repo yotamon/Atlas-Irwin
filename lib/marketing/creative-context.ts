@@ -229,7 +229,7 @@ export async function loadCreativeReferenceContext({ db, ownerId, releaseId, con
       : Promise.resolve({ data: [], error: null }),
     contentItemId
       ? stemDb.from("content_items")
-          .select("id,title,platform,format,hook_text,content_angle,production_notes,audio_scene_id")
+          .select("id,title,platform,format,hook_text,production_notes,audio_scene_id")
           .eq("id", contentItemId)
           .eq("owner_id", ownerId)
           .maybeSingle()
@@ -334,7 +334,6 @@ export async function loadCreativeReferenceContext({ db, ownerId, releaseId, con
       content?.format,
       content?.platform,
       content?.hook_text,
-      content?.content_angle,
       content?.production_notes,
     ].filter((value): value is string => typeof value === "string" && Boolean(value.trim())).join(" ");
     const platform = typeof content?.platform === "string" ? content.platform : "";
