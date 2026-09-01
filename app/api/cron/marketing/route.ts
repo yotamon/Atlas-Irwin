@@ -1,7 +1,10 @@
 import { kickMediaWorkerQueue } from "@/lib/media-worker/queue";
 import { runMarketingAutomationCycle } from "@/lib/marketing/automation";
 import { syncAudienceInteractions } from "@/lib/marketing/audience";
+import { processAutonomousCreativeSpend } from "@/lib/marketing/autonomous-creative-spend";
 import { authorizeMarketingCron } from "@/lib/marketing/cron-auth";
+import { processApprovedCreativeDerivativeEvents } from "@/lib/marketing/creative-derivative-events";
+import { kickMarketingMediaWorkerQueue } from "@/lib/marketing/media-worker-queue";
 import { refreshNextBestActions } from "@/lib/marketing/next-best-action";
 import { processDueOutreachEnrollments } from "@/lib/marketing/outreach";
 import { processDuePublicationJobs } from "@/lib/marketing/publications";
@@ -33,20 +36,41 @@ export async function GET(request: Request) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  // The same authenticated 15-minute heartbeat also recovers durable Media Worker jobs after
-  // an interrupted dispatch/callback window. Healthy callbacks still drain the queue immediately.
+  // The same authenticated 15-minute heartbeat recovers all durable Media Worker queues after
+  // an interrupted dispatch/callback window. Healthy callbacks still drain the shared worker immediately.
   const mediaWorker = await runStep("media worker queue", () => kickMediaWorkerQueue());
+  const marketingMediaWorker = mediaWorker.ok && mediaWorker.value.dispatched
+    ? { ok: true as const, value: { dispatched: false, reason: "shared-worker-busy" as const } }
+    : await runStep("marketing media worker queue", () => kickMarketingMediaWorkerQueue());
 
-  // Publishing is first among marketing effects because it is the most time-sensitive external effect.
-  // Heavy FFmpeg composition runs on its own low-frequency endpoint.
+  // Publishing is first among external marketing effects because it is the most time-sensitive.
   const publications = await runStep("publication queue", () => processDuePublicationJobs());
   const outreach = await runStep("outreach queue", () => processDueOutreachEnrollments());
+
+  // Spend is permitted only for autopilot campaigns with an explicitly enabled atomic envelope.
+  // Campaign mode alone is never authority to call a paid creative provider.
+  const autonomousCreativeSpend = await runStep("autonomous creative spend", () => processAutonomousCreativeSpend());
+
+  // Consume human-approved master creatives before the generic event processor marks unknown
+  // event types processed. Derivatives use deterministic repackaging and never create new media spend.
+  const creativeDerivatives = await runStep("creative derivatives", () => processApprovedCreativeDerivativeEvents());
   const automation = await runStep("marketing event automation", () => runMarketingAutomationCycle());
   const audience = await runStep("audience sync", () => syncAudienceInteractions());
   const radar = await runStep("marketing radar", () => refreshMarketingRadarIfDue());
   const nextBestActions = await runStep("next best actions", () => refreshNextBestActions());
 
-  const results = { mediaWorker, publications, outreach, automation, audience, radar, nextBestActions };
+  const results = {
+    mediaWorker,
+    marketingMediaWorker,
+    publications,
+    outreach,
+    autonomousCreativeSpend,
+    creativeDerivatives,
+    automation,
+    audience,
+    radar,
+    nextBestActions,
+  };
   const failures = Object.entries(results)
     .filter(([, result]) => !result.ok)
     .map(([name, result]) => ({ name, error: "error" in result ? result.error : "Unknown failure." }));

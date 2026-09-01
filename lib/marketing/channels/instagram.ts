@@ -3,13 +3,113 @@ import "server-only";
 import type { Json } from "@/types/database";
 import { requireSocialAccess, socialOwnerForExternalPost } from "../social-auth";
 import type { ChannelCapability, ChannelMetrics, MarketingChannelAdapter, PublishRequest, PublishResult } from "../channel-types";
-import { captionFor, isVideoRequest, jsonOrThrow } from "../channel-utils";
+import { captionFor, isVideoRequest, jsonOrThrow, record } from "../channel-utils";
 
 const INSTAGRAM_GRAPH_URL = "https://graph.instagram.com";
 const INSTAGRAM_API_VERSION = process.env.INSTAGRAM_GRAPH_API_VERSION?.trim() || "v25.0";
 
 function instagramUrl(path: string) {
   return `${INSTAGRAM_GRAPH_URL}/${INSTAGRAM_API_VERSION}${path}`;
+}
+
+function format(request: PublishRequest) {
+  const value = record(request.metadata).format;
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function assetUrls(request: PublishRequest) {
+  const metadata = record(request.metadata);
+  const values = Array.isArray(metadata.assetUrls)
+    ? metadata.assetUrls.filter((value): value is string => typeof value === "string" && /^https:\/\//i.test(value))
+    : [];
+  if (values.length) return Array.from(new Set(values)).slice(0, 10);
+  return request.assetUrl && /^https:\/\//i.test(request.assetUrl) ? [request.assetUrl] : [];
+}
+
+async function createContainer(accountId: string, accessToken: string, params: URLSearchParams, label: string) {
+  params.set("access_token", accessToken);
+  const response = await fetch(instagramUrl(`/${accountId}/media`), {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: params,
+    cache: "no-store",
+  });
+  const created = await jsonOrThrow<{ id?: string }>(response, label);
+  if (!created.id) throw new Error(`${label} did not return a media container ID.`);
+  return created.id;
+}
+
+async function waitForContainer(containerId: string, accessToken: string) {
+  let ready = false;
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const statusUrl = new URL(instagramUrl(`/${containerId}`));
+    statusUrl.searchParams.set("fields", "status_code,status");
+    statusUrl.searchParams.set("access_token", accessToken);
+    const status = await jsonOrThrow<{ status_code?: string; status?: string }>(
+      await fetch(statusUrl, { cache: "no-store" }),
+      "Instagram container status",
+    );
+    if (status.status_code === "FINISHED") {
+      ready = true;
+      break;
+    }
+    if (["ERROR", "EXPIRED"].includes(status.status_code || "")) {
+      throw new Error(`Instagram media processing failed: ${status.status || status.status_code}.`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+  }
+  if (!ready) throw new Error("Instagram media is still processing. Atlas will retry the publication job.");
+}
+
+async function publishContainer(accountId: string, accessToken: string, containerId: string) {
+  const publishResponse = await fetch(instagramUrl(`/${accountId}/media_publish`), {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ creation_id: containerId, access_token: accessToken }),
+    cache: "no-store",
+  });
+  const published = await jsonOrThrow<{ id?: string }>(publishResponse, "Instagram publish");
+  if (!published.id) throw new Error("Instagram did not return a published media ID.");
+  return published.id;
+}
+
+async function permalink(externalPostId: string, accessToken: string) {
+  const url = new URL(instagramUrl(`/${externalPostId}`));
+  url.searchParams.set("fields", "permalink");
+  url.searchParams.set("access_token", accessToken);
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) return undefined;
+  const payload = await response.json() as { permalink?: string };
+  return payload.permalink;
+}
+
+async function publishCarousel(request: PublishRequest, access: Awaited<ReturnType<typeof requireSocialAccess>>): Promise<PublishResult> {
+  const urls = assetUrls(request);
+  if (urls.length < 2) throw new Error("Instagram carousel publishing requires at least two public image URLs.");
+  const childIds: string[] = [];
+  for (const url of urls) {
+    const childId = await createContainer(
+      access.externalAccountId,
+      access.accessToken,
+      new URLSearchParams({ image_url: url, is_carousel_item: "true" }),
+      "Instagram carousel child creation",
+    );
+    childIds.push(childId);
+  }
+  const parentParams = new URLSearchParams({
+    media_type: "CAROUSEL",
+    children: childIds.join(","),
+  });
+  const caption = captionFor(request);
+  if (caption) parentParams.set("caption", caption);
+  const parentId = await createContainer(access.externalAccountId, access.accessToken, parentParams, "Instagram carousel creation");
+  const publishedId = await publishContainer(access.externalAccountId, access.accessToken, parentId);
+  return {
+    status: "published",
+    externalPostId: publishedId,
+    externalUrl: await permalink(publishedId, access.accessToken),
+    details: { adapter: "instagram:first-party", kind: "carousel", containerId: parentId, childContainerIds: childIds } as Json,
+  };
 }
 
 export class InstagramChannelAdapter implements MarketingChannelAdapter {
@@ -25,69 +125,37 @@ export class InstagramChannelAdapter implements MarketingChannelAdapter {
   }
 
   async publish(request: PublishRequest): Promise<PublishResult> {
-    if (!request.assetUrl) throw new Error("Instagram publishing requires an attached media asset.");
+    if (!request.assetUrl && !assetUrls(request).length) throw new Error("Instagram publishing requires attached media.");
     const access = await requireSocialAccess(request.ownerId, "instagram", ["instagram_business_content_publish"]);
-    const params = new URLSearchParams({ access_token: access.accessToken });
+    const nativeFormat = format(request);
+    if (nativeFormat.includes("carousel") || assetUrls(request).length > 1) return publishCarousel(request, access);
+
+    const isStory = nativeFormat.includes("story");
+    const params = new URLSearchParams();
     const caption = captionFor(request);
-    if (caption) params.set("caption", caption);
+    if (caption && !isStory) params.set("caption", caption);
     if (isVideoRequest(request)) {
-      params.set("media_type", "REELS");
-      params.set("video_url", request.assetUrl);
-      params.set("share_to_feed", "true");
+      params.set("media_type", isStory ? "STORIES" : "REELS");
+      params.set("video_url", request.assetUrl!);
+      if (!isStory) params.set("share_to_feed", "true");
     } else {
-      params.set("image_url", request.assetUrl);
+      params.set("image_url", request.assetUrl!);
+      if (isStory) params.set("media_type", "STORIES");
     }
 
-    const createResponse = await fetch(instagramUrl(`/${access.externalAccountId}/media`), {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: params,
-      cache: "no-store",
-    });
-    const created = await jsonOrThrow<{ id?: string }>(createResponse, "Instagram media container creation");
-    if (!created.id) throw new Error("Instagram did not return a media container ID.");
-
-    if (isVideoRequest(request)) {
-      let ready = false;
-      for (let attempt = 0; attempt < 12; attempt += 1) {
-        const statusUrl = new URL(instagramUrl(`/${created.id}`));
-        statusUrl.searchParams.set("fields", "status_code,status");
-        statusUrl.searchParams.set("access_token", access.accessToken);
-        const status = await jsonOrThrow<{ status_code?: string; status?: string }>(
-          await fetch(statusUrl, { cache: "no-store" }),
-          "Instagram container status",
-        );
-        if (status.status_code === "FINISHED") {
-          ready = true;
-          break;
-        }
-        if (["ERROR", "EXPIRED"].includes(status.status_code || "")) {
-          throw new Error(`Instagram media processing failed: ${status.status || status.status_code}.`);
-        }
-        await new Promise((resolve) => setTimeout(resolve, 2500));
-      }
-      if (!ready) throw new Error("Instagram media is still processing. Atlas will retry the publication job.");
-    }
-
-    const publishResponse = await fetch(instagramUrl(`/${access.externalAccountId}/media_publish`), {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ creation_id: created.id, access_token: access.accessToken }),
-      cache: "no-store",
-    });
-    const published = await jsonOrThrow<{ id?: string }>(publishResponse, "Instagram publish");
-    if (!published.id) throw new Error("Instagram did not return a published media ID.");
-
-    const permalinkUrl = new URL(instagramUrl(`/${published.id}`));
-    permalinkUrl.searchParams.set("fields", "permalink");
-    permalinkUrl.searchParams.set("access_token", access.accessToken);
-    const permalinkResponse = await fetch(permalinkUrl, { cache: "no-store" });
-    const permalink = permalinkResponse.ok ? await permalinkResponse.json() as { permalink?: string } : {};
+    const containerId = await createContainer(
+      access.externalAccountId,
+      access.accessToken,
+      params,
+      isStory ? "Instagram Story container creation" : "Instagram media container creation",
+    );
+    if (isVideoRequest(request)) await waitForContainer(containerId, access.accessToken);
+    const publishedId = await publishContainer(access.externalAccountId, access.accessToken, containerId);
     return {
       status: "published",
-      externalPostId: published.id,
-      externalUrl: permalink.permalink,
-      details: { adapter: "instagram:first-party", containerId: created.id } as Json,
+      externalPostId: publishedId,
+      externalUrl: isStory ? undefined : await permalink(publishedId, access.accessToken),
+      details: { adapter: "instagram:first-party", kind: isStory ? "story" : isVideoRequest(request) ? "reel" : "image", containerId } as Json,
     };
   }
 

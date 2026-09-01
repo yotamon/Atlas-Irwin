@@ -5,6 +5,7 @@ export type ChannelCapability = {
   label: string;
   automatedPublishing: boolean;
   automatedMetrics: boolean;
+  providerScheduling?: boolean;
   reason?: string;
 };
 
@@ -21,9 +22,15 @@ export type PublishRequest = {
 };
 
 export type PublishResult = {
-  status: "published" | "manual_handoff";
+  status: "published" | "provider_scheduled" | "manual_handoff";
   externalPostId?: string;
   externalUrl?: string;
+  details?: Json;
+};
+
+export type ProviderPublicationStatus = {
+  status: "scheduled" | "published" | "failed";
+  publishedAt?: string;
   details?: Json;
 };
 
@@ -35,4 +42,5 @@ export interface MarketingChannelAdapter {
   capability(): ChannelCapability;
   publish(request: PublishRequest): Promise<PublishResult>;
   fetchMetrics(externalPostId: string): Promise<ChannelMetrics | null>;
+  fetchPublicationStatus?(ownerId: string, externalPostId: string): Promise<ProviderPublicationStatus>;
 }

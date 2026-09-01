@@ -2,15 +2,24 @@ import "server-only";
 
 import type { Json } from "@/types/database";
 import { requireSocialAccess, socialOwnerForExternalPost } from "../social-auth";
-import type { ChannelCapability, ChannelMetrics, MarketingChannelAdapter, PublishRequest, PublishResult } from "../channel-types";
+import type { ChannelCapability, ChannelMetrics, MarketingChannelAdapter, ProviderPublicationStatus, PublishRequest, PublishResult } from "../channel-types";
 import { captionFor, isVideoRequest, jsonOrThrow, readAsset } from "../channel-utils";
 
 const YOUTUBE_API_URL = "https://www.googleapis.com/youtube/v3";
 const YOUTUBE_UPLOAD_URL = "https://www.googleapis.com/upload/youtube/v3/videos";
+const YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upload";
+const YOUTUBE_READ_SCOPE = "https://www.googleapis.com/auth/youtube.readonly";
 
 function youtubeTitle(request: PublishRequest) {
   const source = request.hookText || request.caption?.split("\n")[0] || "Atlas Irwin";
   return source.trim().slice(0, 100) || "Atlas Irwin";
+}
+
+function providerScheduledAt(request: PublishRequest) {
+  if (!request.scheduledAt) return null;
+  const timestamp = new Date(request.scheduledAt).getTime();
+  if (!Number.isFinite(timestamp) || timestamp <= Date.now() + 60_000) return null;
+  return new Date(timestamp).toISOString();
 }
 
 export class YouTubeChannelAdapter implements MarketingChannelAdapter {
@@ -21,15 +30,17 @@ export class YouTubeChannelAdapter implements MarketingChannelAdapter {
       label: "YouTube Data API",
       automatedPublishing: configured,
       automatedMetrics: configured,
+      providerScheduling: configured,
       reason: configured ? undefined : "YouTube OAuth environment variables are not configured.",
     };
   }
 
   async publish(request: PublishRequest): Promise<PublishResult> {
     if (!request.assetUrl || !isVideoRequest(request)) throw new Error("YouTube Shorts publishing requires an attached video asset.");
-    const access = await requireSocialAccess(request.ownerId, "youtube", ["https://www.googleapis.com/auth/youtube.upload"]);
+    const access = await requireSocialAccess(request.ownerId, "youtube", [YOUTUBE_UPLOAD_SCOPE]);
     const asset = await readAsset(request.assetUrl);
     const boundary = `atlas_${crypto.randomUUID().replaceAll("-", "")}`;
+    const scheduledAt = providerScheduledAt(request);
     const metadata = Buffer.from(JSON.stringify({
       snippet: {
         title: youtubeTitle(request),
@@ -37,7 +48,8 @@ export class YouTubeChannelAdapter implements MarketingChannelAdapter {
         categoryId: process.env.YOUTUBE_CATEGORY_ID?.trim() || "10",
       },
       status: {
-        privacyStatus: process.env.YOUTUBE_DEFAULT_PRIVACY?.trim() || "public",
+        privacyStatus: scheduledAt ? "private" : process.env.YOUTUBE_DEFAULT_PRIVACY?.trim() || "public",
+        ...(scheduledAt ? { publishAt: scheduledAt } : {}),
         selfDeclaredMadeForKids: false,
       },
     }));
@@ -64,17 +76,71 @@ export class YouTubeChannelAdapter implements MarketingChannelAdapter {
     const video = await jsonOrThrow<{ id?: string }>(response, "YouTube upload");
     if (!video.id) throw new Error("YouTube did not return a video ID.");
     return {
-      status: "published",
+      status: scheduledAt ? "provider_scheduled" : "published",
       externalPostId: video.id,
       externalUrl: `https://www.youtube.com/watch?v=${video.id}`,
-      details: { adapter: "youtube:first-party" } as Json,
+      details: {
+        adapter: "youtube:first-party",
+        ...(scheduledAt ? { providerScheduledAt: scheduledAt, privacyStatus: "private" } : {}),
+      } as Json,
+    };
+  }
+
+  async fetchPublicationStatus(ownerId: string, externalPostId: string): Promise<ProviderPublicationStatus> {
+    const access = await requireSocialAccess(ownerId, "youtube", [YOUTUBE_READ_SCOPE]);
+    const url = new URL(`${YOUTUBE_API_URL}/videos`);
+    url.searchParams.set("part", "status,processingDetails");
+    url.searchParams.set("id", externalPostId);
+    const payload = await jsonOrThrow<{
+      items?: Array<{
+        status?: {
+          privacyStatus?: string;
+          uploadStatus?: string;
+          failureReason?: string;
+          rejectionReason?: string;
+          publishAt?: string;
+        };
+        processingDetails?: { processingStatus?: string };
+      }>;
+    }>(await fetch(url, {
+      headers: { Authorization: `Bearer ${access.accessToken}` },
+      cache: "no-store",
+    }), "YouTube publication status");
+    const item = payload.items?.[0];
+    if (!item) {
+      return { status: "failed", details: { reason: "YouTube no longer returns the scheduled video." } as Json };
+    }
+    const uploadStatus = item.status?.uploadStatus || "";
+    const processingStatus = item.processingDetails?.processingStatus || "";
+    if (["failed", "rejected", "deleted"].includes(uploadStatus) || processingStatus === "failed") {
+      return {
+        status: "failed",
+        details: {
+          uploadStatus,
+          processingStatus,
+          failureReason: item.status?.failureReason,
+          rejectionReason: item.status?.rejectionReason,
+        } as Json,
+      };
+    }
+    if (item.status?.privacyStatus === "public") {
+      return { status: "published", publishedAt: new Date().toISOString(), details: { uploadStatus, processingStatus } as Json };
+    }
+    return {
+      status: "scheduled",
+      details: {
+        privacyStatus: item.status?.privacyStatus,
+        publishAt: item.status?.publishAt,
+        uploadStatus,
+        processingStatus,
+      } as Json,
     };
   }
 
   async fetchMetrics(externalPostId: string): Promise<ChannelMetrics | null> {
     const ownerId = await socialOwnerForExternalPost("YouTube Shorts", externalPostId);
     if (!ownerId) return null;
-    const access = await requireSocialAccess(ownerId, "youtube", ["https://www.googleapis.com/auth/youtube.readonly"]);
+    const access = await requireSocialAccess(ownerId, "youtube", [YOUTUBE_READ_SCOPE]);
     const url = new URL(`${YOUTUBE_API_URL}/videos`);
     url.searchParams.set("part", "statistics");
     url.searchParams.set("id", externalPostId);

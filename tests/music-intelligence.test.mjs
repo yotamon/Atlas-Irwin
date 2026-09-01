@@ -148,6 +148,7 @@ test("v3 cache and Content Lab timestamp provenance are exact-master only", asyn
 test("production Media Worker remains self-bootstrapping, zero-idle and Sandbox-native", async () => {
   const worker = await readFile("services/media-worker/app/main.py", "utf8");
   const runner = await readFile("services/media-worker/app/runner.py", "utf8");
+  const socialFinishing = await readFile("services/media-worker/app/social_finishing.py", "utf8");
   const bridge = await readFile("lib/media-worker/sandbox.ts", "utf8");
   const queue = await readFile("lib/media-worker/queue.ts", "utf8");
   const health = await readFile("app/api/health/media-worker/route.ts", "utf8");
@@ -157,6 +158,8 @@ test("production Media Worker remains self-bootstrapping, zero-idle and Sandbox-
   assert.ok(worker.includes("imageio_ffmpeg.get_ffmpeg_exe"));
   assert.ok(runner.includes("request_path.unlink"));
   assert.ok(runner.includes("shutil.rmtree(LOCK_PATH"));
+  assert.ok(runner.includes("finish_social_video"));
+  assert.ok(socialFinishing.includes("finish_social_video_job"));
   assert.ok(bridge.includes("vercel/sandbox/universal@sha256:"));
   assert.ok(bridge.includes('MEDIA_WORKER_PYTHON_VERSION = "3.13.14"'));
   assert.ok(bridge.includes("resources: { vcpus: 4 }"));
@@ -165,8 +168,8 @@ test("production Media Worker remains self-bootstrapping, zero-idle and Sandbox-
   assert.ok(bridge.includes("detached: true"));
   assert.ok(bridge.includes("MEDIA_WORKER_CALLBACK_HASH_KEY"));
   assert.ok(bridge.includes("atlas-media-worker-${environmentName()}"));
-  assert.ok(bridge.includes("MEDIA_WORKER_RUNTIME_VERSION = 7"));
-  assert.ok(bridge.includes("MEDIA_WORKER_BOOTSTRAP_VERSION = 4"));
+  assert.ok(bridge.includes("MEDIA_WORKER_RUNTIME_VERSION = 8"));
+  assert.ok(bridge.includes("MEDIA_WORKER_BOOTSTRAP_VERSION = 5"));
   assert.ok(bridge.includes('uv python install "$PYTHON_VERSION"'));
   assert.ok(bridge.includes('uv venv --python "$PYTHON_VERSION"'));
   assert.ok(bridge.includes('uv pip install --python "$WORKDIR/.venv/bin/python"'));
@@ -191,13 +194,16 @@ test("active Media Worker code cannot regress to Google Cloud infrastructure", a
     ".github/workflows/ci.yml",
     "lib/media-worker/sandbox.ts",
     "lib/media-worker/queue.ts",
+    "lib/marketing/media-worker-queue.ts",
     "lib/studio/vault-analysis.ts",
     "lib/video-director/worker.ts",
     "app/studio/growth-media-actions.ts",
     "app/api/studio/growth/audio-callback/route.ts",
     "app/api/video-director/worker/callback/route.ts",
+    "app/api/studio/marketing/media-worker/callback/route.ts",
     "app/api/health/media-worker/route.ts",
     "services/media-worker/app/main.py",
+    "services/media-worker/app/social_finishing.py",
     "services/media-worker/app/runner.py",
     "services/media-worker/requirements.txt",
   ];

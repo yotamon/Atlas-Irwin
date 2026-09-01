@@ -5,6 +5,8 @@ import { createMarketingServiceClient } from "./db";
 import { getSiteUrl } from "@/lib/site-url";
 import type { Json } from "@/types/database";
 
+const PROVIDER_SCHEDULE_LEAD_MS = 7 * 24 * 60 * 60 * 1000;
+
 function payloadObject(value: Json): Record<string, Json | undefined> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, Json | undefined>
@@ -15,22 +17,155 @@ function text(value: Json | undefined) {
   return typeof value === "string" ? value : null;
 }
 
-export async function processDuePublicationJobs(limit = 20) {
+function json(value: unknown) {
+  return value as Json;
+}
+
+function inFuture(value: string | null) {
+  return Boolean(value && new Date(value).getTime() > Date.now());
+}
+
+async function markPublicationPublished(job: {
+  id: string;
+  owner_id: string;
+  campaign_id: string | null;
+  content_item_id: string | null;
+  content_variant_id: string | null;
+  platform: string;
+  external_post_id: string | null;
+  external_url: string | null;
+}, publishedAt: string, result: Json = {}) {
+  const client = createMarketingServiceClient();
+  const { error: publishError } = await client.from("publication_jobs").update({
+    status: "published",
+    published_at: publishedAt,
+    result,
+    last_error: null,
+  }).eq("id", job.id);
+  if (publishError) throw new Error(publishError.message);
+  if (job.content_variant_id) {
+    await client.from("content_variants").update({
+      status: "published",
+      published_at: publishedAt,
+      external_post_id: job.external_post_id,
+    }).eq("id", job.content_variant_id);
+  }
+  if (job.content_item_id) {
+    await client.from("content_items").update({
+      status: "Published",
+      published_at: publishedAt,
+      schedule_locked: true,
+    }).eq("id", job.content_item_id);
+  }
+  await client.from("marketing_events").insert({
+    owner_id: job.owner_id,
+    campaign_id: job.campaign_id,
+    event_type: "content.published",
+    entity_type: "content_item",
+    entity_id: job.content_item_id,
+    payload: {
+      publicationJobId: job.id,
+      externalPostId: job.external_post_id,
+      externalUrl: job.external_url,
+      platform: job.platform,
+    },
+  });
+}
+
+async function reconcileProviderScheduledPublications(limit = 20) {
   const client = createMarketingServiceClient();
   const now = new Date().toISOString();
   const { data: jobs, error } = await client
     .from("publication_jobs")
     .select("*")
-    .in("status", ["approved", "scheduled"])
-    .or(`scheduled_at.is.null,scheduled_at.lte.${now}`)
+    .eq("status", "provider_scheduled")
+    .lte("scheduled_at", now)
     .order("scheduled_at", { ascending: true, nullsFirst: true })
     .limit(Math.max(1, Math.min(limit, 50)));
   if (error) throw new Error(error.message);
 
   let published = 0;
+  let failed = 0;
+  let pending = 0;
+  for (const job of jobs ?? []) {
+    if (!job.external_post_id) {
+      await client.from("publication_jobs").update({
+        status: "failed",
+        last_error: "Provider-scheduled publication has no external post ID to reconcile.",
+      }).eq("id", job.id);
+      failed += 1;
+      continue;
+    }
+    const adapter = channelAdapter(job.platform);
+    if (!adapter.fetchPublicationStatus) {
+      pending += 1;
+      continue;
+    }
+    try {
+      const provider = await adapter.fetchPublicationStatus(job.owner_id, job.external_post_id);
+      if (provider.status === "scheduled") {
+        await client.from("publication_jobs").update({ result: provider.details ?? {}, last_error: null }).eq("id", job.id);
+        pending += 1;
+        continue;
+      }
+      if (provider.status === "failed") {
+        await client.from("publication_jobs").update({
+          status: "failed",
+          result: provider.details ?? {},
+          last_error: "The provider reported that the scheduled publication failed.",
+        }).eq("id", job.id);
+        if (job.content_item_id) {
+          await client.from("content_items").update({ status: "Ready", schedule_locked: false }).eq("id", job.content_item_id);
+        }
+        await client.from("marketing_events").insert({
+          owner_id: job.owner_id,
+          campaign_id: job.campaign_id,
+          event_type: "publication.failed",
+          entity_type: "content_item",
+          entity_id: job.content_item_id,
+          payload: { publicationJobId: job.id, platform: job.platform, provider: provider.details ?? {} },
+        });
+        failed += 1;
+        continue;
+      }
+      await markPublicationPublished(job, provider.publishedAt ?? new Date().toISOString(), provider.details ?? {});
+      published += 1;
+    } catch (error) {
+      await client.from("publication_jobs").update({
+        last_error: error instanceof Error ? error.message : "Provider schedule reconciliation failed.",
+      }).eq("id", job.id);
+      pending += 1;
+    }
+  }
+  return { considered: jobs?.length ?? 0, published, failed, pending };
+}
+
+export async function processDuePublicationJobs(limit = 20) {
+  const client = createMarketingServiceClient();
+  const dispatchHorizon = new Date(Date.now() + PROVIDER_SCHEDULE_LEAD_MS).toISOString();
+  const reconciliation = await reconcileProviderScheduledPublications(limit);
+  const { data: jobs, error } = await client
+    .from("publication_jobs")
+    .select("*")
+    .in("status", ["approved", "scheduled"])
+    .or(`scheduled_at.is.null,scheduled_at.lte.${dispatchHorizon}`)
+    .order("scheduled_at", { ascending: true, nullsFirst: true })
+    .limit(Math.max(1, Math.min(limit * 2, 50)));
+  if (error) throw new Error(error.message);
+
+  let published = 0;
+  let providerScheduled = 0;
   let manualReady = 0;
   let failed = 0;
+  let deferred = 0;
   for (const job of jobs ?? []) {
+    const adapter = channelAdapter(job.platform);
+    const future = inFuture(job.scheduled_at);
+    if (future && !adapter.capability().providerScheduling) {
+      deferred += 1;
+      continue;
+    }
+
     const { data: claimed, error: claimError } = await client
       .from("publication_jobs")
       .update({ status: "publishing", attempt_count: job.attempt_count + 1 })
@@ -52,7 +187,16 @@ export async function processDuePublicationJobs(limit = 20) {
           .maybeSingle();
         if (variant?.attribution_code) attributionUrl = `${getSiteUrl()}/go/${variant.attribution_code}`;
       }
-      const adapter = channelAdapter(job.platform);
+      const { data: sourceContent, error: sourceContentError } = job.content_item_id
+        ? await client.from("content_items").select("source,format").eq("id", job.content_item_id).maybeSingle()
+        : { data: null, error: null };
+      if (sourceContentError) throw new Error(sourceContentError.message);
+      const publicationMetadata = json({
+        ...requestPayload,
+        source: sourceContent?.source ?? requestPayload.source ?? null,
+        format: sourceContent?.format ?? requestPayload.format ?? null,
+        aiGenerated: sourceContent?.source === "ai" || requestPayload.aiGenerated === true,
+      });
       const result = await adapter.publish({
         ownerId: job.owner_id,
         platform: job.platform,
@@ -62,12 +206,12 @@ export async function processDuePublicationJobs(limit = 20) {
         assetUrl: text(requestPayload.assetUrl),
         scheduledAt: job.scheduled_at,
         attributionUrl,
-        metadata: job.request_payload,
+        metadata: publicationMetadata,
       });
 
       if (result.status === "manual_handoff") {
         const { error: handoffError } = await client.from("publication_jobs").update({
-          status: "manual_ready" as never,
+          status: "manual_ready",
           result: result.details ?? {},
           last_error: null,
         }).eq("id", job.id);
@@ -76,35 +220,52 @@ export async function processDuePublicationJobs(limit = 20) {
         continue;
       }
 
+      if (result.status === "provider_scheduled") {
+        if (!result.externalPostId) throw new Error("Provider schedule succeeded without an external post ID.");
+        const { error: scheduleError } = await client.from("publication_jobs").update({
+          status: "provider_scheduled",
+          external_post_id: result.externalPostId,
+          external_url: result.externalUrl ?? null,
+          result: result.details ?? {},
+          last_error: null,
+        }).eq("id", job.id);
+        if (scheduleError) throw new Error(scheduleError.message);
+        if (job.content_variant_id) {
+          await client.from("content_variants").update({ status: "scheduled", external_post_id: result.externalPostId }).eq("id", job.content_variant_id);
+        }
+        if (job.content_item_id) {
+          await client.from("content_items").update({ status: "Scheduled", schedule_locked: true }).eq("id", job.content_item_id);
+        }
+        await client.from("marketing_events").insert({
+          owner_id: job.owner_id,
+          campaign_id: job.campaign_id,
+          event_type: "publication.provider_scheduled",
+          entity_type: "content_item",
+          entity_id: job.content_item_id,
+          payload: {
+            publicationJobId: job.id,
+            externalPostId: result.externalPostId,
+            externalUrl: result.externalUrl ?? null,
+            platform: job.platform,
+            scheduledAt: job.scheduled_at,
+          },
+        });
+        providerScheduled += 1;
+        continue;
+      }
+
       const publishedAt = new Date().toISOString();
-      const { error: publishError } = await client.from("publication_jobs").update({
-        status: "published",
-        published_at: publishedAt,
+      const externalJob = {
+        ...job,
         external_post_id: result.externalPostId ?? null,
         external_url: result.externalUrl ?? null,
-        result: result.details ?? {},
-        last_error: null,
+      };
+      const { error: identityError } = await client.from("publication_jobs").update({
+        external_post_id: externalJob.external_post_id,
+        external_url: externalJob.external_url,
       }).eq("id", job.id);
-      if (publishError) throw new Error(publishError.message);
-      if (job.content_variant_id) {
-        await client.from("content_variants").update({ status: "published", published_at: publishedAt, external_post_id: result.externalPostId ?? null }).eq("id", job.content_variant_id);
-      }
-      if (job.content_item_id) {
-        await client.from("content_items").update({ status: "Published", published_at: publishedAt }).eq("id", job.content_item_id);
-      }
-      await client.from("marketing_events").insert({
-        owner_id: job.owner_id,
-        campaign_id: job.campaign_id,
-        event_type: "content.published",
-        entity_type: "content_item",
-        entity_id: job.content_item_id,
-        payload: {
-          publicationJobId: job.id,
-          externalPostId: result.externalPostId ?? null,
-          externalUrl: result.externalUrl ?? null,
-          platform: job.platform,
-        },
-      });
+      if (identityError) throw new Error(identityError.message);
+      await markPublicationPublished(externalJob, publishedAt, result.details ?? {});
       published += 1;
     } catch (error) {
       const attempts = job.attempt_count + 1;
@@ -119,5 +280,15 @@ export async function processDuePublicationJobs(limit = 20) {
     }
   }
 
-  return { considered: jobs?.length ?? 0, published, manualReady, failed };
+  return {
+    considered: jobs?.length ?? 0,
+    published,
+    providerScheduled,
+    manualReady,
+    failed,
+    deferred,
+    reconciledPublished: reconciliation.published,
+    reconciliationFailed: reconciliation.failed,
+    reconciliationPending: reconciliation.pending,
+  };
 }
