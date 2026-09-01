@@ -1,6 +1,7 @@
 import { kickMediaWorkerQueue } from "@/lib/media-worker/queue";
 import { runMarketingAutomationCycle } from "@/lib/marketing/automation";
 import { syncAudienceInteractions } from "@/lib/marketing/audience";
+import { processAutonomousCreativeSpend } from "@/lib/marketing/autonomous-creative-spend";
 import { authorizeMarketingCron } from "@/lib/marketing/cron-auth";
 import { processApprovedCreativeDerivativeEvents } from "@/lib/marketing/creative-derivative-events";
 import { kickMarketingMediaWorkerQueue } from "@/lib/marketing/media-worker-queue";
@@ -46,6 +47,10 @@ export async function GET(request: Request) {
   const publications = await runStep("publication queue", () => processDuePublicationJobs());
   const outreach = await runStep("outreach queue", () => processDueOutreachEnrollments());
 
+  // Spend is permitted only for autopilot campaigns with an explicitly enabled atomic envelope.
+  // Campaign mode alone is never authority to call a paid creative provider.
+  const autonomousCreativeSpend = await runStep("autonomous creative spend", () => processAutonomousCreativeSpend());
+
   // Consume human-approved master creatives before the generic event processor marks unknown
   // event types processed. Derivatives use deterministic repackaging and never create new media spend.
   const creativeDerivatives = await runStep("creative derivatives", () => processApprovedCreativeDerivativeEvents());
@@ -59,6 +64,7 @@ export async function GET(request: Request) {
     marketingMediaWorker,
     publications,
     outreach,
+    autonomousCreativeSpend,
     creativeDerivatives,
     automation,
     audience,
