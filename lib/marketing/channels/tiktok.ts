@@ -58,6 +58,24 @@ function photoUrls(request: PublishRequest) {
   return request.assetUrl && /^https:\/\//i.test(request.assetUrl) ? [request.assetUrl] : [];
 }
 
+function verifiedPhotoPrefixes() {
+  return (process.env.TIKTOK_PHOTO_URL_PREFIXES || "")
+    .split(/[;,\n]+/)
+    .map((value) => value.trim())
+    .filter((value) => /^https:\/\//i.test(value));
+}
+
+function assertVerifiedPhotoUrls(photos: string[]) {
+  const prefixes = verifiedPhotoPrefixes();
+  if (!prefixes.length) {
+    throw new Error("TikTok photo posting needs a verified image URL prefix. Verify the public media domain in the TikTok developer app, then set TIKTOK_PHOTO_URL_PREFIXES before enabling automated photo posts.");
+  }
+  const invalid = photos.find((photo) => !prefixes.some((prefix) => photo.startsWith(prefix)));
+  if (invalid) {
+    throw new Error(`TikTok cannot pull this photo because its URL is outside the verified prefix set: ${invalid.slice(0, 180)}.`);
+  }
+}
+
 function photoCoverIndex(request: PublishRequest, count: number) {
   const metadata = record(request.metadata);
   const requested = Number(metadata.photoCoverIndex ?? 0);
@@ -92,6 +110,7 @@ function creatorPrivacy(creator: Awaited<ReturnType<typeof creatorInfo>>) {
 async function publishTikTokPhotos(request: PublishRequest, audited: boolean): Promise<PublishResult> {
   const photos = photoUrls(request);
   if (!photos.length) throw new Error("TikTok photo publishing requires at least one HTTPS photo URL.");
+  assertVerifiedPhotoUrls(photos);
   const scope = audited ? "video.publish" : "video.upload";
   const access = await requireSocialAccess(request.ownerId, "tiktok", [scope]);
   const fullCaption = captionFor(request);
