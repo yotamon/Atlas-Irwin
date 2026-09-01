@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { FiPause, FiPlay } from "react-icons/fi";
+import styles from "./audio-scene-live-player.module.css";
 import type { Json } from "@/types/database";
 
 export type AudioSceneLiveStem = {
@@ -332,7 +333,7 @@ export function AudioSceneLivePlayer({
   }, [recipe, startMs, endMs]);
 
   return (
-    <div className={`audio-scene-live-player${compact ? " compact" : ""}`}>
+    <div className={`${styles.player} audio-scene-live-player${compact ? ` ${styles.compact} compact` : ""}`}>
       {layers.map((layer) => (
         <audio
           key={layer.key}
@@ -347,7 +348,7 @@ export function AudioSceneLivePlayer({
           hidden
         />
       ))}
-      <div className="audio-scene-live-controls">
+      <div className={`${styles.controls} audio-scene-live-controls`}>
         <button
           type="button"
           className="button"
@@ -356,9 +357,10 @@ export function AudioSceneLivePlayer({
         >
           {playing ? <><FiPause /> Pause live mix</> : <><FiPlay /> Play live mix</>}
         </button>
-        <span><strong>Live from stems</strong><small>{layers.length} layer{layers.length === 1 ? "" : "s"}</small></span>
+        <span className={styles.status}><strong>Live from stems</strong><small>{layers.length} layer{layers.length === 1 ? "" : "s"}</small></span>
       </div>
       <input
+        className={styles.range}
         type="range"
         min={0}
         max={durationMs}
@@ -366,8 +368,9 @@ export function AudioSceneLivePlayer({
         value={Math.min(durationMs, positionMs)}
         aria-label="Audio Scene position"
         onChange={(event) => void seek(Number(event.target.value))}
+        disabled={!layers.length}
       />
-      <div className="audio-scene-live-time">
+      <div className={`${styles.time} audio-scene-live-time`}>
         <span>{clock(startMs + positionMs)}</span>
         <span>{clock(endMs)}</span>
       </div>
