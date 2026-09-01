@@ -1,5 +1,6 @@
 import { analyzeVaultTrack } from "@/app/studio/growth-media-actions";
 import { AnalysisAutoRefresh } from "@/components/studio/analysis-auto-refresh";
+import { LyricsIntelligencePanel } from "@/components/studio/lyrics-intelligence-panel";
 import { MediaUploader } from "@/components/studio/media-uploader";
 import { MusicIntelligencePreview } from "@/components/studio/music-intelligence-preview";
 import { StemIntelligencePanel } from "@/components/studio/stem-intelligence-panel";
@@ -114,6 +115,7 @@ export function ReleaseMasterAudioPanel({
         )}
       </section>
       <StemIntelligencePanel releaseId={releaseId} track={primaryTrack} />
+      <LyricsIntelligencePanel releaseId={releaseId} track={primaryTrack} />
     </>
   );
 }
