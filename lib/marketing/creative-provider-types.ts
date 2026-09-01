@@ -3,8 +3,9 @@ import type { VideoGenerationRequest } from "@/lib/video-providers/types";
 export const CREATIVE_PROVIDER_IDS = ["bfl", "google", "zai", "fal", "higgsfield"] as const;
 export type CreativeProviderId = (typeof CREATIVE_PROVIDER_IDS)[number];
 
-export type CreativeGenerationRequest = VideoGenerationRequest & {
+export type CreativeGenerationRequest = Omit<VideoGenerationRequest, "aspectRatio"> & {
   provider: CreativeProviderId;
+  aspectRatio: VideoGenerationRequest["aspectRatio"] | "4:5";
 };
 
 export type CreativeMoneyQuote = {
