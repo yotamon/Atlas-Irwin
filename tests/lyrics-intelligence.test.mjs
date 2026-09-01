@@ -6,9 +6,10 @@ async function source(path) {
   return readFile(path, "utf8");
 }
 
-test("canonical lyrics are versioned human truth with immutable revision history", async () => {
+test("canonical lyrics are versioned human truth with immutable revision history and least privilege", async () => {
   const migration = await source("supabase/migrations/20260901130402_lyrics_intelligence.sql");
   const hardening = await source("supabase/migrations/20260901130501_lyrics_intelligence_hardening.sql");
+  const privileges = await source("supabase/migrations/20260901130823_lyrics_intelligence_privilege_hardening.sql");
 
   assert.ok(migration.includes("create table public.track_lyrics"));
   assert.ok(migration.includes("canonical_text text not null"));
@@ -20,6 +21,13 @@ test("canonical lyrics are versioned human truth with immutable revision history
   assert.ok(migration.includes("v_old.version + 1"));
   assert.ok(hardening.includes("Immutable canonical lyrics revision history"));
   assert.ok(hardening.includes("revoke insert, update, delete on public.track_lyrics_revisions from authenticated"));
+  assert.ok(privileges.includes("revoke all privileges on table"));
+  assert.ok(privileges.includes("from anon, authenticated"));
+  assert.ok(privileges.includes("public.track_lyrics_revisions"));
+  assert.ok(privileges.includes("grant select on table"));
+  assert.ok(privileges.includes("grant select, update on table public.track_lyric_sections to authenticated"));
+  assert.ok(privileges.includes("grant select, insert, update on table public.track_lyrics_analysis to authenticated"));
+  assert.ok(privileges.includes("grant select, insert, delete on table public.track_lyric_moments to authenticated"));
 });
 
 test("master replacement preserves words and semantics while invalidating only derived lyric timing", async () => {
