@@ -1,12 +1,38 @@
 import "server-only";
 
 import type { Json } from "@/types/database";
+import type { AudioScene, StemDatabase } from "@/types/stem-database";
 import type { ExtendedMusicVideoProject, VideoDatabase } from "@/types/video-database";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { parseMusicMap, type DirectorPreferences, type VideoProjectContext } from "./creative-director";
+import { parseMusicMap, type DirectorPreferences, type MusicMap, type VideoProjectContext } from "./creative-director";
 
 function stringArray(value: Json): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function stemAwareMusicMap(value: Json, scenes: AudioScene[]) {
+  const map = parseMusicMap(value);
+  if (!map || !scenes.length) return map;
+  return {
+    ...map,
+    stem_intelligence: {
+      purpose: "Reusable stem-aware musical treatments. The full music video still follows the canonical master; use these scenes to inform musical causality, shot mechanics, edit motifs and derivative social concepts.",
+      audio_scenes: scenes.slice(0, 10).map((scene) => ({
+        id: scene.id,
+        name: scene.name,
+        type: scene.scene_type,
+        description: scene.description,
+        start_ms: scene.recommended_start_ms,
+        end_ms: scene.recommended_end_ms,
+        score: scene.score,
+        objectives: scene.objective_tags,
+        platform_hints: scene.platform_hints,
+        is_pinned: scene.is_pinned,
+        preview_ready: Boolean(scene.preview_asset_id),
+        rationale: scene.rationale,
+      })),
+    },
+  } as MusicMap;
 }
 
 export async function loadVideoProjectContext(
@@ -22,7 +48,8 @@ export async function loadVideoProjectContext(
     .single();
   if (projectError || !project) throw new Error(projectError?.message || "Music video project not found.");
 
-  const [releaseResult, trackResult, brandResult, linkResult, preferenceResult] = await Promise.all([
+  const stemDb = db as unknown as SupabaseClient<StemDatabase>;
+  const [releaseResult, trackResult, brandResult, linkResult, preferenceResult, sceneResult] = await Promise.all([
     db.from("releases").select("*").eq("id", project.release_id).eq("owner_id", ownerId).single(),
     db.from("tracks").select("*").eq("id", project.track_id).eq("owner_id", ownerId).single(),
     db.from("brand_settings").select("content").eq("owner_id", ownerId).order("section"),
@@ -30,6 +57,13 @@ export async function loadVideoProjectContext(
       .eq("owner_id", ownerId)
       .or(`release_id.eq.${project.release_id},track_id.eq.${project.track_id}`),
     db.from("music_video_director_preferences").select("*").eq("owner_id", ownerId).maybeSingle(),
+    stemDb.from("audio_scenes")
+      .select("*")
+      .eq("owner_id", ownerId)
+      .eq("track_id", project.track_id)
+      .eq("status", "ready")
+      .order("is_pinned", { ascending: false })
+      .order("score", { ascending: false, nullsFirst: false }),
   ]);
 
   if (releaseResult.error || !releaseResult.data) throw new Error(releaseResult.error?.message || "Release not found.");
@@ -37,6 +71,7 @@ export async function loadVideoProjectContext(
   if (brandResult.error) throw new Error(brandResult.error.message);
   if (linkResult.error) throw new Error(linkResult.error.message);
   if (preferenceResult.error) throw new Error(preferenceResult.error.message);
+  if (sceneResult.error) throw new Error(sceneResult.error.message);
 
   const assetIds = [...new Set((linkResult.data ?? []).map((link) => link.media_asset_id))];
   const { data: media, error: mediaError } = assetIds.length
@@ -57,7 +92,7 @@ export async function loadVideoProjectContext(
     project,
     release: releaseResult.data,
     track: trackResult.data,
-    musicMap: parseMusicMap(project.music_map),
+    musicMap: stemAwareMusicMap(project.music_map, (sceneResult.data ?? []) as AudioScene[]),
     brandSettings: (brandResult.data ?? []).map((item) => item.content),
     media: media ?? [],
     preferences,
