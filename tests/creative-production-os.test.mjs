@@ -140,7 +140,7 @@ test("campaign Autopilot spend is atomically reserved and ambiguity never auto-r
   assert.match(migration, /c\.mode = 'autopilot'/);
   assert.match(migration, /for update of e/);
   assert.match(migration, /max_single_generation_usd/);
-  assert.match(migration, /reserved_usd \+ spent_usd \+ p_amount_usd/);
+  assert.match(migration, /envelope_row\.reserved_usd \+ envelope_row\.spent_usd \+ p_amount_usd > envelope_row\.hard_limit_usd/);
   assert.match(migration, /overrun_usd/);
   assert.match(processor, /reserveCampaignAiSpend/);
   assert.match(processor, /assertSpecialistMediaSpendAllowed/);
