@@ -3,6 +3,10 @@ import "server-only";
 import { createMarketingServiceClient } from "@/lib/marketing/db";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { Json } from "@/types/database";
+import {
+  releaseCampaignSpendForGeneration,
+  settleCampaignSpendForGeneration,
+} from "./campaign-ai-spend";
 import type { CreativeReferenceContext } from "./creative-context";
 import type { CreativeGenerationRequest, CreativeProviderStatus } from "./creative-provider-types";
 import type { CreativeTreatment } from "./creative-treatment";
@@ -24,6 +28,10 @@ function json(value: unknown) {
   return value as Json;
 }
 
+function nonNegativeCost(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
 export async function applyMarketingCreativeProviderStatus(input: {
   runId?: string;
   providerRequestId?: string;
@@ -38,7 +46,17 @@ export async function applyMarketingCreativeProviderStatus(input: {
   if (runError) throw new Error(runError.message);
   if (!run) return { ignored: true as const, reason: "unknown_generation" };
   if (!run.purpose.startsWith("content_asset:")) return { ignored: true as const, reason: "not_marketing_creative" };
-  if (run.status === "completed") return { completed: true as const, duplicate: true as const, output: run.output };
+  if (run.status === "completed") {
+    const completedOutput = record(run.output);
+    const completedCost = nonNegativeCost(completedOutput.actualCostUsd) ?? nonNegativeCost(run.actual_cost_usd) ?? nonNegativeCost(run.estimated_cost_usd);
+    await settleCampaignSpendForGeneration({
+      ownerId: run.owner_id,
+      generationRunId: run.id,
+      actualUsd: completedCost,
+      basis: nonNegativeCost(run.actual_cost_usd) !== null ? "provider_actual" : "estimated",
+    });
+    return { completed: true as const, duplicate: true as const, output: run.output };
+  }
 
   const inputContext = record(run.input_context);
   const output = record(run.output);
@@ -58,9 +76,25 @@ export async function applyMarketingCreativeProviderStatus(input: {
     const message = input.status.status === "nsfw"
       ? `${run.provider} rejected this generation during safety review.`
       : `${run.provider} reported that the creative generation failed.`;
+    const reportedCost = nonNegativeCost(input.status.actualCostUsd);
+    if (reportedCost === 0) {
+      await releaseCampaignSpendForGeneration({
+        ownerId: run.owner_id,
+        generationRunId: run.id,
+        reason: `${input.status.status}:provider_reported_not_billed`,
+      });
+    } else {
+      await settleCampaignSpendForGeneration({
+        ownerId: run.owner_id,
+        generationRunId: run.id,
+        actualUsd: reportedCost,
+        basis: reportedCost !== null ? "provider_actual" : "conservative_reserve",
+      });
+    }
     const { error } = await marketing.from("generation_runs").update({
       status: "failed",
       provider_request_id: providerRequestId,
+      actual_cost_usd: reportedCost,
       output: json({ ...output, stage: "failed", providerStatus: input.status.status, providerRaw: input.status.raw }),
       error: message,
     }).eq("id", run.id);
@@ -84,7 +118,15 @@ export async function applyMarketingCreativeProviderStatus(input: {
     throw new Error("Stored Creative Director treatment is missing.");
   }
 
-  const actualCostUsd = input.status.actualCostUsd ?? run.estimated_cost_usd ?? null;
+  const providerActual = nonNegativeCost(input.status.actualCostUsd);
+  const actualCostUsd = providerActual ?? nonNegativeCost(run.estimated_cost_usd);
+  await settleCampaignSpendForGeneration({
+    ownerId: run.owner_id,
+    generationRunId: run.id,
+    actualUsd: actualCostUsd,
+    basis: providerActual !== null ? "provider_actual" : "estimated",
+  });
+
   const db = createServiceClient();
   const stored = await storeRemoteMarketingAsset({
     db,
@@ -198,6 +240,7 @@ export async function applyMarketingCreativeProviderStatus(input: {
     status: "completed",
     provider_request_id: providerRequestId,
     output: json(completedOutput),
+    actual_cost_usd: actualCostUsd,
     error: null,
   }).eq("id", run.id);
   if (updateError) throw new Error(updateError.message);
