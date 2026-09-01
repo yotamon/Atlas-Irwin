@@ -6,6 +6,8 @@ import { buildSmartAudioScenes } from "@/lib/music-intelligence/stems";
 import type { Database, Json } from "@/types/database";
 import type { AudioScene, StemDatabase, TrackStem } from "@/types/stem-database";
 
+export const AUDIO_SCENE_RECIPE_VERSION = 2;
+
 export function asStemClient(client: SupabaseClient<Database> | SupabaseClient<StemDatabase>) {
   return client as unknown as SupabaseClient<StemDatabase>;
 }
@@ -40,7 +42,7 @@ export function stemSetFingerprint(stems: TrackStem[]) {
   return createHash("sha256").update(stableJson(material)).digest("hex");
 }
 
-export async function loadStemIntelligence(
+async function loadStemIntelligenceState(
   client: SupabaseClient<Database> | SupabaseClient<StemDatabase>,
   ownerId: string,
   trackId: string,
@@ -64,6 +66,24 @@ export async function loadStemIntelligence(
   };
 }
 
+export async function loadStemIntelligence(
+  client: SupabaseClient<Database> | SupabaseClient<StemDatabase>,
+  ownerId: string,
+  trackId: string,
+) {
+  const state = await loadStemIntelligenceState(client, ownerId, trackId);
+  const hasCurrentReadyStem = Boolean(state.track?.audio_url) && state.stems.some(
+    (stem) => stem.status === "ready" && stem.source_master_url === state.track?.audio_url,
+  );
+  const needsRecipeUpgrade = state.scenes.some(
+    (scene) => scene.source === "system" && scene.recipe_version < AUDIO_SCENE_RECIPE_VERSION,
+  );
+  if (!hasCurrentReadyStem || !needsRecipeUpgrade) return state;
+
+  await regenerateSystemAudioScenes({ client, ownerId, trackId });
+  return loadStemIntelligenceState(client, ownerId, trackId);
+}
+
 export async function regenerateSystemAudioScenes({
   client,
   ownerId,
@@ -74,7 +94,7 @@ export async function regenerateSystemAudioScenes({
   trackId: string;
 }) {
   const db = asStemClient(client);
-  const state = await loadStemIntelligence(db, ownerId, trackId);
+  const state = await loadStemIntelligenceState(db, ownerId, trackId);
   if (!state.track?.audio_url) return [] as AudioScene[];
   const currentStems = state.stems.filter(
     (stem) => stem.status === "ready" && stem.source_master_url === state.track?.audio_url,
@@ -92,6 +112,7 @@ export async function regenerateSystemAudioScenes({
   for (const draft of drafts) {
     const previous = existing.get(draft.sceneType);
     const fingerprintChanged = previous?.stem_set_fingerprint !== fingerprint;
+    const recipeVersionChanged = previous?.recipe_version !== AUDIO_SCENE_RECIPE_VERSION;
     const row = {
       owner_id: ownerId,
       track_id: trackId,
@@ -100,7 +121,7 @@ export async function regenerateSystemAudioScenes({
       source: "system" as const,
       status: "ready" as const,
       description: draft.description,
-      recipe_version: 1,
+      recipe_version: AUDIO_SCENE_RECIPE_VERSION,
       recipe: json(draft.recipe),
       objective_tags: draft.objectiveTags,
       platform_hints: draft.platformHints,
@@ -109,7 +130,7 @@ export async function regenerateSystemAudioScenes({
       score: Math.round(draft.score * 10000) / 10000,
       rationale: json(draft.rationale),
       stem_set_fingerprint: fingerprint,
-      preview_asset_id: fingerprintChanged ? null : previous?.preview_asset_id ?? null,
+      preview_asset_id: fingerprintChanged || recipeVersionChanged ? null : previous?.preview_asset_id ?? null,
       preview_error: null,
       is_pinned: previous?.is_pinned ?? false,
     };
