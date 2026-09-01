@@ -17,6 +17,10 @@ function text(value: Json | undefined) {
   return typeof value === "string" ? value : null;
 }
 
+function json(value: unknown) {
+  return value as Json;
+}
+
 function inFuture(value: string | null) {
   return Boolean(value && new Date(value).getTime() > Date.now());
 }
@@ -74,7 +78,7 @@ async function reconcileProviderScheduledPublications(limit = 20) {
   const { data: jobs, error } = await client
     .from("publication_jobs")
     .select("*")
-    .eq("status", "provider_scheduled" as never)
+    .eq("status", "provider_scheduled")
     .lte("scheduled_at", now)
     .order("scheduled_at", { ascending: true, nullsFirst: true })
     .limit(Math.max(1, Math.min(limit, 50)));
@@ -183,6 +187,16 @@ export async function processDuePublicationJobs(limit = 20) {
           .maybeSingle();
         if (variant?.attribution_code) attributionUrl = `${getSiteUrl()}/go/${variant.attribution_code}`;
       }
+      const { data: sourceContent, error: sourceContentError } = job.content_item_id
+        ? await client.from("content_items").select("source,format").eq("id", job.content_item_id).maybeSingle()
+        : { data: null, error: null };
+      if (sourceContentError) throw new Error(sourceContentError.message);
+      const publicationMetadata = json({
+        ...requestPayload,
+        source: sourceContent?.source ?? requestPayload.source ?? null,
+        format: sourceContent?.format ?? requestPayload.format ?? null,
+        aiGenerated: sourceContent?.source === "ai" || requestPayload.aiGenerated === true,
+      });
       const result = await adapter.publish({
         ownerId: job.owner_id,
         platform: job.platform,
@@ -192,12 +206,12 @@ export async function processDuePublicationJobs(limit = 20) {
         assetUrl: text(requestPayload.assetUrl),
         scheduledAt: job.scheduled_at,
         attributionUrl,
-        metadata: job.request_payload,
+        metadata: publicationMetadata,
       });
 
       if (result.status === "manual_handoff") {
         const { error: handoffError } = await client.from("publication_jobs").update({
-          status: "manual_ready" as never,
+          status: "manual_ready",
           result: result.details ?? {},
           last_error: null,
         }).eq("id", job.id);
@@ -209,7 +223,7 @@ export async function processDuePublicationJobs(limit = 20) {
       if (result.status === "provider_scheduled") {
         if (!result.externalPostId) throw new Error("Provider schedule succeeded without an external post ID.");
         const { error: scheduleError } = await client.from("publication_jobs").update({
-          status: "provider_scheduled" as never,
+          status: "provider_scheduled",
           external_post_id: result.externalPostId,
           external_url: result.externalUrl ?? null,
           result: result.details ?? {},
