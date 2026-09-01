@@ -192,7 +192,7 @@ export type PublicationJob = {
   content_variant_id: string | null;
   platform: string;
   adapter: string;
-  status: "draft" | "awaiting_approval" | "approved" | "scheduled" | "publishing" | "published" | "failed" | "cancelled";
+  status: "draft" | "awaiting_approval" | "approved" | "scheduled" | "publishing" | "provider_scheduled" | "manual_ready" | "published" | "failed" | "cancelled";
   requires_approval: boolean;
   approval_status: ApprovalStatus;
   scheduled_at: string | null;
