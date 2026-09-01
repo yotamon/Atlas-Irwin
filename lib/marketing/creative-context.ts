@@ -355,7 +355,10 @@ export async function loadCreativeReferenceContext({ db, ownerId, releaseId, con
     }
   }
 
-  const audioReferenceUrl = selectedAudioScene?.previewUrl || canonicalAudioUrl;
+  // A selected Audio Scene is a specific mix recipe. Never misrepresent the canonical master as
+  // that scene merely because no portable bounce has been materialized yet. Downstream callers
+  // that require one audio URL can request an on-demand scene render instead.
+  const audioReferenceUrl = selectedAudioScene ? selectedAudioScene.previewUrl : canonicalAudioUrl;
   const visualDirection = release?.visual_direction?.trim() || "";
   const colorPalette = Array.isArray(release?.color_palette)
     ? release.color_palette.filter((value): value is string => typeof value === "string" && Boolean(value.trim()))

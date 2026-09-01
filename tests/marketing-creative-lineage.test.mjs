@@ -24,6 +24,13 @@ test("creative context always prioritizes release artwork and preserves lineage"
   assert.match(context, /generic cyberpunk/);
 });
 
+test("a selected Audio Scene is never misrepresented by the canonical master", async () => {
+  const context = await source("lib/marketing/creative-context.ts");
+  assert.match(context, /selectedAudioScene \? selectedAudioScene\.previewUrl : canonicalAudioUrl/);
+  assert.doesNotMatch(context, /selectedAudioScene\?\.previewUrl \|\| canonicalAudioUrl/);
+  assert.match(context, /request an on-demand scene render instead/);
+});
+
 test("paid generation is prepared before provider submission", async () => {
   const actions = await source("app/studio/marketing-creative-actions.ts");
   const prepareIndex = actions.indexOf("export async function prepareContentCreativeGeneration");
