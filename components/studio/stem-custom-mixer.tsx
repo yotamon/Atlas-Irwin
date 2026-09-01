@@ -3,13 +3,17 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveCustomAudioScene } from "@/app/studio/stem-actions";
+import { AudioSceneLivePlayer } from "@/components/studio/audio-scene-live-player";
 import { STEM_CATEGORY_LABELS } from "@/lib/music-intelligence/stems";
+import type { Json } from "@/types/database";
 import type { StemCategory } from "@/types/stem-database";
 
 type MixerStem = {
   id: string;
   label: string;
   category: StemCategory;
+  url: string;
+  offsetMs: number;
 };
 
 type LayerState = {
@@ -43,6 +47,20 @@ export function StemCustomMixer({
     [layers, stems],
   );
 
+  const recipe = useMemo(() => ({
+    schema: "atlas.audio_scene.v1",
+    mix_mode: "layers",
+    layers: stems
+      .filter((stem) => layers[stem.id]?.enabled)
+      .map((stem) => ({
+        source: "stem",
+        stem_id: stem.id,
+        category: stem.category,
+        gain_db: layers[stem.id]?.gainDb ?? 0,
+      })),
+    limiter: { enabled: true, ceiling_db: -1 },
+  }) as Json, [layers, stems]);
+
   function patch(stemId: string, values: Partial<LayerState>) {
     setLayers((current) => ({
       ...current,
@@ -56,19 +74,6 @@ export function StemCustomMixer({
       setMessage("Keep at least one stem in the scene.");
       return;
     }
-    const recipe = {
-      schema: "atlas.audio_scene.v1",
-      mix_mode: "layers",
-      layers: stems
-        .filter((stem) => layers[stem.id]?.enabled)
-        .map((stem) => ({
-          source: "stem",
-          stem_id: stem.id,
-          category: stem.category,
-          gain_db: layers[stem.id]?.gainDb ?? 0,
-        })),
-      limiter: { enabled: true, ceiling_db: -1 },
-    };
     const form = new FormData();
     form.set("track_id", trackId);
     form.set("name", name.trim() || "Custom Scene");
@@ -78,7 +83,7 @@ export function StemCustomMixer({
     startTransition(async () => {
       try {
         await saveCustomAudioScene(form);
-        setMessage("Custom Audio Scene saved. Render a preview from its card below.");
+        setMessage("Custom Audio Scene saved. You can keep auditioning it live; create an audio file only when export or publishing needs one.");
         router.refresh();
       } catch (error) {
         setMessage(error instanceof Error ? error.message : "Could not save the custom Audio Scene.");
@@ -92,7 +97,7 @@ export function StemCustomMixer({
         <div>
           <span className="section-label">Advanced</span>
           <h3>Build a custom Audio Scene</h3>
-          <p>Override Atlas only when you want a specific stem balance. The recipe stays non-destructive.</p>
+          <p>Override Atlas only when you want a specific stem balance. The recipe stays non-destructive and is audible immediately.</p>
         </div>
         <span>{activeCount}/{stems.length} layers</span>
       </div>
@@ -111,6 +116,14 @@ export function StemCustomMixer({
           <input type="number" min="1" max="120" step="0.1" value={durationSeconds} onChange={(event) => setDurationSeconds(Math.max(1, Math.min(120, Number(event.target.value) || 1)))} />
         </label>
       </div>
+
+      <AudioSceneLivePlayer
+        compact
+        recipe={recipe}
+        startMs={Math.max(0, Math.round(startSeconds * 1000))}
+        endMs={Math.max(1, Math.round((startSeconds + durationSeconds) * 1000))}
+        stems={stems.map((stem) => ({ id: stem.id, label: stem.label, url: stem.url, offsetMs: stem.offsetMs }))}
+      />
 
       <div className="stem-mixer-layers">
         {stems.map((stem) => {
@@ -141,7 +154,7 @@ export function StemCustomMixer({
         <button type="button" className="button primary" disabled={pending || !stems.length} onClick={submit}>
           {pending ? "Saving…" : "Save custom scene"}
         </button>
-        {message ? <span aria-live="polite">{message}</span> : <span>Nothing is bounced until you ask Atlas to render a preview.</span>}
+        {message ? <span aria-live="polite">{message}</span> : <span>Audition is live. Saving stores only the recipe, not another audio file.</span>}
       </div>
     </div>
   );
