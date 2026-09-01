@@ -8,13 +8,14 @@ create table public.campaign_ai_spend_envelopes (
   allowed_media_kinds text[] not null default array['image','video']::text[],
   reserved_usd numeric(12,4) not null default 0 check (reserved_usd >= 0),
   spent_usd numeric(12,4) not null default 0 check (spent_usd >= 0),
+  overrun_usd numeric(12,4) not null default 0 check (overrun_usd >= 0),
   expires_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique(owner_id, campaign_id),
   check (allowed_media_kinds <@ array['image','video']::text[]),
   check (cardinality(allowed_media_kinds) > 0),
-  check (reserved_usd + spent_usd <= hard_limit_usd + 0.0001)
+  check (reserved_usd + spent_usd <= hard_limit_usd + overrun_usd + 0.0001)
 );
 
 create table public.campaign_ai_spend_reservations (
@@ -130,6 +131,9 @@ begin
   if envelope_row.expires_at is not null and envelope_row.expires_at <= now() then
     raise exception 'Campaign AI spend envelope has expired.';
   end if;
+  if envelope_row.overrun_usd > 0 then
+    raise exception 'Campaign AI spend is paused because a provider exceeded a prior reservation by $%.', envelope_row.overrun_usd;
+  end if;
   if not p_media_kind = any(envelope_row.allowed_media_kinds) then
     raise exception 'Campaign AI spend envelope does not allow % generation.', p_media_kind;
   end if;
@@ -168,6 +172,8 @@ as $$
 declare
   reservation_row public.campaign_ai_spend_reservations%rowtype;
   actual numeric;
+  overrun numeric;
+  basis text;
 begin
   perform private.assert_campaign_spend_actor(p_owner_id);
   if p_basis not in ('provider_actual','estimated','conservative_reserve','not_billed') then
@@ -182,18 +188,17 @@ begin
   if reservation_row.status <> 'reserved' then return reservation_row; end if;
 
   actual := greatest(0, round(coalesce(p_actual_usd, reservation_row.reserved_usd), 4));
-  if actual > reservation_row.reserved_usd then
-    actual := reservation_row.reserved_usd;
-    p_basis := 'conservative_reserve';
-  end if;
+  overrun := greatest(0, actual - reservation_row.reserved_usd);
+  basis := case when overrun > 0 then 'provider_actual' else p_basis end;
 
   update public.campaign_ai_spend_envelopes
     set reserved_usd = greatest(0, reserved_usd - reservation_row.reserved_usd),
-        spent_usd = spent_usd + actual
+        spent_usd = spent_usd + actual,
+        overrun_usd = overrun_usd + overrun
     where id = reservation_row.envelope_id;
 
   update public.campaign_ai_spend_reservations
-    set status = 'settled', settled_usd = actual, settlement_basis = p_basis,
+    set status = 'settled', settled_usd = actual, settlement_basis = basis,
         settled_at = now(), released_reason = null
     where id = reservation_row.id
     returning * into reservation_row;
