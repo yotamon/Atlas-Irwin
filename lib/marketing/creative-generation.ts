@@ -4,10 +4,11 @@ import { createMarketingServiceClient } from "@/lib/marketing/db";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { Json } from "@/types/database";
 import type { CreativeReferenceContext } from "./creative-context";
-import type { CreativeProviderStatus } from "./creative-provider-types";
+import type { CreativeGenerationRequest, CreativeProviderStatus } from "./creative-provider-types";
 import type { CreativeTreatment } from "./creative-treatment";
 import { reviewGeneratedCreativeImage } from "./creative-visual-quality";
 import { storeRemoteMarketingAsset } from "./generated-assets";
+import { enqueueMarketingVideoFinishing } from "./media-production";
 
 function record(value: Json | unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -105,6 +106,8 @@ export async function applyMarketingCreativeProviderStatus(input: {
   });
 
   let visualQuality: Record<string, unknown>;
+  let stage: string;
+  let eventType: string;
   if (outputKind === "image") {
     try {
       const review = await reviewGeneratedCreativeImage({
@@ -118,7 +121,12 @@ export async function applyMarketingCreativeProviderStatus(input: {
         context: storedContext as unknown as CreativeReferenceContext,
       });
       visualQuality = { status: "reviewed", ...review };
-      if (!review.passed) {
+      if (review.passed) {
+        stage = "creative_review";
+        eventType = "content.ai_asset_ready_for_review";
+      } else {
+        stage = "creative_qc_failed";
+        eventType = "content.ai_asset_qc_failed";
         await marketing.from("content_items").update({ approval_status: "rejected" }).eq("id", contentItemId).eq("owner_id", run.owner_id);
       }
     } catch (error) {
@@ -128,27 +136,62 @@ export async function applyMarketingCreativeProviderStatus(input: {
         error: error instanceof Error ? error.message : "Automated visual quality review was unavailable.",
         humanReviewRequired: true,
       };
+      stage = "creative_qc_pending";
+      eventType = "content.ai_asset_qc_pending";
     }
   } else {
-    visualQuality = {
-      status: "temporal_review_pending",
-      passed: null,
-      humanReviewRequired: true,
-      note: "Video temporal artifact review requires sampled frames across the finished edit; a single-frame vision check is intentionally not treated as sufficient.",
-    };
+    try {
+      const requestValue = inputContext.request;
+      const request = requestValue && typeof requestValue === "object" && !Array.isArray(requestValue)
+        ? requestValue as unknown as CreativeGenerationRequest
+        : null;
+      const finishingJob = await enqueueMarketingVideoFinishing({
+        ownerId: run.owner_id,
+        campaignId: run.campaign_id,
+        releaseId: run.release_id,
+        contentItemId,
+        generationRunId: run.id,
+        rawAssetId: stored.asset.id,
+        rawAssetUrl: stored.asset.public_url,
+        treatment: storedTreatment as unknown as CreativeTreatment,
+        context: storedContext as unknown as CreativeReferenceContext,
+        request,
+      });
+      visualQuality = {
+        status: "finishing_queued",
+        passed: null,
+        finishingJobId: finishingJob.id,
+        humanReviewRequired: false,
+        note: "Raw provider video is blocked from approval until deterministic finishing and multi-frame temporal QC complete.",
+      };
+      stage = "finishing_queued";
+      eventType = "content.ai_asset_finishing_queued";
+    } catch (error) {
+      visualQuality = {
+        status: "finishing_unavailable",
+        passed: null,
+        error: error instanceof Error ? error.message : "Deterministic social finishing could not be queued.",
+        humanReviewRequired: false,
+      };
+      stage = "finishing_failed";
+      eventType = "content.ai_asset_finishing_failed";
+    }
   }
 
+  const qualityPassed = visualQuality.status === "reviewed" && visualQuality.passed === true;
   const qualityFailed = visualQuality.status === "reviewed" && visualQuality.passed === false;
   const completedOutput = {
     ...output,
-    stage: qualityFailed ? "creative_qc_failed" : "creative_review",
+    stage,
     providerStatus: "completed",
     providerRaw: input.status.raw,
-    resultUrl: stored.asset.public_url,
-    mediaAssetId: stored.asset.id,
+    rawResultUrl: stored.asset.public_url,
+    rawMediaAssetId: stored.asset.id,
+    resultUrl: outputKind === "image" ? stored.asset.public_url : null,
+    mediaAssetId: outputKind === "image" ? stored.asset.id : null,
     contentStatus: stored.status,
     visualQuality,
-    approvalRequired: !qualityFailed,
+    approvalRequired: qualityPassed,
     actualCostUsd,
   };
   const { error: updateError } = await marketing.from("generation_runs").update({
@@ -161,12 +204,12 @@ export async function applyMarketingCreativeProviderStatus(input: {
   const { error: eventError } = await marketing.from("marketing_events").insert({
     owner_id: run.owner_id,
     campaign_id: run.campaign_id,
-    event_type: qualityFailed ? "content.ai_asset_qc_failed" : "content.ai_asset_ready_for_review",
+    event_type: eventType,
     entity_type: "content_item",
     entity_id: contentItemId,
     payload: json({
       generationRunId: run.id,
-      mediaAssetId: stored.asset.id,
+      rawMediaAssetId: stored.asset.id,
       provider: run.provider,
       model: run.model,
       actualCostUsd,
@@ -175,5 +218,12 @@ export async function applyMarketingCreativeProviderStatus(input: {
     }),
   });
   if (eventError) throw new Error(eventError.message);
-  return { completed: true as const, mediaAssetId: stored.asset.id, assetUrl: stored.asset.public_url, qualityFailed };
+  return {
+    completed: true as const,
+    mediaAssetId: outputKind === "image" ? stored.asset.id : null,
+    assetUrl: outputKind === "image" ? stored.asset.public_url : null,
+    qualityPassed,
+    qualityFailed,
+    stage,
+  };
 }
