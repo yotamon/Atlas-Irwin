@@ -36,13 +36,19 @@ export type CreativeRoute = {
 
 function autoOutputKind(format: string): "image" | "video" {
   const normalized = format.toLowerCase();
-  if (["reel", "tiktok video", "short", "dj clip", "mood video"].some((token) => normalized.includes(token))) return "video";
+  if (["reel", "tiktok video", "short", "dj clip", "mood video", "story"].some((token) => normalized.includes(token))) return "video";
   return "image";
 }
 
-function aspectRatio(platform: string, format: string): "9:16" | "1:1" {
+function aspectRatio(platform: string, format: string, outputKind: "image" | "video"): "9:16" | "4:5" | "1:1" {
   const normalized = `${platform} ${format}`.toLowerCase();
-  if (normalized.includes("feed post") || normalized.includes("carousel") || normalized.includes("newsletter") || normalized.includes("outreach")) return "1:1";
+  if (normalized.includes("newsletter") || normalized.includes("outreach")) return "1:1";
+  if (outputKind === "image" && (
+    normalized.includes("instagram") ||
+    normalized.includes("feed post") ||
+    normalized.includes("carousel") ||
+    normalized.includes("tiktok photo")
+  )) return "4:5";
   return "9:16";
 }
 
@@ -125,7 +131,7 @@ function higgsfieldParams(model: string, input: CreativeRouteInput) {
 
 export function routeMarketingCreative(input: CreativeRouteInput): CreativeRoute {
   const outputKind = input.mediaKind === "auto" ? autoOutputKind(input.format) : input.mediaKind;
-  const ratio = aspectRatio(input.platform, input.format);
+  const ratio = aspectRatio(input.platform, input.format, outputKind);
   const selected = chooseCandidate(input.quality, outputKind);
   let model = selected.candidate.model;
   if (selected.candidate.provider === "higgsfield" && model === "auto_premium") model = higgsfieldPremiumModel(input);
