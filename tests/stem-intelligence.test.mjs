@@ -54,8 +54,9 @@ test("Stem analysis records musical usefulness and explicit alignment confidence
     "alignment",
   ]) assert.ok(analyzer.includes(signal), `missing stem signal ${signal}`);
 
-  assert.ok(analyzer.includes('"method": "onset_cross_correlation"'));
-  assert.ok(analyzer.includes('"method": "duration_guard"'));
+  assert.ok(analyzer.includes('"onset_cross_correlation"'));
+  assert.ok(analyzer.includes('"duration_guard"'));
+  assert.ok(analyzer.includes("_alignment("));
   assert.ok(analyzer.includes("confidence < 0.28"));
   assert.ok(worker.includes('elif request.job_type == "analyze_stem"'));
   assert.ok(worker.includes('elif request.job_type == "render_audio_scene"'));
