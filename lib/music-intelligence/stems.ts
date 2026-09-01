@@ -203,19 +203,23 @@ export function buildSmartAudioScenes(stems: TrackStem[], musicMap?: Json | null
 
   if (vocals.length) {
     const supporting = atmosphere.slice(0, 2);
-    const used = [vocals[0], ...supporting];
+    const used = [...vocals, ...supporting];
+    const strongestVocalHook = Math.max(...vocals.map((stem) => stemMetric(stem, "hook_score", 0.7)));
     result.push({
       name: "Vocal Spotlight",
       sceneType: "vocal_spotlight",
-      description: "Lead vocal in front with only enough atmosphere to preserve the release world.",
+      description: "The complete vocal stack in front, with only enough atmosphere to preserve the release world.",
       objectiveTags: ["lyrics", "identity", "intimacy", "story"],
       platformHints: ["story", "reel", "tiktok"],
       recommendedStartMs: instantHook.startMs,
       recommendedEndMs: instantHook.endMs,
-      score: clamp01(avgScore(used) * 0.8 + stemMetric(vocals[0], "hook_score", 0.7) * 0.2),
-      rationale: { primary_stem_id: vocals[0].id, reason: "Strong vocal identity with restrained harmonic context." },
+      score: clamp01(avgScore(used) * 0.8 + strongestVocalHook * 0.2),
+      rationale: {
+        vocal_stem_ids: vocals.map((stem) => stem.id) as unknown as Json,
+        reason: "Keeps every ready vocal stem together so lead, backing vocals, doubles and harmonies remain musically complete.",
+      },
       recipe: sceneRecipe([
-        stemLayer(vocals[0], 0),
+        ...vocals.map((stem) => stemLayer(stem, 0)),
         ...supporting.map((stem) => stemLayer(stem, -11)),
       ]),
     });
@@ -294,28 +298,36 @@ export function buildSmartAudioScenes(stems: TrackStem[], musicMap?: Json | null
   }
 
   if (ready.length >= 3) {
-    const revealOrder = [
+    const revealCore = [
       ...ranked(ready, ["drums", "percussion"]).slice(0, 1),
       ...ranked(ready, ["bass"]).slice(0, 1),
       ...ranked(ready, ["guitar", "keys", "synth", "strings", "brass", "woodwinds", "other"]).slice(0, 2),
-      ...vocals.slice(0, 1),
-    ].filter((stem, index, values) => values.findIndex((item) => item.id === stem.id) === index).slice(0, 5);
-    const stepMs = Math.max(1200, Math.min(2500, Math.floor((instantHook.endMs - instantHook.startMs) / Math.max(3, revealOrder.length))));
+    ].filter((stem, index, values) => values.findIndex((item) => item.id === stem.id) === index).slice(0, 4);
+    const revealGroups = [
+      ...revealCore.map((stem) => [stem]),
+      ...(vocals.length ? [vocals] : []),
+    ];
+    const used = [...revealCore, ...vocals];
+    const stepMs = Math.max(1200, Math.min(2500, Math.floor((instantHook.endMs - instantHook.startMs) / Math.max(3, revealGroups.length))));
     result.push({
       name: "Build the Track",
       sceneType: "progressive_reveal",
-      description: "Layers enter one by one so the audience hears the arrangement assemble before the payoff.",
+      description: "Layers enter one by one, with the complete vocal stack arriving together as a musical unit before the payoff.",
       objectiveTags: ["breakdown", "retention", "production", "reveal"],
       platformHints: ["reel", "tiktok"],
       recommendedStartMs: instantHook.startMs,
-      recommendedEndMs: Math.max(instantHook.endMs, instantHook.startMs + stepMs * revealOrder.length),
-      score: clamp01(avgScore(revealOrder) * 0.9 + 0.08),
-      rationale: { entry_order: revealOrder.map((stem) => stem.id) as unknown as Json, step_ms: stepMs, reason: "Progressively reveals the most legible rhythmic and melodic layers." },
-      recipe: sceneRecipe(revealOrder.map((stem, index) => ({
+      recommendedEndMs: Math.max(instantHook.endMs, instantHook.startMs + stepMs * revealGroups.length),
+      score: clamp01(avgScore(used) * 0.9 + 0.08),
+      rationale: {
+        entry_groups: revealGroups.map((group) => group.map((stem) => stem.id)) as unknown as Json,
+        step_ms: stepMs,
+        reason: "Progressively reveals legible instrumental layers while preserving multi-stem musical roles such as the vocal stack.",
+      },
+      recipe: sceneRecipe(revealGroups.flatMap((group, index) => group.map((stem) => ({
         ...stemLayer(stem, 0),
         start_at_ms: index * stepMs,
         fade_in_ms: 90,
-      })), {
+      }))), {
         automation: { kind: "progressive_reveal", step_ms: stepMs },
       }),
     });
@@ -326,15 +338,19 @@ export function buildSmartAudioScenes(stems: TrackStem[], musicMap?: Json | null
     result.push({
       name: "Vocal → Drop",
       sceneType: "vocal_to_drop",
-      description: "Start exposed on the vocal, then hand the moment to the canonical full master for maximum payoff.",
+      description: "Start exposed on the complete vocal stack, then hand the moment to the canonical full master for maximum payoff.",
       objectiveTags: ["hook", "transition", "drop", "retention"],
       platformHints: ["reel", "tiktok", "story"],
       recommendedStartMs: climax.startMs,
       recommendedEndMs: climax.endMs,
-      score: clamp01(stemCapabilityScore(vocals[0]) * 0.45 + climax.score * 0.55),
-      rationale: { vocal_stem_id: vocals[0].id, transition_ms: transitionMs, reason: "Contrast creates a stronger arrival than starting immediately on the full mix." },
+      score: clamp01(avgScore(vocals) * 0.45 + climax.score * 0.55),
+      rationale: {
+        vocal_stem_ids: vocals.map((stem) => stem.id) as unknown as Json,
+        transition_ms: transitionMs,
+        reason: "Exposes the complete vocal arrangement before the canonical master arrives, preserving harmonies and backing parts.",
+      },
       recipe: sceneRecipe([
-        { ...stemLayer(vocals[0], 0), end_at_ms: transitionMs + 120, fade_out_ms: 120 },
+        ...vocals.map((stem) => ({ ...stemLayer(stem, 0), end_at_ms: transitionMs + 120, fade_out_ms: 120 })),
         { source: "master", gain_db: 0, start_at_ms: transitionMs, fade_in_ms: 80 },
       ]),
     });
