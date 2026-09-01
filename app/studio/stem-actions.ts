@@ -200,8 +200,7 @@ export async function registerTrackStem(form: FormData) {
       source_master_media_asset_id: intelligence?.source_media_asset_id ?? null,
       status: "uploaded",
       error: null,
-      preview_error: undefined,
-    } as never).eq("id", existing.data.id).eq("owner_id", user.id).select("*").single();
+    }).eq("id", existing.data.id).eq("owner_id", user.id).select("*").single();
     if (updated.error || !updated.data) throw new Error(updated.error?.message || "Could not update this stem.");
     stem = updated.data as TrackStem;
   } else {
@@ -276,12 +275,55 @@ export async function updateStemIdentity(form: FormData) {
   const label = z.string().trim().min(1).max(120).parse(value(form, "label"));
   const { supabase, user } = await requireStudioAdmin();
   const db = asStemClient(supabase);
-  const result = await db.from("track_stems").update({ category, label }).eq("id", stemId).eq("owner_id", user.id).select("track_id").single();
-  if (result.error || !result.data) throw new Error(result.error?.message || "Stem not found.");
-  const track = await db.from("tracks").select("release_id").eq("id", result.data.track_id).eq("owner_id", user.id).single();
-  if (track.error || !track.data) throw new Error(track.error?.message || "Track not found.");
-  await regenerateSystemAudioScenes({ client: db, ownerId: user.id, trackId: result.data.track_id });
-  revalidatePath(`/studio/releases/${track.data.release_id}`);
+  const stemResult = await db.from("track_stems").select("*").eq("id", stemId).eq("owner_id", user.id).single();
+  if (stemResult.error || !stemResult.data) throw new Error(stemResult.error?.message || "Stem not found.");
+  const stem = stemResult.data as TrackStem;
+  const categoryChanged = stem.category !== category;
+  const context = await canonicalTrackContext(stem.track_id);
+
+  if (categoryChanged) {
+    const cancelled = await db.from("track_stem_jobs").update({
+      status: "cancelled",
+      error: "Stem category changed before analysis completed.",
+      completed_at: new Date().toISOString(),
+    }).eq("stem_id", stem.id).eq("owner_id", user.id).in("status", ["planned", "queued", "running"]);
+    if (cancelled.error) throw new Error(cancelled.error.message);
+  }
+
+  const updated = await db.from("track_stems").update({
+    category,
+    label,
+    ...(categoryChanged ? {
+      status: "uploaded" as const,
+      analysis: json({}),
+      alignment: json({}),
+      offset_ms: 0,
+      alignment_confidence: null,
+      analyzed_at: null,
+      error: null,
+    } : {}),
+  }).eq("id", stem.id).eq("owner_id", user.id).select("*").single();
+  if (updated.error || !updated.data) throw new Error(updated.error?.message || "Could not update this stem.");
+
+  if (categoryChanged) {
+    const assetResult = await db.from("media_assets")
+      .select("public_url,mime_type")
+      .eq("id", stem.media_asset_id)
+      .eq("owner_id", user.id)
+      .single();
+    if (assetResult.error || !assetResult.data?.public_url || !assetResult.data.mime_type?.startsWith("audio/")) {
+      throw new Error(assetResult.error?.message || "The stem audio asset is unavailable for re-analysis.");
+    }
+    await enqueueStemAnalysis({
+      stem: updated.data as TrackStem,
+      stemUrl: assetResult.data.public_url,
+      masterUrl: context.track.audio_url,
+      sections: analysisSections(context.musicMap),
+    });
+  }
+
+  await regenerateSystemAudioScenes({ client: db, ownerId: user.id, trackId: stem.track_id });
+  revalidatePath(`/studio/releases/${context.track.release_id}`);
 }
 
 export async function removeTrackStem(form: FormData) {
@@ -385,10 +427,6 @@ export async function renderAudioScenePreview(form: FormData) {
   const bucket = "public-media";
   const outputName = safeFileName(`${scene.scene_type}-${scene.id}.mp3`);
   const path = `${user.id}/library/stem-intelligence/${scene.track_id}/${randomUUID()}-${outputName}`;
-  const signed = await db.storage.from(bucket).createSignedUploadUrl(path);
-  if (signed.error || !signed.data) throw new Error(signed.error?.message || "Could not prepare the Audio Scene preview upload.");
-  const signedUrl = signed.data.signedUrl;
-  if (!signedUrl) throw new Error("Storage did not return a signed Audio Scene upload URL.");
   const publicUrl = db.storage.from(bucket).getPublicUrl(path).data.publicUrl;
 
   const idempotencyKey = `audio-scene:${scene.id}:${scene.stem_set_fingerprint || "custom"}:${clipStartMs}:${clipEndMs}`;
@@ -414,7 +452,6 @@ export async function renderAudioScenePreview(form: FormData) {
       layers: resolvedLayers,
       clip_start_ms: clipStartMs,
       clip_end_ms: clipEndMs,
-      upload_url: signedUrl,
       upload_bucket: bucket,
       upload_path: path,
       public_url: publicUrl,
