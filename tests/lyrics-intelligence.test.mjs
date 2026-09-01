@@ -1,14 +1,127 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import ts from "typescript";
 
 async function source(path) {
   return readFile(path, "utf8");
 }
 
-test("canonical lyrics are versioned human truth with immutable revision history", async () => {
-  const migration = await source("supabase/migrations/20260901160000_lyrics_intelligence.sql");
-  const hardening = await source("supabase/migrations/20260901160100_lyrics_intelligence_hardening.sql");
+async function loadLyricsDomain() {
+  const domain = await source("lib/lyrics-intelligence/domain.ts");
+  const compiled = ts.transpileModule(domain, {
+    compilerOptions: {
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2022,
+    },
+  }).outputText;
+  const encoded = Buffer.from(compiled, "utf8").toString("base64");
+  return import(`data:text/javascript;base64,${encoded}`);
+}
+
+const REALISTIC_SUNO_LYRICS = String.raw`[Intro]
+My love
+My love
+My love
+
+[Verse]
+Saw you 'cross the room
+You see me lookin' too
+I'm like
+"Oh my God
+He's so damn fine"
+Wonderin' if you think the same
+Then I see you walk my way
+Ooh
+You're mine
+
+[Chorus]
+He said
+"Meet me at the dancefloor
+Meet me at the dancefloor
+Meet me at the dancefloor
+Meet me at the dancefloor
+I'll see you at the dancefloor
+Meet me at the dancefloor
+I'll see you at the dancefloor
+I'll see you at the dancefloor"
+Mm-mm
+My love
+
+[Verse 2]
+Oh
+I can't get enough of it
+The way that you move your hips
+Dancin' all up on me
+Boy
+You got me fallin'
+Oh
+And now you look into my eyes
+And I don't wanna say goodbye
+You know I don't wanna leave
+Baby
+Keep on callin' me
+
+[Chorus]
+He said
+"Meet me at the dancefloor
+Meet me at the dancefloor
+Meet me at the dancefloor
+Meet me at the dancefloor
+I'll see you at the dancefloor
+Meet me at the dancefloor
+I'll see you at the dancefloor
+I'll see you at the dancefloor"
+
+[Outro]
+He said
+"Meet me at the dancefloor
+Meet me at the dancefloor
+Meet me at the dancefloor
+Meet me at the dancefloor"
+Mm
+He said
+"Meet me at the dancefloor
+Meet me at the dancefloor
+Meet me at the dancefloor
+Meet me at the dancefloor"
+Mm-mm
+My love`;
+
+test("realistic Suno-style lyrics parse into stable sections without losing exact lines", async () => {
+  const { parseLyrics, excerptExists } = await loadLyricsDomain();
+  const sections = parseLyrics(REALISTIC_SUNO_LYRICS);
+
+  assert.deepEqual(
+    sections.map((section) => [section.section_key, section.section_type, section.label]),
+    [
+      ["intro_1", "intro", "Intro"],
+      ["verse_1", "verse", "Verse"],
+      ["chorus_1", "chorus", "Chorus"],
+      ["verse_2", "verse", "Verse 2"],
+      ["chorus_2", "chorus", "Chorus"],
+      ["outro_1", "outro", "Outro"],
+    ],
+  );
+  assert.equal(sections.length, 6);
+  assert.equal(sections[0].lines.length, 3);
+  assert.equal(sections[0].lines.every((line) => line.text === "My love"), true);
+  assert.equal(sections[1].lines.some((line) => line.text === '"Oh my God'), true);
+  assert.equal(sections[1].lines.some((line) => line.text === 'He\'s so damn fine"'), true);
+  assert.equal(sections[3].lines.some((line) => line.text === "Oh"), true);
+  assert.equal(sections[3].lines.some((line) => line.text === "Boy"), true);
+  assert.equal(sections[5].lines.at(-1)?.text, "My love");
+
+  assert.equal(excerptExists("Meet me at the dancefloor", REALISTIC_SUNO_LYRICS), true);
+  assert.equal(excerptExists("I'll see you at the dancefloor", REALISTIC_SUNO_LYRICS), true);
+  assert.equal(excerptExists("Saw you 'cross the room", REALISTIC_SUNO_LYRICS), true);
+  assert.equal(excerptExists("Meet me under neon lights", REALISTIC_SUNO_LYRICS), false);
+});
+
+test("canonical lyrics are versioned human truth with immutable revision history and least privilege", async () => {
+  const migration = await source("supabase/migrations/20260901130402_lyrics_intelligence.sql");
+  const hardening = await source("supabase/migrations/20260901130501_lyrics_intelligence_hardening.sql");
+  const privileges = await source("supabase/migrations/20260901130823_lyrics_intelligence_privilege_hardening.sql");
 
   assert.ok(migration.includes("create table public.track_lyrics"));
   assert.ok(migration.includes("canonical_text text not null"));
@@ -20,10 +133,30 @@ test("canonical lyrics are versioned human truth with immutable revision history
   assert.ok(migration.includes("v_old.version + 1"));
   assert.ok(hardening.includes("Immutable canonical lyrics revision history"));
   assert.ok(hardening.includes("revoke insert, update, delete on public.track_lyrics_revisions from authenticated"));
+  assert.ok(privileges.includes("revoke all privileges on table"));
+  assert.ok(privileges.includes("from anon, authenticated"));
+  assert.ok(privileges.includes("public.track_lyrics_revisions"));
+  assert.ok(privileges.includes("grant select on table"));
+  assert.ok(privileges.includes("grant select, update on table public.track_lyric_sections to authenticated"));
+  assert.ok(privileges.includes("grant select, insert, update on table public.track_lyrics_analysis to authenticated"));
+  assert.ok(privileges.includes("grant select, insert, delete on table public.track_lyric_moments to authenticated"));
+});
+
+test("Lyrics Intelligence foreign keys remain indexed", async () => {
+  const indexes = await source("supabase/migrations/20260901130933_lyrics_intelligence_fk_indexes.sql");
+  for (const index of [
+    "track_lyrics_revisions_owner_idx",
+    "track_lyric_sections_owner_idx",
+    "track_lyric_lines_lyrics_idx",
+    "track_lyric_lines_owner_idx",
+    "track_lyrics_analysis_owner_idx",
+    "track_lyric_moments_lyrics_idx",
+    "track_lyric_moments_owner_idx",
+  ]) assert.ok(indexes.includes(index), `missing Lyrics Intelligence FK index ${index}`);
 });
 
 test("master replacement preserves words and semantics while invalidating only derived lyric timing", async () => {
-  const migration = await source("supabase/migrations/20260901160000_lyrics_intelligence.sql");
+  const migration = await source("supabase/migrations/20260901130402_lyrics_intelligence.sql");
   const start = migration.indexOf("create or replace function private.invalidate_lyric_timing_on_audio_change");
   const end = migration.indexOf("drop trigger if exists invalidate_lyric_timing_on_audio_change");
   assert.ok(start >= 0 && end > start);

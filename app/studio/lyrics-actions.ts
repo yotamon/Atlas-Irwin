@@ -39,19 +39,21 @@ async function persistLyrics(form: FormData, status: LyricsStatus = "verified") 
   if (status !== "instrumental" && !canonicalText) throw new Error("Paste the official lyrics before saving.");
   const sections = status === "instrumental" ? [] : parseLyrics(canonicalText);
   if (status !== "instrumental" && !sections.length) throw new Error("Atlas could not find any lyric lines to save.");
+  const allowAiContext = status === "instrumental" ? false : checked(form, "allow_ai_context");
+  const allowMediaQuotes = status === "instrumental" ? false : checked(form, "allow_media_quotes");
 
   const { data: lyricsId, error } = await context.db.rpc("save_track_lyrics", {
     p_track_id: context.trackId,
     p_canonical_text: canonicalText,
     p_language: text(form, "language") || null,
     p_status: status,
-    p_allow_ai_context: status === "instrumental" ? false : checked(form, "allow_ai_context"),
-    p_allow_media_quotes: status === "instrumental" ? false : checked(form, "allow_media_quotes"),
+    p_allow_ai_context: allowAiContext,
+    p_allow_media_quotes: allowMediaQuotes,
     p_sections: sections as unknown as Json,
   });
   if (error) throw new Error(error.message);
   revalidatePath(`/studio/releases/${context.releaseId}`);
-  return { ...context, lyricsId };
+  return { ...context, lyricsId, allowAiContext };
 }
 
 export async function saveTrackLyricsAction(form: FormData) {
@@ -60,13 +62,15 @@ export async function saveTrackLyricsAction(form: FormData) {
 
 export async function saveAndAnalyzeTrackLyricsAction(form: FormData) {
   const context = await persistLyrics(form);
-  await analyzeTrackLyrics({
-    db: context.db,
-    ownerId: context.user.id,
-    trackId: context.trackId,
-    releaseId: context.releaseId,
-    cacheMode: "use",
-  });
+  if (context.allowAiContext) {
+    await analyzeTrackLyrics({
+      db: context.db,
+      ownerId: context.user.id,
+      trackId: context.trackId,
+      releaseId: context.releaseId,
+      cacheMode: "use",
+    });
+  }
   revalidatePath(`/studio/releases/${context.releaseId}`);
   revalidatePath("/studio/production");
   revalidatePath("/studio/video");
