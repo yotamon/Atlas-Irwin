@@ -151,3 +151,33 @@ test("campaign Autopilot spend is atomically reserved and ambiguity never auto-r
   assert.match(card, /Campaign mode alone never authorizes spend/);
   assert.match(card, /Pause autonomous creative spend/);
 });
+
+test("Social OS database hardening keeps spend RPCs server-only and covers new foreign keys", async () => {
+  const hardening = await source("supabase/migrations/20260901184000_social_os_db_hardening.sql");
+
+  for (const signature of [
+    "reserve_campaign_ai_spend(uuid,uuid,uuid,text,numeric)",
+    "settle_campaign_ai_spend(uuid,uuid,numeric,text)",
+    "release_campaign_ai_spend(uuid,uuid,text)",
+  ]) {
+    assert.ok(hardening.includes(`revoke execute on function public.${signature} from authenticated`));
+    assert.ok(hardening.includes(`grant execute on function public.${signature} to service_role`));
+  }
+
+  for (const index of [
+    "marketing_media_jobs_campaign_id_idx",
+    "marketing_media_jobs_release_id_idx",
+    "marketing_media_jobs_content_item_id_idx",
+    "marketing_media_jobs_generation_run_id_idx",
+    "creative_derivatives_campaign_id_idx",
+    "creative_derivatives_master_content_item_id_idx",
+    "creative_derivatives_derivative_content_item_id_idx",
+    "creative_derivatives_master_generation_run_id_idx",
+    "creative_derivatives_derivative_generation_run_id_idx",
+    "campaign_ai_spend_envelopes_campaign_id_idx",
+    "campaign_ai_spend_reservations_campaign_id_idx",
+    "campaign_ai_spend_reservations_generation_run_id_idx",
+  ]) {
+    assert.ok(hardening.includes(`create index if not exists ${index}`), `missing ${index}`);
+  }
+});
