@@ -8,6 +8,7 @@ import {
   updateStemIdentity,
 } from "@/app/studio/stem-actions";
 import { AnalysisAutoRefresh } from "@/components/studio/analysis-auto-refresh";
+import { AudioSceneLivePlayer } from "@/components/studio/audio-scene-live-player";
 import { StemCustomMixer } from "@/components/studio/stem-custom-mixer";
 import { StemUploader } from "@/components/studio/stem-uploader";
 import { requireStudioAdmin } from "@/lib/auth/studio";
@@ -50,9 +51,9 @@ function offset(value: number) {
 
 function statusLabel(status: TrackStem["status"]) {
   return ({
-    uploaded: "Uploaded",
-    queued: "Queued",
-    analyzing: "Analyzing",
+    uploaded: "Preparing",
+    queued: "Waiting",
+    analyzing: "Analyzing now",
     ready: "Ready",
     failed: "Needs retry",
     stale: "Old master",
@@ -108,6 +109,17 @@ export async function StemIntelligencePanel({
   const assetById = new Map((assetResult.data ?? []).map((asset) => [asset.id, asset]));
   const readyStems = state.stems.filter((stem) => stem.status === "ready" && stem.source_master_url === track.audio_url);
   const readyScenes = state.scenes.filter((scene) => scene.status !== "stale");
+  const liveStems = readyStems.flatMap((stem) => {
+    const asset = assetById.get(stem.media_asset_id);
+    if (!asset?.public_url || !asset.mime_type?.startsWith("audio/")) return [];
+    return [{
+      id: stem.id,
+      label: stem.label,
+      category: stem.category,
+      url: asset.public_url,
+      offsetMs: stem.offset_ms,
+    }];
+  });
   const categoryCount = new Set(readyStems.map((stem) => stem.category)).size;
   const currentBound = state.stems.filter((stem) => stem.source_master_url === track.audio_url).length;
   const analyzing = activeStatuses(state.stems, state.scenes);
@@ -123,7 +135,7 @@ export async function StemIntelligencePanel({
           <p>Atlas understands what each layer contributes, where it works best, and which mix treatment fits different kinds of media.</p>
         </div>
         <div className="stem-intelligence-summary">
-          <span><strong>{readyStems.length}</strong><small>ready stems</small></span>
+          <span><strong>{readyStems.length}/{state.stems.length}</strong><small>analyzed</small></span>
           <span><strong>{categoryCount}</strong><small>roles</small></span>
           <span><strong>{readyScenes.length}</strong><small>Audio Scenes</small></span>
         </div>
@@ -132,7 +144,7 @@ export async function StemIntelligencePanel({
       <div className="stem-principle-strip">
         <div><FiLayers /><span><strong>Non-destructive</strong><small>Original stems stay untouched</small></span></div>
         <div><FiActivity /><span><strong>Master-bound</strong><small>{currentBound}/{state.stems.length || 0} attached to this exact version</small></span></div>
-        <div><FiMusic /><span><strong>Content-aware</strong><small>Scenes carry platform and campaign intent</small></span></div>
+        <div><FiMusic /><span><strong>Live-mixable</strong><small>Audition scenes directly from aligned stems</small></span></div>
       </div>
 
       <details className="workspace-drawer stem-import-drawer" open={!state.stems.length}>
@@ -216,13 +228,17 @@ export async function StemIntelligencePanel({
       {readyStems.length ? (
         <div className="audio-scenes-section">
           <div className="stem-subheading">
-            <div><span className="section-label">Audio Scenes</span><h3>Ready-made musical treatments for media</h3><p>These are mix recipes, not duplicate files. Render only the previews you want to audition or use.</p></div>
+            <div>
+              <span className="section-label">Audio Scenes</span>
+              <h3>Ready-made musical treatments for media</h3>
+              <p>Play every recipe instantly from the original aligned stems. No preview render is required. Create a file only when export, publishing, or another tool needs a portable audio asset.</p>
+            </div>
           </div>
 
           {readyScenes.length ? (
             <div className="audio-scene-grid">
               {readyScenes.map((scene) => {
-                const preview = scene.preview_asset_id ? assetById.get(scene.preview_asset_id) : null;
+                const renderedAsset = scene.preview_asset_id ? assetById.get(scene.preview_asset_id) : null;
                 return (
                   <article className={`audio-scene-card ${scene.is_pinned ? "pinned" : ""}`} key={scene.id}>
                     <div className="audio-scene-card-header">
@@ -236,12 +252,29 @@ export async function StemIntelligencePanel({
                     <div className="audio-scene-window"><strong>{time(scene.recommended_start_ms)} → {time(scene.recommended_end_ms)}</strong><span>{scene.score === null ? "Artist-defined" : `${Math.round(scene.score * 100)}% fit`}</span></div>
                     <div className="audio-scene-tags">{scene.objective_tags.slice(0, 4).map((tag) => <span key={tag}>{tag}</span>)}</div>
                     <small className="audio-scene-rationale">{sceneRationale(scene)}</small>
-                    {preview?.public_url ? <audio controls preload="none" src={preview.public_url} /> : scene.status === "rendering" ? <div className="audio-scene-rendering">Rendering preview…</div> : null}
+
+                    <AudioSceneLivePlayer
+                      recipe={scene.recipe}
+                      startMs={scene.recommended_start_ms}
+                      endMs={scene.recommended_end_ms}
+                      masterUrl={track.audio_url}
+                      stems={liveStems}
+                    />
+
                     {scene.preview_error ? <div className="notice compact-notice">{scene.preview_error}</div> : null}
-                    <form action={renderAudioScenePreview}>
-                      <input type="hidden" name="scene_id" value={scene.id} />
-                      <button className="button" type="submit" disabled={scene.status === "rendering"}>{preview?.public_url ? "Refresh preview" : "Render preview"}</button>
-                    </form>
+                    {renderedAsset?.public_url ? (
+                      <details className="workspace-drawer">
+                        <summary>Rendered audio file</summary>
+                        <audio controls preload="none" src={renderedAsset.public_url} />
+                      </details>
+                    ) : null}
+                    {scene.status === "rendering" ? <div className="audio-scene-rendering">Creating portable audio file…</div> : (
+                      <form action={renderAudioScenePreview}>
+                        <input type="hidden" name="scene_id" value={scene.id} />
+                        <button className="button" type="submit">{renderedAsset?.public_url ? "Rebuild audio file" : "Create audio file"}</button>
+                      </form>
+                    )}
+                    <small className="v2-muted-copy">Optional. Live audition above always uses the current stems; the file is only for export and downstream media workflows.</small>
                   </article>
                 );
               })}
@@ -252,7 +285,7 @@ export async function StemIntelligencePanel({
             <summary>Advanced custom mixer</summary>
             <StemCustomMixer
               trackId={track.id}
-              stems={readyStems.map((stem) => ({ id: stem.id, label: stem.label, category: stem.category }))}
+              stems={liveStems}
               defaultStartMs={bestScene?.recommended_start_ms ?? 0}
               defaultEndMs={bestScene?.recommended_end_ms ?? 15000}
             />
