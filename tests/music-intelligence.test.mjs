@@ -165,8 +165,8 @@ test("production Media Worker remains self-bootstrapping, zero-idle and Sandbox-
   assert.ok(bridge.includes("detached: true"));
   assert.ok(bridge.includes("MEDIA_WORKER_CALLBACK_HASH_KEY"));
   assert.ok(bridge.includes("atlas-media-worker-${environmentName()}"));
-  assert.ok(bridge.includes("MEDIA_WORKER_RUNTIME_VERSION = 6"));
-  assert.ok(bridge.includes("MEDIA_WORKER_BOOTSTRAP_VERSION = 3"));
+  assert.ok(bridge.includes("MEDIA_WORKER_RUNTIME_VERSION = 7"));
+  assert.ok(bridge.includes("MEDIA_WORKER_BOOTSTRAP_VERSION = 4"));
   assert.ok(bridge.includes('uv python install "$PYTHON_VERSION"'));
   assert.ok(bridge.includes('uv venv --python "$PYTHON_VERSION"'));
   assert.ok(bridge.includes('uv pip install --python "$WORKDIR/.venv/bin/python"'));
