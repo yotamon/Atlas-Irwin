@@ -7,11 +7,13 @@ import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { buildCohesiveVisualPrompt, loadCreativeReferenceContext } from "@/lib/marketing/creative-context";
 import { applyMarketingCreativeProviderStatus } from "@/lib/marketing/creative-generation";
+import { assessCreativeProductionPreflight, assertCreativeProductionGate } from "@/lib/marketing/creative-quality";
 import {
   CREATIVE_MEDIA_KINDS,
   CREATIVE_QUALITY_PROFILES,
   routeMarketingCreative,
 } from "@/lib/marketing/creative-router";
+import { directContentCreative } from "@/lib/marketing/creative-treatment";
 import { creativeProvider, isCreativeDefiniteRejection } from "@/lib/marketing/creative-providers";
 import { CREATIVE_PROVIDER_IDS, type CreativeGenerationRequest, type CreativeProviderId } from "@/lib/marketing/creative-provider-types";
 import { getSiteUrl } from "@/lib/site-url";
@@ -40,7 +42,7 @@ function record(input: Json | unknown): Record<string, unknown> {
 function outputKindFor(format: string, preference: (typeof CREATIVE_MEDIA_KINDS)[number]) {
   if (preference !== "auto") return preference;
   const normalized = format.toLowerCase();
-  return ["reel", "tiktok video", "short", "dj clip", "mood video"].some((token) => normalized.includes(token)) ? "video" : "image";
+  return ["reel", "tiktok video", "short", "dj clip", "mood video", "story"].some((token) => normalized.includes(token)) ? "video" : "image";
 }
 
 function revalidateCreativePaths(content: { id: string; release_id: string | null; campaign_id: string | null }) {
@@ -87,13 +89,18 @@ export async function prepareContentCreativeGeneration(form: FormData) {
     contentItemId: content.id,
   });
   const outputKind = outputKindFor(content.format, mediaKind);
-  const creativeBrief = content.visual_prompt || content.production_notes || content.content_angle || content.hook_text || content.title;
+  const { treatment, generationRunId: treatmentGenerationRunId } = await directContentCreative({
+    ownerId: user.id,
+    content,
+    context: referenceContext,
+    outputKind,
+  });
   const prompt = buildCohesiveVisualPrompt({
     context: referenceContext,
     contentTitle: content.title,
     platform: content.platform,
     format: content.format,
-    creativeBrief,
+    creativeBrief: treatment.generationPrompt,
     hook: content.hook_text,
     outputKind,
   });
@@ -108,6 +115,9 @@ export async function prepareContentCreativeGeneration(form: FormData) {
     audioEnd: content.audio_timestamp_end,
     context: referenceContext,
   });
+  const productionGate = assessCreativeProductionPreflight({ treatment, context: referenceContext, route });
+  assertCreativeProductionGate(productionGate);
+
   const provider = creativeProvider(route.request.provider);
   const quote = await provider.quote(route.request);
 
@@ -118,7 +128,7 @@ export async function prepareContentCreativeGeneration(form: FormData) {
     purpose: `content_asset:${content.id}`,
     provider: route.request.provider,
     model: route.request.model,
-    prompt_version: "creative-lineage-v2-provider-router",
+    prompt_version: "creative-lineage-v3-creative-director",
     input_context: json({
       contentItemId: content.id,
       outputKind: route.outputKind,
@@ -127,6 +137,10 @@ export async function prepareContentCreativeGeneration(form: FormData) {
       mediaKind,
       request: route.request,
       referenceContext,
+      treatment,
+      treatmentGenerationRunId,
+      platformPackage: treatment.platformPackage,
+      productionGate,
       fallbackUsed: route.fallbackUsed,
       preferredProvider: route.preferredProvider,
       priceLabel: route.priceLabel,
@@ -137,7 +151,10 @@ export async function prepareContentCreativeGeneration(form: FormData) {
       routeReason: route.reason,
       cohesionScore: referenceContext.cohesionScore,
       referenceSummary: referenceContext.referenceSummary,
+      treatmentVersion: treatment.version,
+      productionGate,
       approvalRequiredBeforeSpend: true,
+      humanVisualReviewRequiredAfterGeneration: true,
       pricingAsOf: "2026-08-19",
     }),
     status: "queued",
@@ -155,11 +172,15 @@ export async function prepareContentCreativeGeneration(form: FormData) {
     entity_id: content.id,
     payload: json({
       generationRunId: generation.id,
+      treatmentGenerationRunId,
+      treatmentVersion: treatment.version,
       provider: route.request.provider,
       model: route.request.model,
       quality,
       quote,
       cohesionScore: referenceContext.cohesionScore,
+      productionGateScore: productionGate.score,
+      platformPackageId: treatment.platformPackage.id,
       fallbackUsed: route.fallbackUsed,
     }),
   });
@@ -183,6 +204,13 @@ export async function approvePreparedCreativeGeneration(form: FormData) {
     throw new Error("This generation is no longer waiting for spend approval.");
   }
   const inputContext = record(run.input_context);
+  const productionGate = record(inputContext.productionGate);
+  if (productionGate.passed !== true) {
+    throw new Error("This creative did not pass the production gate and cannot spend on provider generation.");
+  }
+  if (!inputContext.treatment || !inputContext.platformPackage) {
+    throw new Error("This creative is missing Creative Director treatment lineage. Prepare it again before generation.");
+  }
   const requestValue = inputContext.request;
   if (!requestValue || typeof requestValue !== "object" || Array.isArray(requestValue)) {
     throw new Error("Prepared provider request is missing.");
@@ -276,6 +304,38 @@ export async function approveGeneratedCreative(form: FormData) {
   const { data: content, error: contentError } = await marketing.from("content_items").select("id,release_id,campaign_id,asset_url,source").eq("id", contentItemId).eq("owner_id", user.id).single();
   if (contentError || !content) throw new Error(contentError?.message || "Content item not found.");
   if (!content.asset_url || content.source !== "ai") throw new Error("There is no AI-generated creative attached to approve.");
+
+  const { data: generation, error: generationError } = await marketing.from("generation_runs")
+    .select("id,input_context,output")
+    .eq("owner_id", user.id)
+    .eq("purpose", `content_asset:${content.id}`)
+    .eq("status", "completed")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (generationError) throw new Error(generationError.message);
+  if (!generation) throw new Error("The generated asset has no completed production lineage and cannot be approved.");
+  const inputContext = record(generation.input_context);
+  const productionGate = record(inputContext.productionGate);
+  const treatment = record(inputContext.treatment);
+  if (productionGate.passed !== true || productionGate.humanVisualReviewRequired !== true || !treatment.version) {
+    throw new Error("This asset is missing a passed production gate or Creative Director treatment. Regenerate it through Production before approval.");
+  }
+
+  const reviewedAt = new Date().toISOString();
+  const runOutput = record(generation.output);
+  const { error: generationUpdateError } = await marketing.from("generation_runs").update({
+    user_outcome: "accepted",
+    output: json({
+      ...runOutput,
+      productionGate: {
+        ...productionGate,
+        humanVisualApprovedAt: reviewedAt,
+      },
+    }),
+  }).eq("id", generation.id).eq("owner_id", user.id);
+  if (generationUpdateError) throw new Error(generationUpdateError.message);
+
   const { error } = await marketing.from("content_items").update({ approval_status: "approved" }).eq("id", content.id).eq("owner_id", user.id);
   if (error) throw new Error(error.message);
   const { error: eventError } = await marketing.from("marketing_events").insert({
@@ -284,7 +344,13 @@ export async function approveGeneratedCreative(form: FormData) {
     event_type: "content.ai_asset_approved",
     entity_type: "content_item",
     entity_id: content.id,
-    payload: json({ assetUrl: content.asset_url }),
+    payload: json({
+      assetUrl: content.asset_url,
+      generationRunId: generation.id,
+      treatmentVersion: treatment.version,
+      productionGateScore: productionGate.score,
+      humanVisualApprovedAt: reviewedAt,
+    }),
   });
   if (eventError) throw new Error(eventError.message);
   revalidateCreativePaths(content);
@@ -297,6 +363,26 @@ export async function rejectGeneratedCreative(form: FormData) {
   const { data: content, error: contentError } = await marketing.from("content_items").select("id,release_id,campaign_id,asset_url,source").eq("id", contentItemId).eq("owner_id", user.id).single();
   if (contentError || !content) throw new Error(contentError?.message || "Content item not found.");
   if (!content.asset_url || content.source !== "ai") throw new Error("There is no AI-generated creative attached to reject.");
+
+  const { data: generation, error: generationError } = await marketing.from("generation_runs")
+    .select("id,output")
+    .eq("owner_id", user.id)
+    .eq("purpose", `content_asset:${content.id}`)
+    .eq("status", "completed")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (generationError) throw new Error(generationError.message);
+  const rejectedAt = new Date().toISOString();
+  if (generation) {
+    const runOutput = record(generation.output);
+    const { error: generationUpdateError } = await marketing.from("generation_runs").update({
+      user_outcome: "rejected",
+      output: json({ ...runOutput, humanVisualRejectedAt: rejectedAt }),
+    }).eq("id", generation.id).eq("owner_id", user.id);
+    if (generationUpdateError) throw new Error(generationUpdateError.message);
+  }
+
   const { error } = await marketing.from("content_items").update({ approval_status: "rejected" }).eq("id", content.id).eq("owner_id", user.id);
   if (error) throw new Error(error.message);
   const { error: eventError } = await marketing.from("marketing_events").insert({
@@ -305,7 +391,7 @@ export async function rejectGeneratedCreative(form: FormData) {
     event_type: "content.ai_asset_rejected",
     entity_type: "content_item",
     entity_id: content.id,
-    payload: json({ assetUrl: content.asset_url }),
+    payload: json({ assetUrl: content.asset_url, generationRunId: generation?.id ?? null, humanVisualRejectedAt: rejectedAt }),
   });
   if (eventError) throw new Error(eventError.message);
   revalidateCreativePaths(content);
