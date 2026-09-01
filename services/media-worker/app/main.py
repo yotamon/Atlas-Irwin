@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import ipaddress
+import math
 import socket
 import tempfile
 from pathlib import Path
@@ -11,22 +12,28 @@ from urllib.parse import urljoin, urlparse
 
 import httpx
 import imageio_ffmpeg
+import numpy as np
+import soundfile as sf
 from pydantic import BaseModel, Field
 
 from .music_intelligence import analyze_music
+from .stem_intelligence import analyze_stem
 
 FFMPEG_BINARY = imageio_ffmpeg.get_ffmpeg_exe()
+AUDIO_SCENE_SR = 44100
 
 
 class WorkerRequest(BaseModel):
     job_id: str
     job_type: Literal[
         "analyze_audio",
+        "analyze_stem",
         "extract_frame",
         "render_master",
         "render_social",
         "render_promo",
         "render_hook",
+        "render_audio_scene",
     ]
     payload: dict[str, Any] = Field(default_factory=dict)
     callback_url: str
@@ -128,6 +135,21 @@ async def ffmpeg(*args: str) -> None:
         raise RuntimeError(f"FFmpeg failed: {detail}")
 
 
+async def decode_analysis_audio(source: Path, target: Path) -> None:
+    await ffmpeg(
+        "-i",
+        str(source),
+        "-vn",
+        "-ac",
+        "2",
+        "-ar",
+        "44100",
+        "-c:a",
+        "pcm_s16le",
+        str(target),
+    )
+
+
 async def analyze_job(payload: dict[str, Any], workdir: Path) -> dict[str, Any]:
     audio_url = str(payload.get("audio_url") or "")
     if not audio_url:
@@ -136,18 +158,7 @@ async def analyze_job(payload: dict[str, Any], workdir: Path) -> dict[str, Any]:
     analysis_path = workdir / "analysis-source.wav"
     await download(audio_url, source_path)
     source_sha256 = await asyncio.to_thread(sha256_file, source_path)
-    await ffmpeg(
-        "-i",
-        str(source_path),
-        "-vn",
-        "-ac",
-        "2",
-        "-ar",
-        "44100",
-        "-c:a",
-        "pcm_s16le",
-        str(analysis_path),
-    )
+    await decode_analysis_audio(source_path, analysis_path)
     analysis_sha256 = await asyncio.to_thread(sha256_file, analysis_path)
     source_audio = {
         "url": str(payload.get("source_audio_url") or audio_url),
@@ -157,6 +168,38 @@ async def analyze_job(payload: dict[str, Any], workdir: Path) -> dict[str, Any]:
     }
     music_map = await asyncio.to_thread(analyze_music, analysis_path, source_audio)
     return {"music_map": music_map}
+
+
+async def analyze_stem_job(payload: dict[str, Any], workdir: Path) -> dict[str, Any]:
+    stem_url = str(payload.get("stem_url") or "")
+    master_url = str(payload.get("master_url") or "")
+    category = str(payload.get("category") or "other").strip().lower() or "other"
+    if not stem_url or not master_url:
+        raise ValueError("stem_url and master_url are required")
+
+    stem_source = workdir / "stem-source"
+    master_source = workdir / "master-source"
+    stem_pcm = workdir / "stem-analysis.wav"
+    master_pcm = workdir / "master-analysis.wav"
+    await asyncio.gather(download(stem_url, stem_source), download(master_url, master_source))
+    stem_source_sha = await asyncio.to_thread(sha256_file, stem_source)
+    await asyncio.gather(decode_analysis_audio(stem_source, stem_pcm), decode_analysis_audio(master_source, master_pcm))
+    stem_pcm_sha = await asyncio.to_thread(sha256_file, stem_pcm)
+    sections_raw = payload.get("sections")
+    sections = [item for item in sections_raw if isinstance(item, dict)] if isinstance(sections_raw, list) else []
+    analysis = await asyncio.to_thread(analyze_stem, stem_pcm, master_pcm, category, sections)
+    alignment = analysis.get("alignment") if isinstance(analysis.get("alignment"), dict) else {}
+    technical = analysis.get("technical") if isinstance(analysis.get("technical"), dict) else {}
+    return {
+        "stem_analysis": analysis,
+        "source_stem_sha256": stem_source_sha,
+        "analysis_pcm_sha256": stem_pcm_sha,
+        "offset_ms": int(alignment.get("offset_ms") or 0),
+        "alignment_confidence": float(alignment.get("confidence") or 0.0),
+        "duration_ms": int(technical.get("duration_ms") or 0) or None,
+        "sample_rate": int(technical.get("source_sample_rate") or 0) or None,
+        "channels": int(technical.get("source_channels") or 0) or None,
+    }
 
 
 def crop_filter(width: int, height: int, fps: int, focus_x: float) -> str:
@@ -265,6 +308,134 @@ async def render_job(payload: dict[str, Any], workdir: Path) -> dict[str, Any]:
     }
 
 
+async def _decode_scene_layer(source: Path, target: Path, source_start_ms: int, duration_ms: int) -> None:
+    args: list[str] = []
+    if source_start_ms > 0:
+        args.extend(["-ss", f"{source_start_ms / 1000.0:.6f}"])
+    args.extend([
+        "-i",
+        str(source),
+        "-vn",
+        "-t",
+        f"{duration_ms / 1000.0:.6f}",
+        "-ac",
+        "2",
+        "-ar",
+        str(AUDIO_SCENE_SR),
+        "-c:a",
+        "pcm_f32le",
+        str(target),
+    ])
+    await ffmpeg(*args)
+
+
+def _fade_curve(length: int, fade_in_samples: int, fade_out_samples: int) -> np.ndarray:
+    curve = np.ones(length, dtype=np.float32)
+    if fade_in_samples > 0:
+        amount = min(length, fade_in_samples)
+        curve[:amount] *= np.linspace(0.0, 1.0, amount, dtype=np.float32)
+    if fade_out_samples > 0:
+        amount = min(length, fade_out_samples)
+        curve[-amount:] *= np.linspace(1.0, 0.0, amount, dtype=np.float32)
+    return curve
+
+
+async def render_audio_scene_job(payload: dict[str, Any], workdir: Path) -> dict[str, Any]:
+    layers = payload.get("layers")
+    upload_url = str(payload.get("upload_url") or "")
+    clip_start_ms = max(0, int(payload.get("clip_start_ms") or 0))
+    clip_end_ms = int(payload.get("clip_end_ms") or 0)
+    if not isinstance(layers, list) or not layers:
+        raise ValueError("Audio Scene layers are required")
+    if not upload_url:
+        raise ValueError("upload_url is required")
+    if clip_end_ms <= clip_start_ms:
+        raise ValueError("Audio Scene clip range is invalid")
+    validate_remote_url(upload_url)
+
+    duration_ms = min(120000, clip_end_ms - clip_start_ms)
+    total_samples = int(math.ceil(duration_ms * AUDIO_SCENE_SR / 1000.0))
+    mix = np.zeros((total_samples, 2), dtype=np.float32)
+
+    for index, layer in enumerate(layers[:24]):
+        if not isinstance(layer, dict):
+            continue
+        url = str(layer.get("url") or "")
+        if not url:
+            continue
+        gain_db = float(layer.get("gain_db") or 0.0)
+        source_offset_ms = int(layer.get("source_offset_ms") or 0)
+        layer_start_ms = max(0, int(layer.get("start_at_ms") or 0))
+        layer_end_ms = int(layer.get("end_at_ms") or duration_ms)
+        layer_end_ms = max(layer_start_ms, min(duration_ms, layer_end_ms))
+        if layer_end_ms <= layer_start_ms:
+            continue
+
+        source_time_at_layer_start = clip_start_ms + layer_start_ms - source_offset_ms
+        source_start_ms = max(0, source_time_at_layer_start)
+        alignment_delay_ms = max(0, -source_time_at_layer_start)
+        effective_start_ms = layer_start_ms + alignment_delay_ms
+        if effective_start_ms >= layer_end_ms:
+            continue
+        requested_ms = max(1, layer_end_ms - effective_start_ms)
+        source = workdir / f"scene-layer-{index:02d}.source"
+        decoded = workdir / f"scene-layer-{index:02d}.wav"
+        await download(url, source)
+        await _decode_scene_layer(source, decoded, source_start_ms, requested_ms)
+        audio, sr = sf.read(decoded, always_2d=True, dtype="float32")
+        if sr != AUDIO_SCENE_SR:
+            raise RuntimeError("Scene decoder returned an unexpected sample rate")
+        if audio.shape[1] == 1:
+            audio = np.repeat(audio, 2, axis=1)
+        elif audio.shape[1] > 2:
+            audio = audio[:, :2]
+
+        start_sample = int(round(effective_start_ms * AUDIO_SCENE_SR / 1000.0))
+        max_length = min(len(audio), total_samples - start_sample)
+        if max_length <= 0:
+            continue
+        audio = audio[:max_length]
+        fade_in = int(max(0, int(layer.get("fade_in_ms") or 0)) * AUDIO_SCENE_SR / 1000.0)
+        fade_out = int(max(0, int(layer.get("fade_out_ms") or 0)) * AUDIO_SCENE_SR / 1000.0)
+        curve = _fade_curve(max_length, fade_in, fade_out)
+        gain = float(10.0 ** (gain_db / 20.0))
+        mix[start_sample:start_sample + max_length] += audio * curve[:, None] * gain
+
+    peak = float(np.max(np.abs(mix))) if mix.size else 0.0
+    ceiling = float(10.0 ** (-1.0 / 20.0))
+    gain_reduction_db = 0.0
+    if peak > ceiling and peak > 1e-9:
+        scale = ceiling / peak
+        mix *= scale
+        gain_reduction_db = 20.0 * math.log10(scale)
+
+    wav_output = workdir / "audio-scene.wav"
+    mp3_output = workdir / "audio-scene.mp3"
+    sf.write(wav_output, mix, AUDIO_SCENE_SR, subtype="PCM_24")
+    await ffmpeg(
+        "-i",
+        str(wav_output),
+        "-c:a",
+        "libmp3lame",
+        "-b:a",
+        "320k",
+        "-ar",
+        str(AUDIO_SCENE_SR),
+        str(mp3_output),
+    )
+    await upload_file(upload_url, mp3_output, "audio/mpeg")
+    return {
+        "uploaded": True,
+        "file_size": mp3_output.stat().st_size,
+        "mime_type": "audio/mpeg",
+        "duration_ms": duration_ms,
+        "sample_rate": AUDIO_SCENE_SR,
+        "layer_count": len(layers),
+        "peak_before_limiter": peak,
+        "gain_reduction_db": gain_reduction_db,
+    }
+
+
 async def extract_frame_job(payload: dict[str, Any], workdir: Path) -> dict[str, Any]:
     source_url = str(payload.get("source_url") or "")
     upload_url = str(payload.get("upload_url") or "")
@@ -339,8 +510,12 @@ async def execute(request: WorkerRequest) -> str:
             workdir = Path(directory)
             if request.job_type == "analyze_audio":
                 result = await analyze_job(request.payload, workdir)
+            elif request.job_type == "analyze_stem":
+                result = await analyze_stem_job(request.payload, workdir)
             elif request.job_type == "extract_frame":
                 result = await extract_frame_job(request.payload, workdir)
+            elif request.job_type == "render_audio_scene":
+                result = await render_audio_scene_job(request.payload, workdir)
             elif request.job_type in {"render_master", "render_social", "render_promo", "render_hook"}:
                 result = await render_job(request.payload, workdir)
             else:
