@@ -1,9 +1,10 @@
 import "server-only";
 
-import { atlasAiGatewayConfigured, normalizeGatewayModel } from "@/lib/ai/gateway";
+import { atlasAiGatewayConfigured } from "@/lib/ai/gateway";
 import { runAtlasAiTask } from "@/lib/ai/control-plane";
 import { strictQualityResult, type AtlasQualityGate } from "@/lib/ai/quality";
-import type { AtlasAiTaskType } from "@/lib/ai/tasks";
+import { atlasAiTaskPolicy, type AtlasAiTaskType } from "@/lib/ai/tasks";
+import { conciseLyricsPromptContext } from "@/lib/lyrics-intelligence/context";
 import type {
   MusicVideoCreativeDirector,
   ProductionPlan,
@@ -86,6 +87,7 @@ function compactContext(context: VideoProjectContext) {
     track: { title: context.track.title, duration_seconds: context.track.duration, notes: context.track.notes },
     release: { title: context.release.title, story: context.release.story, core_emotion: context.release.core_emotion, audience: context.release.audience, primary_hook: context.release.primary_hook, visual_direction: context.release.visual_direction, color_palette: context.release.color_palette, release_identity: context.release.release_identity, story_answers: context.release.story_answers },
     music_map: context.musicMap,
+    lyrics_intelligence: conciseLyricsPromptContext(context.lyrics),
     brand_settings: context.brandSettings,
     available_media: context.media.map((asset) => ({ id: asset.id, type: asset.asset_type, mime: asset.mime_type, metadata: asset.metadata, has_url: Boolean(asset.public_url) })),
     learned_preferences: context.preferences,
@@ -97,6 +99,9 @@ const DIRECTOR_INSTRUCTIONS = `You are the creative director for Atlas Irwin, an
 Creative requirements:
 - Build one memorable visual system or premise that can evolve across the whole track.
 - Respond to the actual music map, section changes, peaks, breakdowns and edit points.
+- Treat Lyrics Intelligence as song-specific narrative evidence: use its themes, imagery, emotional arc and timed Lyric Moments to shape visual causality, concepts and edit payoffs. Do not default to literal lyric illustration.
+- When a Lyric Moment has timing, combine that timing with the music map and stem-aware Audio Scenes so lyrical meaning and musical payoff reinforce one another.
+- Only quote lyric text that the supplied Lyrics Intelligence explicitly marks as mayQuote=true. Never invent, complete, reconstruct or paraphrase text as if it were an official lyric.
 - Prefer tactile, physical-looking materials, purposeful camera language and visual causality.
 - Avoid generic cyberpunk, purple neon cities, random nightclub crowds, generic fashion models, floating particles, meaningless abstract blobs, literal audio visualizers and disconnected pretty shots unless the supplied context explicitly asks for them.
 - Reuse worlds, motifs, props and visual grammar for continuity.
@@ -107,6 +112,14 @@ Creative requirements:
 - The first timeline shot must create its own source with reuse_strategy=unique. Later editorial reuse may only refer backward to an established source.
 - test_shot_indexes must refer only to unique or continuation source shots that can actually be generated and reviewed.
 - The final result must feel intentional, premium, strange enough to be memorable, and recognizably part of one Atlas Irwin world.`;
+
+export function openAIDirectorReadiness() {
+  const policy = atlasAiTaskPolicy("video.concepts");
+  return {
+    configured: atlasAiGatewayConfigured(),
+    model: policy.models[0] ?? "auto via Atlas AI Control Plane",
+  };
+}
 
 async function structuredResponse<T>({
   context,
@@ -200,8 +213,6 @@ function shotQualityGate(): AtlasQualityGate<StoryboardShot> {
   ]);
 }
 
-// Kept under the existing export name so Studio actions do not need a migration.
-// The implementation is provider-agnostic and all reasoning now runs through Atlas AI Control Plane.
 export class OpenAIMusicVideoDirector implements MusicVideoCreativeDirector {
   async createConcepts(context: VideoProjectContext): Promise<VideoConcept[]> {
     const result = await structuredResponse<{ concepts: VideoConcept[] }>({
@@ -286,12 +297,4 @@ function validatePlanTimeline(plan: ProductionPlan, context: VideoProjectContext
       throw new Error(`Creative Director test shot ${index + 1} is editorial-only and cannot be generated as a representative test.`);
     }
   }
-}
-
-export function openAIDirectorReadiness() {
-  const model = normalizeGatewayModel(process.env.VIDEO_DIRECTOR_LLM_MODEL?.trim() || "openai/gpt-5.6-sol");
-  return {
-    configured: Boolean(atlasAiGatewayConfigured() && model),
-    model: model || "Not configured",
-  };
 }

@@ -1,10 +1,13 @@
 import "server-only";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { atlasAiGatewayConfigured } from "@/lib/ai/gateway";
 import { runAtlasAiTask } from "@/lib/ai/control-plane";
 import { strictQualityResult, type AtlasQualityGate } from "@/lib/ai/quality";
 import type { AtlasAiTaskType } from "@/lib/ai/tasks";
+import { conciseLyricsPromptContext, loadTrackLyricsContext } from "@/lib/lyrics-intelligence/context";
+import type { LyricsDatabase } from "@/types/lyrics-database";
 
 export type MarketingTextProvider = "vercel-gateway" | "openai" | "google" | "zai";
 export type MarketingTextPreset = "economy" | "balanced" | "premium";
@@ -49,6 +52,58 @@ function taskForName(name: string): AtlasAiTaskType {
 function parseInputContext(input: string) {
   try { return asRecord(JSON.parse(input)); }
   catch { return {}; }
+}
+
+function releaseIdFromContext(context: Record<string, unknown>) {
+  const release = asRecord(context.release);
+  const content = asRecord(context.content);
+  return stringValue(release.id)
+    || stringValue(context.releaseId)
+    || stringValue(context.release_id)
+    || stringValue(content.releaseId)
+    || stringValue(content.release_id)
+    || null;
+}
+
+async function enrichMarketingContextWithLyrics({
+  context,
+  supabase,
+  ownerId,
+}: {
+  context: Record<string, unknown>;
+  supabase: SupabaseClient;
+  ownerId: string;
+}) {
+  if ("lyricsIntelligence" in context) return context;
+  const releaseId = releaseIdFromContext(context);
+  if (!releaseId) return context;
+
+  try {
+    const { data: tracks, error } = await supabase
+      .from("tracks")
+      .select("id,is_primary")
+      .eq("owner_id", ownerId)
+      .eq("release_id", releaseId)
+      .order("is_primary", { ascending: false });
+    if (error) throw new Error(error.message);
+    const primaryTrack = tracks?.[0];
+    if (!primaryTrack?.id) return context;
+
+    const lyrics = await loadTrackLyricsContext(
+      supabase as unknown as SupabaseClient<LyricsDatabase>,
+      primaryTrack.id,
+      ownerId,
+    );
+    return {
+      ...context,
+      lyricsIntelligence: conciseLyricsPromptContext(lyrics),
+    };
+  } catch (error) {
+    // Lyrics are optional context. A migration/read problem must not prevent otherwise valid
+    // campaign or caption work; it should remain visible in server logs for repair.
+    console.warn("Unable to enrich marketing AI with Lyrics Intelligence:", error instanceof Error ? error.message : error);
+    return context;
+  }
 }
 
 function campaignQualityGate(input: string): AtlasQualityGate<unknown> {
@@ -121,20 +176,26 @@ export async function generateStructured<T>({
     );
   }
 
-  const { user } = await requireStudioAdmin();
-  const inputContext = parseInputContext(input);
-  const release = asRecord(inputContext.release);
+  const { supabase, user } = await requireStudioAdmin();
+  const parsedInputContext = parseInputContext(input);
+  const inputContext = await enrichMarketingContextWithLyrics({
+    context: parsedInputContext,
+    supabase: supabase as unknown as SupabaseClient,
+    ownerId: user.id,
+  });
+  const enrichedInput = JSON.stringify(inputContext, null, 2);
+  const releaseId = releaseIdFromContext(inputContext);
   const result = await runAtlasAiTask<T>({
     ownerId: user.id,
     task: taskForName(name),
     purpose: name === "atlas_campaign_plan" ? "campaign_plan" : name,
-    releaseId: stringValue(release.id) || null,
-    promptVersion: name === "atlas_campaign_plan" ? "marketing-v2" : "marketing-control-v1",
+    releaseId,
+    promptVersion: name === "atlas_campaign_plan" ? "marketing-v3-lyrics" : "marketing-control-v2-lyrics",
     schema,
-    instructions,
-    input,
+    instructions: `${instructions}\n\nLYRICS INTELLIGENCE RULES:\nWhen lyricsIntelligence is present, treat it as authoritative song-specific narrative context. It may inform hooks, captions, visual briefs and campaign angles. Quote only excerpts explicitly supplied with mayQuote=true. Never invent, complete, reconstruct or paraphrase text as if it were an official lyric. If quoting is disabled, use only semantic themes and meaning without reproducing lyric text.`,
+    input: enrichedInput,
     inputContext,
-    qualityGate: qualityGateFor<T>(name, input),
+    qualityGate: qualityGateFor<T>(name, enrichedInput),
   });
 
   return {

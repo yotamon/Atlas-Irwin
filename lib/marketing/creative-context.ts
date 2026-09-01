@@ -1,8 +1,10 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { conciseLyricsPromptContext, EMPTY_LYRICS_CONTEXT, loadTrackLyricsContext, type TrackLyricsContext } from "@/lib/lyrics-intelligence/context";
 import { mediaKind, mediaMetadata } from "@/lib/studio/media";
 import type { Json, MediaAsset, MediaLink } from "@/types/database";
+import type { LyricsDatabase } from "@/types/lyrics-database";
 import type { AudioScene, StemDatabase } from "@/types/stem-database";
 import type { VideoDatabase } from "@/types/video-database";
 
@@ -55,6 +57,7 @@ export type CreativeReferenceContext = {
   audioReferenceUrl: string | null;
   audioScenes: CreativeAudioSceneReference[];
   selectedAudioScene: CreativeAudioSceneReference | null;
+  lyrics: TrackLyricsContext;
   cohesionScore: number;
   referenceSummary: string;
 };
@@ -146,12 +149,21 @@ function summarizeReferences(
   videoReferences: CreativeReference[],
   artworkUrl: string | null,
   audioScene: CreativeAudioSceneReference | null,
+  lyrics: TrackLyricsContext,
 ) {
+  const lyricSummary = lyrics.instrumental
+    ? "instrumental track"
+    : lyrics.analysisCurrent
+      ? `Lyrics Intelligence v${lyrics.version} active`
+      : lyrics.available
+        ? "official lyrics available; semantic intelligence pending"
+        : "no lyrics source";
   const parts = [
     artworkUrl ? "release artwork locked as primary anchor" : "no release artwork available",
     imageReferences.length ? `${imageReferences.length} image reference${imageReferences.length === 1 ? "" : "s"}` : "no reusable image references",
     videoReferences.length ? `${videoReferences.length} motion reference${videoReferences.length === 1 ? "" : "s"}` : "no motion reference",
     audioScene ? `${audioScene.name} selected as the musical treatment` : "canonical master remains the audio reference",
+    lyricSummary,
   ];
   return parts.join("; ");
 }
@@ -211,8 +223,24 @@ function toAudioSceneReference(scene: AudioScene, previewUrl: string | null, sel
   };
 }
 
+function lyricSceneContext(lyrics: TrackLyricsContext, contentText: string) {
+  if (!lyrics.analysisCurrent || lyrics.instrumental || !lyrics.allowAiContext) return "";
+  const content = contentText.toLowerCase();
+  const quotedHook = lyrics.hooks.some((hook) => hook.mayQuote && hook.text.length >= 4 && content.includes(hook.text.toLowerCase()));
+  const quotedMoment = lyrics.moments.some((moment) => moment.mayQuote && moment.excerpt.length >= 4 && content.includes(moment.excerpt.toLowerCase()));
+  return [
+    lyrics.summary,
+    lyrics.coreMeaning,
+    lyrics.themes.join(" "),
+    lyrics.imagery.join(" "),
+    lyrics.moments.flatMap((moment) => moment.purposeTags).join(" "),
+    quotedHook || quotedMoment ? "lyrics vocal phrase" : "",
+  ].filter(Boolean).join(" ");
+}
+
 export async function loadCreativeReferenceContext({ db, ownerId, releaseId, contentItemId }: ContextInput): Promise<CreativeReferenceContext> {
   const stemDb = db as unknown as SupabaseClient<StemDatabase>;
+  const lyricsDb = db as unknown as SupabaseClient<LyricsDatabase>;
   const [releaseResult, brandResult, assetResult, linkResult, tracksResult, contentResult] = await Promise.all([
     releaseId
       ? db.from("releases")
@@ -315,6 +343,9 @@ export async function loadCreativeReferenceContext({ db, ownerId, releaseId, con
     .find((asset) => httpUrl(asset?.public_url));
   const primaryTrack = (tracksResult.data ?? []).find((track) => track.is_primary) ?? tracksResult.data?.[0];
   const canonicalAudioUrl = httpUrl(linkedMaster?.public_url) || httpUrl(primaryTrack?.audio_url);
+  const lyrics = primaryTrack?.id
+    ? await loadTrackLyricsContext(lyricsDb, primaryTrack.id, ownerId)
+    : EMPTY_LYRICS_CONTEXT;
 
   let audioScenes: CreativeAudioSceneReference[] = [];
   let selectedAudioScene: CreativeAudioSceneReference | null = null;
@@ -329,13 +360,14 @@ export async function loadCreativeReferenceContext({ db, ownerId, releaseId, con
     if (sceneResult.error) throw new Error(sceneResult.error.message);
     const scenes = (sceneResult.data ?? []) as AudioScene[];
     const content = contentResult.data;
-    const contextText = [
+    const contentText = [
       content?.title,
       content?.format,
       content?.platform,
       content?.hook_text,
       content?.production_notes,
     ].filter((value): value is string => typeof value === "string" && Boolean(value.trim())).join(" ");
+    const contextText = [contentText, lyricSceneContext(lyrics, contentText)].filter(Boolean).join(" ");
     const platform = typeof content?.platform === "string" ? content.platform : "";
     const explicitId = typeof content?.audio_scene_id === "string" ? content.audio_scene_id : null;
     const ranked = scenes
@@ -346,7 +378,7 @@ export async function loadCreativeReferenceContext({ db, ownerId, releaseId, con
       const preview = scene.preview_asset_id ? assetById.get(scene.preview_asset_id) : null;
       const reason = explicitId === scene.id
         ? "Artist-selected Audio Scene for this content item."
-        : `Atlas content-fit score ${Math.round(fit)} based on the brief, format, platform and musical intent.`;
+        : `Atlas content-fit score ${Math.round(fit)} based on the brief, platform, Lyrics Intelligence and musical intent.`;
       return toAudioSceneReference(scene, httpUrl(preview?.public_url), reason);
     });
     if (selected) {
@@ -391,8 +423,9 @@ export async function loadCreativeReferenceContext({ db, ownerId, releaseId, con
     audioReferenceUrl,
     audioScenes,
     selectedAudioScene,
+    lyrics,
     cohesionScore,
-    referenceSummary: summarizeReferences(imageReferences, videoReferences, artworkUrl, selectedAudioScene),
+    referenceSummary: summarizeReferences(imageReferences, videoReferences, artworkUrl, selectedAudioScene, lyrics),
   };
 }
 
@@ -427,6 +460,7 @@ export function buildCohesiveVisualPrompt(input: {
         "For video, let shot density, movement, reveals and transitions follow this treatment. Do not simply put unrelated motion over the track. For a progressive reveal, visually add complexity as musical layers enter; for a vocal spotlight, simplify the frame and protect lyrical focus; for groove, make motion feel rhythm-led; for vocal-to-drop or full-impact, reserve the strongest visual change for the payoff.",
       ].filter(Boolean).join("\n")
     : "No derived Audio Scene is selected. Use the canonical master and Track Intelligence timing as the musical reference.";
+  const lyricsDirection = JSON.stringify(conciseLyricsPromptContext(context.lyrics), null, 2);
 
   return [
     `Create one ${input.outputKind} asset for Atlas Irwin: ${input.contentTitle}.`,
@@ -442,6 +476,9 @@ export function buildCohesiveVisualPrompt(input: {
     `Continuity rule: ${context.brand.continuityRules}`,
     referenceManifest,
     motionManifest,
+    "LYRICAL / NARRATIVE DIRECTION:",
+    lyricsDirection,
+    "Use Lyrics Intelligence as song-specific narrative evidence. It can shape concept, imagery, emotional progression and edit logic even when no lyric text appears on screen. If the context says an excerpt may not be quoted, do not reconstruct, paraphrase or display it as if it were an official lyric.",
     "MUSICAL DIRECTION:",
     audioDirection,
     "REFERENCE HANDLING:",

@@ -1,9 +1,11 @@
 import "server-only";
 
 import type { Json } from "@/types/database";
+import type { LyricsDatabase } from "@/types/lyrics-database";
 import type { AudioScene, StemDatabase } from "@/types/stem-database";
 import type { ExtendedMusicVideoProject, VideoDatabase } from "@/types/video-database";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { loadTrackLyricsContext } from "@/lib/lyrics-intelligence/context";
 import { parseMusicMap, type DirectorPreferences, type MusicMap, type VideoProjectContext } from "./creative-director";
 
 function stringArray(value: Json): string[] {
@@ -49,7 +51,8 @@ export async function loadVideoProjectContext(
   if (projectError || !project) throw new Error(projectError?.message || "Music video project not found.");
 
   const stemDb = db as unknown as SupabaseClient<StemDatabase>;
-  const [releaseResult, trackResult, brandResult, linkResult, preferenceResult, sceneResult] = await Promise.all([
+  const lyricsDb = db as unknown as SupabaseClient<LyricsDatabase>;
+  const [releaseResult, trackResult, brandResult, linkResult, preferenceResult, sceneResult, lyrics] = await Promise.all([
     db.from("releases").select("*").eq("id", project.release_id).eq("owner_id", ownerId).single(),
     db.from("tracks").select("*").eq("id", project.track_id).eq("owner_id", ownerId).single(),
     db.from("brand_settings").select("content").eq("owner_id", ownerId).order("section"),
@@ -64,6 +67,7 @@ export async function loadVideoProjectContext(
       .eq("status", "ready")
       .order("is_pinned", { ascending: false })
       .order("score", { ascending: false, nullsFirst: false }),
+    loadTrackLyricsContext(lyricsDb, project.track_id, ownerId),
   ]);
 
   if (releaseResult.error || !releaseResult.data) throw new Error(releaseResult.error?.message || "Release not found.");
@@ -93,6 +97,7 @@ export async function loadVideoProjectContext(
     release: releaseResult.data,
     track: trackResult.data,
     musicMap: stemAwareMusicMap(project.music_map, (sceneResult.data ?? []) as AudioScene[]),
+    lyrics,
     brandSettings: (brandResult.data ?? []).map((item) => item.content),
     media: media ?? [],
     preferences,
