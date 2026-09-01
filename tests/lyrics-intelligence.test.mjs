@@ -30,6 +30,19 @@ test("canonical lyrics are versioned human truth with immutable revision history
   assert.ok(privileges.includes("grant select, insert, delete on table public.track_lyric_moments to authenticated"));
 });
 
+test("Lyrics Intelligence foreign keys remain indexed", async () => {
+  const indexes = await source("supabase/migrations/20260901130933_lyrics_intelligence_fk_indexes.sql");
+  for (const index of [
+    "track_lyrics_revisions_owner_idx",
+    "track_lyric_sections_owner_idx",
+    "track_lyric_lines_lyrics_idx",
+    "track_lyric_lines_owner_idx",
+    "track_lyrics_analysis_owner_idx",
+    "track_lyric_moments_lyrics_idx",
+    "track_lyric_moments_owner_idx",
+  ]) assert.ok(indexes.includes(index), `missing Lyrics Intelligence FK index ${index}`);
+});
+
 test("master replacement preserves words and semantics while invalidating only derived lyric timing", async () => {
   const migration = await source("supabase/migrations/20260901130402_lyrics_intelligence.sql");
   const start = migration.indexOf("create or replace function private.invalidate_lyric_timing_on_audio_change");
