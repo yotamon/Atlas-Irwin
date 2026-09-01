@@ -7,8 +7,8 @@ async function source(path) {
 }
 
 test("canonical lyrics are versioned human truth with immutable revision history", async () => {
-  const migration = await source("supabase/migrations/20260901160000_lyrics_intelligence.sql");
-  const hardening = await source("supabase/migrations/20260901160100_lyrics_intelligence_hardening.sql");
+  const migration = await source("supabase/migrations/20260901130402_lyrics_intelligence.sql");
+  const hardening = await source("supabase/migrations/20260901130501_lyrics_intelligence_hardening.sql");
 
   assert.ok(migration.includes("create table public.track_lyrics"));
   assert.ok(migration.includes("canonical_text text not null"));
@@ -23,7 +23,7 @@ test("canonical lyrics are versioned human truth with immutable revision history
 });
 
 test("master replacement preserves words and semantics while invalidating only derived lyric timing", async () => {
-  const migration = await source("supabase/migrations/20260901160000_lyrics_intelligence.sql");
+  const migration = await source("supabase/migrations/20260901130402_lyrics_intelligence.sql");
   const start = migration.indexOf("create or replace function private.invalidate_lyric_timing_on_audio_change");
   const end = migration.indexOf("drop trigger if exists invalidate_lyric_timing_on_audio_change");
   assert.ok(start >= 0 && end > start);
