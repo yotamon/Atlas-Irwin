@@ -4,7 +4,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { Sandbox } from "@vercel/sandbox";
 
 export const MEDIA_WORKER_CALLBACK_HASH_KEY = "__atlas_callback_token_sha256";
-const MEDIA_WORKER_RUNTIME_VERSION = 7;
+const MEDIA_WORKER_RUNTIME_VERSION = 8;
 const MEDIA_WORKER_BOOTSTRAP_VERSION = 4;
 const MEDIA_WORKER_PYTHON_VERSION = "3.13.14";
 const MEDIA_WORKER_SANDBOX_IMAGE = "vercel/sandbox/universal@sha256:0e3e3617e824397f170fc7c43ccaa565dd7ac36518e83ead3d41e077cd9f6ec7";
@@ -239,7 +239,8 @@ export async function dispatchMediaWorkerJob(input: {
     | "render_social"
     | "render_promo"
     | "render_hook"
-    | "render_audio_scene";
+    | "render_audio_scene"
+    | "finish_social_video";
   payload: Record<string, unknown>;
   callbackUrl: string;
   callbackToken: string;
@@ -291,11 +292,21 @@ export function scheduleMediaWorkerSandboxCleanup() {
     // Terminal callbacks invoke this only after durable state has been reconciled. Give the
     // detached runner a moment to release its lock, then dispatch the oldest queued job.
     await new Promise((resolve) => setTimeout(resolve, 1200));
+    let dispatched = false;
     try {
       const { kickMediaWorkerQueue } = await import("@/lib/media-worker/queue");
-      await kickMediaWorkerQueue();
+      const result = await kickMediaWorkerQueue();
+      dispatched = result.dispatched;
     } catch {
-      // Queue work is durable. A later enqueue/callback/request will kick it again.
+      // Existing queue work is durable. Give marketing finishing a chance below.
+    }
+    if (!dispatched) {
+      try {
+        const { kickMarketingMediaWorkerQueue } = await import("@/lib/marketing/media-worker-queue");
+        await kickMarketingMediaWorkerQueue();
+      } catch {
+        // Marketing media work is durable. A later enqueue/callback/request will kick it again.
+      }
     }
   };
 }
