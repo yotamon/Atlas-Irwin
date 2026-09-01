@@ -12,6 +12,8 @@ export type CreativeQualityProfile = (typeof CREATIVE_QUALITY_PROFILES)[number];
 export const CREATIVE_MEDIA_KINDS = ["auto", "image", "video"] as const;
 export type CreativeMediaKindPreference = (typeof CREATIVE_MEDIA_KINDS)[number];
 
+type CreativeAspectRatio = CreativeGenerationRequest["aspectRatio"];
+
 export type CreativeRouteInput = {
   platform: string;
   format: string;
@@ -40,7 +42,7 @@ function autoOutputKind(format: string): "image" | "video" {
   return "image";
 }
 
-function aspectRatio(platform: string, format: string, outputKind: "image" | "video"): "9:16" | "4:5" | "1:1" {
+function aspectRatio(platform: string, format: string, outputKind: "image" | "video"): CreativeAspectRatio {
   const normalized = `${platform} ${format}`.toLowerCase();
   if (normalized.includes("newsletter") || normalized.includes("outreach")) return "1:1";
   if (outputKind === "image" && (
@@ -56,8 +58,18 @@ function providerAvailability() {
   return new Map(creativeProviderReadiness().map((provider) => [provider.id, provider.configured]));
 }
 
-function chooseCandidate(quality: CreativePreset, outputKind: "image" | "video") {
-  const candidates = creativeCandidates(quality, outputKind);
+function routeCompatible(provider: CreativeProviderId, outputKind: "image" | "video", ratio: CreativeAspectRatio) {
+  // The current BFL adapter translates unknown ratios to square dimensions. Until it
+  // has explicit 4:5 dimension support, silently routing portrait feed work there
+  // would violate the platform package contract.
+  if (outputKind === "image" && ratio === "4:5" && provider === "bfl") return false;
+  return true;
+}
+
+function chooseCandidate(quality: CreativePreset, outputKind: "image" | "video", ratio: CreativeAspectRatio) {
+  const allCandidates = creativeCandidates(quality, outputKind);
+  const compatibleCandidates = allCandidates.filter((candidate) => routeCompatible(candidate.provider, outputKind, ratio));
+  const candidates = compatibleCandidates.length ? compatibleCandidates : allCandidates;
   const availability = providerAvailability();
   const configured = candidates.find((candidate) => availability.get(candidate.provider));
   return {
@@ -132,7 +144,7 @@ function higgsfieldParams(model: string, input: CreativeRouteInput) {
 export function routeMarketingCreative(input: CreativeRouteInput): CreativeRoute {
   const outputKind = input.mediaKind === "auto" ? autoOutputKind(input.format) : input.mediaKind;
   const ratio = aspectRatio(input.platform, input.format, outputKind);
-  const selected = chooseCandidate(input.quality, outputKind);
+  const selected = chooseCandidate(input.quality, outputKind, ratio);
   let model = selected.candidate.model;
   if (selected.candidate.provider === "higgsfield" && model === "auto_premium") model = higgsfieldPremiumModel(input);
   const provider = selected.candidate.provider;
@@ -141,7 +153,8 @@ export function routeMarketingCreative(input: CreativeRouteInput): CreativeRoute
     : selected.configured
       ? ""
       : `${selected.preferred.label} is the preferred route but is not connected yet. `;
-  const reason = `${fallbackPrefix}${selected.candidate.label}. ${selected.candidate.reason} ${input.context.imageReferences.length} ranked image reference${input.context.imageReferences.length === 1 ? "" : "s"} are available from visual lineage.`;
+  const compatibilityNote = ratio === "4:5" ? " Native 4:5 compatibility is required for this package." : "";
+  const reason = `${fallbackPrefix}${selected.candidate.label}. ${selected.candidate.reason}${compatibilityNote} ${input.context.imageReferences.length} ranked image reference${input.context.imageReferences.length === 1 ? "" : "s"} are available from visual lineage.`;
 
   if (outputKind === "image") {
     return {
