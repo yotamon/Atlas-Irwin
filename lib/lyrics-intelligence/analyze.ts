@@ -132,6 +132,7 @@ export async function analyzeTrackLyrics({
   if (lyricsError || !lyrics) throw new Error(lyricsError?.message || "Official lyrics not found.");
   const document = lyrics as TrackLyrics;
   if (document.status === "instrumental") throw new Error("Instrumental tracks do not need Lyrics Intelligence analysis.");
+  if (!document.allow_ai_context) throw new Error("Enable 'Use lyrics for creative intelligence' before analyzing Lyrics Intelligence.");
 
   const { data: sections, error: sectionsError } = await db.from("track_lyric_sections")
     .select("*")
