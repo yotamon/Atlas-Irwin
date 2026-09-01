@@ -24,6 +24,8 @@ type ResolvedLayer = {
 };
 
 type LayerGraph = {
+  element: HTMLAudioElement;
+  source: MediaElementAudioSourceNode;
   gain: GainNode;
 };
 
@@ -170,13 +172,19 @@ export function AudioSceneLivePlayer({
     const bus = busRef.current;
     if (!context || !bus) throw new Error("Could not initialize the live Audio Scene mixer.");
     for (const layer of layers) {
-      if (graphs.current.has(layer.key)) continue;
       const element = audioRefs.current.get(layer.key);
       if (!element) continue;
+      const existing = graphs.current.get(layer.key);
+      if (existing?.element === element) continue;
+      if (existing) {
+        existing.source.disconnect();
+        existing.gain.disconnect();
+        graphs.current.delete(layer.key);
+      }
       const source = context.createMediaElementSource(element);
       const gain = context.createGain();
       source.connect(gain).connect(bus);
-      graphs.current.set(layer.key, { gain });
+      graphs.current.set(layer.key, { element, source, gain });
     }
     await context.resume();
   }
@@ -305,13 +313,22 @@ export function AudioSceneLivePlayer({
       window.removeEventListener("atlas-audio-scene-play", stopOtherPlayer);
       if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
       for (const element of audioRefs.current.values()) element.pause();
+      for (const graph of graphs.current.values()) {
+        graph.source.disconnect();
+        graph.gain.disconnect();
+      }
+      graphs.current.clear();
       void contextRef.current?.close();
     };
+    // pause() deliberately reads the latest refs; re-registering this global listener on every render is unnecessary.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instanceId]);
 
   useEffect(() => {
     pause(true);
-    graphs.current.clear();
+    // Keep existing MediaElementSource nodes attached. Browsers allow only one source node per media element.
+    // ensureGraph() reconnects only when React has actually replaced an element.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recipe, startMs, endMs]);
 
   return (
