@@ -51,7 +51,7 @@ export async function removeDistributionTrackContributor(form: FormData) {
 }
 
 export async function prepareDistributionCatalog(form: FormData) {
-  return runReleaseAction(form, actions.prepareDistributionCatalog, "Distribution package prepared and provider catalog synchronized.");
+  return runReleaseAction(form, actions.prepareDistributionCatalog, "Distribution package synchronized. Run full preflight before final approval.");
 }
 
 export async function runDistributionPreflight(form: FormData) {
@@ -59,11 +59,15 @@ export async function runDistributionPreflight(form: FormData) {
 }
 
 export async function submitDistribution(form: FormData) {
-  return runReleaseAction(form, actions.submitDistribution, "Release submitted for distribution.");
+  return runReleaseAction(form, actions.submitDistribution, "Release submitted to the selected music services.");
 }
 
 export async function syncDistributionStatus(form: FormData) {
-  return runReleaseAction(form, actions.syncDistributionStatus, "Distribution status refreshed.");
+  return runReleaseAction(form, actions.syncDistributionStatus, "Distribution status and provider identifiers refreshed.");
+}
+
+export async function beginDistributionUpdate(form: FormData) {
+  return runReleaseAction(form, actions.beginDistributionUpdate, "Correction mode started. Make the allowed metadata changes, synchronize the package, run full preflight, then approve the resend.");
 }
 
 export async function requestDistributionTakedown(form: FormData) {
