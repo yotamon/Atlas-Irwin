@@ -1,10 +1,10 @@
 "use server";
 
+export { prepareDistributionCatalog } from "./distribution-catalog-action";
 export {
   addDistributionTrackContributor,
   addDistributionTrackWriter,
   linkDistributionProviderRelease,
-  prepareDistributionCatalog,
   removeDistributionTrackContributor,
   removeDistributionTrackWriter,
   runDistributionPreflight,
