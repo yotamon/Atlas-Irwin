@@ -182,18 +182,19 @@ export async function prepareDistributionCatalog(form: FormData) {
   const existingResult = await db.from("distribution_provider_operations").select("*").eq("owner_id", user.id).eq("provider", "revelator").eq("operation_key", operationKey).maybeSingle();
   if (existingResult.error) throw new Error(existingResult.error.message);
   const existing = existingResult.data;
+  const providerConfiguration = { releaseDate: input.releaseDate, ugcEnabled: rights.ugc.enabled };
   if (existing?.state === "completed" && existing.provider_resource_id) {
-    await getDistributionProvider().configureRelease(existing.provider_resource_id, { releaseDate: input.releaseDate });
+    await getDistributionProvider().configureRelease(existing.provider_resource_id, providerConfiguration);
     refresh(releaseId);
     return;
   }
   if (existing && ["started", "ambiguous"].includes(existing.state)) throw new Error(operationType === "prepare_catalog" ? "A previous provider creation is unresolved. Ensemblis will not risk creating a duplicate release; reconcile it in Operations." : "A previous provider catalog update is unresolved. Reconcile it before sending another update.");
   const now = new Date().toISOString();
   if (existing) {
-    const restart = await db.from("distribution_provider_operations").update({ state: "started", request_snapshot: asJson(input), result_snapshot: {}, provider_resource_id: config?.provider_release_id ?? null, error: null, started_at: now, completed_at: null }).eq("id", existing.id).eq("owner_id", user.id);
+    const restart = await db.from("distribution_provider_operations").update({ state: "started", request_snapshot: asJson({ catalog: input, configuration: providerConfiguration }), result_snapshot: {}, provider_resource_id: config?.provider_release_id ?? null, error: null, started_at: now, completed_at: null }).eq("id", existing.id).eq("owner_id", user.id);
     if (restart.error) throw new Error(restart.error.message);
   } else {
-    const start = await db.from("distribution_provider_operations").insert({ owner_id: user.id, release_id: releaseId, provider: "revelator", operation_type: operationType, operation_key: operationKey, state: "started", request_snapshot: asJson(input), provider_resource_id: config?.provider_release_id ?? null });
+    const start = await db.from("distribution_provider_operations").insert({ owner_id: user.id, release_id: releaseId, provider: "revelator", operation_type: operationType, operation_key: operationKey, state: "started", request_snapshot: asJson({ catalog: input, configuration: providerConfiguration }), provider_resource_id: config?.provider_release_id ?? null });
     if (start.error) throw new Error(start.error.message);
   }
 
@@ -228,11 +229,12 @@ export async function prepareDistributionCatalog(form: FormData) {
   if (operationWrite.error) throw new Error(operationWrite.error.message);
 
   try {
-    await provider.configureRelease(prepared.providerReleaseId, { releaseDate: input.releaseDate });
+    const configurationResult = await provider.configureRelease(prepared.providerReleaseId, providerConfiguration);
+    await db.from("release_distribution_configs").update({ provider_metadata: asJson({ ...object(config?.provider_metadata), preparedAt: completedAt, packageHash, supplyChainConfiguredAt: new Date().toISOString(), supplyChainConfiguration: configurationResult }) }).eq("release_id", releaseId).eq("owner_id", user.id);
   } catch (error) {
-    await db.from("release_distribution_configs").update({ state: "needs_attention", provider_metadata: asJson({ ...object(config?.provider_metadata), preparedAt: completedAt, packageHash, scheduleError: error instanceof Error ? error.message : "Unknown schedule configuration error" }) }).eq("release_id", releaseId).eq("owner_id", user.id);
+    await db.from("release_distribution_configs").update({ state: "needs_attention", provider_metadata: asJson({ ...object(config?.provider_metadata), preparedAt: completedAt, packageHash, supplyChainError: error instanceof Error ? error.message : "Unknown supply-chain configuration error" }) }).eq("release_id", releaseId).eq("owner_id", user.id);
     refresh(releaseId);
-    throw new Error(`The provider catalog package is synchronized, but release scheduling needs attention: ${error instanceof Error ? error.message : "unknown provider error"}`);
+    throw new Error(`The provider catalog package is synchronized, but supply-chain configuration needs attention: ${error instanceof Error ? error.message : "unknown provider error"}`);
   }
   refresh(releaseId);
 }
