@@ -21,11 +21,24 @@ export type DistributionUpdateBaseline = {
   destinationSnapshot: Json;
 };
 
+export type DistributionProviderAssignedIdentity = {
+  upc?: string | null;
+  tracks?: Array<{
+    trackId: string;
+    isrc?: string | null;
+    providerTrackId?: string;
+    audioId?: string | null;
+    audioFilename?: string | null;
+    fileFormat?: number | null;
+  }>;
+};
+
 export function assertSafeDistributedReleaseUpdate(input: {
   release: Release;
   tracks: Track[];
   trackMetadata: DistributionTrackMetadata[];
   baseline: DistributionUpdateBaseline;
+  providerIdentity?: DistributionProviderAssignedIdentity | null;
 }) {
   const metadata = record(input.baseline.metadataSnapshot);
   const baselineRelease = record(metadata.release);
@@ -33,15 +46,20 @@ export function assertSafeDistributedReleaseUpdate(input: {
   const baselineTrackMetadata = records(metadata.trackMetadata);
   const assets = record(input.baseline.assetSnapshot);
   const baselineMasters = records(assets.trackMasters);
+  const providerTracks = new Map((input.providerIdentity?.tracks ?? []).map((item) => [item.trackId, item]));
   const issues: string[] = [];
 
   if (!baselineTracks.length || !baselineMasters.length) {
     throw new Error("The latest immutable submission does not contain enough identity evidence for a safe in-place correction. Use takedown + new release instead.");
   }
 
-  if (normalized(input.release.upc) !== normalized(baselineRelease.upc)) {
-    issues.push("UPC changed");
+  const submittedUpc = normalized(baselineRelease.upc);
+  const authoritativeUpc = submittedUpc || normalized(input.providerIdentity?.upc);
+  const currentUpc = normalized(input.release.upc);
+  if (!authoritativeUpc) {
+    throw new Error("The provider UPC has not been synchronized yet. Refresh distribution status before starting a correction.");
   }
+  if (currentUpc !== authoritativeUpc) issues.push("UPC changed");
 
   if (input.tracks.length !== baselineTracks.length) {
     issues.push("track count changed");
@@ -66,7 +84,12 @@ export function assertSafeDistributedReleaseUpdate(input: {
       issues.push(`missing submitted identity evidence for '${track.title}'`);
       continue;
     }
-    if (normalized(current?.isrc) !== normalized(previous.isrc)) {
+    const submittedIsrc = normalized(previous.isrc);
+    const providerIsrc = normalized(providerTracks.get(track.id)?.isrc);
+    const authoritativeIsrc = submittedIsrc || providerIsrc;
+    if (!authoritativeIsrc) {
+      issues.push(`provider ISRC is not synchronized for '${track.title}'`);
+    } else if (normalized(current?.isrc) !== authoritativeIsrc) {
       issues.push(`ISRC changed for '${track.title}'`);
     }
     const previousMaster = previousMasters.get(track.id);
