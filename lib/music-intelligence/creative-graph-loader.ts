@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { loadTrackLyricsContext } from "@/lib/lyrics-intelligence/context";
+import { loadTrackLyricsContext, type TrackLyricsContext } from "@/lib/lyrics-intelligence/context";
 import { parseMusicMap } from "@/lib/video-director/creative-director";
 import type { LyricsDatabase } from "@/types/lyrics-database";
 import type { AudioScene, StemDatabase, TrackStem } from "@/types/stem-database";
@@ -14,6 +14,7 @@ export async function loadTrackCreativeIntelligenceGraph(
   db: SupabaseClient,
   trackId: string,
   ownerId: string,
+  knownLyrics?: TrackLyricsContext,
 ): Promise<TrackCreativeIntelligenceGraph | null> {
   const stemDb = db as unknown as SupabaseClient<StemDatabase>;
   const lyricsDb = db as unknown as SupabaseClient<LyricsDatabase>;
@@ -36,7 +37,9 @@ export async function loadTrackCreativeIntelligenceGraph(
       .eq("status", "ready")
       .order("is_pinned", { ascending: false })
       .order("score", { ascending: false, nullsFirst: false }),
-    loadTrackLyricsContext(lyricsDb, trackId, ownerId),
+    knownLyrics
+      ? Promise.resolve(knownLyrics)
+      : loadTrackLyricsContext(lyricsDb, trackId, ownerId),
   ]);
   const error = musicResult.error || stemsResult.error || scenesResult.error;
   if (error) throw new Error(error.message);
