@@ -1,6 +1,6 @@
 begin;
 
-select plan(8);
+select plan(9);
 
 select has_table('public', 'workspaces', 'Ensemblis workspaces table exists');
 select has_table('public', 'artists', 'Ensemblis artists table exists');
