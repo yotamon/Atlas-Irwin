@@ -17,6 +17,12 @@ type RevelatorLoginPermission = {
   email?: unknown;
 };
 
+type RevelatorLogin = {
+  raw: unknown;
+  providerAccountId: string;
+  accessToken: string;
+};
+
 function object(value: Json | null | undefined): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
@@ -53,8 +59,12 @@ function partnerApiKey() {
   return process.env.REVELATOR_PARTNER_API_KEY?.trim() ?? "";
 }
 
-function v1Base() {
+export function revelatorV1Base() {
   return (process.env.REVELATOR_API_V1_BASE_URL ?? "https://api.revelator.com").replace(/\/$/, "");
+}
+
+export function revelatorV2Base() {
+  return (process.env.REVELATOR_API_V2_BASE_URL ?? "https://platform.revelator.com").replace(/\/$/, "");
 }
 
 export function distributionAccountModel() {
@@ -68,21 +78,23 @@ export function childAccountProvisioningConfigured() {
   return distributionAccountModel() === "child" && Boolean(partnerApiKey());
 }
 
-async function loginChild(partnerUserId: string) {
+async function loginPartnerUser(partnerUserId: string): Promise<RevelatorLogin> {
   const apiKey = partnerApiKey();
-  if (!apiKey) throw new Error("Revelator partner API key is not configured for child-account authentication.");
-  const raw = await jsonRequest(`${v1Base()}/partner/account/login`, {
+  if (!apiKey) throw new Error("Revelator partner API key is not configured for partner authentication.");
+  const raw = await jsonRequest(`${revelatorV1Base()}/partner/account/login`, {
     partnerUserId,
     partnerApiKey: apiKey,
   });
   const record = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+  const accessToken = String(record.accessToken ?? "").trim();
+  if (!accessToken) throw new Error("Provider login succeeded without an access token.");
   const permissions = Array.isArray(record.permissions)
     ? record.permissions.filter((item): item is RevelatorLoginPermission => Boolean(item && typeof item === "object"))
     : [];
   const preferred = permissions.find((permission) => permission.isDefault === true) ?? permissions[0];
   const enterpriseId = Number(preferred?.enterpriseId);
-  if (!Number.isFinite(enterpriseId) || enterpriseId <= 0) throw new Error("Child-account login succeeded without a usable enterprise ID.");
-  return { raw, providerAccountId: String(enterpriseId) };
+  if (!Number.isFinite(enterpriseId) || enterpriseId <= 0) throw new Error("Provider login succeeded without a usable enterprise ID.");
+  return { raw, providerAccountId: String(enterpriseId), accessToken };
 }
 
 export async function ensureProviderClientAccount(input: {
@@ -90,22 +102,12 @@ export async function ensureProviderClientAccount(input: {
   email: string;
   enterpriseName: string;
 }): Promise<ProviderClientAccount> {
-  if (!childAccountProvisioningConfigured()) {
-    throw new Error("Revelator child-account provisioning is not configured for this environment.");
-  }
+  if (!childAccountProvisioningConfigured()) throw new Error("Revelator child-account provisioning is not configured for this environment.");
   const partnerUserId = input.ownerId;
 
-  // A stable partnerUserId makes onboarding recoverable. Before creating anything, try to
-  // recover an existing child account from a previous partially persisted signup.
   try {
-    const existing = await loginChild(partnerUserId);
-    return {
-      providerAccountId: existing.providerAccountId,
-      providerUserId: null,
-      partnerUserId,
-      raw: existing.raw,
-      recovered: true,
-    };
+    const existing = await loginPartnerUser(partnerUserId);
+    return { providerAccountId: existing.providerAccountId, providerUserId: null, partnerUserId, raw: existing.raw, recovered: true };
   } catch {
     // No recoverable child was found. Signup below uses the same stable partnerUserId.
   }
@@ -120,7 +122,7 @@ export async function ensureProviderClientAccount(input: {
   };
 
   try {
-    const raw = await jsonRequest(`${v1Base()}/partner/account/signup`, signupBody);
+    const raw = await jsonRequest(`${revelatorV1Base()}/partner/account/signup`, signupBody);
     const record = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
     const enterpriseId = Number(record.enterpriseId);
     if (!Number.isFinite(enterpriseId) || enterpriseId <= 0) throw new Error("Child-account signup succeeded without a usable enterprise ID.");
@@ -132,21 +134,28 @@ export async function ensureProviderClientAccount(input: {
       recovered: false,
     };
   } catch (signupError) {
-    // Network ambiguity or a duplicate signup can leave the child created even though the
-    // caller saw an error. Recover through unprompted login before surfacing failure.
     try {
-      const recovered = await loginChild(partnerUserId);
-      return {
-        providerAccountId: recovered.providerAccountId,
-        providerUserId: null,
-        partnerUserId,
-        raw: recovered.raw,
-        recovered: true,
-      };
+      const recovered = await loginPartnerUser(partnerUserId);
+      return { providerAccountId: recovered.providerAccountId, providerUserId: null, partnerUserId, raw: recovered.raw, recovered: true };
     } catch {
       throw signupError;
     }
   }
+}
+
+export async function accessTokenForDistributionAccount(account: DistributionAccount | null | undefined) {
+  const metadata = object(account?.provider_metadata);
+  if (metadata.accountModel === "child") {
+    const partnerUserId = typeof metadata.partnerUserId === "string" ? metadata.partnerUserId.trim() : "";
+    if (!partnerUserId) throw new Error("Distribution child account is missing its partner user context.");
+    return (await loginPartnerUser(partnerUserId)).accessToken;
+  }
+
+  const staticToken = process.env.REVELATOR_ACCESS_TOKEN?.trim();
+  if (staticToken) return staticToken;
+  const partnerUserId = process.env.REVELATOR_PARTNER_USER_ID?.trim();
+  if (!partnerUserId) throw new Error("Distribution provider authentication is not configured for the parent account.");
+  return (await loginPartnerUser(partnerUserId)).accessToken;
 }
 
 export function providerForDistributionAccount(account: DistributionAccount | null | undefined): DistributionProvider {
@@ -155,7 +164,6 @@ export function providerForDistributionAccount(account: DistributionAccount | nu
   const partnerUserId = typeof metadata.partnerUserId === "string" ? metadata.partnerUserId.trim() : "";
   if (accountModel === "child") {
     if (!partnerUserId) throw new Error("Distribution child account is missing its partner user context.");
-    // Explicit empty token prevents a parent static token from overriding child-scoped login.
     return new RevelatorProvider({ token: "", partnerApiKey: partnerApiKey(), partnerUserId });
   }
   return getDistributionProvider();
