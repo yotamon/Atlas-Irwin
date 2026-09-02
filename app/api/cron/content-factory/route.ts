@@ -3,7 +3,10 @@ import { fillOneMissingScheduledAsset } from "@/lib/marketing/free-content-facto
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 55;
+// First-run Vercel Sandbox bootstrap installs the local ffmpeg binary before rendering.
+// Hobby/Fluid Compute supports a longer function window; keep this comfortably above
+// the Sandbox lifetime while the database-side caller uses a slightly shorter timeout.
+export const maxDuration = 240;
 
 export async function GET(request: Request) {
   const auth = await authorizeMarketingCron(request);
