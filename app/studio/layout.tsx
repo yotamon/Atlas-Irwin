@@ -11,6 +11,7 @@ import "./video-director.css";
 import "./video-director-states.css";
 import "./video-director-refinements.css";
 import "./ai-control.css";
+import "./distribution.css";
 
 export const metadata: Metadata = {
   title: {
