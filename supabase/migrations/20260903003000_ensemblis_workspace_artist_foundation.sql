@@ -55,9 +55,9 @@ create trigger set_artists_updated_at
   before update on public.artists
   for each row execute function private.set_updated_at();
 
--- Keep slug rules deterministic and deliberately boring. The short profile-id suffix
--- makes legacy workspace slugs globally unique while artist slugs only need to be
--- unique inside their workspace.
+-- Keep slug rules deterministic and deliberately boring. The normalized full
+-- profile UUID makes legacy workspace slugs globally collision-proof while artist
+-- slugs only need to be unique inside their workspace.
 create or replace function private.ensemblis_slugify(value text)
 returns text
 language sql
@@ -146,7 +146,7 @@ begin
       'Artist'
     );
     artist_slug := private.ensemblis_slugify(inferred_artist_name);
-    workspace_slug := artist_slug || '-' || substr(replace(profile_row.id::text, '-', ''), 1, 8);
+    workspace_slug := artist_slug || '-' || replace(profile_row.id::text, '-', '');
 
     insert into public.workspaces (name, slug, kind, created_by, legacy_owner_id)
     values (inferred_artist_name || ' Workspace', workspace_slug, 'personal', profile_row.id, profile_row.id)
