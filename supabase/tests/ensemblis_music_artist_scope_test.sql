@@ -1,6 +1,6 @@
 begin;
 
-select plan(14);
+select plan(15);
 
 insert into auth.users (id, email, aud, role, created_at, updated_at)
 values
@@ -10,6 +10,13 @@ values
 update public.profiles
 set is_admin = true
 where id in (
+  '14000000-0000-0000-0000-000000000001',
+  '14000000-0000-0000-0000-000000000002'
+);
+
+-- Replace auto-provisioned fixture rows with stable IDs so lineage assertions remain explicit.
+delete from public.workspaces
+where legacy_owner_id in (
   '14000000-0000-0000-0000-000000000001',
   '14000000-0000-0000-0000-000000000002'
 );
