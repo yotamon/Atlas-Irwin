@@ -1,0 +1,642 @@
+.distribution-page {
+  display: grid;
+  gap: 1.15rem;
+  width: min(1180px, 100%);
+  margin: 0 auto;
+}
+
+.distribution-header,
+.distribution-title-row,
+.distribution-section-heading,
+.distribution-readiness-card,
+.distribution-callout,
+.distribution-submit-card,
+.distribution-release-row,
+.distribution-delivery-grid article > div,
+.distribution-profile-card > div:first-child {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.distribution-header h1,
+.distribution-section h2,
+.distribution-form-block h3,
+.distribution-submit-card h2 {
+  margin: 0.15rem 0 0;
+}
+
+.distribution-header p,
+.distribution-section-heading p,
+.distribution-form-block > p,
+.distribution-callout p,
+.distribution-submit-card p,
+.distribution-account-summary > p {
+  margin: 0.45rem 0 0;
+  opacity: 0.7;
+  line-height: 1.55;
+}
+
+.distribution-title-row {
+  align-items: center;
+  margin-top: 0.45rem;
+}
+
+.distribution-section,
+.distribution-readiness-card,
+.distribution-stat-grid article,
+.distribution-check,
+.distribution-feedback {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.035);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.12);
+}
+
+.distribution-section,
+.distribution-readiness-card {
+  padding: 1.15rem;
+}
+
+.distribution-feedback {
+  display: flex;
+  gap: 0.8rem;
+  align-items: center;
+  padding: 0.8rem 1rem;
+}
+
+.distribution-feedback.error {
+  border-color: rgba(255, 112, 112, 0.28);
+  background: rgba(255, 95, 95, 0.07);
+}
+
+.distribution-feedback.success {
+  border-color: rgba(98, 214, 159, 0.28);
+  background: rgba(98, 214, 159, 0.07);
+}
+
+.distribution-readiness-card {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.55fr) minmax(260px, 1.4fr) auto;
+  align-items: center;
+  gap: 1.15rem;
+}
+
+.distribution-score {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.distribution-score strong {
+  font-size: clamp(2rem, 5vw, 3.2rem);
+  line-height: 1;
+}
+
+.distribution-score span,
+.distribution-score small {
+  opacity: 0.78;
+}
+
+.distribution-meter {
+  height: 0.55rem;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.distribution-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(152, 127, 255, 0.75), rgba(89, 221, 177, 0.92));
+}
+
+.distribution-check-grid,
+.distribution-stat-grid,
+.distribution-profile-grid,
+.distribution-delivery-grid {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.distribution-check-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.distribution-check {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  padding: 0.85rem;
+}
+
+.distribution-check > span {
+  display: grid;
+  place-items: center;
+  flex: 0 0 1.6rem;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 999px;
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.distribution-check.pass > span {
+  background: rgba(91, 211, 155, 0.14);
+}
+
+.distribution-check.warning > span {
+  background: rgba(255, 190, 100, 0.14);
+}
+
+.distribution-check.block > span {
+  background: rgba(255, 105, 105, 0.14);
+}
+
+.distribution-check div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.distribution-check small,
+.distribution-muted {
+  opacity: 0.65;
+  line-height: 1.4;
+}
+
+.distribution-state {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.8rem;
+  padding: 0.28rem 0.58rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.state-live,
+.state-delivered,
+.state-ready {
+  border-color: rgba(91, 211, 155, 0.25);
+  background: rgba(91, 211, 155, 0.09);
+}
+
+.state-needs_attention,
+.state-under_review,
+.state-submitted,
+.state-delivering,
+.state-partially_live,
+.state-approved,
+.state-update_pending,
+.state-takedown_pending {
+  border-color: rgba(255, 190, 100, 0.24);
+  background: rgba(255, 190, 100, 0.08);
+}
+
+.state-error,
+.state-rejected {
+  border-color: rgba(255, 105, 105, 0.27);
+  background: rgba(255, 105, 105, 0.08);
+}
+
+.distribution-section-heading {
+  margin-bottom: 1rem;
+}
+
+.distribution-section-heading > div {
+  max-width: 780px;
+}
+
+.distribution-lock {
+  font-size: 0.78rem;
+  opacity: 0.72;
+}
+
+.distribution-issue-list,
+.distribution-release-list,
+.distribution-history,
+.distribution-ops-table,
+.distribution-ops-queue {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.distribution-issue-list > article,
+.distribution-issue-list > a {
+  display: grid;
+  grid-template-columns: 5.2rem minmax(0, 1fr);
+  gap: 0.8rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.8rem;
+  color: inherit;
+  text-decoration: none;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.distribution-issue-list > * > span:first-child {
+  align-self: start;
+  width: fit-content;
+  padding: 0.2rem 0.42rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.distribution-issue-list .issue-error {
+  border-color: rgba(255, 105, 105, 0.2);
+}
+
+.distribution-issue-list .issue-warning {
+  border-color: rgba(255, 190, 100, 0.19);
+}
+
+.distribution-issue-list p {
+  margin: 0.25rem 0;
+  opacity: 0.72;
+  line-height: 1.45;
+}
+
+.distribution-callout,
+.distribution-submit-card {
+  align-items: center;
+}
+
+.distribution-form,
+.distribution-form fieldset,
+.distribution-form-block,
+.distribution-checkboxes,
+.distribution-onboarding-form,
+.distribution-account-summary,
+.distribution-ops-bridge {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.distribution-form fieldset {
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+.distribution-form-block {
+  padding: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.85rem;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.distribution-checkboxes {
+  gap: 0.55rem;
+}
+
+.distribution-checkboxes label,
+.distribution-radio-row label,
+.inline-check,
+.distribution-final-confirm {
+  display: flex;
+  gap: 0.55rem;
+  align-items: flex-start;
+  line-height: 1.4;
+}
+
+.distribution-checkboxes input,
+.distribution-radio-row input,
+.inline-check input,
+.distribution-final-confirm input {
+  margin-top: 0.18rem;
+}
+
+.distribution-checkboxes.compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.distribution-field-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.distribution-field-grid label,
+.distribution-profile-card > label,
+.distribution-ops-bridge label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  opacity: 0.9;
+}
+
+.distribution-field-grid input,
+.distribution-field-grid select,
+.distribution-profile-card input,
+.distribution-ops-bridge input,
+.distribution-ops-bridge select,
+.distribution-onboarding-form input {
+  width: 100%;
+  min-height: 2.55rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0.65rem;
+  color: inherit;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.distribution-radio-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.distribution-radio-row label {
+  min-width: min(100%, 300px);
+}
+
+.distribution-radio-row small {
+  display: block;
+  opacity: 0.62;
+}
+
+.distribution-store-picker {
+  padding: 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.7rem;
+}
+
+.distribution-store-picker summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.distribution-store-picker > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+  max-height: 22rem;
+  overflow: auto;
+  padding-top: 0.8rem;
+}
+
+.distribution-store-picker label {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+  font-size: 0.78rem;
+}
+
+.distribution-profile-grid,
+.distribution-delivery-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.distribution-profile-card,
+.distribution-delivery-grid article {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.8rem;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.distribution-profile-card > div:first-child strong {
+  font-size: 0.78rem;
+  opacity: 0.75;
+}
+
+.distribution-delivery-grid article > small {
+  opacity: 0.65;
+}
+
+.distribution-delivery-grid article > a {
+  width: fit-content;
+  color: inherit;
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+
+.distribution-final-confirm {
+  margin-bottom: 0.75rem;
+  max-width: 660px;
+}
+
+.distribution-history > div:not(.distribution-section-heading) {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto minmax(150px, auto);
+  gap: 0.8rem;
+  align-items: center;
+  padding: 0.7rem 0.8rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.distribution-history small,
+.distribution-history span {
+  opacity: 0.65;
+}
+
+.distribution-stat-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.distribution-stat-grid article {
+  display: grid;
+  gap: 0.15rem;
+  padding: 1rem;
+}
+
+.distribution-stat-grid article strong {
+  font-size: 1.8rem;
+}
+
+.distribution-stat-grid article small {
+  opacity: 0.62;
+}
+
+.distribution-account-summary dl {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin: 0;
+}
+
+.distribution-account-summary dl div {
+  padding: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 0.7rem;
+}
+
+.distribution-account-summary dt {
+  font-size: 0.68rem;
+  opacity: 0.6;
+}
+
+.distribution-account-summary dd {
+  margin: 0.22rem 0 0;
+  font-weight: 700;
+}
+
+.distribution-release-row {
+  align-items: center;
+  padding: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-radius: 0.8rem;
+  color: inherit;
+  text-decoration: none;
+  background: rgba(255, 255, 255, 0.018);
+  transition: border-color 140ms ease, transform 140ms ease, background 140ms ease;
+}
+
+.distribution-release-row:hover,
+.distribution-ops-table > a:hover,
+.distribution-ops-queue > a:hover,
+.distribution-issue-list > a:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.045);
+  transform: translateY(-1px);
+}
+
+.distribution-release-artwork {
+  display: grid;
+  place-items: center;
+  flex: 0 0 3.4rem;
+  width: 3.4rem;
+  height: 3.4rem;
+  overflow: hidden;
+  border-radius: 0.55rem;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.distribution-release-artwork img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.distribution-release-copy {
+  display: grid;
+  gap: 0.08rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.distribution-release-copy span,
+.distribution-release-copy small,
+.distribution-release-progress small {
+  opacity: 0.62;
+}
+
+.distribution-release-progress {
+  display: grid;
+  justify-items: end;
+  gap: 0.3rem;
+}
+
+.distribution-ops-warning {
+  border-color: rgba(255, 190, 100, 0.2);
+}
+
+.distribution-ops-warning p {
+  margin: 0.3rem 0 0;
+  opacity: 0.72;
+}
+
+.distribution-ops-bridge {
+  grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) auto;
+  align-items: end;
+}
+
+.distribution-ops-queue {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 0.9rem;
+}
+
+.distribution-ops-queue > a {
+  display: grid;
+  gap: 0.12rem;
+  padding: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 0.7rem;
+  color: inherit;
+  text-decoration: none;
+}
+
+.distribution-ops-queue span,
+.distribution-ops-queue small {
+  opacity: 0.62;
+}
+
+.distribution-ops-table > a {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto auto 1.5rem;
+  gap: 0.8rem;
+  align-items: center;
+  padding: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 0.7rem;
+  color: inherit;
+  text-decoration: none;
+}
+
+.distribution-ops-table > a > div {
+  display: grid;
+}
+
+.distribution-ops-table small {
+  opacity: 0.62;
+}
+
+@media (max-width: 900px) {
+  .distribution-readiness-card,
+  .distribution-ops-bridge {
+    grid-template-columns: 1fr;
+  }
+
+  .distribution-check-grid,
+  .distribution-field-grid,
+  .distribution-store-picker > div,
+  .distribution-stat-grid,
+  .distribution-account-summary dl,
+  .distribution-ops-queue {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .distribution-header,
+  .distribution-title-row,
+  .distribution-section-heading,
+  .distribution-callout,
+  .distribution-submit-card,
+  .distribution-release-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .distribution-check-grid,
+  .distribution-field-grid,
+  .distribution-profile-grid,
+  .distribution-delivery-grid,
+  .distribution-stat-grid,
+  .distribution-account-summary dl,
+  .distribution-store-picker > div,
+  .distribution-checkboxes.compact,
+  .distribution-ops-queue {
+    grid-template-columns: 1fr;
+  }
+
+  .distribution-release-progress {
+    justify-items: start;
+  }
+
+  .distribution-history > div:not(.distribution-section-heading),
+  .distribution-ops-table > a {
+    grid-template-columns: 1fr;
+  }
+}
