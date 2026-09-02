@@ -223,6 +223,66 @@
   min-width: min(100%, 420px);
 }
 
+.distribution-lifecycle-card {
+  display: grid;
+  gap: 1rem;
+}
+
+.distribution-correction-guide,
+.distribution-correction-start {
+  border-color: rgba(152, 127, 255, 0.22);
+  background: linear-gradient(135deg, rgba(152, 127, 255, 0.075), rgba(89, 221, 177, 0.025));
+}
+
+.distribution-correction-guide h3,
+.distribution-correction-start h3 {
+  margin: 0.15rem 0 0;
+}
+
+.distribution-correction-guide > p,
+.distribution-correction-start p {
+  margin: 0.42rem 0 0;
+  opacity: 0.72;
+  line-height: 1.5;
+}
+
+.distribution-correction-guide ol {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.25rem 0 0 1.25rem;
+  padding: 0;
+  line-height: 1.45;
+}
+
+.distribution-correction-guide li::marker {
+  font-weight: 800;
+}
+
+.distribution-correction-start {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.8rem 1rem;
+}
+
+.distribution-correction-start > small {
+  grid-column: 1 / -1;
+}
+
+.distribution-takedown-form {
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--distribution-line);
+}
+
+.distribution-takedown-form .distribution-checkboxes label > span {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.distribution-takedown-form .distribution-checkboxes small {
+  opacity: 0.62;
+}
+
 .distribution-release-workspace button:disabled,
 .distribution-release-workspace input:disabled,
 .distribution-release-workspace select:disabled {
@@ -270,6 +330,15 @@
   .distribution-package-card form small {
     max-width: none;
     text-align: left;
+  }
+
+  .distribution-correction-start {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .distribution-correction-start > small {
+    grid-column: auto;
   }
 }
 
