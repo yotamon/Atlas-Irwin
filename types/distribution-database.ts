@@ -163,7 +163,7 @@ export type DistributionProviderOperation = {
   owner_id: string;
   release_id: string;
   provider: string;
-  operation_type: "prepare_catalog" | "update_catalog" | "takedown";
+  operation_type: "prepare_catalog" | "submit" | "update_catalog" | "takedown";
   operation_key: string;
   state: "started" | "completed" | "failed_safe" | "ambiguous" | "resolved";
   request_snapshot: Json;
