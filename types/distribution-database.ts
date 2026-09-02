@@ -123,6 +123,59 @@ export type DistributionEvent = {
   created_at: string;
 };
 
+export type DistributionTrackMetadata = {
+  track_id: string;
+  owner_id: string;
+  metadata_language_code: string;
+  audio_language_code: string;
+  explicit: boolean;
+  track_origin: "original" | "cover" | "public_domain";
+  isrc: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DistributionTrackWriter = {
+  id: string;
+  owner_id: string;
+  track_id: string;
+  legal_name: string;
+  role: "composer" | "lyricist" | "composer_lyricist";
+  share: number;
+  publishing_type: "copyright_control" | "published" | "public_domain";
+  publisher_name: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DistributionTrackContributor = {
+  id: string;
+  owner_id: string;
+  track_id: string;
+  name: string;
+  role: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DistributionProviderOperation = {
+  id: string;
+  owner_id: string;
+  release_id: string;
+  provider: string;
+  operation_type: "prepare_catalog" | "update_catalog" | "takedown";
+  operation_key: string;
+  state: "started" | "completed" | "failed_safe" | "ambiguous" | "resolved";
+  request_snapshot: Json;
+  result_snapshot: Json;
+  provider_resource_id: string | null;
+  error: string | null;
+  started_at: string;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 type Table<Row> = {
   Row: Row;
   Insert: Partial<Row>;
@@ -140,6 +193,10 @@ export type DistributionDatabase = {
       distribution_deliveries: Table<DistributionDelivery>;
       distribution_validation_issues: Table<DistributionValidationIssue>;
       distribution_events: Table<DistributionEvent>;
+      distribution_track_metadata: Table<DistributionTrackMetadata>;
+      distribution_track_writers: Table<DistributionTrackWriter>;
+      distribution_track_contributors: Table<DistributionTrackContributor>;
+      distribution_provider_operations: Table<DistributionProviderOperation>;
     };
     Views: Database["public"]["Views"];
     Functions: Database["public"]["Functions"] & {
