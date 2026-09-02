@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { getProviderCatalogIdentity } from "@/lib/distribution/provider-catalog-identity";
-import { syncDistributionStatus as syncRuntimeDistributionStatus } from "./distribution-runtime-actions";
+import { syncDistributionStatus as syncProviderDistributionStatus } from "./distribution-status-action";
 import type { Json } from "@/types/database";
 import type { DistributionDatabase } from "@/types/distribution-database";
 
@@ -28,7 +28,7 @@ function normalized(value: unknown) {
 
 export async function syncDistributionStatus(form: FormData) {
   const releaseId = text(form, "release_id");
-  await syncRuntimeDistributionStatus(form);
+  await syncProviderDistributionStatus(form);
 
   const { supabase, user } = await requireStudioAdmin();
   const db = supabase as unknown as Db;
