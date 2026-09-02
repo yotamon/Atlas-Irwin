@@ -37,11 +37,27 @@ class StemIntelligenceTest(unittest.TestCase):
         delayed[delay_samples:] = master[:-delay_samples]
         alignment = stem_intelligence._alignment(master, delayed, sr, 0)
 
-        self.assertGreaterEqual(alignment["confidence"], 0.28)
+        self.assertGreaterEqual(alignment["timeline_confidence"], 0.5)
+        self.assertGreaterEqual(alignment["signal_correlation_confidence"], 0.32)
         self.assertEqual(alignment["method"], "onset_cross_correlation")
         self.assertLessEqual(abs(abs(alignment["offset_ms"]) - 480), 80)
+        self.assertEqual(alignment["confidence"], alignment["timeline_confidence"])
 
-    def test_synthetic_stem_produces_usefulness_sections_and_technical_metadata(self) -> None:
+    def test_sparse_same_duration_stem_keeps_high_timeline_confidence_without_fake_signal_confidence(self) -> None:
+        sr = stem_intelligence.TARGET_SR
+        samples = sr * 5
+        master = np.zeros(samples, dtype=np.float32)
+        stem = np.zeros(samples, dtype=np.float32)
+        master[int(1.0 * sr):int(1.03 * sr)] = 0.6
+        stem[int(3.0 * sr):int(3.03 * sr)] = 0.4
+        alignment = stem_intelligence._alignment(master, stem, sr, 0)
+
+        self.assertGreaterEqual(alignment["timeline_confidence"], 0.65)
+        self.assertLess(alignment["signal_correlation_confidence"], alignment["timeline_confidence"])
+        self.assertEqual(alignment["offset_ms"], 0)
+        self.assertIn("duration_match", alignment["evidence"])
+
+    def test_synthetic_stem_produces_role_aware_metrics_master_clock_and_activity_curve(self) -> None:
         sr = stem_intelligence.TARGET_SR
         duration_seconds = 8.0
         samples = int(sr * duration_seconds)
@@ -70,8 +86,8 @@ class StemIntelligenceTest(unittest.TestCase):
             sf.write(stem_path, stereo_stem, sr, subtype="PCM_16")
             analysis = stem_intelligence.analyze_stem(stem_path, master_path, "drums", sections)
 
-        self.assertEqual(analysis["version"], stem_intelligence.ANALYSIS_VERSION)
-        self.assertEqual(analysis["engine"], "atlas_stem_intelligence")
+        self.assertEqual(analysis["version"], 2)
+        self.assertEqual(analysis["engine"], "atlas_stem_intelligence_v2")
         self.assertEqual(analysis["category"], "drums")
         for signal in (
             "energy",
@@ -80,22 +96,33 @@ class StemIntelligenceTest(unittest.TestCase):
             "groove_score",
             "loopability",
             "hook_score",
-            "tonal_focus",
             "spectral_motion",
         ):
             self.assertIn(signal, analysis["summary"])
             self.assertGreaterEqual(analysis["summary"][signal], 0.0)
             self.assertLessEqual(analysis["summary"][signal], 1.0)
+        self.assertNotIn("tonal_focus", analysis["summary"], "drum metrics should not expose misleading tonal-focus semantics")
+
+        self.assertIsNotNone(analysis["tempo"]["canonical_bpm"])
+        self.assertEqual(analysis["tempo"]["bpm"], analysis["tempo"]["canonical_bpm"])
+        self.assertEqual(analysis["tempo"]["canonical_source"], "master_audio")
+        self.assertIn("observed_stem_bpm", analysis["tempo"])
+        self.assertGreaterEqual(analysis["tempo"]["tempo_agreement"], 0.0)
+        self.assertLessEqual(analysis["tempo"]["tempo_agreement"], 1.0)
 
         self.assertEqual(len(analysis["section_activity"]), 2)
+        self.assertGreaterEqual(len(analysis["activity_curve"]), 8)
         self.assertTrue(analysis["best_moments"])
-        self.assertIn(analysis["alignment"]["method"], {"onset_cross_correlation", "duration_guard", "duration_only"})
-        self.assertGreaterEqual(analysis["alignment"]["confidence"], 0.0)
-        self.assertLessEqual(analysis["alignment"]["confidence"], 1.0)
+        for moment in analysis["best_moments"]:
+            self.assertLess(moment["score"], 1.0, "window normalization should not produce meaningless perfect scores")
+        self.assertIn(analysis["alignment"]["method"], {"onset_cross_correlation", "duration_plus_sparse_signal", "duration_evidence"})
+        self.assertGreaterEqual(analysis["alignment"]["timeline_confidence"], 0.0)
+        self.assertLessEqual(analysis["alignment"]["timeline_confidence"], 1.0)
         self.assertEqual(analysis["technical"]["analysis_sample_rate"], sr)
         self.assertEqual(analysis["technical"]["source_sample_rate"], sr)
         self.assertEqual(analysis["technical"]["source_channels"], 2)
         self.assertLessEqual(abs(analysis["technical"]["duration_ms"] - 8000), 2)
+        self.assertEqual(analysis["provenance"]["canonical_clock"], "master_audio")
 
 
 if __name__ == "__main__":
