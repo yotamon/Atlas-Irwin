@@ -1,6 +1,7 @@
 import type {
   Database,
   HomepagePlacement,
+  MediaLink,
   Release,
   ReleaseExternalLink,
   Track,
@@ -22,6 +23,7 @@ export type ArtistScopedTrack = ArtistScoped<Track>;
 export type ArtistScopedHomepagePlacement = ArtistScoped<HomepagePlacement>;
 export type ArtistScopedTrackExternalId = ArtistScoped<TrackExternalId>;
 export type ArtistScopedReleaseExternalLink = ArtistScoped<ReleaseExternalLink>;
+export type ArtistAwareMediaLink = MediaLink & { artist_id: string | null };
 
 export type ArtistScopedMusicDatabase = Omit<Database, "public"> & {
   public: Omit<Database["public"], "Tables"> & {
@@ -32,12 +34,14 @@ export type ArtistScopedMusicDatabase = Omit<Database, "public"> & {
       | "homepage_placements"
       | "track_external_ids"
       | "release_external_links"
+      | "media_links"
     > & {
       releases: Table<ArtistScopedRelease>;
       tracks: Table<ArtistScopedTrack>;
       homepage_placements: Table<ArtistScopedHomepagePlacement>;
       track_external_ids: Table<ArtistScopedTrackExternalId>;
       release_external_links: Table<ArtistScopedReleaseExternalLink>;
+      media_links: Table<ArtistAwareMediaLink>;
     };
   };
 };
