@@ -1,38 +1,30 @@
 import Link from "next/link";
 import { PageHeader, Panel } from "@/components/studio/ui";
 
-const createOptions = [
+const primaryOutcomes = [
   {
-    title: "New Release",
-    eyebrow: "Start here",
+    title: "Move Atlas forward",
+    eyebrow: "Recommended",
     description:
-      "Give Atlas the minimum viable brief. The Studio will build the workspace around it.",
-    href: "/studio/releases/new",
-    cta: "Start a release",
+      "Start from the highest-leverage decision. Today already knows what is blocked, what Atlas is preparing and which release needs attention.",
+    href: "/studio",
+    cta: "Open Today",
   },
   {
-    title: "Music",
-    eyebrow: "Specialist tool",
+    title: "Start a release",
+    eyebrow: "New release",
     description:
-      "Write or generate new material in Music Lab when the job is musical creation.",
+      "Create the minimum release workspace. Atlas will classify its lifecycle and build only the work that is still actionable.",
+    href: "/studio/releases/new",
+    cta: "Create release",
+  },
+  {
+    title: "Develop new music",
+    eyebrow: "Artist-led creation",
+    description:
+      "Use Music Lab when the goal is making a new track, not when a campaign simply needs another asset.",
     href: "/studio/music",
     cta: "Open Music Lab",
-  },
-  {
-    title: "Content",
-    eyebrow: "Production",
-    description:
-      "Finish the content moments Atlas planned for your releases without managing status fields manually.",
-    href: "/studio/production",
-    cta: "Open Production",
-  },
-  {
-    title: "Video",
-    eyebrow: "Video Director",
-    description:
-      "Plan and build a complete music video from an Atlas track, with creative approvals and cost gates before paid generation.",
-    href: "/studio/video",
-    cta: "Open Video Director",
   },
 ];
 
@@ -41,10 +33,10 @@ export default function CreatePage() {
     <>
       <PageHeader
         title="Create"
-        description="Choose the outcome. Atlas keeps the machinery behind the scenes until you actually need it."
+        description="Start with the outcome. Atlas chooses campaign machinery automatically; specialist tools stay available when you deliberately want to direct the craft."
       />
       <div className="v2-create-grid">
-        {createOptions.map((item) => (
+        {primaryOutcomes.map((item) => (
           <Link className="v2-create-card" href={item.href} key={item.title}>
             <span className="section-label">{item.eyebrow}</span>
             <h2>{item.title}</h2>
@@ -54,9 +46,11 @@ export default function CreatePage() {
         ))}
       </div>
       <details className="v2-advanced-disclosure">
-        <summary>Advanced creation tools</summary>
-        <Panel title="Open specialist workspaces only when the normal flow is not enough.">
+        <summary>Direct a specialist production tool</summary>
+        <Panel title="Use these when you want to override or deepen the normal release workflow.">
           <div className="v2-secondary-links">
+            <Link href="/studio/production">Production queue</Link>
+            <Link href="/studio/video">Video Director</Link>
             <Link href="/studio/campaigns">Campaign Brain</Link>
             <Link href="/studio/outreach">Outreach</Link>
             <Link href="/studio/content">Legacy Content Lab</Link>

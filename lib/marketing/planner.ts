@@ -6,6 +6,12 @@ import type { Release } from "@/types/database";
 import { generateStructured, marketingAiConfigured } from "./ai";
 import { OBJECTIVE_KPIS, type MarketingObjective } from "./domain";
 import {
+  daysSinceRelease,
+  lifecyclePlanningPrinciple,
+  relativeDayForFutureOffset,
+  releaseLifecycle,
+} from "./release-lifecycle";
+import {
   plannerPlatformsFromConnections,
   type CampaignSocialPlatform,
 } from "./social-platforms";
@@ -152,7 +158,9 @@ function campaignPlanSchema(connectedPlatforms: CampaignSocialPlatform[]) {
             format: { type: "string" },
             goal: { type: "string", enum: OBJECTIVES },
             phaseCode: { type: "string", enum: PHASES },
-            relativeDay: { type: "integer", minimum: -21, maximum: 45 },
+            // Historical catalog releases can legitimately be hundreds of days past T0. The
+            // lifecycle gate below, not an arbitrary 45-day schema ceiling, decides what is actionable.
+            relativeDay: { type: "integer", minimum: -21, maximum: 3650 },
             audienceSegment: { type: "string" },
             contentAngle: { type: "string" },
             experimentTitle: { type: "string" },
@@ -169,8 +177,10 @@ Atlas Irwin is an independent electronic artist. Build a testable, artist-specif
 
 Rules:
 - The input contains connectedSocialChannels. These are a hard capability boundary. Create content moments ONLY for those exact platforms. Never suggest, reserve, repurpose to, or mention posting on an unavailable social channel.
+- The input contains releaseLifecycle, lifecyclePlanningPrinciple and minimumActionableRelativeDay. They are hard temporal boundaries. NEVER create a content moment before minimumActionableRelativeDay. Never recreate missed pre-release activity for music that is already live.
+- When releaseLifecycle is launch_window or catalog, speak and plan as if the music is already available. Do not write fake teasers, countdowns, pre-save language or "coming soon" copy.
 - If only one social channel is connected, create a coherent campaign for that one channel instead of inventing channel diversity.
-- Every creative idea must come from the supplied release identity, sonic hook, emotion, visual world, or story.
+- Every creative idea must come from the supplied release identity, sonic hook, emotion, visual world, story, or explicitly supplied historical evidence.
 - Treat historical learnings as evidence only when they are explicitly supplied. Never invent performance claims.
 - Each experiment tests one clear hypothesis and has 2 or 3 meaningfully different variants.
 - Every experiment must be attached to exactly one content moment. Do not reuse the same experimentTitle across multiple platforms or posting times. Cross-platform repurposing happens only after a winner is found and only when that destination platform is connected.
@@ -178,7 +188,7 @@ Rules:
 - Keep captions concise, human, specific, and compatible with an artist voice. Avoid marketing jargon, fake urgency, generic AI language, and repetitive "out now" posts.
 - Use platform-native formats but keep one coherent campaign world.
 - Prefer a small number of strong experiments over content volume.
-- Use release-relative timing. Day 0 is the release date.
+- Use release-relative timing. Day 0 is the release date, even for live catalog; current-day work may therefore have a large positive relativeDay.
 - Include at least one DJ/selector or curator discovery angle when it fits the release.
 - The goal is to learn what moves the right listeners toward saves, follows, smart-link clicks, streams, playlist adds, and genuine community signals.`;
 
@@ -190,6 +200,12 @@ function nativeFormat(platform: CampaignSocialPlatform) {
   if (platform === "Instagram") return "Reel";
   if (platform === "TikTok") return "TikTok video";
   return "Short";
+}
+
+function minimumActionableRelativeDay(releaseDate: string | null | undefined) {
+  if (!releaseDate) return null;
+  const relativeToday = daysSinceRelease(releaseDate) ?? 0;
+  return Math.max(-21, relativeToday + 1);
 }
 
 async function resolvePlanningContext(
@@ -218,6 +234,7 @@ async function resolvePlanningContext(
 function normalizeCampaignPlan(
   plan: CampaignPlan,
   connectedPlatforms: CampaignSocialPlatform[],
+  minimumRelativeDay: number | null,
 ): CampaignPlan {
   const allowedPlatforms = new Set<string>(connectedPlatforms);
   const uniqueExperiments = Array.from(
@@ -240,6 +257,7 @@ function normalizeCampaignPlan(
   const claimed = new Set<string>();
   const contentMoments = plan.contentMoments
     .filter((moment) => allowedPlatforms.has(moment.platform))
+    .filter((moment) => minimumRelativeDay === null || moment.relativeDay >= minimumRelativeDay)
     .map((moment) => {
       const requestedTitle = moment.experimentTitle.trim();
       const experiment = requestedTitle ? experimentByTitle.get(requestedTitle) : undefined;
@@ -264,8 +282,118 @@ function normalizeCampaignPlan(
   };
 }
 
+function noTimingPlan(context: ResolvedCampaignPlanningContext): CampaignPlan {
+  const title = context.release.title;
+  const audience = firstNonEmpty(context.release.audience, "independent electronic and nu-disco listeners");
+  return {
+    strategySummary: `${title} has enough identity context to prepare strategy, but Atlas will not manufacture calendar dates until the release has an anchor date.`,
+    audienceSegments: [audience, "DJs and selectors who program warm electronic music"],
+    contentPillars: ["musical payoff", "world and mood", "selector utility", "human process"],
+    learningsApplied: context.approvedLearnings.slice(0, 4),
+    experiments: [],
+    contentMoments: [],
+  };
+}
+
+function liveFallbackPlan(context: ResolvedCampaignPlanningContext): CampaignPlan {
+  const release = context.release;
+  if (!release.release_date) return noTimingPlan(context);
+  const title = release.title;
+  const emotion = firstNonEmpty(release.core_emotion, "late-night connection");
+  const sonicHook = firstNonEmpty(release.primary_hook, "the strongest musical turn in the track");
+  const visual = firstNonEmpty(release.visual_direction, "warm analog light, motion and tactile electronic detail");
+  const audience = firstNonEmpty(release.audience, "independent electronic and nu-disco listeners");
+  const learned = context.approvedLearnings.slice(0, 4);
+  const primary = context.connectedPlatforms[0];
+  if (!primary) {
+    return {
+      strategySummary: `${title} is already live. Atlas has a rediscovery thesis, but no posting moments were created because no social channels are connected in Studio Settings.`,
+      audienceSegments: [audience, "DJs and selectors who program warm electronic music"],
+      contentPillars: ["rediscovery", "musical detail", "song meaning", "selector utility"],
+      learningsApplied: learned,
+      experiments: [],
+      contentMoments: [],
+    };
+  }
+  const second = context.connectedPlatforms[1] ?? primary;
+  const phase = releaseLifecycle({ releaseDate: release.release_date }) === "catalog" ? "revival" : "momentum";
+  const relative = (offset: number) => relativeDayForFutureOffset(release.release_date!, offset);
+  return normalizeCampaignPlan({
+    strategySummary: `${title} is live. Start from current-day rediscovery, use ${sonicHook} as the musical proof, and learn which specific angle turns renewed attention into durable listener intent. Missed launch activity is intentionally ignored.`,
+    audienceSegments: [audience, "DJs and selectors who program warm electronic music", "listeners discovering Atlas Irwin after release day"],
+    contentPillars: ["rediscovery", "musical detail", "song meaning", "selector utility"],
+    learningsApplied: learned,
+    experiments: [
+      {
+        title: "Current rediscovery framing",
+        hypothesis: `A direct current-day entry into ${sonicHook} will create stronger music intent than pretending ${title} is a new launch.`,
+        goal: context.objective,
+        primaryMetric: OBJECTIVE_KPIS[context.objective].primary,
+        phaseCode: phase,
+        contentAngle: "current rediscovery",
+        audienceSegment: audience,
+        variants: [
+          {
+            label: "A",
+            hookText: `If you missed ${title}, start here.`,
+            caption: `${title} has been out. This is still the part I would use to introduce it today.`,
+            cta: "Hear the full track.",
+            visualPrompt: `Current-day vertical rediscovery visual tied to ${visual}. Open on the strongest musical payoff; no countdown, launch badge, fake crowd, generic cyberpunk or "coming soon" language.`,
+            productionNotes: "Use Track Intelligence or the strongest matching Audio Scene. Treat the track as available now.",
+          },
+          {
+            label: "B",
+            hookText: `One detail inside ${title} that keeps pulling me back.`,
+            caption: `${title}, from the inside out.`,
+            cta: "Save it if this detail gets you.",
+            visualPrompt: `Tactile vertical detail study derived from ${visual}; make the musical layer feel physically visible without fake waveform decoration.`,
+            productionNotes: "Prefer Stem Intelligence or a progressive reveal Audio Scene. One concrete musical detail, no generic BTS copy.",
+          },
+        ],
+      },
+      {
+        title: "Live selector utility",
+        hypothesis: `Showing how ${title} functions as a selector record will create higher-quality saves and shares than generic artist promotion.`,
+        goal: "DJ Discovery",
+        primaryMetric: OBJECTIVE_KPIS["DJ Discovery"].primary,
+        phaseCode: phase,
+        contentAngle: "selector utility",
+        audienceSegment: "DJs and selectors who program warm electronic music",
+        variants: [
+          {
+            label: "A",
+            hookText: "For selectors who need movement without more noise.",
+            caption: `${title}. Warm low end, room to mix, and the payoff is in the movement.`,
+            cta: "DJ or selector? Keep it for a set.",
+            visualPrompt: `Restrained DJ-oriented vertical visual for ${title}, derived from ${visual}. Tactile controls and groove-led motion, no fake crowd footage.`,
+            productionNotes: "Use a groove-led Audio Scene or the most mix-friendly Track Intelligence window.",
+          },
+          {
+            label: "B",
+            hookText: "A transition record for when the room needs more body, not more noise.",
+            caption: `${title} was built for that point in the night.`,
+            cta: "Send this to a selector who would use it.",
+            visualPrompt: `Minimal 9:16 club-tool visual derived from ${visual}; physical rhythm, restrained typography, no festival tropes.`,
+            productionNotes: "Let the groove prove the claim. Keep it specific and current, never launch-coded.",
+          },
+        ],
+      },
+    ],
+    contentMoments: [
+      { title: `${title}: current rediscovery`, platform: primary, format: nativeFormat(primary), goal: context.objective, phaseCode: phase, relativeDay: relative(1), audienceSegment: audience, contentAngle: "current rediscovery", experimentTitle: "Current rediscovery framing" },
+      { title: `${title}: musical detail`, platform: second, format: nativeFormat(second), goal: "Saves", phaseCode: phase, relativeDay: relative(5), audienceSegment: audience, contentAngle: "inside the track", experimentTitle: "" },
+      { title: `${title}: meaning angle`, platform: primary, format: nativeFormat(primary), goal: "Follows", phaseCode: phase, relativeDay: relative(9), audienceSegment: audience, contentAngle: emotion, experimentTitle: "" },
+      { title: `${title}: selector utility`, platform: second, format: nativeFormat(second), goal: "DJ Discovery", phaseCode: phase, relativeDay: relative(14), audienceSegment: "DJs and selectors who program warm electronic music", contentAngle: "selector utility", experimentTitle: "Live selector utility" },
+    ],
+  }, context.connectedPlatforms, minimumActionableRelativeDay(release.release_date));
+}
+
 function fallbackPlan(context: ResolvedCampaignPlanningContext): CampaignPlan {
   const release = context.release;
+  if (!release.release_date) return noTimingPlan(context);
+  const lifecycle = releaseLifecycle({ releaseDate: release.release_date });
+  if (lifecycle === "launch_window" || lifecycle === "catalog") return liveFallbackPlan(context);
+
   const title = release.title;
   const emotion = firstNonEmpty(release.core_emotion, "late-night connection");
   const sonicHook = firstNonEmpty(release.primary_hook, "the strongest musical turn in the track");
@@ -366,12 +494,14 @@ function fallbackPlan(context: ResolvedCampaignPlanningContext): CampaignPlan {
       { title: `${title}: process detail`, platform: third, format: nativeFormat(third), goal: "Follows", phaseCode: "momentum", relativeDay: 9, audienceSegment: audience, contentAngle: "human process", experimentTitle: "" },
       { title: `${title}: catalog re-entry`, platform: second, format: nativeFormat(second), goal: "Streams", phaseCode: "revival", relativeDay: 28, audienceSegment: audience, contentAngle: "rediscovery through a different musical detail", experimentTitle: "" },
     ],
-  }, context.connectedPlatforms);
+  }, context.connectedPlatforms, minimumActionableRelativeDay(release.release_date));
 }
 
 export async function planCampaign(inputContext: CampaignPlanningContext) {
   const context = await resolvePlanningContext(inputContext);
-  if (!context.connectedPlatforms.length || !marketingAiConfigured()) {
+  const lifecycle = releaseLifecycle({ releaseDate: context.release.release_date });
+  const minimumRelativeDay = minimumActionableRelativeDay(context.release.release_date);
+  if (!context.connectedPlatforms.length || !context.release.release_date || !marketingAiConfigured()) {
     return {
       plan: fallbackPlan(context),
       generation: { provider: "template", model: "adaptive-fallback", requestId: null },
@@ -380,6 +510,9 @@ export async function planCampaign(inputContext: CampaignPlanningContext) {
 
   const input = JSON.stringify({
     release: context.release,
+    releaseLifecycle: lifecycle,
+    lifecyclePlanningPrinciple: lifecyclePlanningPrinciple(lifecycle),
+    minimumActionableRelativeDay: minimumRelativeDay,
     objective: context.objective,
     connectedSocialChannels: context.connectedPlatforms,
     brandContext: context.brandContext,
@@ -393,8 +526,11 @@ export async function planCampaign(inputContext: CampaignPlanningContext) {
       instructions: PLANNER_INSTRUCTIONS,
       input,
     });
+    const normalized = normalizeCampaignPlan(generated.value, context.connectedPlatforms, minimumRelativeDay);
     return {
-      plan: normalizeCampaignPlan(generated.value, context.connectedPlatforms),
+      // If a model ignored the hard temporal rule so completely that no actionable moments survived,
+      // fall back to a deterministic lifecycle-safe plan instead of saving an empty or historical plan.
+      plan: normalized.contentMoments.length ? normalized : fallbackPlan(context),
       generation: generated,
     } as const;
   } catch (error) {

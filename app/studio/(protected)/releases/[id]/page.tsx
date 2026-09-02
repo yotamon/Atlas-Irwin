@@ -20,6 +20,7 @@ export default async function ReleaseDetail({
   const { id } = await params;
   const { tab = "overview", stage = "overview", view } = await searchParams;
   const advanced = view === "advanced";
+  const renderedAt = new Date().toISOString();
   const { supabase, user } = await requireStudioAdmin();
   const marketing = asMarketingClient(supabase);
   const growth = asGrowthClient(supabase);
@@ -70,7 +71,7 @@ export default async function ReleaseDetail({
   if (providerScheduleError) throw new Error(providerScheduleError.message);
 
   if (!advanced) {
-    return <ReleaseWorkspaceV2 release={release} tracks={tracks ?? []} mediaLinks={mediaLinks ?? []} mediaAssets={mediaAssets ?? []} contentItems={contentItems ?? []} metrics={metrics ?? []} campaign={campaignResult.data} stage={stage} playbookTasks={playbookTasks ?? []} providerScheduledCount={providerScheduledCount ?? 0} vaultTrack={vaultResult.data} />;
+    return <ReleaseWorkspaceV2 release={release} tracks={tracks ?? []} mediaLinks={mediaLinks ?? []} mediaAssets={mediaAssets ?? []} contentItems={contentItems ?? []} metrics={metrics ?? []} campaign={campaignResult.data} stage={stage} renderedAt={renderedAt} playbookTasks={playbookTasks ?? []} providerScheduledCount={providerScheduledCount ?? 0} vaultTrack={vaultResult.data} />;
   }
 
   const mediaPreviewUrls = await createMediaPreviewMap(supabase, mediaAssets ?? []);
