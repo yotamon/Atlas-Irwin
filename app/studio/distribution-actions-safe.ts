@@ -30,6 +30,30 @@ export async function saveDistributionArtistProfile(form: FormData) {
   return runReleaseAction(form, actions.saveDistributionArtistProfile, "Artist profile mapping saved.");
 }
 
+export async function saveDistributionTrackMetadata(form: FormData) {
+  return runReleaseAction(form, actions.saveDistributionTrackMetadata, "Track distribution metadata saved.");
+}
+
+export async function addDistributionTrackWriter(form: FormData) {
+  return runReleaseAction(form, actions.addDistributionTrackWriter, "Writer credit added.");
+}
+
+export async function removeDistributionTrackWriter(form: FormData) {
+  return runReleaseAction(form, actions.removeDistributionTrackWriter, "Writer credit removed.");
+}
+
+export async function addDistributionTrackContributor(form: FormData) {
+  return runReleaseAction(form, actions.addDistributionTrackContributor, "Production credit added.");
+}
+
+export async function removeDistributionTrackContributor(form: FormData) {
+  return runReleaseAction(form, actions.removeDistributionTrackContributor, "Production credit removed.");
+}
+
+export async function prepareDistributionCatalog(form: FormData) {
+  return runReleaseAction(form, actions.prepareDistributionCatalog, "Distribution package prepared and provider catalog synchronized.");
+}
+
 export async function runDistributionPreflight(form: FormData) {
   return runReleaseAction(form, actions.runDistributionPreflight, "Distribution preflight completed.");
 }
@@ -59,5 +83,5 @@ export async function linkDistributionProviderRelease(form: FormData) {
     redirect(`/studio/distribution/operations?error=${encodeURIComponent(message(error))}`);
   }
   const suffix = releaseId ? `&release=${encodeURIComponent(releaseId)}` : "";
-  redirect(`/studio/distribution/operations?notice=Provider%20release%20linked${suffix}`);
+  redirect(`/studio/distribution/operations?notice=Provider%20release%20reconciled${suffix}`);
 }
