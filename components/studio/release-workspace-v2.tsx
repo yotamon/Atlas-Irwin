@@ -52,16 +52,17 @@ function healthScore({
   return Math.min(100, score);
 }
 
-export function ReleaseWorkspaceV2({ release, tracks, mediaLinks, mediaAssets, contentItems, metrics, campaign, stage, playbookTasks = [], providerScheduledCount = 0, vaultTrack = null }: {
-  release: Release; tracks: Track[]; mediaLinks: MediaLink[]; mediaAssets: MediaAsset[]; contentItems: ContentItem[]; metrics: MetricSnapshot[]; campaign: CampaignSummary; stage: string; playbookTasks?: PlaybookTask[]; providerScheduledCount?: number; vaultTrack?: VaultTrack | null;
+export function ReleaseWorkspaceV2({ release, tracks, mediaLinks, mediaAssets, contentItems, metrics, campaign, stage, renderedAt, playbookTasks = [], providerScheduledCount = 0, vaultTrack = null }: {
+  release: Release; tracks: Track[]; mediaLinks: MediaLink[]; mediaAssets: MediaAsset[]; contentItems: ContentItem[]; metrics: MetricSnapshot[]; campaign: CampaignSummary; stage: string; renderedAt: string; playbookTasks?: PlaybookTask[]; providerScheduledCount?: number; vaultTrack?: VaultTrack | null;
 }) {
-  const lifecycle = releaseLifecycle({ releaseDate: release.release_date, status: release.status, isArchived: release.is_archived });
+  const renderTime = new Date(renderedAt);
+  const lifecycle = releaseLifecycle({ releaseDate: release.release_date, status: release.status, isArchived: release.is_archived }, renderTime);
   const stages = stagesFor(lifecycle);
   const activeStage: Stage = STAGE_KEYS.some((key) => key === stage) ? stage as Stage : "overview";
   const activeStageIndex = STAGE_KEYS.findIndex((key) => key === activeStage);
   const releaseMediaIds = new Set(mediaLinks.map((link) => link.media_asset_id));
   const releaseAssets = mediaAssets.filter((asset) => releaseMediaIds.has(asset.id));
-  const now = Date.now();
+  const now = renderTime.getTime();
   const planned = contentItems.filter((item) => item.scheduled_at && item.status !== "Published" && Date.parse(item.scheduled_at) >= now - 3_600_000).sort((a,b) => Date.parse(a.scheduled_at!) - Date.parse(b.scheduled_at!));
   const scheduled = contentItems.filter((item) => item.status === "Scheduled");
   const missingAsset = contentItems.filter((item) => item.scheduled_at && Date.parse(item.scheduled_at) >= now - 3_600_000 && !item.asset_url && item.status !== "Published");
