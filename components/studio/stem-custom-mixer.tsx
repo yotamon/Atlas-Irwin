@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { saveCustomAudioScene } from "@/app/studio/stem-actions";
+import { saveCustomAudioScene } from "@/app/studio/stem-actions-safe";
 import { AudioSceneLivePlayer } from "@/components/studio/audio-scene-live-player";
 import { STEM_CATEGORY_LABELS } from "@/lib/music-intelligence/stems";
 import type { Json } from "@/types/database";
@@ -97,7 +97,7 @@ export function StemCustomMixer({
         <div>
           <span className="section-label">Advanced</span>
           <h3>Build a custom Audio Scene</h3>
-          <p>Override Atlas only when you want a specific stem balance. The recipe stays non-destructive and is audible immediately.</p>
+          <p>Override Ensemblis only when you want a specific stem balance. The recipe stays non-destructive and is audible immediately.</p>
         </div>
         <span>{activeCount}/{stems.length} layers</span>
       </div>
