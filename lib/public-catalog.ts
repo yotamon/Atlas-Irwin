@@ -1,6 +1,7 @@
 import "server-only";
 
 import { unstable_cache } from "next/cache";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Release, ReleaseLink, ReleaseTrack } from "@/lib/releases/types";
 import {
   formatDurationSeconds,
@@ -9,6 +10,7 @@ import {
   trackNumber,
 } from "@/lib/catalog/format";
 import { resolveLegacyCanvasVideoUrl } from "@/lib/catalog/legacy-media";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import {
   createCatalogClient,
   getPublicCatalogOwnerId,
@@ -22,6 +24,7 @@ import type {
   Track,
   TrackExternalId,
 } from "@/types/database";
+import type { EnsemblisDatabase } from "@/types/ensemblis-database";
 import { adminEmails } from "@/lib/auth/studio";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 
@@ -64,8 +67,31 @@ async function resolveCatalogOwnerId() {
   return admin.id;
 }
 
-async function loadCatalogBundle(ownerId: string): Promise<CatalogBundle> {
+async function resolveCatalogArtistId(ownerId: string) {
   const supabase = createCatalogClient();
+  const ensemblis = supabase as unknown as SupabaseClient<EnsemblisDatabase>;
+  const { data, error } = await ensemblis
+    .from("artists")
+    .select("id")
+    .eq("legacy_owner_id", ownerId)
+    .eq("status", "active")
+    .limit(2);
+  if (error) throw new Error(error.message);
+  const artists = data ?? [];
+  if (artists.length !== 1) {
+    throw new Error(
+      artists.length
+        ? "The public catalog owner has more than one legacy artist mapping."
+        : "No active legacy artist is configured for the public catalog owner.",
+    );
+  }
+  return artists[0].id;
+}
+
+async function loadCatalogBundle(ownerId: string, artistId?: string): Promise<CatalogBundle> {
+  const supabase = createCatalogClient();
+  const music = asArtistScopedMusicClient(supabase);
+  const resolvedArtistId = artistId ?? await resolveCatalogArtistId(ownerId);
   const [
     releasesResult,
     placementsResult,
@@ -74,26 +100,37 @@ async function loadCatalogBundle(ownerId: string): Promise<CatalogBundle> {
     externalLinksResult,
     externalTrackIdsResult,
   ] = await Promise.all([
-    supabase
+    music
       .from("releases")
       .select("*")
       .eq("owner_id", ownerId)
+      .eq("artist_id", resolvedArtistId)
       .eq("is_public", true)
       .eq("publish_state", "live")
       .eq("is_archived", false),
-    supabase
+    music
       .from("homepage_placements")
       .select("*")
       .eq("owner_id", ownerId)
+      .eq("artist_id", resolvedArtistId)
       .eq("enabled", true)
       .order("display_order", { ascending: true }),
-    supabase.from("tracks").select("*").eq("owner_id", ownerId),
+    music
+      .from("tracks")
+      .select("*")
+      .eq("owner_id", ownerId)
+      .eq("artist_id", resolvedArtistId),
     supabase.from("media_links").select("*").eq("owner_id", ownerId),
-    supabase
+    music
       .from("release_external_links")
       .select("*")
-      .eq("owner_id", ownerId),
-    supabase.from("track_external_ids").select("*").eq("owner_id", ownerId),
+      .eq("owner_id", ownerId)
+      .eq("artist_id", resolvedArtistId),
+    music
+      .from("track_external_ids")
+      .select("*")
+      .eq("owner_id", ownerId)
+      .eq("artist_id", resolvedArtistId),
   ]);
 
   for (const result of [
@@ -298,7 +335,8 @@ async function fetchPublicReleasesUncached(): Promise<Release[]> {
   }
 
   const ownerId = await resolveCatalogOwnerId();
-  const bundle = await loadCatalogBundle(ownerId);
+  const artistId = await resolveCatalogArtistId(ownerId);
+  const bundle = await loadCatalogBundle(ownerId, artistId);
   const placementByRelease = new Map(
     bundle.placements.map((placement) => [placement.release_id, placement]),
   );
@@ -336,4 +374,4 @@ export async function getPublicReleaseBySlug(slug: string) {
   return releases.find((release) => release.slug === slug) ?? null;
 }
 
-export { resolveCatalogOwnerId, loadCatalogBundle };
+export { resolveCatalogOwnerId, resolveCatalogArtistId, loadCatalogBundle };
