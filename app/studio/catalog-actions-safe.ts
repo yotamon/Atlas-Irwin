@@ -1,7 +1,64 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { requireStudioAdmin } from "@/lib/auth/studio";
+import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import * as actions from "./catalog-actions";
+
+function formValue(form: FormData, key: string) {
+  return String(form.get(key) ?? "").trim();
+}
+
+async function assertActiveArtistTargets(form: FormData) {
+  const { supabase, user } = await requireStudioAdmin();
+  const artist = await resolveDefaultArtistContext(supabase, user);
+  const db = asArtistScopedMusicClient(supabase);
+
+  const releaseIds = new Set(
+    ["release_id", "target_release_id"]
+      .map((key) => formValue(form, key))
+      .filter(Boolean),
+  );
+  const trackIds = new Set(
+    ["track_id", "target_track_id", "default_track_id"]
+      .map((key) => formValue(form, key))
+      .filter(Boolean),
+  );
+
+  for (const releaseId of releaseIds) {
+    const { data, error } = await db
+      .from("releases")
+      .select("id")
+      .eq("id", releaseId)
+      .eq("artist_id", artist.artistId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) throw new Error("Release not found for the active artist.");
+  }
+
+  for (const trackId of trackIds) {
+    const { data, error } = await db
+      .from("tracks")
+      .select("id,release_id")
+      .eq("id", trackId)
+      .eq("artist_id", artist.artistId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) throw new Error("Track not found for the active artist.");
+
+    if (releaseIds.size && !releaseIds.has(data.release_id)) {
+      throw new Error("Track and release must belong to the same active artist context.");
+    }
+  }
+
+  return { supabase, user, artist };
+}
+
+async function guarded<T>(form: FormData, action: (form: FormData) => Promise<T>) {
+  await assertActiveArtistTargets(form);
+  return action(form);
+}
 
 /**
  * Treat release-readiness failures as expected validation, not runtime errors.
@@ -13,6 +70,7 @@ import * as actions from "./catalog-actions";
  * failures still propagate normally so they remain observable in Vercel.
  */
 export async function publishRelease(form: FormData) {
+  await assertActiveArtistTargets(form);
   try {
     return await actions.publishRelease(form);
   } catch (error) {
@@ -31,23 +89,23 @@ export async function publishRelease(form: FormData) {
 }
 
 export async function saveWebsiteDetails(form: FormData) {
-  return actions.saveWebsiteDetails(form);
+  return guarded(form, actions.saveWebsiteDetails);
 }
 
 export async function moveHomepagePlacement(form: FormData) {
-  return actions.moveHomepagePlacement(form);
+  return guarded(form, actions.moveHomepagePlacement);
 }
 
 export async function saveHomepagePlacement(form: FormData) {
-  return actions.saveHomepagePlacement(form);
+  return guarded(form, actions.saveHomepagePlacement);
 }
 
 export async function setActiveRelease(form: FormData) {
-  return actions.setActiveRelease(form);
+  return guarded(form, actions.setActiveRelease);
 }
 
 export async function linkExternalSoundCloudTrack(form: FormData) {
-  return actions.linkExternalSoundCloudTrack(form);
+  return guarded(form, actions.linkExternalSoundCloudTrack);
 }
 
 export async function dismissSoundCloudTrack(form: FormData) {
@@ -59,43 +117,43 @@ export async function dismissSpotifyTrack(form: FormData) {
 }
 
 export async function linkExternalSpotifyTrack(form: FormData) {
-  return actions.linkExternalSpotifyTrack(form);
+  return guarded(form, actions.linkExternalSpotifyTrack);
 }
 
 export async function createTrackFromSpotify(form: FormData) {
-  return actions.createTrackFromSpotify(form);
+  return guarded(form, actions.createTrackFromSpotify);
 }
 
 export async function createTrackFromSoundCloud(form: FormData) {
-  return actions.createTrackFromSoundCloud(form);
+  return guarded(form, actions.createTrackFromSoundCloud);
 }
 
 export async function moveTrack(form: FormData) {
-  return actions.moveTrack(form);
+  return guarded(form, actions.moveTrack);
 }
 
 export async function getSoundCloudMatchSuggestions(form: FormData) {
-  return actions.getSoundCloudMatchSuggestions(form);
+  return guarded(form, actions.getSoundCloudMatchSuggestions);
 }
 
 export async function uploadReleaseMedia(form: FormData) {
-  return actions.uploadReleaseMedia(form);
+  return guarded(form, actions.uploadReleaseMedia);
 }
 
 export async function attachMediaAsset(form: FormData) {
-  return actions.attachMediaAsset(form);
+  return guarded(form, actions.attachMediaAsset);
 }
 
 export async function createMediaUploadTarget(form: FormData) {
-  return actions.createMediaUploadTarget(form);
+  return guarded(form, actions.createMediaUploadTarget);
 }
 
 export async function discardMediaUpload(form: FormData) {
-  return actions.discardMediaUpload(form);
+  return guarded(form, actions.discardMediaUpload);
 }
 
 export async function registerMediaUpload(form: FormData) {
-  return actions.registerMediaUpload(form);
+  return guarded(form, actions.registerMediaUpload);
 }
 
 export async function updateMediaAsset(form: FormData) {
@@ -103,11 +161,11 @@ export async function updateMediaAsset(form: FormData) {
 }
 
 export async function updateMediaLink(form: FormData) {
-  return actions.updateMediaLink(form);
+  return guarded(form, actions.updateMediaLink);
 }
 
 export async function detachMediaAsset(form: FormData) {
-  return actions.detachMediaAsset(form);
+  return guarded(form, actions.detachMediaAsset);
 }
 
 export async function deleteMediaAsset(form: FormData) {
