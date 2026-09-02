@@ -2,6 +2,7 @@
 
 export { saveDistributionAccount } from "./distribution-account-action";
 export { prepareDistributionCatalog } from "./distribution-catalog-action";
+export { requestDistributionTakedown } from "./distribution-takedown-action";
 export {
   runDistributionPreflight,
   submitDistribution,
