@@ -101,7 +101,7 @@ test("Hobby-safe scheduler self-provisions a Vault secret and separates heavy wo
   assert.ok(route.includes("authorizeMarketingCron(request)"));
   assert.ok(factoryRoute.includes("authorizeMarketingCron(request)"));
   assert.ok(factoryRoute.includes("fillOneMissingScheduledAsset()"));
-  assert.ok(factoryRoute.includes("export const maxDuration = 55"));
+  assert.ok(factoryRoute.includes("export const maxDuration = 240"));
   assert.ok(auth.includes('from("automation_runtime_secrets")'));
   assert.ok(auth.includes('process.env.CRON_SECRET'));
   assert.ok(provisioning.includes("vault.create_secret"));
