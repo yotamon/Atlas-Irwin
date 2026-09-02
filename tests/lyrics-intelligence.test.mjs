@@ -185,16 +185,32 @@ test("Lyrics Intelligence never silently invents public lyric text", async () =>
   assert.ok(context.includes("Do not display, quote or reconstruct lyric text"));
 });
 
-test("Lyric Moments fuse semantic usefulness with Track Intelligence timing and hook strength", async () => {
+test("Lyric timing is chronological, stale-safe, line-addressable, and fused with vocal evidence", async () => {
   const analyzer = await source("lib/lyrics-intelligence/analyze.ts");
+  const timing = await source("lib/lyrics-intelligence/timing.ts");
 
   assert.ok(analyzer.includes("alignSectionsToMusic"));
+  assert.ok(analyzer.includes("aggregateVocalActivity"));
+  assert.ok(analyzer.includes("alignLyricSectionsMonotonically"));
+  assert.ok(analyzer.includes("interpolateLyricLineTimings"));
+  assert.ok(analyzer.includes('timing_source: "alignment"'));
+  assert.ok(analyzer.includes("start_ms: null"));
+  assert.ok(analyzer.includes("Lyrics timing invariant violated"));
+  assert.ok(timing.includes("Globally aligns lyric sections to music sections while preserving chronology"));
+  assert.ok(timing.includes("Unresolved is intentionally preferable"));
+});
+
+test("Lyric Moments fuse exact excerpt timing with Track Intelligence hook strength", async () => {
+  const analyzer = await source("lib/lyrics-intelligence/analyze.ts");
+
   assert.ok(analyzer.includes("music_section_id"));
   assert.ok(analyzer.includes("overlapCandidate"));
+  assert.ok(analyzer.includes("excerptLineWindow"));
   assert.ok(analyzer.includes("aiScore * 0.65 + musicScore * 0.35"));
   assert.ok(analyzer.includes("music_hook_candidate_id"));
   assert.ok(analyzer.includes("music_analysis_version"));
   assert.ok(analyzer.includes("source_audio_url"));
+  assert.ok(analyzer.includes('timing_method: lineWindow ? "section_weighted_line_alignment"'));
 });
 
 test("release UX treats Lyrics Intelligence as part of the same source-material workflow", async () => {
@@ -212,7 +228,28 @@ test("release UX treats Lyrics Intelligence as part of the same source-material 
   assert.ok(actions.includes("analyzeTrackLyrics"));
 });
 
-test("Marketing, stems, and lyrics share one creative context instead of parallel feature silos", async () => {
+test("unified Track Creative Intelligence graph fuses and diversifies master, lyric, stem and scene evidence", async () => {
+  const graph = await source("lib/music-intelligence/creative-graph.ts");
+  const loader = await source("lib/music-intelligence/creative-graph-loader.ts");
+
+  assert.ok(graph.includes("TrackCreativeIntelligenceGraph"));
+  assert.ok(graph.includes("seedsFromMaster"));
+  assert.ok(graph.includes("seedsFromLyrics"));
+  assert.ok(graph.includes("seedsFromScenes"));
+  assert.ok(graph.includes("activeStemRoles"));
+  assert.ok(graph.includes("multimodalBonus"));
+  assert.ok(graph.includes("Diversity is a first-class requirement"));
+  assert.ok(graph.includes("kindCount >= 3"));
+  assert.ok(graph.includes("lyricSectionTimingCoverage"));
+  assert.ok(graph.includes("stemTimelineConfidence"));
+  assert.ok(graph.includes("provenance"));
+  assert.ok(loader.includes("loadTrackCreativeIntelligenceGraph"));
+  assert.ok(loader.includes("track_music_intelligence"));
+  assert.ok(loader.includes("track_stems"));
+  assert.ok(loader.includes("audio_scenes"));
+});
+
+test("Marketing, stems, lyrics and master audio share one creative context instead of parallel feature silos", async () => {
   const creative = await source("lib/marketing/creative-context.ts");
   const marketingAi = await source("lib/marketing/ai.ts");
 
@@ -224,16 +261,20 @@ test("Marketing, stems, and lyrics share one creative context instead of paralle
   assert.ok(creative.includes("MUSICAL DIRECTION:"));
   assert.ok(marketingAi.includes("enrichMarketingContextWithLyrics"));
   assert.ok(marketingAi.includes("lyricsIntelligence"));
-  assert.ok(marketingAi.includes("marketing-v3-lyrics"));
+  assert.ok(marketingAi.includes("trackCreativeIntelligence"));
+  assert.ok(marketingAi.includes("marketing-v4-creative-graph"));
+  assert.ok(marketingAi.includes("shared cross-modal timeline"));
   assert.ok(marketingAi.includes("Quote only excerpts explicitly supplied with mayQuote=true"));
 });
 
-test("Video Director consumes Lyrics, Track, and Stem Intelligence together", async () => {
+test("Video Director consumes the unified creative graph with Lyrics, Track, and Stem Intelligence", async () => {
   const context = await source("lib/video-director/context.ts");
   const directorTypes = await source("lib/video-director/creative-director.ts");
   const director = await source("lib/video-director/openai-director.ts");
 
   assert.ok(context.includes("loadTrackLyricsContext"));
+  assert.ok(context.includes("loadTrackCreativeIntelligenceGraph"));
+  assert.ok(context.includes("creative_intelligence: conciseCreativeGraphContext(graph)"));
   assert.ok(context.includes("stemAwareMusicMap"));
   assert.ok(directorTypes.includes("lyrics: TrackLyricsContext"));
   assert.ok(director.includes("lyrics_intelligence: conciseLyricsPromptContext(context.lyrics)"));
