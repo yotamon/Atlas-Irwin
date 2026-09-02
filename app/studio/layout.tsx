@@ -12,11 +12,12 @@ import "./video-director-states.css";
 import "./video-director-refinements.css";
 import "./ai-control.css";
 import "./distribution.css";
+import "./distribution-release.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "Atlas Studio",
-    template: "%s · Atlas Studio",
+    default: "Ensemblis Studio",
+    template: "%s · Ensemblis Studio",
   },
   robots: { index: false, follow: false, nocache: true },
   referrer: "no-referrer",
