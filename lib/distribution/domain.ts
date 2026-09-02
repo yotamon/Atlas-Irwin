@@ -55,6 +55,9 @@ export type DistributionRights = {
   samplesCleared: boolean;
   contributorPermissionsConfirmed: boolean;
   aiDeclarationConfirmed: boolean;
+  masterRightsHolder: string;
+  compositionCopyrightHolder: string;
+  copyrightYear: number | null;
   territories: "worldwide" | string[];
   ugc: {
     enabled: boolean;
@@ -123,6 +126,7 @@ export function calculateDistributionReadiness({
   aiProvenance,
   artistProfiles,
   providerIssues = [],
+  creditsReady,
 }: {
   release: Release;
   tracks: Track[];
@@ -130,8 +134,9 @@ export function calculateDistributionReadiness({
   aiProvenance: AIProvenance;
   artistProfiles: Array<{ platform: string; external_artist_id: string | null; status: string }>;
   providerIssues?: DistributionIssue[];
+  creditsReady?: { ready: boolean; detail: string; issues?: DistributionIssue[] };
 }): DistributionReadiness {
-  const issues: DistributionIssue[] = [...providerIssues];
+  const issues: DistributionIssue[] = [...providerIssues, ...(creditsReady?.issues ?? [])];
   const primaryTrack = tracks.find((track) => track.is_primary) ?? tracks[0];
   const audioPass = tracks.length > 0 && tracks.every((track) => Boolean(track.audio_url));
   if (!tracks.length) issues.push({ code: "tracks.missing", title: "Add at least one track", detail: "DSP delivery requires a release with at least one track.", severity: "error", source: "ensemblis", objectType: "release", objectId: release.id });
@@ -146,8 +151,11 @@ export function calculateDistributionReadiness({
   const timingPass = Boolean(release.release_date);
   if (!timingPass) issues.push({ code: "timing.release_date_missing", title: "Choose a release date", detail: "Distribution needs a canonical release date to schedule store delivery.", severity: "error", source: "ensemblis", objectType: "release", objectId: release.id });
 
-  const baseRightsPass = Boolean(rights?.masterRightsConfirmed && rights.compositionRightsConfirmed && rights.samplesCleared && rights.contributorPermissionsConfirmed && rights.aiDeclarationConfirmed);
-  if (!baseRightsPass) issues.push({ code: "rights.unconfirmed", title: "Confirm release rights", detail: "The artist must personally confirm master, composition, sample, contributor and AI declarations.", severity: "error", source: "ensemblis", objectType: "rights", objectId: release.id });
+  const declarationsPass = Boolean(rights?.masterRightsConfirmed && rights.compositionRightsConfirmed && rights.samplesCleared && rights.contributorPermissionsConfirmed && rights.aiDeclarationConfirmed);
+  if (!declarationsPass) issues.push({ code: "rights.unconfirmed", title: "Confirm release rights", detail: "The artist must personally confirm master, composition, sample, contributor and AI declarations.", severity: "error", source: "ensemblis", objectType: "rights", objectId: release.id });
+
+  const copyrightPass = Boolean(rights?.masterRightsHolder.trim() && rights.compositionCopyrightHolder.trim() && rights.copyrightYear && rights.copyrightYear >= 1900 && rights.copyrightYear <= new Date().getUTCFullYear() + 1);
+  if (!copyrightPass) issues.push({ code: "rights.copyright_identity", title: "Complete copyright identity", detail: "Distribution requires the master/product rights holder, composition copyright holder and a valid copyright year.", severity: "error", source: "ensemblis", objectType: "rights", objectId: release.id });
 
   const ugcRightsPass = !rights?.ugc.enabled || Boolean(
     rights.ugc.exclusiveMasterConfirmed &&
@@ -156,23 +164,24 @@ export function calculateDistributionReadiness({
     rights.ugc.noUnauthorizedVoicesConfirmed
   );
   if (!ugcRightsPass) issues.push({ code: "rights.ugc_incomplete", title: "Complete UGC rights confirmation", detail: "UGC monetization needs explicit confirmation of exclusive master control, cleared samples, no non-exclusive beats and no unauthorized voices.", severity: "error", source: "ensemblis", objectType: "rights", objectId: release.id });
-  const rightsPass = baseRightsPass && ugcRightsPass;
+  const rightsPass = declarationsPass && copyrightPass && ugcRightsPass;
 
   const clonedVoiceNeedsAuth = aiProvenance.vocals.clonedVoice && !aiProvenance.vocals.authorizationConfirmed;
   if (clonedVoiceNeedsAuth) issues.push({ code: "ai.voice_authorization", title: "Confirm synthetic voice authorization", detail: "A cloned or replicated voice cannot be submitted until authorization is confirmed.", severity: "error", source: "ensemblis", objectType: "rights", objectId: primaryTrack?.id ?? release.id });
 
-  const majorProfileCount = artistProfiles.filter((profile) => ["spotify", "apple_music"].includes(profile.platform) && profile.status === "confirmed").length;
+  const majorProfileCount = artistProfiles.filter((profile) => ["spotify", "apple_music"].includes(profile.platform) && ["confirmed", "create_new"].includes(profile.status)).length;
   const profilesStatus = majorProfileCount === 2 ? "pass" : "warning";
-  if (majorProfileCount < 2) issues.push({ code: "artist_profiles.incomplete", title: "Confirm DSP artist profiles", detail: "Confirm Spotify and Apple Music identities to reduce the risk of catalog mapping to the wrong artist.", severity: "warning", source: "ensemblis", objectType: "artist", objectId: release.id });
+  if (majorProfileCount < 2) issues.push({ code: "artist_profiles.incomplete", title: "Confirm DSP artist profiles", detail: "Confirm existing Spotify and Apple Music identities, or explicitly choose new profiles, to reduce catalog mapping errors.", severity: "warning", source: "ensemblis", objectType: "artist", objectId: release.id });
 
+  const creditsStatus = creditsReady ? (creditsReady.ready ? "pass" : "block") : "warning";
   const checks: DistributionReadiness["checks"] = [
     { key: "audio", label: "Audio", status: audioPass ? "pass" : "block", detail: audioPass ? `${tracks.length} master${tracks.length === 1 ? "" : "s"} attached` : "Master audio is incomplete" },
     { key: "metadata", label: "Metadata", status: metadataPass ? "pass" : "block", detail: metadataPass ? "Core release identity is complete" : "Artist, title or genre is missing" },
     { key: "artwork", label: "Artwork", status: artworkPass ? "pass" : "block", detail: artworkPass ? "Cover artwork is attached" : "Cover artwork is missing" },
-    { key: "credits", label: "Credits", status: "warning", detail: "Provider validation will verify contributor/composer requirements per DSP" },
-    { key: "rights", label: "Rights", status: rightsPass ? "pass" : "block", detail: rightsPass ? "Artist declarations confirmed" : rights?.ugc.enabled && !ugcRightsPass ? "UGC rights declarations are incomplete" : "Legal declarations need artist confirmation" },
+    { key: "credits", label: "Credits", status: creditsStatus, detail: creditsReady?.detail ?? "Provider validation will verify contributor/composer requirements per DSP" },
+    { key: "rights", label: "Rights", status: rightsPass ? "pass" : "block", detail: rightsPass ? "Artist declarations and copyright identity confirmed" : rights?.ugc.enabled && !ugcRightsPass ? "UGC rights declarations are incomplete" : "Legal declarations or copyright identity need confirmation" },
     { key: "ai_provenance", label: "AI provenance", status: clonedVoiceNeedsAuth ? "block" : "pass", detail: clonedVoiceNeedsAuth ? "Voice authorization is missing" : "AI involvement is explicitly modeled" },
-    { key: "artist_profiles", label: "Artist profiles", status: profilesStatus, detail: majorProfileCount === 2 ? "Spotify and Apple Music confirmed" : `${majorProfileCount}/2 major profiles confirmed` },
+    { key: "artist_profiles", label: "Artist profiles", status: profilesStatus, detail: majorProfileCount === 2 ? "Spotify and Apple Music mapped or explicitly new" : `${majorProfileCount}/2 major profiles resolved` },
     { key: "timing", label: "Release timing", status: timingPass ? "pass" : "block", detail: timingPass ? release.release_date! : "Release date is missing" },
   ];
   const blockingCount = issues.filter((issue) => issue.severity === "error").length;
