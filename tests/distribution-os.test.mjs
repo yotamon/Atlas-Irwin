@@ -9,8 +9,10 @@ const files = {
   domain: "lib/distribution/domain.ts",
   provider: "lib/distribution/provider.ts",
   providerAccount: "lib/distribution/provider-account.ts",
+  providerLifecycle: "lib/distribution/provider-lifecycle.ts",
   actions: "app/studio/distribution-core-actions.ts",
   catalogAction: "app/studio/distribution-catalog-action.ts",
+  takedownAction: "app/studio/distribution-takedown-action.ts",
   actionFacade: "app/studio/distribution-actions.ts",
   releasePage: "app/studio/(protected)/releases/[id]/distribution/release-distribution-page.tsx",
   routePage: "app/studio/(protected)/releases/[id]/distribution/page.tsx",
@@ -73,10 +75,10 @@ test("Revelator stays behind a provider-neutral boundary and catalog IDs are dis
   assert.ok(provider.includes("listStores()"));
   assert.ok(provider.includes("prepareRelease(input: ProviderCatalogRelease)"));
   assert.ok(provider.includes("/common/lookup/stores?activeOnly=true"));
-  assert.ok(provider.includes('"/common/lookup/languages"'));
-  assert.ok(provider.includes('"/common/lookup/musicstyles"'));
-  assert.ok(provider.includes('"/common/lookup/contributorRoles"'));
-  assert.ok(provider.includes('"/common/lookup/trackProperties"'));
+  assert.ok(provider.includes("/common/lookup/languages"));
+  assert.ok(provider.includes("/common/lookup/musicstyles"));
+  assert.ok(provider.includes("/common/lookup/contributorRoles"));
+  assert.ok(provider.includes("/common/lookup/trackProperties"));
   assert.ok(provider.includes("/supply-chain/v1/releases/${encodeURIComponent(providerReleaseId)}/deliver/validate"));
   assert.ok(provider.includes("/distribution/release/addtoqueue"));
   assert.equal(provider.includes("const storeIds = ["), false, "DSP IDs must not be hardcoded");
@@ -86,10 +88,10 @@ test("Revelator stays behind a provider-neutral boundary and catalog IDs are dis
 test("provider catalog preparation uploads lossless masters, artwork, writers and production credits", async () => {
   const provider = await readFile(files.provider, "utf8");
   const catalogAction = await readFile(files.catalogAction, "utf8");
-  assert.ok(provider.includes('"/media/audio/upload"'));
-  assert.ok(provider.includes('"/media/image/upload?cover=true"'));
-  assert.ok(provider.includes('"/content/release/save"'));
-  assert.ok(provider.includes('"/content/release/retail/save"'));
+  assert.ok(provider.includes("/media/audio/upload"));
+  assert.ok(provider.includes("/media/image/upload?cover=true"));
+  assert.ok(provider.includes("/content/release/save"));
+  assert.ok(provider.includes("/content/release/retail/save"));
   assert.ok(provider.includes("must use a lossless WAV or FLAC master"));
   assert.ok(provider.includes("Production & Engineering credit"));
   assert.ok(provider.includes("Writer shares for"));
@@ -102,11 +104,12 @@ test("provider catalog preparation uploads lossless masters, artwork, writers an
 
 test("hybrid V1/V2 supply-chain settings are reapplied after retail and UGC policies are per-track", async () => {
   const provider = await readFile(files.provider, "utf8");
-  const retailIndex = provider.indexOf('this.request(this.v1Base, "/content/release/retail/save"');
+  const configureIndex = provider.indexOf("async configureRelease(providerReleaseId");
+  const retailIndex = provider.indexOf("/content/release/retail/save", configureIndex);
   const territoryIndex = provider.indexOf("/territories-clearances", retailIndex);
-  const pricingIndex = provider.indexOf("/pricing-tiers/options", retailIndex);
-  const monetizationIndex = provider.indexOf('this.configureMonetization(providerReleaseId, options.ugcEnabled)', retailIndex);
-  assert.ok(retailIndex > -1 && territoryIndex > retailIndex && pricingIndex > retailIndex && monetizationIndex > retailIndex, "V1 retail must run before every V2 supply-chain setting");
+  const pricingIndex = provider.indexOf("this.configureDefaultPricing(providerReleaseId)", retailIndex);
+  const monetizationIndex = provider.indexOf("this.configureMonetization(providerReleaseId, options.ugcEnabled)", retailIndex);
+  assert.ok(configureIndex > -1 && retailIndex > configureIndex && territoryIndex > retailIndex && pricingIndex > retailIndex && monetizationIndex > retailIndex, "V1 retail must run before every V2 supply-chain setting in configureRelease");
   assert.ok(provider.includes("/supply-chain/v1/monetization-policies"));
   assert.ok(provider.includes("monetizationPolicies: selectedPolicies.map"));
   assert.ok(provider.includes("order === 1"), "UGC enabled should use the provider-declared default policy rather than a hardcoded ID");
@@ -120,15 +123,15 @@ test("catalog creation and updates are duplicate-safe under ambiguous provider o
   assert.ok(catalogAction.includes('`update_catalog:${releaseId}:${packageHash}`'));
   assert.ok(catalogAction.includes('["started", "ambiguous"]'));
   assert.ok(catalogAction.includes("will not risk creating a duplicate release"));
-  const startIndex = catalogAction.indexOf('operation_type: operationType');
+  const startIndex = catalogAction.indexOf("operation_type: operationType");
   const providerMutationIndex = catalogAction.indexOf("provider.prepareRelease(input)", startIndex);
   assert.ok(startIndex > -1 && providerMutationIndex > startIndex, "provider operation evidence must be written before the external catalog mutation");
 });
 
 test("child-account support uses stable unattended identity and never stores the generated provider password", async () => {
   const providerAccount = await readFile(files.providerAccount, "utf8");
-  assert.ok(providerAccount.includes('"/partner/account/signup"'));
-  assert.ok(providerAccount.includes('"/partner/account/login"'));
+  assert.ok(providerAccount.includes("/partner/account/signup"));
+  assert.ok(providerAccount.includes("/partner/account/login"));
   assert.ok(providerAccount.includes("partnerUserId = input.ownerId"));
   assert.ok(providerAccount.includes('type: "Growth"'));
   assert.ok(providerAccount.includes("randomBytes(32)"));
@@ -151,6 +154,25 @@ test("submission is approval-gated, revalidated, snapshotted and ambiguity-safe 
   assert.equal(actions.includes("masterRightsConfirmed: true"), false, "legal ownership must never be auto-attested");
 });
 
+test("takedown dry-runs first, records intent before mutation and never retries an ambiguous destructive result", async () => {
+  const [lifecycle, action, domain] = await Promise.all([
+    readFile(files.providerLifecycle, "utf8"),
+    readFile(files.takedownAction, "utf8"),
+    readFile(files.domain, "utf8"),
+  ]);
+  assert.ok(lifecycle.includes("/takedown/validate"), "provider dry-run endpoint must be used before takedown");
+  assert.ok(lifecycle.includes("/distribution/release/removefromstore"), "provider takedown endpoint must be implemented");
+  assert.ok(action.includes('bool(form, "confirm_takedown")'), "destructive removal must require explicit confirmation");
+  const validationIndex = action.indexOf("validateTakedown(config.provider_release_id, storeIds)");
+  const operationIndex = action.indexOf('operation_type: "takedown"', validationIndex);
+  const mutationIndex = action.indexOf("takedownRelease(config.provider_release_id, storeIds)", operationIndex);
+  assert.ok(validationIndex > -1 && operationIndex > validationIndex && mutationIndex > operationIndex, "validated durable intent must precede the destructive provider write");
+  assert.ok(action.includes("will not retry it automatically"));
+  assert.ok(action.includes("will not retry automatically; reconcile provider status"));
+  assert.ok(domain.includes('"78"') && domain.includes('return "takedown_pending"'), "provider takedown delivery must remain pending until store removal is confirmed");
+  assert.ok(domain.includes('"79"') && domain.includes('return "taken_down"'), "only confirmed store removal should become taken_down");
+});
+
 test("UGC, AI voice authorization and copyright identity are blocking legal readiness inputs", async () => {
   const domain = await readFile(files.domain, "utf8");
   const releasePage = await readFile(files.releasePage, "utf8");
@@ -165,9 +187,13 @@ test("UGC, AI voice authorization and copyright identity are blocking legal read
 
 test("delivered is never treated as live", async () => {
   const domain = await readFile(files.domain, "utf8");
-  assert.ok(domain.includes('["50", "delivered"]'));
-  assert.ok(domain.includes('["60", "on store", "live"]'));
-  assert.notEqual(domain.indexOf('["50", "delivered"]'), domain.indexOf('["60", "on store", "live"]'));
+  const deliveredIndex = domain.indexOf('["50", "delivered"]');
+  const liveIndex = domain.indexOf('["60", "on store"');
+  assert.ok(deliveredIndex > -1, "provider status 50 must map to delivered");
+  assert.ok(liveIndex > -1, "provider status 60 must map to live/on-store");
+  assert.notEqual(deliveredIndex, liveIndex);
+  assert.ok(domain.indexOf('return "delivered"', deliveredIndex) > deliveredIndex);
+  assert.ok(domain.indexOf('return "live"', liveIndex) > liveIndex);
 });
 
 test("provider IDs never enter the artist UX and manual linking is recovery-only", async () => {
