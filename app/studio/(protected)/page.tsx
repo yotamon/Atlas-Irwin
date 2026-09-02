@@ -68,7 +68,7 @@ export default async function TodayPage() {
     outreachDraftsResult,
   ] = await Promise.all([
     supabase.from("releases").select("id,title,release_date,artwork_url,cover_alt,status,active_release").eq("owner_id", user.id).order("updated_at", { ascending: false }),
-    supabase.from("tasks").select("id,title,due_at,priority,status,metadata").eq("owner_id", user.id).not("status", "in", '("Done","Skipped")').order("due_at", { ascending: true }).limit(30),
+    supabase.from("tasks").select("id,title,due_at,priority,status").eq("owner_id", user.id).not("status", "in", '("Done","Skipped")').order("due_at", { ascending: true }).limit(30),
     marketing.from("campaigns").select("id,release_id,name,status").eq("owner_id", user.id).in("status", ["draft", "planned", "active"]),
     marketing.from("automation_jobs").select("id,campaign_id,job_type,status,approval_status,run_after").eq("owner_id", user.id).not("status", "in", '("completed","failed","cancelled")').order("run_after", { ascending: true }).limit(40),
     marketing.from("publication_jobs").select("id,campaign_id,content_item_id,platform,status,approval_status,scheduled_at").eq("owner_id", user.id).not("status", "in", '("published","failed","cancelled")').order("scheduled_at", { ascending: true }).limit(40),
