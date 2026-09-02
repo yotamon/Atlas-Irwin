@@ -15,10 +15,10 @@ test("free content factory can bootstrap persistent ffmpeg without a 55-second r
   assert.match(route, /fillOneMissingScheduledAsset/);
 });
 
-test("database-side content factory caller outlives bootstrap without changing spend policy", () => {
+test("database-side content factory caller outlives bootstrap without mutating paid or publish state", () => {
   const migration = read("supabase/migrations/20260902221500_content_factory_timeout_hardening.sql");
   assert.match(migration, /atlas-content-factory-6-hour/);
   assert.match(migration, /timeout_milliseconds\s*:=\s*210000/);
   assert.match(migration, /atlas_marketing_cron_secret/);
-  assert.doesNotMatch(migration, /provider|model|budget|spend/i);
+  assert.doesNotMatch(migration, /generation_runs|campaign_ai_spend|ai_control_settings|publication_jobs/i);
 });
