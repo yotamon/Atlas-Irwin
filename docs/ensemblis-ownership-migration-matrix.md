@@ -44,16 +44,20 @@ New profiles are provisioned idempotently with one personal workspace, owner mem
 | `track_external_ids` | Parent-derived | track | retains `owner_id` |
 | `release_external_links` | Parent-derived | release | retains `owner_id` |
 | `homepage_placements` | Parent-derived | release | retains `owner_id` during Atlas public-site compatibility |
+| `media_links` targeting Release/Track | Parent-derived | release or track | `artist_id` required for music targets; content-only links remain nullable until #71 |
 
 ### Music-domain invariants
 
 1. A child may not override its parent's artist.
 2. Parent/child artist mismatch raises an error rather than being silently repaired.
 3. Existing Atlas IDs and public routes do not change.
-4. `artist_id` is non-null after deterministic backfill.
+4. `artist_id` is non-null after deterministic backfill for canonical music rows and music-targeting media links.
 5. Artist deletion is restricted; artists should be archived instead of cascading catalog deletion.
 6. A rename of the canonical Artist updates the temporary `releases.artist` compatibility label.
 7. Server actions validate the active Artist Context in addition to workspace membership.
+8. Release slugs are unique per Artist, not per profile, so two Artists managed by one account may use the same slug safely.
+9. The single-active-release invariant is Artist-local. Activating a release for Artist B must not mutate Artist A.
+10. The legacy Atlas public catalog resolves one explicit legacy/default Artist before reading releases, tracks, placements or external music identities.
 
 ## Media ownership
 
@@ -65,12 +69,19 @@ The intended model is:
 
 `workspace/profile-owned asset → artist-scoped link or usage → release/track/content`
 
-Before general multi-artist media sharing is exposed, access checks must still prevent a user from linking an asset from a workspace they cannot access.
+For #70, `media_links` attached to a Release or Track inherit and validate that music parent's `artist_id`. Content-only media links remain nullable until content ownership moves in #71. Before general multi-artist media sharing is exposed, access checks must still prevent a user from linking an asset from a workspace they cannot access.
+
+## Brand / Artist Intelligence boundary
+
+`brand_settings` remains on its legacy profile scope in #70 because the current music-analysis graph does not consume it. Track Intelligence, Lyrics Intelligence, Stem Intelligence and Audio Scenes are derived from the canonical Track/Lyrics/Stem graph, not from `brand_settings`.
+
+When brand, marketing and creative-generation surfaces move in #71, artist-specific brand identity must move with them. This is an intentional boundary, not an omission from the music migration. Product-level model/provider configuration may remain broader when it is genuinely shared.
 
 ## Operational domain — #71
 
 These entities become artist-scoped after the music graph is proven:
 
+- artist-specific brand settings and creative identity;
 - campaigns and phases;
 - content items and creative lineage;
 - publication jobs and provider scheduling;
@@ -107,7 +118,7 @@ A domain may switch reads from `owner_id` to `artist_id` only when:
 - direct deep links are artist-scoped;
 - Server Actions validate active artist context;
 - service/background paths retain explicit lineage;
-- a second-artist adversarial test passes;
+- a same-user, second-artist adversarial test passes;
 - Atlas production compatibility is preserved.
 
 `owner_id` is removed or demoted only after every downstream consumer has crossed those gates.
