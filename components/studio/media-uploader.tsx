@@ -7,9 +7,9 @@ import {
   createMediaUploadTarget,
   discardMediaUpload,
   registerMediaUpload,
-} from "@/app/studio/catalog-actions";
+} from "@/app/studio/catalog-actions-safe";
 import { attachContentMediaV2 } from "@/app/studio/content-actions-v2";
-import { attachReleaseMasterFromMedia, createVaultTrackFromMedia } from "@/app/studio/growth-media-actions";
+import { attachReleaseMasterFromMedia, createVaultTrackFromMedia } from "@/app/studio/growth-media-actions-safe";
 import { createClient } from "@/lib/supabase/client";
 import {
   compatibleMediaTypes,
@@ -198,7 +198,7 @@ export function MediaUploader({
             ? releaseMasterResult?.analysisReused
               ? "Master attached. Existing Music Intelligence was reused instantly."
               : releaseMasterResult?.analysisQueued
-                ? "Master attached. Atlas is analyzing its structure and strongest hooks."
+                ? "Master attached. Ensemblis is analyzing its structure and strongest hooks."
                 : "Master attached. Analysis can be retried from the release when the media worker is available."
             : vaultMode
               ? "Master is in the Vault. Free audio analysis was queued when the media worker is available."
@@ -241,7 +241,7 @@ export function MediaUploader({
       >
         <FiUploadCloud aria-hidden />
         <strong>{releaseMasterMode ? "Drop the release master here" : vaultMode ? "Drop unreleased masters here" : "Drop media here"}</strong>
-        <span>{releaseMasterMode ? "WAV, MP3 or another audio master. Atlas will attach it to this release and analyze its structure and strongest hooks." : vaultMode ? "Audio masters only. Each file becomes an independent Vault track." : "Images, video, audio, masters, stems, or ZIP files"}</span>
+        <span>{releaseMasterMode ? "WAV, MP3 or another audio master. Ensemblis will attach it to this release and analyze its structure and strongest hooks." : vaultMode ? "Audio masters only. Each file becomes an independent Vault track." : "Images, video, audio, masters, stems, or ZIP files"}</span>
         <button type="button" className="button" onClick={() => inputRef.current?.click()}>{releaseMasterMode ? "Choose master" : vaultMode ? "Choose masters" : "Choose files"}</button>
         <input ref={inputRef} hidden multiple={!releaseMasterMode} type="file" accept={vaultMode || releaseMasterMode ? "audio/*" : "image/*,video/*,audio/*,.zip"} onChange={(event) => event.target.files && addFiles(event.target.files)} />
       </div>
