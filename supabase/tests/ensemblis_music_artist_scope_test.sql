@@ -1,6 +1,6 @@
 begin;
 
-select plan(18);
+select plan(21);
 
 insert into auth.users (id, email, aud, role, created_at, updated_at)
 values
@@ -73,6 +73,14 @@ select throws_ok(
   'a release slug remains unique inside one artist'
 );
 
+update public.releases set active_release=true where id='44000000-0000-0000-0000-000000000001';
+update public.releases set active_release=true where id='44000000-0000-0000-0000-000000000003';
+select is(
+  (select count(*)::integer from public.releases where owner_id='14000000-0000-0000-0000-000000000001' and active_release),
+  2,
+  'different artists under one owner may each keep an active release'
+);
+
 insert into public.tracks (id, release_id, owner_id, title, audio_url)
 values ('54000000-0000-0000-0000-000000000001','44000000-0000-0000-0000-000000000001','14000000-0000-0000-0000-000000000001','Alpha Track','https://example.com/alpha.wav');
 
@@ -124,6 +132,22 @@ select is(
 
 insert into public.media_assets(id, owner_id, bucket_name, storage_path, asset_type, visibility)
 values ('74000000-0000-0000-0000-000000000001','14000000-0000-0000-0000-000000000001','studio-assets','alpha/stem.wav','stem','private');
+
+insert into public.media_links(id, owner_id, media_asset_id, track_id, role)
+values ('75000000-0000-0000-0000-000000000001','14000000-0000-0000-0000-000000000001','74000000-0000-0000-0000-000000000001','54000000-0000-0000-0000-000000000001','stem');
+select is(
+  (select artist_id from public.media_links where id='75000000-0000-0000-0000-000000000001'),
+  '34000000-0000-0000-0000-000000000001'::uuid,
+  'music media links inherit the target Track artist'
+);
+select throws_ok(
+  $$insert into public.media_links(id, owner_id, media_asset_id, track_id, artist_id, role)
+    values ('75000000-0000-0000-0000-000000000099','14000000-0000-0000-0000-000000000001','74000000-0000-0000-0000-000000000001','54000000-0000-0000-0000-000000000001','34000000-0000-0000-0000-000000000003','stem')$$,
+  'P0001',
+  'media_links artist must match music target artist',
+  'a media usage cannot claim another Artist than its music target'
+);
+
 insert into public.track_stems(id, owner_id, track_id, media_asset_id, label, source_master_url)
 values ('84000000-0000-0000-0000-000000000001','14000000-0000-0000-0000-000000000001','54000000-0000-0000-0000-000000000001','74000000-0000-0000-0000-000000000001','Vocals','https://example.com/alpha.wav');
 select is(
