@@ -55,8 +55,8 @@ export type DistributionRights = {
   samplesCleared: boolean;
   contributorPermissionsConfirmed: boolean;
   aiDeclarationConfirmed: boolean;
-  masterRightsHolder: string;
-  compositionCopyrightHolder: string;
+  productCopyrightHolder: string;
+  recordingCopyrightHolder: string;
   copyrightYear: number | null;
   territories: "worldwide" | string[];
   ugc: {
@@ -154,8 +154,8 @@ export function calculateDistributionReadiness({
   const declarationsPass = Boolean(rights?.masterRightsConfirmed && rights.compositionRightsConfirmed && rights.samplesCleared && rights.contributorPermissionsConfirmed && rights.aiDeclarationConfirmed);
   if (!declarationsPass) issues.push({ code: "rights.unconfirmed", title: "Confirm release rights", detail: "The artist must personally confirm master, composition, sample, contributor and AI declarations.", severity: "error", source: "ensemblis", objectType: "rights", objectId: release.id });
 
-  const copyrightPass = Boolean(rights?.masterRightsHolder.trim() && rights.compositionCopyrightHolder.trim() && rights.copyrightYear && rights.copyrightYear >= 1900 && rights.copyrightYear <= new Date().getUTCFullYear() + 1);
-  if (!copyrightPass) issues.push({ code: "rights.copyright_identity", title: "Complete copyright identity", detail: "Distribution requires the master/product rights holder, composition copyright holder and a valid copyright year.", severity: "error", source: "ensemblis", objectType: "rights", objectId: release.id });
+  const copyrightPass = Boolean(rights?.productCopyrightHolder.trim() && rights.recordingCopyrightHolder.trim() && rights.copyrightYear && rights.copyrightYear >= 1900 && rights.copyrightYear <= new Date().getUTCFullYear() + 1);
+  if (!copyrightPass) issues.push({ code: "rights.copyright_identity", title: "Complete copyright identity", detail: "Distribution requires the product copyright holder, sound-recording copyright holder and a valid copyright year.", severity: "error", source: "ensemblis", objectType: "rights", objectId: release.id });
 
   const ugcRightsPass = !rights?.ugc.enabled || Boolean(
     rights.ugc.exclusiveMasterConfirmed &&
