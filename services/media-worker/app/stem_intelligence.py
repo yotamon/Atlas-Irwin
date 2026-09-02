@@ -135,8 +135,28 @@ def _alignment(master: np.ndarray, stem: np.ndarray, sr: int, duration_delta_ms:
             "signal_correlation_confidence": 0.0,
             "method": "duration_evidence",
             "duration_delta_ms": duration_delta_ms,
-            "evidence": {"duration_match": duration_match, "onset_correlation": 0.0},
+            "evidence": {
+                "duration_match": duration_match,
+                "onset_correlation": 0.0,
+                "support_event_count": 0,
+                "support_confidence": 0.0,
+            },
         }
+
+    master_events = librosa.onset.onset_detect(
+        onset_envelope=master_onset,
+        sr=sr,
+        hop_length=HOP_LENGTH,
+        backtrack=False,
+    )
+    stem_events = librosa.onset.onset_detect(
+        onset_envelope=stem_onset,
+        sr=sr,
+        hop_length=HOP_LENGTH,
+        backtrack=False,
+    )
+    support_event_count = int(min(len(master_events), len(stem_events)))
+    support_confidence = _clamp01((support_event_count - 1) / 4.0)
 
     master_onset = (master_onset - float(np.mean(master_onset))) / max(float(np.std(master_onset)), 1e-6)
     stem_onset = (stem_onset - float(np.mean(stem_onset))) / max(float(np.std(stem_onset)), 1e-6)
@@ -163,21 +183,29 @@ def _alignment(master: np.ndarray, stem: np.ndarray, sr: int, duration_delta_ms:
 
     signal_corr = _clamp01(max(0.0, best_corr))
     prominence = max(0.0, best_corr - max(0.0, runner_up))
-    correlation_confidence = _clamp01(signal_corr * 0.78 + min(1.0, prominence * 3.0) * 0.22)
+    raw_correlation_confidence = _clamp01(signal_corr * 0.78 + min(1.0, prominence * 3.0) * 0.22)
+    # A mathematically perfect correlation from one isolated transient is not enough evidence
+    # to claim a trustworthy source offset. Require repeated onset support before signal
+    # evidence can dominate the timeline confidence.
+    evidence_strength = _clamp01(0.15 + support_confidence * 0.85)
+    correlation_confidence = _clamp01(raw_correlation_confidence * evidence_strength)
     timeline_confidence = _clamp01(duration_match * 0.68 + correlation_confidence * 0.32)
-    offset_ms = int(round(best_lag * HOP_LENGTH * 1000.0 / sr)) if correlation_confidence >= 0.32 else 0
+    trustworthy_signal = correlation_confidence >= 0.32 and support_event_count >= 2
+    offset_ms = int(round(best_lag * HOP_LENGTH * 1000.0 / sr)) if trustworthy_signal else 0
     return {
         "offset_ms": offset_ms,
         "confidence": timeline_confidence,
         "timeline_confidence": timeline_confidence,
         "signal_correlation_confidence": correlation_confidence,
-        "method": "onset_cross_correlation" if correlation_confidence >= 0.32 else "duration_plus_sparse_signal",
+        "method": "onset_cross_correlation" if trustworthy_signal else "duration_plus_sparse_signal",
         "duration_delta_ms": duration_delta_ms,
         "correlation": signal_corr,
         "evidence": {
             "duration_match": duration_match,
             "onset_correlation": signal_corr,
             "correlation_prominence": _clamp01(prominence * 3.0),
+            "support_event_count": support_event_count,
+            "support_confidence": support_confidence,
         },
     }
 
