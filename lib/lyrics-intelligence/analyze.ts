@@ -5,9 +5,10 @@ import { runAtlasAiTask } from "@/lib/ai/control-plane";
 import { strictQualityResult } from "@/lib/ai/quality";
 import { parseMusicMap, type MusicHookCandidate } from "@/lib/video-director/creative-director";
 import {
+  alignLyricLinesToVocalActivity,
   alignLyricSectionsMonotonically,
-  interpolateLyricLineTimings,
   normalizeExcerpt,
+  type VocalActivitySlice,
   type VocalSectionActivity,
 } from "./timing";
 import {
@@ -66,8 +67,14 @@ function overlapCandidate(section: TrackLyricSection, candidates: MusicHookCandi
     .sort((a, b) => b.score - a.score)[0] ?? null;
 }
 
-function aggregateVocalActivity(stems: Array<{ analysis: Json }>) {
-  const totals = new Map<string, { activeRatio: number; energy: number; rhythmicActivity: number; count: number }>();
+type VocalEvidence = {
+  sectionActivity: Map<string, VocalSectionActivity>;
+  activityCurve: VocalActivitySlice[];
+};
+
+function aggregateVocalEvidence(stems: Array<{ analysis: Json }>): VocalEvidence {
+  const sectionTotals = new Map<string, { activeRatio: number; energy: number; rhythmicActivity: number; count: number }>();
+  const curveTotals = new Map<string, { startMs: number; endMs: number; activeRatio: number; energy: number; rhythmicActivity: number; count: number }>();
   for (const stem of stems) {
     const analysis = record(stem.analysis);
     const rows = Array.isArray(analysis.section_activity) ? analysis.section_activity : [];
@@ -75,24 +82,52 @@ function aggregateVocalActivity(stems: Array<{ analysis: Json }>) {
       const row = record(raw);
       const id = typeof row.section_id === "string" ? row.section_id : "";
       if (!id) continue;
-      const current = totals.get(id) ?? { activeRatio: 0, energy: 0, rhythmicActivity: 0, count: 0 };
+      const current = sectionTotals.get(id) ?? { activeRatio: 0, energy: 0, rhythmicActivity: 0, count: 0 };
       current.activeRatio += clamp(numeric(row.active_ratio));
       current.energy += clamp(numeric(row.energy));
       current.rhythmicActivity += clamp(numeric(row.rhythmic_activity));
       current.count += 1;
-      totals.set(id, current);
+      sectionTotals.set(id, current);
+    }
+
+    const curve = Array.isArray(analysis.activity_curve) ? analysis.activity_curve : [];
+    for (const raw of curve) {
+      const row = record(raw);
+      const startMs = Math.max(0, Math.round(numeric(row.start_ms, -1)));
+      const endMs = Math.max(startMs + 1, Math.round(numeric(row.end_ms, -1)));
+      if (startMs < 0 || endMs <= startMs) continue;
+      const key = `${startMs}:${endMs}`;
+      const current = curveTotals.get(key) ?? { startMs, endMs, activeRatio: 0, energy: 0, rhythmicActivity: 0, count: 0 };
+      current.activeRatio += clamp(numeric(row.active_ratio));
+      current.energy += clamp(numeric(row.energy));
+      current.rhythmicActivity += clamp(numeric(row.rhythmic_activity));
+      current.count += 1;
+      curveTotals.set(key, current);
     }
   }
-  const result = new Map<string, VocalSectionActivity>();
-  for (const [id, value] of totals) {
+
+  const sectionActivity = new Map<string, VocalSectionActivity>();
+  for (const [id, value] of sectionTotals) {
     const divisor = Math.max(1, value.count);
-    result.set(id, {
+    sectionActivity.set(id, {
       activeRatio: clamp(value.activeRatio / divisor),
       energy: clamp(value.energy / divisor),
       rhythmicActivity: clamp(value.rhythmicActivity / divisor),
     });
   }
-  return result;
+  const activityCurve = [...curveTotals.values()]
+    .map((value) => {
+      const divisor = Math.max(1, value.count);
+      return {
+        startMs: value.startMs,
+        endMs: value.endMs,
+        activeRatio: clamp(value.activeRatio / divisor),
+        energy: clamp(value.energy / divisor),
+        rhythmicActivity: clamp(value.rhythmicActivity / divisor),
+      } satisfies VocalActivitySlice;
+    })
+    .sort((a, b) => a.startMs - b.startMs);
+  return { sectionActivity, activityCurve };
 }
 
 type AlignedLine = {
@@ -154,11 +189,11 @@ async function alignSectionsToMusic({
   if (vocalsResult.error) throw new Error(vocalsResult.error.message);
   const musicIntelligence = musicResult.data;
   const map = parseMusicMap(musicIntelligence?.analysis);
-  if (!map) return { sections, map: null, analysisVersion: null, sourceAudioUrl: null, alignedLines: [] as AlignedLine[] };
+  if (!map) return { sections, map: null, analysisVersion: null, sourceAudioUrl: null, alignedLines: [] as AlignedLine[], lineAlignmentMethod: "none" as const };
 
-  const vocalActivity = aggregateVocalActivity((vocalsResult.data ?? []) as Array<{ analysis: Json }>);
+  const vocalEvidence = aggregateVocalEvidence((vocalsResult.data ?? []) as Array<{ analysis: Json }>);
   const automaticSections = sections.filter((section) => section.timing_source !== "manual");
-  const decisions = alignLyricSectionsMonotonically(automaticSections, map.sections, vocalActivity);
+  const decisions = alignLyricSectionsMonotonically(automaticSections, map.sections, vocalEvidence.sectionActivity);
   const decisionBySection = new Map(decisions.map((decision) => [decision.lyricSectionId, decision]));
 
   for (const section of automaticSections) {
@@ -194,7 +229,6 @@ async function alignSectionsToMusic({
     .in("section_id", sections.map((section) => section.id));
   if (linesError) throw new Error(linesError.message);
   const alignedLines: AlignedLine[] = [];
-  const sectionById = new Map(sections.map((section) => [section.id, section]));
 
   for (const section of sections) {
     const sectionLines = (rawLines ?? []).filter((line) => line.section_id === section.id);
@@ -226,10 +260,11 @@ async function alignSectionsToMusic({
       continue;
     }
 
-    const derived = interpolateLyricLineTimings(
+    const derived = alignLyricLinesToVocalActivity(
       section.start_ms,
       section.end_ms,
       sectionLines.map((line) => ({ id: line.id, display_order: line.display_order, text: line.text })),
+      vocalEvidence.activityCurve,
     );
     for (const timing of derived) {
       const source = sectionLines.find((line) => line.id === timing.id);
@@ -267,8 +302,8 @@ async function alignSectionsToMusic({
     analysisVersion: musicIntelligence?.analysis_version ?? null,
     sourceAudioUrl: musicIntelligence?.source_audio_url ?? null,
     alignedLines,
+    lineAlignmentMethod: vocalEvidence.activityCurve.length ? "vocal_activity" as const : "text_weighted" as const,
     sectionAlignmentScores: new Map(decisions.map((decision) => [decision.lyricSectionId, decision.score])),
-    sectionById,
   };
 }
 
@@ -436,7 +471,7 @@ export async function analyzeTrackLyrics({
           music_hook_score: musicScore,
           music_hook_candidate_id: musicalHook?.id ?? null,
           music_section_id: section?.music_section_id ?? null,
-          timing_method: lineWindow ? "section_weighted_line_alignment" : "music_section_or_hook",
+          timing_method: lineWindow ? `${alignment.lineAlignmentMethod}_line_alignment` : "music_section_or_hook",
           section_alignment_score: section ? alignment.sectionAlignmentScores?.get(section.id) ?? null : null,
         } as Json,
       };
@@ -451,6 +486,7 @@ export async function analyzeTrackLyrics({
     moments: moments.length,
     alignedSections: alignment.sections.filter((section) => section.timing_source === "music_intelligence").length,
     alignedLines: alignment.alignedLines.length,
+    lineAlignmentMethod: alignment.lineAlignmentMethod,
     model: result.model,
     runId: result.runId,
     cacheHit: result.cacheHit,
