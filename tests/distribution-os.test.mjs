@@ -8,6 +8,7 @@ const files = {
   catalogMigration: "supabase/migrations/20260902231500_distribution_catalog_metadata.sql",
   domain: "lib/distribution/domain.ts",
   provider: "lib/distribution/provider.ts",
+  providerAccount: "lib/distribution/provider-account.ts",
   actions: "app/studio/distribution-core-actions.ts",
   catalogAction: "app/studio/distribution-catalog-action.ts",
   actionFacade: "app/studio/distribution-actions.ts",
@@ -66,18 +67,20 @@ test("distribution schema keeps Ensemblis canonical and immutable submission evi
   assert.ok(catalog.includes("where state in ('started','ambiguous')"), "ambiguous external operations need an indexed recovery queue");
 });
 
-test("Revelator stays behind a provider-neutral boundary and store IDs are discovered dynamically", async () => {
+test("Revelator stays behind a provider-neutral boundary and catalog IDs are discovered dynamically", async () => {
   const provider = await readFile(files.provider, "utf8");
   assert.ok(provider.includes("interface DistributionProvider"));
   assert.ok(provider.includes("listStores()"));
   assert.ok(provider.includes("prepareRelease(input: ProviderCatalogRelease)"));
-  assert.ok(provider.includes('"/common/lookup/stores"'));
+  assert.ok(provider.includes("/common/lookup/stores?activeOnly=true"));
   assert.ok(provider.includes('"/common/lookup/languages"'));
   assert.ok(provider.includes('"/common/lookup/musicstyles"'));
   assert.ok(provider.includes('"/common/lookup/contributorRoles"'));
+  assert.ok(provider.includes('"/common/lookup/trackProperties"'));
   assert.ok(provider.includes("/supply-chain/v1/releases/${encodeURIComponent(providerReleaseId)}/deliver/validate"));
   assert.ok(provider.includes("/distribution/release/addtoqueue"));
   assert.equal(provider.includes("const storeIds = ["), false, "DSP IDs must not be hardcoded");
+  assert.equal(provider.includes("trackProperties: [8]"), false, "AI property IDs must come from the provider lookup");
 });
 
 test("provider catalog preparation uploads lossless masters, artwork, writers and production credits", async () => {
@@ -97,6 +100,20 @@ test("provider catalog preparation uploads lossless masters, artwork, writers an
   assert.ok(catalogAction.includes("existing UPC"), "existing catalog must preserve its UPC instead of minting a new one");
 });
 
+test("hybrid V1/V2 supply-chain settings are reapplied after retail and UGC policies are per-track", async () => {
+  const provider = await readFile(files.provider, "utf8");
+  const retailIndex = provider.indexOf('this.request(this.v1Base, "/content/release/retail/save"');
+  const territoryIndex = provider.indexOf("/territories-clearances", retailIndex);
+  const pricingIndex = provider.indexOf("/pricing-tiers/options", retailIndex);
+  const monetizationIndex = provider.indexOf('this.configureMonetization(providerReleaseId, options.ugcEnabled)', retailIndex);
+  assert.ok(retailIndex > -1 && territoryIndex > retailIndex && pricingIndex > retailIndex && monetizationIndex > retailIndex, "V1 retail must run before every V2 supply-chain setting");
+  assert.ok(provider.includes("/supply-chain/v1/monetization-policies"));
+  assert.ok(provider.includes("monetizationPolicies: selectedPolicies.map"));
+  assert.ok(provider.includes("order === 1"), "UGC enabled should use the provider-declared default policy rather than a hardcoded ID");
+  assert.ok(provider.includes("library only") && provider.includes("not eligible"), "UGC disabled must map a safe non-monetizing policy dynamically");
+  assert.ok(provider.includes("JSON.stringify({ release: [], assets: [] })"), "worldwide availability should be represented as no territory exceptions");
+});
+
 test("catalog creation and updates are duplicate-safe under ambiguous provider outcomes", async () => {
   const catalogAction = await readFile(files.catalogAction, "utf8");
   assert.ok(catalogAction.includes('`prepare_catalog:${releaseId}`'));
@@ -106,6 +123,17 @@ test("catalog creation and updates are duplicate-safe under ambiguous provider o
   const startIndex = catalogAction.indexOf('operation_type: operationType');
   const providerMutationIndex = catalogAction.indexOf("provider.prepareRelease(input)", startIndex);
   assert.ok(startIndex > -1 && providerMutationIndex > startIndex, "provider operation evidence must be written before the external catalog mutation");
+});
+
+test("child-account support uses stable unattended identity and never stores the generated provider password", async () => {
+  const providerAccount = await readFile(files.providerAccount, "utf8");
+  assert.ok(providerAccount.includes('"/partner/account/signup"'));
+  assert.ok(providerAccount.includes('"/partner/account/login"'));
+  assert.ok(providerAccount.includes("partnerUserId = input.ownerId"));
+  assert.ok(providerAccount.includes('type: "Growth"'));
+  assert.ok(providerAccount.includes("randomBytes(32)"));
+  assert.ok(providerAccount.includes("loginChild(partnerUserId)"), "ambiguous/duplicate signup must be recoverable via stable unprompted login");
+  assert.equal(providerAccount.includes("providerPassword"), false, "provider password must never be persisted as application state");
 });
 
 test("submission is approval-gated, revalidated, snapshotted and ambiguity-safe before external delivery", async () => {
