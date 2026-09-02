@@ -15,17 +15,19 @@ function dayKey() {
 async function ownerIds() {
   const autonomy = createAutonomyServiceClient();
   const marketing = createMarketingServiceClient();
-  const [audience, opportunities, publications] = await Promise.all([
+  const [audience, opportunities, publications, campaigns] = await Promise.all([
     autonomy.from("audience_interactions").select("owner_id").limit(500),
     autonomy.from("marketing_opportunities").select("owner_id").limit(500),
     marketing.from("publication_jobs").select("owner_id").limit(500),
+    marketing.from("campaigns").select("owner_id").in("status", ["draft", "planned", "active"]).limit(500),
   ]);
-  const error = audience.error || opportunities.error || publications.error;
+  const error = audience.error || opportunities.error || publications.error || campaigns.error;
   if (error) throw new Error(error.message);
   return Array.from(new Set([
     ...(audience.data ?? []).map((row) => row.owner_id),
     ...(opportunities.data ?? []).map((row) => row.owner_id),
     ...(publications.data ?? []).map((row) => row.owner_id),
+    ...(campaigns.data ?? []).map((row) => row.owner_id),
   ]));
 }
 
