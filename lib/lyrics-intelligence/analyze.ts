@@ -3,7 +3,13 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { runAtlasAiTask } from "@/lib/ai/control-plane";
 import { strictQualityResult } from "@/lib/ai/quality";
-import { parseMusicMap, type MusicHookCandidate, type MusicMapSection } from "@/lib/video-director/creative-director";
+import { parseMusicMap, type MusicHookCandidate } from "@/lib/video-director/creative-director";
+import {
+  alignLyricSectionsMonotonically,
+  interpolateLyricLineTimings,
+  normalizeExcerpt,
+  type VocalSectionActivity,
+} from "./timing";
 import {
   LYRICS_ANALYSIS_SCHEMA,
   LYRICS_PROMPT_VERSION,
@@ -43,13 +49,14 @@ function clamp(value: number) {
   return Math.max(0, Math.min(1, value > 1 ? value / 100 : value));
 }
 
-function normalizedType(value: string) {
-  return value.toLowerCase().replace(/[\s-]+/g, "_").replace(/[^a-z_]/g, "");
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }
 
-function sectionMatches(lyricType: string, section: MusicMapSection) {
-  const expected = normalizedType(lyricType);
-  return normalizedType(section.type) === expected || normalizedType(section.label).includes(expected);
+function numeric(value: unknown, fallback = 0) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
 function overlapCandidate(section: TrackLyricSection, candidates: MusicHookCandidate[]) {
@@ -57,6 +64,65 @@ function overlapCandidate(section: TrackLyricSection, candidates: MusicHookCandi
   return candidates
     .filter((candidate) => candidate.end_ms > section.start_ms! && candidate.start_ms < section.end_ms!)
     .sort((a, b) => b.score - a.score)[0] ?? null;
+}
+
+function aggregateVocalActivity(stems: Array<{ analysis: Json }>) {
+  const totals = new Map<string, { activeRatio: number; energy: number; rhythmicActivity: number; count: number }>();
+  for (const stem of stems) {
+    const analysis = record(stem.analysis);
+    const rows = Array.isArray(analysis.section_activity) ? analysis.section_activity : [];
+    for (const raw of rows) {
+      const row = record(raw);
+      const id = typeof row.section_id === "string" ? row.section_id : "";
+      if (!id) continue;
+      const current = totals.get(id) ?? { activeRatio: 0, energy: 0, rhythmicActivity: 0, count: 0 };
+      current.activeRatio += clamp(numeric(row.active_ratio));
+      current.energy += clamp(numeric(row.energy));
+      current.rhythmicActivity += clamp(numeric(row.rhythmic_activity));
+      current.count += 1;
+      totals.set(id, current);
+    }
+  }
+  const result = new Map<string, VocalSectionActivity>();
+  for (const [id, value] of totals) {
+    const divisor = Math.max(1, value.count);
+    result.set(id, {
+      activeRatio: clamp(value.activeRatio / divisor),
+      energy: clamp(value.energy / divisor),
+      rhythmicActivity: clamp(value.rhythmicActivity / divisor),
+    });
+  }
+  return result;
+}
+
+type AlignedLine = {
+  id: string;
+  sectionId: string;
+  sectionKey: string;
+  displayOrder: number;
+  text: string;
+  startMs: number;
+  endMs: number;
+};
+
+function excerptLineWindow(sectionKey: string, excerpt: string, lines: AlignedLine[]) {
+  const target = normalizeExcerpt(excerpt);
+  const sectionLines = lines
+    .filter((line) => line.sectionKey === sectionKey)
+    .sort((a, b) => a.displayOrder - b.displayOrder);
+  if (!target || !sectionLines.length) return null;
+
+  for (let start = 0; start < sectionLines.length; start += 1) {
+    let combined = "";
+    for (let end = start; end < sectionLines.length; end += 1) {
+      combined = `${combined} ${normalizeExcerpt(sectionLines[end].text)}`.trim();
+      if (combined === target || combined.includes(target) || target.includes(combined)) {
+        return { startMs: sectionLines[start].startMs, endMs: sectionLines[end].endMs };
+      }
+      if (combined.length > target.length * 2.4 + 24) break;
+    }
+  }
+  return null;
 }
 
 async function alignSectionsToMusic({
@@ -71,36 +137,128 @@ async function alignSectionsToMusic({
   sections: TrackLyricSection[];
 }) {
   const musicDb = db as unknown as SupabaseClient<StemDatabase>;
-  const { data: musicIntelligence, error } = await musicDb.from("track_music_intelligence")
-    .select("analysis_version,source_audio_url,analysis")
-    .eq("track_id", trackId)
-    .eq("owner_id", ownerId)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
+  const [musicResult, vocalsResult] = await Promise.all([
+    musicDb.from("track_music_intelligence")
+      .select("analysis_version,source_audio_url,analysis")
+      .eq("track_id", trackId)
+      .eq("owner_id", ownerId)
+      .maybeSingle(),
+    musicDb.from("track_stems")
+      .select("analysis")
+      .eq("track_id", trackId)
+      .eq("owner_id", ownerId)
+      .eq("category", "vocals")
+      .eq("status", "ready"),
+  ]);
+  if (musicResult.error) throw new Error(musicResult.error.message);
+  if (vocalsResult.error) throw new Error(vocalsResult.error.message);
+  const musicIntelligence = musicResult.data;
   const map = parseMusicMap(musicIntelligence?.analysis);
-  if (!map) return { sections, map: null, analysisVersion: null, sourceAudioUrl: null };
+  if (!map) return { sections, map: null, analysisVersion: null, sourceAudioUrl: null, alignedLines: [] as AlignedLine[] };
 
-  const available = [...map.sections].sort((a, b) => a.start_ms - b.start_ms);
-  const used = new Set<string>();
-  for (const section of sections) {
-    if (section.timing_source === "manual") continue;
-    const match = available.find((candidate) => !used.has(candidate.id) && sectionMatches(section.section_type, candidate));
-    if (!match) continue;
-    used.add(match.id);
+  const vocalActivity = aggregateVocalActivity((vocalsResult.data ?? []) as Array<{ analysis: Json }>);
+  const automaticSections = sections.filter((section) => section.timing_source !== "manual");
+  const decisions = alignLyricSectionsMonotonically(automaticSections, map.sections, vocalActivity);
+  const decisionBySection = new Map(decisions.map((decision) => [decision.lyricSectionId, decision]));
+
+  for (const section of automaticSections) {
+    const decision = decisionBySection.get(section.id);
+    const match = decision?.musicSection ?? null;
+    const updatePayload = match
+      ? {
+          start_ms: match.start_ms,
+          end_ms: match.end_ms,
+          timing_source: "music_intelligence" as const,
+          music_section_id: match.id,
+        }
+      : {
+          start_ms: null,
+          end_ms: null,
+          timing_source: null,
+          music_section_id: null,
+        };
     const { error: updateError } = await db.from("track_lyric_sections")
-      .update({
-        start_ms: match.start_ms,
-        end_ms: match.end_ms,
-        timing_source: "music_intelligence",
-        music_section_id: match.id,
-      })
+      .update(updatePayload)
       .eq("id", section.id)
       .eq("owner_id", ownerId);
     if (updateError) throw new Error(updateError.message);
-    section.start_ms = match.start_ms;
-    section.end_ms = match.end_ms;
-    section.timing_source = "music_intelligence";
-    section.music_section_id = match.id;
+    section.start_ms = match?.start_ms ?? null;
+    section.end_ms = match?.end_ms ?? null;
+    section.timing_source = match ? "music_intelligence" : null;
+    section.music_section_id = match?.id ?? null;
+  }
+
+  const { data: rawLines, error: linesError } = await db.from("track_lyric_lines")
+    .select("id,section_id,display_order,text,start_ms,end_ms,timing_source")
+    .eq("owner_id", ownerId)
+    .in("section_id", sections.map((section) => section.id));
+  if (linesError) throw new Error(linesError.message);
+  const alignedLines: AlignedLine[] = [];
+  const sectionById = new Map(sections.map((section) => [section.id, section]));
+
+  for (const section of sections) {
+    const sectionLines = (rawLines ?? []).filter((line) => line.section_id === section.id);
+    if (section.timing_source === "manual") {
+      for (const line of sectionLines) {
+        if (line.start_ms !== null && line.end_ms !== null) {
+          alignedLines.push({
+            id: line.id,
+            sectionId: section.id,
+            sectionKey: section.section_key,
+            displayOrder: line.display_order,
+            text: line.text,
+            startMs: line.start_ms,
+            endMs: line.end_ms,
+          });
+        }
+      }
+      continue;
+    }
+    if (section.start_ms === null || section.end_ms === null) {
+      const ids = sectionLines.filter((line) => line.timing_source !== "manual").map((line) => line.id);
+      if (ids.length) {
+        const cleared = await db.from("track_lyric_lines")
+          .update({ start_ms: null, end_ms: null, timing_source: null })
+          .in("id", ids)
+          .eq("owner_id", ownerId);
+        if (cleared.error) throw new Error(cleared.error.message);
+      }
+      continue;
+    }
+
+    const derived = interpolateLyricLineTimings(
+      section.start_ms,
+      section.end_ms,
+      sectionLines.map((line) => ({ id: line.id, display_order: line.display_order, text: line.text })),
+    );
+    for (const timing of derived) {
+      const source = sectionLines.find((line) => line.id === timing.id);
+      if (!source || source.timing_source === "manual") continue;
+      const updated = await db.from("track_lyric_lines")
+        .update({ start_ms: timing.startMs, end_ms: timing.endMs, timing_source: "alignment" })
+        .eq("id", timing.id)
+        .eq("owner_id", ownerId);
+      if (updated.error) throw new Error(updated.error.message);
+      alignedLines.push({
+        id: source.id,
+        sectionId: section.id,
+        sectionKey: section.section_key,
+        displayOrder: source.display_order,
+        text: source.text,
+        startMs: timing.startMs,
+        endMs: timing.endMs,
+      });
+    }
+  }
+
+  // Defensive invariant: derived lyric section timing must always be monotonic.
+  const timed = sections
+    .filter((section) => section.start_ms !== null && section.end_ms !== null)
+    .sort((a, b) => a.display_order - b.display_order);
+  for (let index = 1; index < timed.length; index += 1) {
+    if (timed[index].start_ms! < timed[index - 1].start_ms!) {
+      throw new Error(`Lyrics timing invariant violated between ${timed[index - 1].section_key} and ${timed[index].section_key}.`);
+    }
   }
 
   return {
@@ -108,6 +266,9 @@ async function alignSectionsToMusic({
     map,
     analysisVersion: musicIntelligence?.analysis_version ?? null,
     sourceAudioUrl: musicIntelligence?.source_audio_url ?? null,
+    alignedLines,
+    sectionAlignmentScores: new Map(decisions.map((decision) => [decision.lyricSectionId, decision.score])),
+    sectionById,
   };
 }
 
@@ -241,11 +402,17 @@ export async function analyzeTrackLyrics({
     .map((moment) => {
       const section = sectionByKey.get(moment.section_key);
       const musicalHook = section ? overlapCandidate(section, candidates) : null;
+      const lineWindow = excerptLineWindow(moment.section_key, moment.excerpt, alignment.alignedLines);
       const aiScore = clamp(moment.score);
       const musicScore = musicalHook ? clamp(musicalHook.score) : null;
       const score = musicScore === null ? aiScore : clamp(aiScore * 0.65 + musicScore * 0.35);
-      const startMs = musicalHook?.start_ms ?? section?.start_ms ?? null;
-      const endMs = musicalHook?.end_ms ?? section?.end_ms ?? null;
+      const startMs = lineWindow?.startMs ?? musicalHook?.start_ms ?? section?.start_ms ?? null;
+      const endMs = lineWindow?.endMs ?? musicalHook?.end_ms ?? section?.end_ms ?? null;
+      const timingSource = lineWindow
+        ? "alignment" as const
+        : startMs !== null && endMs !== null
+          ? "music_intelligence" as const
+          : null;
       return {
         lyrics_id: document.id,
         owner_id: ownerId,
@@ -261,7 +428,7 @@ export async function analyzeTrackLyrics({
         allow_media: document.allow_media_quotes && (section?.allow_media ?? true),
         start_ms: startMs,
         end_ms: endMs,
-        timing_source: startMs !== null && endMs !== null ? "music_intelligence" as const : null,
+        timing_source: timingSource,
         source_audio_url: startMs !== null ? alignment.sourceAudioUrl : null,
         music_analysis_version: startMs !== null ? alignment.analysisVersion : null,
         metadata: {
@@ -269,6 +436,8 @@ export async function analyzeTrackLyrics({
           music_hook_score: musicScore,
           music_hook_candidate_id: musicalHook?.id ?? null,
           music_section_id: section?.music_section_id ?? null,
+          timing_method: lineWindow ? "section_weighted_line_alignment" : "music_section_or_hook",
+          section_alignment_score: section ? alignment.sectionAlignmentScores?.get(section.id) ?? null : null,
         } as Json,
       };
     });
@@ -281,6 +450,7 @@ export async function analyzeTrackLyrics({
     analysis,
     moments: moments.length,
     alignedSections: alignment.sections.filter((section) => section.timing_source === "music_intelligence").length,
+    alignedLines: alignment.alignedLines.length,
     model: result.model,
     runId: result.runId,
     cacheHit: result.cacheHit,
