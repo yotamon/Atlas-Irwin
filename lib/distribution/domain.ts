@@ -194,14 +194,15 @@ export function calculateDistributionReadiness({
 
 export function providerStateToDistributionState(providerStatus: string | number | null | undefined): DistributionState {
   const status = String(providerStatus ?? "").trim().toLowerCase();
-  if (["60", "on store", "live"].includes(status)) return "live";
+  if (["60", "on store", "onstore", "live"].includes(status)) return "live";
   if (["50", "delivered"].includes(status)) return "delivered";
-  if (["pending approval", "pending owner inspection", "inspection", "under_review"].includes(status)) return "under_review";
+  if (["-13", "-21", "rejected by inspector", "failed owner inspection", "rejecteddealinspection"].includes(status)) return "rejected";
+  if (["-10", "-20", "pending approval", "pending owner inspection", "pendingapproval", "pendingdealinspection", "inspection", "under_review"].includes(status)) return "under_review";
   if (["approved"].includes(status)) return "approved";
-  if (["queued", "uploading", "processing", "delivering"].includes(status)) return "delivering";
-  if (["takedown pending", "takedown_pending"].includes(status)) return "takedown_pending";
-  if (["taken down", "taken_down"].includes(status)) return "taken_down";
-  if (["failed", "rejected", "failed owner inspection"].includes(status)) return "rejected";
-  if (["error", "100", "system error"].includes(status)) return "error";
+  if (["0", "4", "5", "8", "10", "20", "30", "31", "40", "41", "45", "46", "queued", "uploading", "processing", "delivering"].includes(status)) return "delivering";
+  if (["70", "71", "72", "75", "76", "78", "takedown pending", "takedown_pending", "takedownwaitingforpackagecreation", "takedowncreatingpackage", "takedownuploading", "takedownenqueuedbyrevelatornetcore", "takedowncompleted"].includes(status)) return "takedown_pending";
+  if (["79", "removed from store", "removedfromstore", "taken down", "taken_down"].includes(status)) return "taken_down";
+  if (["6", "11", "21", "32", "42", "77", "100", "error", "system error", "processerror", "validationfailed", "takedownerror"].includes(status)) return "error";
+  if (["failed", "rejected"].includes(status)) return "rejected";
   return "submitted";
 }
