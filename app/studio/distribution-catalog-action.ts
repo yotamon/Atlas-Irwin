@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { calculateDistributionReadiness, normalizeAiProvenance, type DistributionIssue, type DistributionRights } from "@/lib/distribution/domain";
-import { distributionProviderConfigured, getDistributionProvider, type ProviderCatalogRelease } from "@/lib/distribution/provider";
+import { providerForDistributionAccount } from "@/lib/distribution/provider-account";
+import type { ProviderCatalogRelease } from "@/lib/distribution/provider";
 import type { Json } from "@/types/database";
 import type { DistributionDatabase, DistributionTrackMetadata } from "@/types/distribution-database";
 
@@ -120,7 +121,7 @@ export async function prepareDistributionCatalog(form: FormData) {
   const config = configResult.data;
   const account = accountResult.data;
   if (!account?.agreement_accepted_at || !account.rights_terms_accepted_at || ["setup_required", "restricted", "suspended"].includes(account.status)) throw new Error("Complete eligible distribution onboarding before preparing a provider package.");
-  if (!distributionProviderConfigured()) throw new Error("Distribution provider credentials are not configured.");
+  const provider = providerForDistributionAccount(account);
   if (config && !["draft", "needs_attention", "ready", "rejected", "error"].includes(config.state)) throw new Error("Provider metadata is locked while the release is in active distribution.");
 
   const trackIds = new Set(tracks.map((track) => track.id));
@@ -184,21 +185,20 @@ export async function prepareDistributionCatalog(form: FormData) {
   const existing = existingResult.data;
   const providerConfiguration = { releaseDate: input.releaseDate, ugcEnabled: rights.ugc.enabled };
   if (existing?.state === "completed" && existing.provider_resource_id) {
-    await getDistributionProvider().configureRelease(existing.provider_resource_id, providerConfiguration);
+    await provider.configureRelease(existing.provider_resource_id, providerConfiguration);
     refresh(releaseId);
     return;
   }
   if (existing && ["started", "ambiguous"].includes(existing.state)) throw new Error(operationType === "prepare_catalog" ? "A previous provider creation is unresolved. Ensemblis will not risk creating a duplicate release; reconcile it in Operations." : "A previous provider catalog update is unresolved. Reconcile it before sending another update.");
   const now = new Date().toISOString();
   if (existing) {
-    const restart = await db.from("distribution_provider_operations").update({ state: "started", request_snapshot: asJson({ catalog: input, configuration: providerConfiguration }), result_snapshot: {}, provider_resource_id: config?.provider_release_id ?? null, error: null, started_at: now, completed_at: null }).eq("id", existing.id).eq("owner_id", user.id);
+    const restart = await db.from("distribution_provider_operations").update({ state: "started", request_snapshot: asJson({ catalog: input, configuration: providerConfiguration, providerAccountId: account.provider_account_id }), result_snapshot: {}, provider_resource_id: config?.provider_release_id ?? null, error: null, started_at: now, completed_at: null }).eq("id", existing.id).eq("owner_id", user.id);
     if (restart.error) throw new Error(restart.error.message);
   } else {
-    const start = await db.from("distribution_provider_operations").insert({ owner_id: user.id, release_id: releaseId, provider: "revelator", operation_type: operationType, operation_key: operationKey, state: "started", request_snapshot: asJson({ catalog: input, configuration: providerConfiguration }), provider_resource_id: config?.provider_release_id ?? null });
+    const start = await db.from("distribution_provider_operations").insert({ owner_id: user.id, release_id: releaseId, provider: "revelator", operation_type: operationType, operation_key: operationKey, state: "started", request_snapshot: asJson({ catalog: input, configuration: providerConfiguration, providerAccountId: account.provider_account_id }), provider_resource_id: config?.provider_release_id ?? null });
     if (start.error) throw new Error(start.error.message);
   }
 
-  const provider = getDistributionProvider();
   let prepared;
   try {
     prepared = await provider.prepareRelease(input);
@@ -219,7 +219,7 @@ export async function prepareDistributionCatalog(form: FormData) {
     territories: config?.territories ?? asJson({ mode: "worldwide", countries: [] }),
     rights: config?.rights ?? {},
     ai_provenance: config?.ai_provenance ?? {},
-    provider_metadata: asJson({ ...object(config?.provider_metadata), preparedAt: completedAt, packageHash }),
+    provider_metadata: asJson({ ...object(config?.provider_metadata), preparedAt: completedAt, packageHash, providerAccountId: account.provider_account_id }),
     state: "draft",
     readiness_score: 0,
     last_validated_at: null,
@@ -230,9 +230,9 @@ export async function prepareDistributionCatalog(form: FormData) {
 
   try {
     const configurationResult = await provider.configureRelease(prepared.providerReleaseId, providerConfiguration);
-    await db.from("release_distribution_configs").update({ provider_metadata: asJson({ ...object(config?.provider_metadata), preparedAt: completedAt, packageHash, supplyChainConfiguredAt: new Date().toISOString(), supplyChainConfiguration: configurationResult }) }).eq("release_id", releaseId).eq("owner_id", user.id);
+    await db.from("release_distribution_configs").update({ provider_metadata: asJson({ ...object(config?.provider_metadata), preparedAt: completedAt, packageHash, providerAccountId: account.provider_account_id, supplyChainConfiguredAt: new Date().toISOString(), supplyChainConfiguration: configurationResult }) }).eq("release_id", releaseId).eq("owner_id", user.id);
   } catch (error) {
-    await db.from("release_distribution_configs").update({ state: "needs_attention", provider_metadata: asJson({ ...object(config?.provider_metadata), preparedAt: completedAt, packageHash, supplyChainError: error instanceof Error ? error.message : "Unknown supply-chain configuration error" }) }).eq("release_id", releaseId).eq("owner_id", user.id);
+    await db.from("release_distribution_configs").update({ state: "needs_attention", provider_metadata: asJson({ ...object(config?.provider_metadata), preparedAt: completedAt, packageHash, providerAccountId: account.provider_account_id, supplyChainError: error instanceof Error ? error.message : "Unknown supply-chain configuration error" }) }).eq("release_id", releaseId).eq("owner_id", user.id);
     refresh(releaseId);
     throw new Error(`The provider catalog package is synchronized, but supply-chain configuration needs attention: ${error instanceof Error ? error.message : "unknown provider error"}`);
   }
