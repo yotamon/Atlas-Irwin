@@ -152,7 +152,7 @@ function providerSetupIssues(config: DistributionConfigRow | null): Distribution
     issues.push({
       code: "provider.credentials_unavailable",
       title: "Distribution provider is not connected",
-      detail: "A Revelator access token must be configured on the server before Ensemblis can validate or deliver releases.",
+      detail: "Distribution provider credentials must be configured on the server before Ensemblis can validate or deliver releases.",
       severity: "error",
       source: "provider",
       objectType: "account",
@@ -161,16 +161,31 @@ function providerSetupIssues(config: DistributionConfigRow | null): Distribution
   return issues;
 }
 
+async function requireDistributionAccountReady(context: DistributionContext) {
+  const provider = context.config?.provider ?? "revelator";
+  const result = await context.db
+    .from("distribution_accounts")
+    .select("status,agreement_accepted_at,rights_terms_accepted_at")
+    .eq("owner_id", context.userId)
+    .eq("provider", provider)
+    .maybeSingle();
+  if (result.error) throw new Error(result.error.message);
+  const account = result.data;
+  if (!account?.agreement_accepted_at || !account?.rights_terms_accepted_at) {
+    throw new Error("Complete distribution onboarding and accept the distribution terms before submitting a release.");
+  }
+  if (["setup_required", "restricted", "suspended"].includes(String(account.status))) {
+    throw new Error("This distribution account is not currently eligible to submit releases. Resolve the account status first.");
+  }
+}
+
 async function persistIssues(db: DistributionDb, userId: string, releaseId: string, issues: DistributionIssue[]) {
   const now = new Date().toISOString();
-  const fingerprints = issues.map(issueFingerprint);
-  let stale = db.from("distribution_validation_issues")
+  const staleResult = await db.from("distribution_validation_issues")
     .update({ status: "resolved", resolved_at: now, updated_at: now })
     .eq("owner_id", userId)
     .eq("release_id", releaseId)
     .in("status", ["open", "acknowledged"]);
-  if (fingerprints.length) stale = stale.not("fingerprint", "in", `(${fingerprints.join(",")})`);
-  const staleResult = await stale;
   if (staleResult.error) throw new Error(staleResult.error.message);
 
   if (!issues.length) return;
@@ -424,6 +439,7 @@ export async function submitDistribution(form: FormData) {
   const releaseId = text(form, "release_id");
   if (!bool(form, "confirm_submission")) throw new Error("Review and explicitly confirm the release before distribution.");
   const context = await loadContext(releaseId);
+  await requireDistributionAccountReady(context);
   if (context.config && !["draft", "needs_attention", "ready", "rejected", "error"].includes(context.config.state)) {
     throw new Error(`This release is already in distribution state '${context.config.state}'. Use update or takedown workflows instead of submitting it again.`);
   }
