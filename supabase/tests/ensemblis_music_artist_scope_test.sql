@@ -1,6 +1,6 @@
 begin;
 
-select plan(15);
+select plan(18);
 
 insert into auth.users (id, email, aud, role, created_at, updated_at)
 values
@@ -34,7 +34,8 @@ values
 insert into public.artists (id, workspace_id, name, slug, legacy_owner_id)
 values
   ('34000000-0000-0000-0000-000000000001','24000000-0000-0000-0000-000000000001','Artist Alpha','artist-alpha','14000000-0000-0000-0000-000000000001'),
-  ('34000000-0000-0000-0000-000000000002','24000000-0000-0000-0000-000000000002','Artist Beta','artist-beta','14000000-0000-0000-0000-000000000002');
+  ('34000000-0000-0000-0000-000000000002','24000000-0000-0000-0000-000000000002','Artist Beta','artist-beta','14000000-0000-0000-0000-000000000002'),
+  ('34000000-0000-0000-0000-000000000003','24000000-0000-0000-0000-000000000001','Artist Alpha Side','artist-alpha-side',null);
 
 -- Legacy callers may omit artist_id only when a deterministic legacy/default artist exists.
 insert into public.releases (id, owner_id, title, slug)
@@ -54,6 +55,24 @@ select is(
 insert into public.releases (id, owner_id, artist_id, title, slug)
 values ('44000000-0000-0000-0000-000000000002','14000000-0000-0000-0000-000000000002','34000000-0000-0000-0000-000000000002','Beta Release','beta-release');
 
+-- One account may manage several artists. Slugs are artist-local, not profile-local.
+insert into public.releases (id, owner_id, artist_id, title, slug)
+values ('44000000-0000-0000-0000-000000000003','14000000-0000-0000-0000-000000000001','34000000-0000-0000-0000-000000000003','Alpha Side Release','alpha-release');
+
+select is(
+  (select count(*)::integer from public.releases where owner_id='14000000-0000-0000-0000-000000000001' and slug='alpha-release'),
+  2,
+  'the same owner may reuse a release slug across two artists'
+);
+
+select throws_ok(
+  $$insert into public.releases (id, owner_id, artist_id, title, slug)
+    values ('44000000-0000-0000-0000-000000000099','14000000-0000-0000-0000-000000000001','34000000-0000-0000-0000-000000000003','Duplicate Side Release','alpha-release')$$,
+  '23505',
+  'duplicate key value violates unique constraint "releases_artist_id_slug_key"',
+  'a release slug remains unique inside one artist'
+);
+
 insert into public.tracks (id, release_id, owner_id, title, audio_url)
 values ('54000000-0000-0000-0000-000000000001','44000000-0000-0000-0000-000000000001','14000000-0000-0000-0000-000000000001','Alpha Track','https://example.com/alpha.wav');
 
@@ -69,6 +88,14 @@ select throws_ok(
   'P0001',
   'Track artist must match release artist',
   'a caller cannot attach a track to a different artist than its release'
+);
+
+insert into public.tracks (id, release_id, owner_id, title, audio_url)
+values ('54000000-0000-0000-0000-000000000003','44000000-0000-0000-0000-000000000003','14000000-0000-0000-0000-000000000001','Alpha Side Track','https://example.com/alpha-side.wav');
+select is(
+  (select artist_id from public.tracks where id='54000000-0000-0000-0000-000000000003'),
+  '34000000-0000-0000-0000-000000000003'::uuid,
+  'same-owner secondary-artist track inherits the secondary release artist'
 );
 
 insert into public.track_music_intelligence(track_id, owner_id, analysis_version, engine, quality, semantic_structure, analysis)
@@ -140,10 +167,13 @@ select is(
 insert into public.tracks (id, release_id, owner_id, title, audio_url)
 values ('54000000-0000-0000-0000-000000000002','44000000-0000-0000-0000-000000000002','14000000-0000-0000-0000-000000000002','Beta Track','https://example.com/beta.wav');
 
+-- Workspace membership legitimately grants database access to both artists in that workspace.
+-- Active-artist isolation is enforced by the application context guards, not by pretending RLS
+-- is a per-tab artist switcher.
 select set_config('request.jwt.claim.sub', '14000000-0000-0000-0000-000000000001', true);
 set local role authenticated;
-select is((select count(*)::integer from public.releases), 1, 'Artist Alpha admin cannot read Beta releases through RLS');
-select is((select count(*)::integer from public.tracks), 1, 'Artist Alpha admin cannot read Beta tracks through RLS');
+select is((select count(*)::integer from public.releases), 2, 'Artist Alpha admin can read both artists in their workspace but not Beta releases');
+select is((select count(*)::integer from public.tracks), 2, 'Artist Alpha admin can read both artists in their workspace but not Beta tracks');
 reset role;
 
 select set_config('request.jwt.claim.sub', '14000000-0000-0000-0000-000000000002', true);
