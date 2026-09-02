@@ -7,6 +7,14 @@ export type VocalSectionActivity = {
   rhythmicActivity: number;
 };
 
+export type VocalActivitySlice = {
+  startMs: number;
+  endMs: number;
+  energy: number;
+  activeRatio: number;
+  rhythmicActivity: number;
+};
+
 export type LyricLineTimingInput = {
   id: string;
   display_order: number;
@@ -50,6 +58,10 @@ function typeAffinity(lyricType: string, music: MusicMapSection) {
 
 function wordCount(text: string) {
   return Math.max(1, text.trim().split(/\s+/).filter(Boolean).length);
+}
+
+function lineWeight(line: LyricLineTimingInput) {
+  return Math.max(1.5, Math.sqrt(wordCount(line.text)) + line.text.length / 42);
 }
 
 function durationFitness(section: TrackLyricSection, music: MusicMapSection) {
@@ -160,7 +172,7 @@ export function interpolateLyricLineTimings(
   const ordered = [...lines].sort((a, b) => a.display_order - b.display_order);
   if (!ordered.length || sectionEndMs <= sectionStartMs) return [];
   const span = sectionEndMs - sectionStartMs;
-  const weights = ordered.map((line) => Math.max(1.5, Math.sqrt(wordCount(line.text)) + line.text.length / 42));
+  const weights = ordered.map(lineWeight);
   const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
   let cursor = sectionStartMs;
 
@@ -175,6 +187,92 @@ export function interpolateLyricLineTimings(
     cursor = result.endMs;
     return result;
   });
+}
+
+function vocalMass(slice: VocalActivitySlice) {
+  return Math.max(0.015, clamp01(slice.activeRatio) * 0.58 + clamp01(slice.energy) * 0.30 + clamp01(slice.rhythmicActivity) * 0.12);
+}
+
+/**
+ * Refines line boundaries with the isolated-vocal activity curve. It does not claim
+ * phoneme/word recognition; it allocates textual line mass over where singing is
+ * acoustically present and falls back to text-weighted interpolation when evidence
+ * is too sparse. This is materially safer than evenly spreading lines across silence.
+ */
+export function alignLyricLinesToVocalActivity(
+  sectionStartMs: number,
+  sectionEndMs: number,
+  lines: LyricLineTimingInput[],
+  activity: VocalActivitySlice[],
+): LyricLineTiming[] {
+  const ordered = [...lines].sort((a, b) => a.display_order - b.display_order);
+  if (!ordered.length || sectionEndMs <= sectionStartMs) return [];
+  const slices = activity
+    .filter((slice) => slice.endMs > sectionStartMs && slice.startMs < sectionEndMs)
+    .map((slice) => ({
+      ...slice,
+      startMs: Math.max(sectionStartMs, slice.startMs),
+      endMs: Math.min(sectionEndMs, slice.endMs),
+    }))
+    .filter((slice) => slice.endMs > slice.startMs)
+    .sort((a, b) => a.startMs - b.startMs);
+  if (slices.length < 2) return interpolateLyricLineTimings(sectionStartMs, sectionEndMs, ordered);
+
+  const weightedSlices = slices.map((slice) => ({
+    ...slice,
+    mass: vocalMass(slice) * Math.max(1, slice.endMs - slice.startMs),
+  }));
+  const totalActivityMass = weightedSlices.reduce((sum, slice) => sum + slice.mass, 0);
+  const activeEvidence = weightedSlices.reduce((sum, slice) => sum + (slice.activeRatio >= 0.12 || slice.energy >= 0.18 ? slice.endMs - slice.startMs : 0), 0)
+    / Math.max(1, sectionEndMs - sectionStartMs);
+  if (totalActivityMass <= 0 || activeEvidence < 0.12) {
+    return interpolateLyricLineTimings(sectionStartMs, sectionEndMs, ordered);
+  }
+
+  const lineWeights = ordered.map(lineWeight);
+  const totalLineWeight = lineWeights.reduce((sum, weight) => sum + weight, 0);
+  const cumulativeTargets: number[] = [];
+  let cumulative = 0;
+  for (let index = 0; index < ordered.length - 1; index += 1) {
+    cumulative += lineWeights[index] / totalLineWeight;
+    cumulativeTargets.push(cumulative * totalActivityMass);
+  }
+
+  const boundaries = [sectionStartMs];
+  let massCursor = 0;
+  let targetIndex = 0;
+  for (const slice of weightedSlices) {
+    if (targetIndex >= cumulativeTargets.length) break;
+    const nextMass = massCursor + slice.mass;
+    while (targetIndex < cumulativeTargets.length && cumulativeTargets[targetIndex] <= nextMass) {
+      const within = slice.mass > 0 ? (cumulativeTargets[targetIndex] - massCursor) / slice.mass : 0;
+      const candidate = Math.round(slice.startMs + clamp01(within) * (slice.endMs - slice.startMs));
+      const previous = boundaries.at(-1) ?? sectionStartMs;
+      const minimumGap = Math.min(180, Math.max(70, Math.floor((sectionEndMs - sectionStartMs) / Math.max(20, ordered.length * 4))));
+      boundaries.push(Math.max(previous + minimumGap, Math.min(sectionEndMs - 1, candidate)));
+      targetIndex += 1;
+    }
+    massCursor = nextMass;
+  }
+  while (boundaries.length < ordered.length) {
+    const fallback = interpolateLyricLineTimings(sectionStartMs, sectionEndMs, ordered);
+    boundaries.push(fallback[boundaries.length]?.startMs ?? sectionEndMs - 1);
+  }
+  boundaries.push(sectionEndMs);
+
+  // Repair any compressed tail caused by very concentrated activity while preserving order.
+  for (let index = boundaries.length - 2; index > 0; index -= 1) {
+    boundaries[index] = Math.min(boundaries[index], boundaries[index + 1] - 1);
+  }
+  for (let index = 1; index < boundaries.length - 1; index += 1) {
+    boundaries[index] = Math.max(boundaries[index], boundaries[index - 1] + 1);
+  }
+
+  return ordered.map((line, index) => ({
+    id: line.id,
+    startMs: boundaries[index],
+    endMs: Math.max(boundaries[index] + 1, boundaries[index + 1]),
+  }));
 }
 
 export function normalizeExcerpt(value: string) {
