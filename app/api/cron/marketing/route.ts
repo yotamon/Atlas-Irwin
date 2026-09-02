@@ -9,6 +9,7 @@ import { refreshNextBestActions } from "@/lib/marketing/next-best-action";
 import { processDueOutreachEnrollments } from "@/lib/marketing/outreach";
 import { processDuePublicationJobs } from "@/lib/marketing/publications";
 import { refreshMarketingRadarIfDue } from "@/lib/marketing/radar";
+import { reconcileMarketingState } from "@/lib/marketing/state-reconciliation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,6 +44,11 @@ export async function GET(request: Request) {
     ? { ok: true as const, value: { dispatched: false, reason: "shared-worker-busy" as const } }
     : await runStep("marketing media worker queue", () => kickMarketingMediaWorkerQueue());
 
+  // Repair lifecycle and durable state before any external effect is considered. This step is
+  // deterministic and $0: it advances campaign phases, creates missing safe production queues,
+  // retires unambiguous orphan generation runs and prepares publication approvals for ready assets.
+  const stateReconciliation = await runStep("state reconciliation", () => reconcileMarketingState());
+
   // Publishing is first among external marketing effects because it is the most time-sensitive.
   const publications = await runStep("publication queue", () => processDuePublicationJobs());
   const outreach = await runStep("outreach queue", () => processDueOutreachEnrollments());
@@ -62,6 +68,7 @@ export async function GET(request: Request) {
   const results = {
     mediaWorker,
     marketingMediaWorker,
+    stateReconciliation,
     publications,
     outreach,
     autonomousCreativeSpend,
