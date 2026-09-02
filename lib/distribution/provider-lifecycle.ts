@@ -97,6 +97,8 @@ export class RevelatorLifecycleProvider implements DistributionLifecycleProvider
 
   async takedownRelease(providerReleaseId: string, storeIds: number[]) {
     if (!storeIds.length) throw new Error("Choose at least one delivered music service before requesting a takedown.");
+    // Current Revelator uses /distribution/release/takedown. The legacy
+    // /distribution/release/removefromstore contract is intentionally not invoked.
     return this.request(revelatorV1Base(), `/distribution/release/takedown?releaseId=${encodeURIComponent(providerReleaseId)}`, {
       method: "POST",
       body: JSON.stringify(storeIds),
