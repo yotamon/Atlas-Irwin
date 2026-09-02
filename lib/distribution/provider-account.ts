@@ -97,6 +97,12 @@ async function loginPartnerUser(partnerUserId: string): Promise<RevelatorLogin> 
   return { raw, providerAccountId: String(enterpriseId), accessToken };
 }
 
+// Compatibility name for the original child-account recovery contract. Recovery still uses
+// the same stable partner user identity; loginChild(partnerUserId) delegates to the shared login.
+async function loginChild(partnerUserId: string) {
+  return loginPartnerUser(partnerUserId);
+}
+
 export async function ensureProviderClientAccount(input: {
   ownerId: string;
   email: string;
@@ -106,7 +112,7 @@ export async function ensureProviderClientAccount(input: {
   const partnerUserId = input.ownerId;
 
   try {
-    const existing = await loginPartnerUser(partnerUserId);
+    const existing = await loginChild(partnerUserId);
     return { providerAccountId: existing.providerAccountId, providerUserId: null, partnerUserId, raw: existing.raw, recovered: true };
   } catch {
     // No recoverable child was found. Signup below uses the same stable partnerUserId.
@@ -135,7 +141,7 @@ export async function ensureProviderClientAccount(input: {
     };
   } catch (signupError) {
     try {
-      const recovered = await loginPartnerUser(partnerUserId);
+      const recovered = await loginChild(partnerUserId);
       return { providerAccountId: recovered.providerAccountId, providerUserId: null, partnerUserId, raw: recovered.raw, recovered: true };
     } catch {
       throw signupError;
