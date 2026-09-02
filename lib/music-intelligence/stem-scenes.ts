@@ -6,7 +6,7 @@ import { buildSmartAudioScenes } from "@/lib/music-intelligence/stems";
 import type { Database, Json } from "@/types/database";
 import type { AudioScene, StemDatabase, TrackStem } from "@/types/stem-database";
 
-export const AUDIO_SCENE_RECIPE_VERSION = 2;
+export const AUDIO_SCENE_RECIPE_VERSION = 3;
 
 export function asStemClient(client: SupabaseClient<Database> | SupabaseClient<StemDatabase>) {
   return client as unknown as SupabaseClient<StemDatabase>;
