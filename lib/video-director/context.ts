@@ -6,18 +6,20 @@ import type { AudioScene, StemDatabase } from "@/types/stem-database";
 import type { ExtendedMusicVideoProject, VideoDatabase } from "@/types/video-database";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadTrackLyricsContext } from "@/lib/lyrics-intelligence/context";
+import { conciseCreativeGraphContext, type TrackCreativeIntelligenceGraph } from "@/lib/music-intelligence/creative-graph";
+import { loadTrackCreativeIntelligenceGraph } from "@/lib/music-intelligence/creative-graph-loader";
 import { parseMusicMap, type DirectorPreferences, type MusicMap, type VideoProjectContext } from "./creative-director";
 
 function stringArray(value: Json): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
-function stemAwareMusicMap(value: Json, scenes: AudioScene[]) {
+function stemAwareMusicMap(value: Json, scenes: AudioScene[], graph: TrackCreativeIntelligenceGraph | null) {
   const map = parseMusicMap(value);
-  if (!map || !scenes.length) return map;
+  if (!map) return null;
   return {
     ...map,
-    stem_intelligence: {
+    stem_intelligence: scenes.length ? {
       purpose: "Reusable stem-aware musical treatments. The full music video still follows the canonical master; use these scenes to inform musical causality, shot mechanics, edit motifs and derivative social concepts.",
       audio_scenes: scenes.slice(0, 10).map((scene) => ({
         id: scene.id,
@@ -33,7 +35,8 @@ function stemAwareMusicMap(value: Json, scenes: AudioScene[]) {
         preview_ready: Boolean(scene.preview_asset_id),
         rationale: scene.rationale,
       })),
-    },
+    } : undefined,
+    creative_intelligence: conciseCreativeGraphContext(graph),
   } as MusicMap;
 }
 
@@ -77,6 +80,13 @@ export async function loadVideoProjectContext(
   if (preferenceResult.error) throw new Error(preferenceResult.error.message);
   if (sceneResult.error) throw new Error(sceneResult.error.message);
 
+  const graph = await loadTrackCreativeIntelligenceGraph(
+    db as unknown as SupabaseClient,
+    project.track_id,
+    ownerId,
+    lyrics,
+  );
+
   const assetIds = [...new Set((linkResult.data ?? []).map((link) => link.media_asset_id))];
   const { data: media, error: mediaError } = assetIds.length
     ? await db.from("media_assets")
@@ -96,7 +106,7 @@ export async function loadVideoProjectContext(
     project,
     release: releaseResult.data,
     track: trackResult.data,
-    musicMap: stemAwareMusicMap(project.music_map, (sceneResult.data ?? []) as AudioScene[]),
+    musicMap: stemAwareMusicMap(project.music_map, (sceneResult.data ?? []) as AudioScene[], graph),
     lyrics,
     brandSettings: (brandResult.data ?? []).map((item) => item.content),
     media: media ?? [],
