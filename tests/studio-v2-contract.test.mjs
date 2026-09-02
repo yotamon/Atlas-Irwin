@@ -31,13 +31,14 @@ test("primary navigation stays intentionally small and growth-led", async () => 
   }
 });
 
-test("release workspace exposes the artist growth lifecycle and preserves an advanced escape hatch", async () => {
+test("release workspace exposes lifecycle-aware growth stages and preserves an advanced escape hatch", async () => {
   const workspace = await readFile("components/studio/release-workspace-v2.tsx", "utf8");
-  for (const stage of ["Select", "Prepare", "Build hype", "Release", "Sustain"]) assert.ok(workspace.includes(stage));
+  for (const upcomingStage of ["Select", "Prepare", "Build hype", "Release", "Sustain"]) assert.ok(workspace.includes(upcomingStage));
+  for (const catalogStage of ["Orient", "Rediscover", "Produce", "Distribute", "Learn"]) assert.ok(workspace.includes(catalogStage));
   assert.ok(workspace.includes("Advanced view"));
   assert.ok(workspace.includes("/studio/production"));
   assert.ok(workspace.includes("/studio/video?release="));
-  assert.ok(workspace.includes("Release health"));
+  assert.ok(workspace.includes("Workflow readiness"));
 });
 
 test("Growth OS keeps planning and diagnosis deterministic before paid creative", async () => {
@@ -72,9 +73,9 @@ test("unreleased masters are independent from releases and reuse the shared dura
 
 test("Create keeps specialist creation outcomes discoverable", async () => {
   const create = await readFile("app/studio/(protected)/create/page.tsx", "utf8");
-  assert.ok(create.includes('href: "/studio/music"'));
-  assert.ok(create.includes('href: "/studio/production"'));
-  assert.ok(create.includes('href: "/studio/video"'));
+  for (const route of ["/studio/music", "/studio/production", "/studio/video"]) {
+    assert.ok(create.includes(route), `${route} is no longer discoverable from Create`);
+  }
 });
 
 test("normal Studio V2 routes do not link daily work back to Content Lab", async () => {
