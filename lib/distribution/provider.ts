@@ -14,8 +14,17 @@ export type ProviderDelivery = {
   raw?: unknown;
 };
 
+export type ProviderStore = {
+  id: number;
+  name: string;
+  active: boolean;
+  category?: string | null;
+  raw?: unknown;
+};
+
 export interface DistributionProvider {
   readonly id: string;
+  listStores(): Promise<ProviderStore[]>;
   validateRelease(providerReleaseId: string, storeIds?: number[]): Promise<ProviderValidationResult>;
   submitRelease(providerReleaseId: string, storeIds: number[]): Promise<void>;
   getDistributionStatus(providerReleaseId: string): Promise<ProviderDelivery[]>;
@@ -39,6 +48,16 @@ function issueFromRevelator(input: Record<string, unknown>, storeId?: number): D
     objectId: input.objectId == null ? undefined : String(input.objectId),
     storeId: storeId == null ? undefined : String(storeId),
   };
+}
+
+function recordArray(raw: unknown): Record<string, unknown>[] {
+  if (Array.isArray(raw)) return raw.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"));
+  if (!raw || typeof raw !== "object") return [];
+  const body = raw as Record<string, unknown>;
+  for (const key of ["items", "data", "stores", "results"]) {
+    if (Array.isArray(body[key])) return (body[key] as unknown[]).filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"));
+  }
+  return [];
 }
 
 export class RevelatorProvider implements DistributionProvider {
@@ -82,6 +101,24 @@ export class RevelatorProvider implements DistributionProvider {
     return body;
   }
 
+  async listStores(): Promise<ProviderStore[]> {
+    const raw = await this.request(this.v1Base, "/common/lookup/stores");
+    return recordArray(raw)
+      .map((item) => {
+        const id = Number(item.distributorStoreId ?? item.storeId ?? item.id);
+        if (!Number.isFinite(id)) return null;
+        return {
+          id,
+          name: String(item.distributorStoreName ?? item.storeName ?? item.name ?? `Store ${id}`),
+          active: item.isActive !== false && item.active !== false && String(item.status ?? "").toLowerCase() !== "disabled",
+          category: item.category == null ? null : String(item.category),
+          raw: item,
+        } satisfies ProviderStore;
+      })
+      .filter((store): store is ProviderStore => store !== null)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
   async validateRelease(providerReleaseId: string, storeIds: number[] = []): Promise<ProviderValidationResult> {
     const query = storeIds.length ? `?${storeIds.map((id) => `distributorStoreIds=${encodeURIComponent(id)}`).join("&")}` : "";
     const raw = await this.request(this.v2Base, `/supply-chain/v1/releases/${encodeURIComponent(providerReleaseId)}/deliver/validate${query}`);
@@ -110,11 +147,10 @@ export class RevelatorProvider implements DistributionProvider {
 
   async getDistributionStatus(providerReleaseId: string): Promise<ProviderDelivery[]> {
     const raw = await this.request(this.v1Base, `/distribution/release/all?pageNumber=1&pageSize=100&searchTerm=${encodeURIComponent(providerReleaseId)}`);
-    const body = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
-    const items = Array.isArray(body.items) ? body.items : Array.isArray(raw) ? raw : [];
-    const release = (items as unknown[]).find((item) => item && typeof item === "object" && String((item as Record<string, unknown>).releaseId ?? (item as Record<string, unknown>).id ?? "") === providerReleaseId);
-    if (!release || typeof release !== "object") return [];
-    const distributions = (release as Record<string, unknown>).distributionStatuses ?? (release as Record<string, unknown>).stores ?? [];
+    const items = recordArray(raw);
+    const release = items.find((item) => String(item.releaseId ?? item.id ?? "") === providerReleaseId);
+    if (!release) return [];
+    const distributions = release.distributionStatuses ?? release.stores ?? [];
     if (!Array.isArray(distributions)) return [];
     return distributions.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object")).map((item) => ({
       storeId: String(item.distributorStoreId ?? item.storeId ?? item.id ?? "unknown"),
@@ -124,6 +160,10 @@ export class RevelatorProvider implements DistributionProvider {
       raw: item,
     }));
   }
+}
+
+export function distributionProviderConfigured() {
+  return Boolean(process.env.REVELATOR_ACCESS_TOKEN?.trim());
 }
 
 export function getDistributionProvider(): DistributionProvider {
