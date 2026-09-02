@@ -19,7 +19,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test:studio": "node --test tests/studio-v2-contract.test.mjs tests/studio-v2-workflow.test.mjs tests/marketing-creative-lineage.test.mjs tests/creative-production-os.test.mjs tests/ai-provider-presets.test.mjs tests/ai-control-plane.test.mjs tests/social-channel-planning.test.mjs tests/music-intelligence.test.mjs tests/music-intelligence-sentinel.test.mjs tests/stem-intelligence.test.mjs tests/lyrics-intelligence.test.mjs tests/autonomous-marketing.test.mjs tests/studio-product-lifecycle.test.mjs tests/content-factory-runtime.test.mjs tests/distribution-os.test.mjs",
+    "test:studio": "node --test tests/studio-v2-contract.test.mjs tests/studio-v2-workflow.test.mjs tests/marketing-creative-lineage.test.mjs tests/creative-production-os.test.mjs tests/ai-provider-presets.test.mjs tests/ai-control-plane.test.mjs tests/social-channel-planning.test.mjs tests/music-intelligence.test.mjs tests/music-intelligence-sentinel.test.mjs tests/stem-intelligence.test.mjs tests/lyrics-intelligence.test.mjs tests/autonomous-marketing.test.mjs tests/studio-product-lifecycle.test.mjs tests/content-factory-runtime.test.mjs tests/distribution-os.test.mjs tests/distribution-corrections.test.mjs",
     "postinstall": "node scripts/ensure-lightningcss-native.mjs",
     "studio:import": "node --env-file=.env.local scripts/import-legacy-releases.mjs",
     "studio:import:dry-run": "node --env-file=.env.local scripts/import-legacy-releases.mjs --dry-run",
