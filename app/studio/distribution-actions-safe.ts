@@ -66,6 +66,10 @@ export async function syncDistributionStatus(form: FormData) {
   return runReleaseAction(form, actions.syncDistributionStatus, "Distribution status refreshed.");
 }
 
+export async function requestDistributionTakedown(form: FormData) {
+  return runReleaseAction(form, actions.requestDistributionTakedown, "Takedown requested. Ensemblis will track removal status per service.");
+}
+
 export async function saveDistributionAccount(form: FormData) {
   try {
     await actions.saveDistributionAccount(form);
