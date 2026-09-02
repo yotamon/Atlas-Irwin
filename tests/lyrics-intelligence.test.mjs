@@ -190,12 +190,13 @@ test("Lyric timing is chronological, stale-safe, line-addressable, and fused wit
   const timing = await source("lib/lyrics-intelligence/timing.ts");
 
   assert.ok(analyzer.includes("alignSectionsToMusic"));
-  assert.ok(analyzer.includes("aggregateVocalActivity"));
+  assert.ok(analyzer.includes("aggregateVocalEvidence"));
   assert.ok(analyzer.includes("alignLyricSectionsMonotonically"));
-  assert.ok(analyzer.includes("interpolateLyricLineTimings"));
+  assert.ok(analyzer.includes("alignLyricLinesToVocalActivity"));
   assert.ok(analyzer.includes('timing_source: "alignment"'));
   assert.ok(analyzer.includes("start_ms: null"));
   assert.ok(analyzer.includes("Lyrics timing invariant violated"));
+  assert.ok(analyzer.includes('lineAlignmentMethod: vocalEvidence.activityCurve.length ? "vocal_activity"'));
   assert.ok(timing.includes("Globally aligns lyric sections to music sections while preserving chronology"));
   assert.ok(timing.includes("Unresolved is intentionally preferable"));
 });
@@ -210,7 +211,7 @@ test("Lyric Moments fuse exact excerpt timing with Track Intelligence hook stren
   assert.ok(analyzer.includes("music_hook_candidate_id"));
   assert.ok(analyzer.includes("music_analysis_version"));
   assert.ok(analyzer.includes("source_audio_url"));
-  assert.ok(analyzer.includes('timing_method: lineWindow ? "section_weighted_line_alignment"'));
+  assert.ok(analyzer.includes('timing_method: lineWindow ? `${alignment.lineAlignmentMethod}_line_alignment`'));
 });
 
 test("release UX treats Lyrics Intelligence as part of the same source-material workflow", async () => {
