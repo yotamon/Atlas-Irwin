@@ -43,7 +43,7 @@ create table public.distribution_provider_operations (
   owner_id uuid not null references public.profiles(id) on delete cascade,
   release_id uuid not null references public.releases(id) on delete cascade,
   provider text not null,
-  operation_type text not null check (operation_type in ('prepare_catalog','update_catalog','takedown')),
+  operation_type text not null check (operation_type in ('prepare_catalog','submit','update_catalog','takedown')),
   operation_key text not null,
   state text not null default 'started' check (state in ('started','completed','failed_safe','ambiguous','resolved')),
   request_snapshot jsonb not null default '{}'::jsonb,
@@ -61,6 +61,7 @@ create index distribution_track_metadata_owner_idx on public.distribution_track_
 create index distribution_track_writers_track_idx on public.distribution_track_writers(track_id);
 create index distribution_track_contributors_track_idx on public.distribution_track_contributors(track_id);
 create index distribution_provider_operations_release_idx on public.distribution_provider_operations(release_id, created_at desc);
+create index distribution_provider_operations_ambiguous_idx on public.distribution_provider_operations(owner_id, release_id, operation_type, state) where state in ('started','ambiguous');
 
 -- Writer shares must total 100 per track before provider preparation. The application enforces
 -- this transactionally at the workflow boundary because rows are edited independently in the UI.
