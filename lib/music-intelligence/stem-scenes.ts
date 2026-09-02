@@ -6,7 +6,7 @@ import { buildSmartAudioScenes } from "@/lib/music-intelligence/stems";
 import type { Database, Json } from "@/types/database";
 import type { AudioScene, StemDatabase, TrackStem } from "@/types/stem-database";
 
-export const AUDIO_SCENE_RECIPE_VERSION = 2;
+export const AUDIO_SCENE_RECIPE_VERSION = 3;
 
 export function asStemClient(client: SupabaseClient<Database> | SupabaseClient<StemDatabase>) {
   return client as unknown as SupabaseClient<StemDatabase>;
@@ -14,6 +14,12 @@ export function asStemClient(client: SupabaseClient<Database> | SupabaseClient<S
 
 function json(value: unknown): Json {
   return value as Json;
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }
 
 function stableJson(value: unknown): string {
@@ -66,22 +72,79 @@ async function loadStemIntelligenceState(
   };
 }
 
+async function reconcileCompletedScenePreviews(
+  client: SupabaseClient<Database> | SupabaseClient<StemDatabase>,
+  ownerId: string,
+  trackId: string,
+  scenes: AudioScene[],
+) {
+  const db = asStemClient(client);
+  const missing = scenes.filter((scene) => !scene.preview_asset_id && scene.status !== "stale");
+  if (!missing.length) return 0;
+  const { data: jobs, error } = await db.from("track_stem_jobs")
+    .select("scene_id,request_payload,result_payload,completed_at")
+    .eq("track_id", trackId)
+    .eq("owner_id", ownerId)
+    .eq("job_type", "render_audio_scene")
+    .eq("status", "completed")
+    .in("scene_id", missing.map((scene) => scene.id))
+    .order("completed_at", { ascending: false });
+  if (error) throw new Error(error.message);
+
+  let repaired = 0;
+  for (const scene of missing) {
+    const sceneUpdated = Date.parse(scene.updated_at || scene.created_at || "") || 0;
+    const job = (jobs ?? []).find((candidate) => {
+      if (candidate.scene_id !== scene.id) return false;
+      const completed = Date.parse(candidate.completed_at || "") || 0;
+      if (completed < sceneUpdated) return false;
+      const request = record(candidate.request_payload);
+      if (scene.source === "system" && scene.stem_set_fingerprint) {
+        return request.stem_set_fingerprint === scene.stem_set_fingerprint;
+      }
+      return true;
+    });
+    if (!job) continue;
+    const result = record(job.result_payload);
+    const assetId = typeof result.media_asset_id === "string" ? result.media_asset_id : "";
+    if (!assetId) continue;
+    const asset = await db.from("media_assets")
+      .select("id")
+      .eq("id", assetId)
+      .eq("owner_id", ownerId)
+      .maybeSingle();
+    if (asset.error) throw new Error(asset.error.message);
+    if (!asset.data) continue;
+    const update = await db.from("audio_scenes").update({
+      status: "ready",
+      preview_asset_id: assetId,
+      preview_error: null,
+    }).eq("id", scene.id).eq("owner_id", ownerId).is("preview_asset_id", null);
+    if (update.error) throw new Error(update.error.message);
+    repaired += 1;
+  }
+  return repaired;
+}
+
 export async function loadStemIntelligence(
   client: SupabaseClient<Database> | SupabaseClient<StemDatabase>,
   ownerId: string,
   trackId: string,
 ) {
-  const state = await loadStemIntelligenceState(client, ownerId, trackId);
+  let state = await loadStemIntelligenceState(client, ownerId, trackId);
   const hasCurrentReadyStem = Boolean(state.track?.audio_url) && state.stems.some(
     (stem) => stem.status === "ready" && stem.source_master_url === state.track?.audio_url,
   );
   const needsRecipeUpgrade = state.scenes.some(
     (scene) => scene.source === "system" && scene.recipe_version < AUDIO_SCENE_RECIPE_VERSION,
   );
-  if (!hasCurrentReadyStem || !needsRecipeUpgrade) return state;
+  if (hasCurrentReadyStem && needsRecipeUpgrade) {
+    await regenerateSystemAudioScenes({ client, ownerId, trackId });
+    state = await loadStemIntelligenceState(client, ownerId, trackId);
+  }
 
-  await regenerateSystemAudioScenes({ client, ownerId, trackId });
-  return loadStemIntelligenceState(client, ownerId, trackId);
+  const repaired = await reconcileCompletedScenePreviews(client, ownerId, trackId, state.scenes);
+  return repaired ? loadStemIntelligenceState(client, ownerId, trackId) : state;
 }
 
 export async function regenerateSystemAudioScenes({
@@ -113,6 +176,8 @@ export async function regenerateSystemAudioScenes({
     const previous = existing.get(draft.sceneType);
     const fingerprintChanged = previous?.stem_set_fingerprint !== fingerprint;
     const recipeVersionChanged = previous?.recipe_version !== AUDIO_SCENE_RECIPE_VERSION;
+    const timingChanged = previous?.recommended_start_ms !== Math.max(0, Math.round(draft.recommendedStartMs))
+      || previous?.recommended_end_ms !== Math.max(1, Math.round(draft.recommendedEndMs));
     const row = {
       owner_id: ownerId,
       track_id: trackId,
@@ -130,7 +195,7 @@ export async function regenerateSystemAudioScenes({
       score: Math.round(draft.score * 10000) / 10000,
       rationale: json(draft.rationale),
       stem_set_fingerprint: fingerprint,
-      preview_asset_id: fingerprintChanged || recipeVersionChanged ? null : previous?.preview_asset_id ?? null,
+      preview_asset_id: fingerprintChanged || recipeVersionChanged || timingChanged ? null : previous?.preview_asset_id ?? null,
       preview_error: null,
       is_pinned: previous?.is_pinned ?? false,
     };

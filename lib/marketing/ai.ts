@@ -7,6 +7,8 @@ import { runAtlasAiTask } from "@/lib/ai/control-plane";
 import { strictQualityResult, type AtlasQualityGate } from "@/lib/ai/quality";
 import type { AtlasAiTaskType } from "@/lib/ai/tasks";
 import { conciseLyricsPromptContext, loadTrackLyricsContext } from "@/lib/lyrics-intelligence/context";
+import { conciseCreativeGraphContext } from "@/lib/music-intelligence/creative-graph";
+import { loadTrackCreativeIntelligenceGraph } from "@/lib/music-intelligence/creative-graph-loader";
 import type { LyricsDatabase } from "@/types/lyrics-database";
 
 export type MarketingTextProvider = "vercel-gateway" | "openai" | "google" | "zai";
@@ -51,7 +53,8 @@ function taskForName(name: string): AtlasAiTaskType {
 
 function parseInputContext(input: string) {
   try { return asRecord(JSON.parse(input)); }
-  catch { return {}; }
+  catch { return {};
+  }
 }
 
 function releaseIdFromContext(context: Record<string, unknown>) {
@@ -74,7 +77,7 @@ async function enrichMarketingContextWithLyrics({
   supabase: SupabaseClient;
   ownerId: string;
 }) {
-  if ("lyricsIntelligence" in context) return context;
+  if ("lyricsIntelligence" in context && "trackCreativeIntelligence" in context) return context;
   const releaseId = releaseIdFromContext(context);
   if (!releaseId) return context;
 
@@ -89,19 +92,30 @@ async function enrichMarketingContextWithLyrics({
     const primaryTrack = tracks?.[0];
     if (!primaryTrack?.id) return context;
 
-    const lyrics = await loadTrackLyricsContext(
-      supabase as unknown as SupabaseClient<LyricsDatabase>,
-      primaryTrack.id,
-      ownerId,
-    );
+    const lyrics = "lyricsIntelligence" in context
+      ? null
+      : await loadTrackLyricsContext(
+          supabase as unknown as SupabaseClient<LyricsDatabase>,
+          primaryTrack.id,
+          ownerId,
+        );
+    const graph = "trackCreativeIntelligence" in context
+      ? null
+      : await loadTrackCreativeIntelligenceGraph(
+          supabase,
+          primaryTrack.id,
+          ownerId,
+          lyrics ?? undefined,
+        );
     return {
       ...context,
-      lyricsIntelligence: conciseLyricsPromptContext(lyrics),
+      ...("lyricsIntelligence" in context ? {} : { lyricsIntelligence: conciseLyricsPromptContext(lyrics!) }),
+      ...("trackCreativeIntelligence" in context ? {} : { trackCreativeIntelligence: conciseCreativeGraphContext(graph) }),
     };
   } catch (error) {
-    // Lyrics are optional context. A migration/read problem must not prevent otherwise valid
-    // campaign or caption work; it should remain visible in server logs for repair.
-    console.warn("Unable to enrich marketing AI with Lyrics Intelligence:", error instanceof Error ? error.message : error);
+    // Creative intelligence is optional context. A migration/read problem must not prevent otherwise
+    // valid campaign/caption work; it remains visible in server logs for repair.
+    console.warn("Unable to enrich marketing AI with track creative intelligence:", error instanceof Error ? error.message : error);
     return context;
   }
 }
@@ -155,7 +169,6 @@ export function marketingAiConfigured() {
 }
 
 export function marketingAiModel() {
-  // Kept for readiness surfaces. Actual routing is task-policy driven by the Control Plane.
   return process.env.ATLAS_MARKETING_MODEL?.trim() || "auto via Atlas AI Control Plane";
 }
 
@@ -190,9 +203,9 @@ export async function generateStructured<T>({
     task: taskForName(name),
     purpose: name === "atlas_campaign_plan" ? "campaign_plan" : name,
     releaseId,
-    promptVersion: name === "atlas_campaign_plan" ? "marketing-v3-lyrics" : "marketing-control-v2-lyrics",
+    promptVersion: name === "atlas_campaign_plan" ? "marketing-v4-creative-graph" : "marketing-control-v3-creative-graph",
     schema,
-    instructions: `${instructions}\n\nLYRICS INTELLIGENCE RULES:\nWhen lyricsIntelligence is present, treat it as authoritative song-specific narrative context. It may inform hooks, captions, visual briefs and campaign angles. Quote only excerpts explicitly supplied with mayQuote=true. Never invent, complete, reconstruct or paraphrase text as if it were an official lyric. If quoting is disabled, use only semantic themes and meaning without reproducing lyric text.`,
+    instructions: `${instructions}\n\nTRACK CREATIVE INTELLIGENCE RULES:\nWhen trackCreativeIntelligence is present, treat it as the shared cross-modal timeline joining master-audio hooks, Lyrics Intelligence, active stem roles and Audio Scenes. Prefer highlights supported by multiple modalities. Respect supplied start/end timing and provenance. Do not infer that a lyric is sung merely because a music section has the same structural label. Use materially different highlights instead of repeatedly choosing near-identical chorus windows.\n\nLYRICS INTELLIGENCE RULES:\nWhen lyricsIntelligence is present, treat it as authoritative song-specific narrative context. It may inform hooks, captions, visual briefs and campaign angles. Quote only excerpts explicitly supplied with mayQuote=true. Never invent, complete, reconstruct or paraphrase text as if it were an official lyric. If quoting is disabled, use only semantic themes and meaning without reproducing lyric text.`,
     input: enrichedInput,
     inputContext,
     qualityGate: qualityGateFor<T>(name, enrichedInput),

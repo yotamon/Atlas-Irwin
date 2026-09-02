@@ -38,15 +38,27 @@ test("Audio Scenes are non-destructive recipes with canonical-master Full Impact
   assert.ok(scenes.includes("The canonical mastered track"));
 });
 
-test("stored system scenes automatically upgrade when recipe semantics change", async () => {
+test("stored system scenes automatically upgrade and invalidate changed timing", async () => {
   const persistence = await source("lib/music-intelligence/stem-scenes.ts");
 
-  assert.ok(persistence.includes("AUDIO_SCENE_RECIPE_VERSION = 2"));
+  assert.ok(persistence.includes("AUDIO_SCENE_RECIPE_VERSION = 3"));
   assert.ok(persistence.includes("needsRecipeUpgrade"));
   assert.ok(persistence.includes("scene.recipe_version < AUDIO_SCENE_RECIPE_VERSION"));
   assert.ok(persistence.includes("await regenerateSystemAudioScenes"));
   assert.ok(persistence.includes("recipe_version: AUDIO_SCENE_RECIPE_VERSION"));
-  assert.ok(persistence.includes("fingerprintChanged || recipeVersionChanged ? null"));
+  assert.ok(persistence.includes("timingChanged"));
+  assert.ok(persistence.includes("fingerprintChanged || recipeVersionChanged || timingChanged"));
+});
+
+test("completed Audio Scene jobs self-heal missing preview_asset_id state", async () => {
+  const persistence = await source("lib/music-intelligence/stem-scenes.ts");
+  assert.ok(persistence.includes("reconcileCompletedScenePreviews"));
+  assert.ok(persistence.includes('job_type", "render_audio_scene"'));
+  assert.ok(persistence.includes('status", "completed"'));
+  assert.ok(persistence.includes("result.media_asset_id"));
+  assert.ok(persistence.includes("completed < sceneUpdated"));
+  assert.ok(persistence.includes("request.stem_set_fingerprint === scene.stem_set_fingerprint"));
+  assert.ok(persistence.includes("preview_asset_id: assetId"));
 });
 
 test("vocal scenes preserve the complete vocal stack instead of selecting one vocal stem", async () => {
@@ -59,6 +71,20 @@ test("vocal scenes preserve the complete vocal stack instead of selecting one vo
   assert.ok(scenes.includes("...(vocals.length ? [vocals] : [])"));
   assert.ok(scenes.includes("...vocals.map((stem) => ({ ...stemLayer(stem, 0), end_at_ms: transitionMs + 120"));
   assert.ok(scenes.includes("complete vocal stack"));
+});
+
+test("scene timing is intent-first, stem-aware, and snapped to the master grid", async () => {
+  const scenes = await source("lib/music-intelligence/stems.ts");
+  const intentIndex = scenes.indexOf("const moments = record(map.moments)");
+  const socialIndex = scenes.indexOf("const socialCuts = record(map.social_cuts)");
+  assert.ok(intentIndex >= 0 && socialIndex > intentIndex, "generic social cuts must not override intent-specific windows");
+  assert.ok(scenes.includes("stemWindowEvidence"));
+  assert.ok(scenes.includes("stemMomentWindows"));
+  assert.ok(scenes.includes("snapWindow"));
+  assert.ok(scenes.includes('gridPoints(musicMap, "downbeats_ms")'));
+  assert.ok(scenes.includes("snappedTransitionMs"));
+  assert.ok(scenes.includes("transition_absolute_ms"));
+  assert.ok(scenes.includes("selected_window_provenance"));
 });
 
 test("Audio Scenes audition live from aligned sources and render only for portable files", async () => {
@@ -83,7 +109,7 @@ test("Audio Scenes audition live from aligned sources and render only for portab
   assert.ok(mixer.includes("Audition is live"));
 });
 
-test("Stem analysis records musical usefulness and explicit alignment confidence", async () => {
+test("Stem Intelligence v2 uses the master clock and role-aware metrics", async () => {
   const analyzer = await source("services/media-worker/app/stem_intelligence.py");
   const worker = await source("services/media-worker/app/main.py");
 
@@ -95,14 +121,22 @@ test("Stem analysis records musical usefulness and explicit alignment confidence
     "loopability",
     "hook_score",
     "section_activity",
+    "activity_curve",
     "best_moments",
     "alignment",
+    "role_metrics",
   ]) assert.ok(analyzer.includes(signal), `missing stem signal ${signal}`);
 
-  assert.ok(analyzer.includes('"onset_cross_correlation"'));
-  assert.ok(analyzer.includes('"duration_guard"'));
-  assert.ok(analyzer.includes("_alignment("));
-  assert.ok(analyzer.includes("confidence < 0.28"));
+  assert.ok(analyzer.includes("ANALYSIS_VERSION = 2"));
+  assert.ok(analyzer.includes('"engine": "atlas_stem_intelligence_v2"'));
+  assert.ok(analyzer.includes('"canonical_source": "master_audio"'));
+  assert.ok(analyzer.includes('"canonical_bpm"'));
+  assert.ok(analyzer.includes('"observed_stem_bpm"'));
+  assert.ok(analyzer.includes('"tempo_agreement"'));
+  assert.ok(analyzer.includes('"timeline_confidence"'));
+  assert.ok(analyzer.includes('"signal_correlation_confidence"'));
+  assert.ok(analyzer.includes("_soft_relative"));
+  assert.ok(analyzer.includes("0.96 * math.tanh"), "sparse stem metrics should not saturate at perfect 1.0 merely from normalization");
   assert.ok(worker.includes('elif request.job_type == "analyze_stem"'));
   assert.ok(worker.includes('elif request.job_type == "render_audio_scene"'));
   assert.ok(worker.includes("gain_reduction_db"));
