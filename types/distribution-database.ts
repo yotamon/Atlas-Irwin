@@ -20,6 +20,7 @@ export type DistributionAccount = {
 export type DistributionArtistProfile = {
   id: string;
   owner_id: string;
+  artist_id: string;
   artist_name: string;
   platform: string;
   external_artist_id: string | null;
@@ -35,6 +36,7 @@ export type DistributionArtistProfile = {
 export type ReleaseDistributionConfig = {
   release_id: string;
   owner_id: string;
+  artist_id: string;
   provider: string;
   provider_release_id: string | null;
   state: "draft" | "needs_attention" | "ready" | "submitted" | "under_review" | "approved" | "delivering" | "delivered" | "partially_live" | "live" | "rejected" | "update_pending" | "takedown_pending" | "taken_down" | "error";
@@ -54,6 +56,7 @@ export type ReleaseDistributionConfig = {
 export type DistributionSubmission = {
   id: string;
   owner_id: string;
+  artist_id: string;
   release_id: string;
   version: number;
   provider: string;
@@ -72,6 +75,7 @@ export type DistributionSubmission = {
 export type DistributionDelivery = {
   id: string;
   owner_id: string;
+  artist_id: string;
   release_id: string;
   submission_id: string | null;
   provider: string;
@@ -91,6 +95,7 @@ export type DistributionDelivery = {
 export type DistributionValidationIssue = {
   id: string;
   owner_id: string;
+  artist_id: string;
   release_id: string;
   submission_id: string | null;
   fingerprint: string;
@@ -114,6 +119,7 @@ export type DistributionValidationIssue = {
 export type DistributionEvent = {
   id: string;
   owner_id: string;
+  artist_id: string;
   release_id: string | null;
   submission_id: string | null;
   event_type: string;
@@ -126,6 +132,7 @@ export type DistributionEvent = {
 export type DistributionTrackMetadata = {
   track_id: string;
   owner_id: string;
+  artist_id: string;
   metadata_language_code: string;
   audio_language_code: string;
   explicit: boolean;
@@ -138,6 +145,7 @@ export type DistributionTrackMetadata = {
 export type DistributionTrackWriter = {
   id: string;
   owner_id: string;
+  artist_id: string;
   track_id: string;
   legal_name: string;
   role: "composer" | "lyricist" | "composer_lyricist";
@@ -151,6 +159,7 @@ export type DistributionTrackWriter = {
 export type DistributionTrackContributor = {
   id: string;
   owner_id: string;
+  artist_id: string;
   track_id: string;
   name: string;
   role: string;
@@ -161,6 +170,7 @@ export type DistributionTrackContributor = {
 export type DistributionProviderOperation = {
   id: string;
   owner_id: string;
+  artist_id: string;
   release_id: string;
   provider: string;
   operation_type: "prepare_catalog" | "submit" | "update_catalog" | "takedown";
