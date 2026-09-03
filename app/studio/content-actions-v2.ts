@@ -7,6 +7,8 @@ import { attachMediaAsset } from "@/app/studio/catalog-actions";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { zonedDateTimeToUtc } from "@/lib/marketing/schedule";
+import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { asMomentAwareMarketingClient, asMomentsClient } from "@/lib/studio/moments-db";
 import { deriveContentStatus } from "@/features/studio-v2/policy.mjs";
 
 const required = z.string().trim().min(1).max(300);
@@ -100,9 +102,11 @@ export async function attachContentMediaV2(form: FormData) {
 
 export async function saveContentV2(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
-  const marketing = asMarketingClient(supabase);
+  const marketing = asMomentAwareMarketingClient(supabase);
+  const moments = asMomentsClient(supabase);
   const id = value(form, "id");
   const releaseId = value(form, "release_id") ? uuid.parse(value(form, "release_id")) : null;
+  const requestedMomentId = value(form, "moment_id") ? uuid.parse(value(form, "moment_id")) : null;
   const title = required.parse(value(form, "title"));
   const platform = required.parse(value(form, "platform"));
   const format = required.parse(value(form, "format"));
@@ -131,6 +135,21 @@ export async function saveContentV2(form: FormData) {
     }
   }
 
+  const momentId = requestedMomentId ?? existing?.moment_id ?? null;
+  const attachingMoment = Boolean(momentId && momentId !== existing?.moment_id);
+  if (attachingMoment && momentId) {
+    const artist = await resolveDefaultArtistContext(supabase, user);
+    const { data: moment, error: momentError } = await moments
+      .from("moments")
+      .select("id,release_id,artist_id,state")
+      .eq("id", momentId)
+      .eq("artist_id", artist.artistId)
+      .single();
+    if (momentError || !moment) throw new Error(momentError?.message || "Moment not found for the active Artist.");
+    if (moment.state !== "approved") throw new Error("Only an approved Moment can start new creative execution.");
+    if (!releaseId || moment.release_id !== releaseId) throw new Error("Creative Release must match the approved Moment Release.");
+  }
+
   const assetUrl = nullable(form, "asset_url_override") || existing?.asset_url || null;
   let campaignId = existing?.campaign_id ?? null;
   if (!campaignId && releaseId) {
@@ -152,6 +171,7 @@ export async function saveContentV2(form: FormData) {
     owner_id: user.id,
     release_id: releaseId,
     campaign_id: campaignId,
+    moment_id: momentId,
     title,
     platform,
     format,
@@ -177,13 +197,44 @@ export async function saveContentV2(form: FormData) {
   const { data: saved, error } = await mutation;
   if (error) throw new Error(error.message);
 
+  if (campaignId && momentId) {
+    const { data: existingLink, error: linkLookupError } = await marketing
+      .from("campaign_moments")
+      .select("id")
+      .eq("owner_id", user.id)
+      .eq("campaign_id", campaignId)
+      .eq("moment_id", momentId)
+      .maybeSingle();
+    if (linkLookupError) throw new Error(linkLookupError.message);
+    if (!existingLink) {
+      const { data: currentPrimary, error: primaryError } = await marketing
+        .from("campaign_moments")
+        .select("id")
+        .eq("owner_id", user.id)
+        .eq("campaign_id", campaignId)
+        .eq("role", "primary")
+        .eq("is_active", true)
+        .limit(1)
+        .maybeSingle();
+      if (primaryError) throw new Error(primaryError.message);
+      const { error: linkError } = await marketing.from("campaign_moments").insert({
+        owner_id: user.id,
+        campaign_id: campaignId,
+        moment_id: momentId,
+        role: currentPrimary ? "supporting" : "primary",
+        is_active: true,
+      });
+      if (linkError) throw new Error(linkError.message);
+    }
+  }
+
   const { error: eventError } = await marketing.from("marketing_events").insert({
     owner_id: user.id,
     campaign_id: campaignId,
     event_type: status === "Scheduled" ? "content.awaiting_publish_approval" : "content.updated",
     entity_type: "content_item",
     entity_id: saved.id,
-    payload: { status, platform, releaseId },
+    payload: { status, platform, releaseId, momentId },
   });
   if (eventError) throw new Error(eventError.message);
 
