@@ -14,10 +14,11 @@ import {
 import { Field, PageHeader, Status, Submit } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { loadCreativeReferenceContext } from "@/lib/marketing/creative-context";
-import { asMarketingClient } from "@/lib/marketing/db";
 import { AI_PRICING_AS_OF, CREATIVE_PRESETS } from "@/lib/marketing/creative-provider-catalog";
 import { creativeProviderReadiness } from "@/lib/marketing/creative-providers";
+import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { CONTENT_FORMATS, GOALS, PLATFORMS } from "@/lib/studio/constants";
+import { asMomentAwareMarketingClient, asMomentsClient } from "@/lib/studio/moments-db";
 import { higgsfieldReadiness } from "@/lib/video-providers/higgsfield/client";
 import type { Json } from "@/types/database";
 import type { VideoDatabase } from "@/types/video-database";
@@ -25,6 +26,13 @@ import type { VideoDatabase } from "@/types/video-database";
 function shortDate(value: string | null | undefined) {
   if (!value) return "No date";
   return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Berlin" }).format(new Date(value));
+}
+
+function momentTime(ms: number) {
+  const total = Math.max(0, ms) / 1000;
+  const minutes = Math.floor(total / 60);
+  const seconds = Math.floor(total % 60);
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
 function berlinDateTimeLocal(value: string | null | undefined) {
@@ -74,11 +82,13 @@ function quoteLabel(quote: Record<string, unknown>) {
 export default async function ProductionPage({
   searchParams,
 }: {
-  searchParams: Promise<{ edit?: string; release?: string; saved?: string }>;
+  searchParams: Promise<{ edit?: string; release?: string; moment?: string; saved?: string }>;
 }) {
   const params = await searchParams;
   const { supabase, user } = await requireStudioAdmin();
-  const marketing = asMarketingClient(supabase);
+  const artist = await resolveDefaultArtistContext(supabase, user);
+  const marketing = asMomentAwareMarketingClient(supabase);
+  const momentsDb = asMomentsClient(supabase);
   const [itemsResult, releasesResult] = await Promise.all([
     marketing.from("content_items").select("*").eq("owner_id", user.id).order("updated_at", { ascending: false }).limit(100),
     supabase.from("releases").select("id,title,release_date").eq("owner_id", user.id).order("updated_at", { ascending: false }),
@@ -89,7 +99,36 @@ export default async function ProductionPage({
   const allItems = itemsResult.data ?? [];
   const releases = releasesResult.data ?? [];
   const editing = params.edit ? allItems.find((item) => item.id === params.edit) ?? null : null;
-  const selectedRelease = editing?.release_id ?? params.release ?? "";
+
+  let selectedMoment = null;
+  const lineageMomentId = editing?.moment_id ?? params.moment ?? null;
+  if (lineageMomentId) {
+    const { data, error } = await momentsDb
+      .from("moments")
+      .select("*")
+      .eq("id", lineageMomentId)
+      .eq("artist_id", artist.artistId)
+      .single();
+    if (error || !data) throw new Error(error?.message || "Moment not found for the active Artist.");
+    if (!editing && data.state !== "approved") throw new Error("Only approved Moments can start new creative execution.");
+    if (!editing && params.release && data.release_id !== params.release) throw new Error("Moment does not belong to the requested Release.");
+    selectedMoment = data;
+  } else if (!editing && params.release) {
+    const { data, error } = await momentsDb
+      .from("moments")
+      .select("*")
+      .eq("release_id", params.release)
+      .eq("artist_id", artist.artistId)
+      .eq("state", "approved")
+      .order("confidence", { ascending: false })
+      .order("start_ms", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    selectedMoment = data;
+  }
+
+  const selectedRelease = editing?.release_id ?? selectedMoment?.release_id ?? params.release ?? "";
   const items = params.release ? allItems.filter((item) => item.release_id === params.release) : allItems;
   const creative = items.filter((item) => ["Draft", "In Production"].includes(item.status));
   const ready = items.filter((item) => item.status === "Ready");
@@ -147,7 +186,7 @@ export default async function ProductionPage({
     <div className="studio-v2-page">
       <PageHeader
         title="Production"
-        description="Atlas makes the creative with a transparent quality preset, a visible provider/model route and a price estimate before any paid generation."
+        description="Ensemblis turns approved musical Moments into traceable campaign creative, then keeps the provider route and price visible before any paid generation."
         action={<Link className="button" href="/studio/content">Advanced Content Lab</Link>}
       />
 
@@ -168,7 +207,7 @@ export default async function ProductionPage({
             <div className="v2-production-list">
               {items.map((item) => (
                 <Link className={editing?.id === item.id ? "active" : ""} href={`/studio/production?edit=${item.id}${params.release ? `&release=${params.release}` : ""}`} key={item.id}>
-                  <div><Status>{item.status}</Status><strong>{item.title}</strong><small>{item.platform} · {item.format}</small></div>
+                  <div><Status>{item.status}</Status><strong>{item.title}</strong><small>{item.platform} · {item.format}{item.moment_id ? " · Moment-linked" : ""}</small></div>
                   <span>{item.scheduled_at ? shortDate(item.scheduled_at) : ""}</span>
                 </Link>
               ))}
@@ -190,6 +229,20 @@ export default async function ProductionPage({
                 Creative and schedule edits are locked here to prevent publishing a different version than the one you approved.
               </span>
               {providerSchedule.external_url ? <a href={providerSchedule.external_url} target="_blank" rel="noreferrer">Open provider item ↗</a> : null}
+            </div>
+          ) : null}
+
+          {selectedMoment ? (
+            <div className="studio-smart-defaults" role="note">
+              <strong>{editing ? "Moment lineage" : "Starting from approved Moment"} · {selectedMoment.label}</strong>
+              <span>{selectedMoment.source_mode.replaceAll("_", " ")} · {momentTime(selectedMoment.start_ms)}–{momentTime(selectedMoment.end_ms)} · {Math.round(selectedMoment.confidence * 100)} confidence · {selectedMoment.state}. This Moment ID remains attached to the creative so campaign and performance learning can trace back to the exact musical evidence.</span>
+              <small>Source timing remains immutable even if this content item later uses a custom cut.</small>
+            </div>
+          ) : !editing && selectedRelease ? (
+            <div className="v2-calm-state compact">
+              <strong>No approved Moment yet.</strong>
+              <p>You can still create manually, but Ensemblis will not invent a musical starting point. Review the release intelligence first if you want Moment-based generation and attribution.</p>
+              <Link className="button" href={`/studio/releases/${selectedRelease}?stage=create#moments`}>Review release Moments</Link>
             </div>
           ) : null}
 
@@ -325,9 +378,10 @@ export default async function ProductionPage({
 
           <form action={saveContentV2} className="studio-form">
             <input type="hidden" name="id" value={editing?.id ?? ""} />
+            <input type="hidden" name="moment_id" value={editing?.moment_id ?? selectedMoment?.id ?? ""} />
             <fieldset className="v2-production-fieldset" disabled={locked}>
               <div className="form-grid">
-                <Field label="Title" wide><input name="title" required defaultValue={editing?.title ?? ""} /></Field>
+                <Field label="Title" wide><input name="title" required defaultValue={editing?.title ?? (selectedMoment ? `${selectedMoment.label} creative` : "")} /></Field>
                 <Field label="Release">
                   <select name="release_id" defaultValue={selectedRelease}>
                     <option value="">No release</option>
@@ -343,7 +397,7 @@ export default async function ProductionPage({
                 <Field label="CTA" wide><input name="cta" defaultValue={editing?.cta ?? ""} /></Field>
               </div>
 
-              {!editing ? <div className="studio-smart-defaults"><strong>Save once to enable generation or upload</strong><span>Atlas needs the content record first. After creation the editor becomes both an AI generation target and a contextual upload target.</span></div> : null}
+              {!editing ? <div className="studio-smart-defaults"><strong>Save once to enable generation or upload</strong><span>{selectedMoment ? "The approved Moment, exact audio window and campaign lineage will be persisted with this item." : "Ensemblis needs the content record first. After creation the editor becomes both an AI generation target and a contextual upload target."}</span></div> : null}
               <div className="studio-smart-defaults" role="note"><strong>Status is automatic</strong><span>Draft, In Production, Ready, Scheduled and Published follow the work itself. AI-generated media stays approval-gated even after the asset arrives.</span></div>
 
               <details className="studio-advanced-details">
@@ -353,8 +407,8 @@ export default async function ProductionPage({
                   <Field label="Vertical visual prompt" wide><textarea name="visual_prompt" rows={4} defaultValue={editing?.visual_prompt ?? ""} /></Field>
                   <Field label="Production notes" wide><textarea name="production_notes" rows={3} defaultValue={editing?.production_notes ?? ""} /></Field>
                   <Field label="Performance notes" wide><textarea name="performance_notes" rows={3} defaultValue={editing?.performance_notes ?? ""} /></Field>
-                  <Field label="Audio start"><input type="number" min="0" name="audio_timestamp_start" defaultValue={editing?.audio_timestamp_start ?? ""} /></Field>
-                  <Field label="Audio end"><input type="number" min="0" name="audio_timestamp_end" defaultValue={editing?.audio_timestamp_end ?? ""} /></Field>
+                  <Field label="Audio start"><input type="number" min="0" name="audio_timestamp_start" defaultValue={editing?.audio_timestamp_start ?? (selectedMoment ? Math.floor(selectedMoment.start_ms / 1000) : "")} /></Field>
+                  <Field label="Audio end"><input type="number" min="0" name="audio_timestamp_end" defaultValue={editing?.audio_timestamp_end ?? (selectedMoment ? Math.ceil(selectedMoment.end_ms / 1000) : "")} /></Field>
                 </div>
               </details>
               <div className="form-actions"><Submit>{editing ? "Save creative" : "Create item"}</Submit></div>

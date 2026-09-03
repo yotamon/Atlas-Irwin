@@ -4,9 +4,11 @@ import { createMediaPreviewMap } from "@/lib/studio/media-previews";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
+import { asMomentsClient } from "@/lib/studio/moments-db";
 import { getPublicReleases } from "@/lib/public-catalog";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { asGrowthClient } from "@/lib/studio/growth-db";
+import { MomentReviewPanel } from "@/components/studio/moment-review-panel";
 import { ReleaseCockpit } from "@/components/studio/release-cockpit";
 import { ReleaseCampaignBridge } from "@/components/studio/release-campaign-bridge";
 import { ReleaseWorkspaceV2 } from "@/components/studio/release-workspace-v2";
@@ -26,6 +28,7 @@ export default async function ReleaseDetail({
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveDefaultArtistContext(supabase, user);
   const music = asArtistScopedMusicClient(supabase);
+  const momentsDb = asMomentsClient(supabase);
   const marketing = asMarketingClient(supabase);
   const growth = asGrowthClient(supabase);
 
@@ -100,8 +103,34 @@ export default async function ReleaseDetail({
     : { count: 0, error: null };
   if (providerScheduleError) throw new Error(providerScheduleError.message);
 
+  const [{ data: moments, error: momentsError }, { data: momentPerformance, error: performanceError }] = await Promise.all([
+    momentsDb
+      .from("moments")
+      .select("*")
+      .eq("release_id", id)
+      .eq("artist_id", artist.artistId)
+      .order("confidence", { ascending: false })
+      .order("start_ms", { ascending: true }),
+    momentsDb
+      .from("moment_performance_rollups")
+      .select("*")
+      .eq("release_id", id)
+      .eq("artist_id", artist.artistId),
+  ]);
+  if (momentsError) throw new Error(momentsError.message);
+  if (performanceError) throw new Error(performanceError.message);
+
+  const lyricMomentIds = [...new Set((moments ?? []).map((moment) => moment.lyric_moment_id).filter((value): value is string => Boolean(value)))];
+  const { data: lyricSources, error: lyricSourcesError } = lyricMomentIds.length
+    ? await music.from("track_lyric_moments").select("id,excerpt").in("id", lyricMomentIds)
+    : { data: [], error: null };
+  if (lyricSourcesError) throw new Error(lyricSourcesError.message);
+
   if (!advanced) {
-    return <ReleaseWorkspaceV2 release={release} tracks={tracks ?? []} mediaLinks={mediaLinks ?? []} mediaAssets={mediaAssets ?? []} contentItems={contentItems ?? []} metrics={metrics ?? []} campaign={campaignResult.data} stage={stage} renderedAt={renderedAt} playbookTasks={playbookTasks ?? []} providerScheduledCount={providerScheduledCount ?? 0} vaultTrack={vaultResult.data} />;
+    return <>
+      <ReleaseWorkspaceV2 release={release} tracks={tracks ?? []} mediaLinks={mediaLinks ?? []} mediaAssets={mediaAssets ?? []} contentItems={contentItems ?? []} metrics={metrics ?? []} campaign={campaignResult.data} stage={stage} renderedAt={renderedAt} playbookTasks={playbookTasks ?? []} providerScheduledCount={providerScheduledCount ?? 0} vaultTrack={vaultResult.data} />
+      {stage === "create" ? <MomentReviewPanel releaseId={release.id} moments={moments ?? []} tracks={(tracks ?? []).map((track) => ({ id: track.id, title: track.title, audio_url: track.audio_url }))} performance={momentPerformance ?? []} lyricSources={lyricSources ?? []} /> : null}
+    </>;
   }
 
   const mediaPreviewUrls = await createMediaPreviewMap(supabase, mediaAssets ?? []);
