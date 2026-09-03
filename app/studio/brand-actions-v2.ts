@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { requireArtistContext } from "@/lib/studio/artist-context";
+import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import type { Json } from "@/types/database";
 
@@ -15,7 +17,10 @@ function content(textValue: string) {
 }
 
 export async function saveBrandProfileV2(form: FormData) {
-  const { supabase, user } = await requireStudioAdmin();
+  const requestedArtistId = value(form, "artist_id") || undefined;
+  const artist = await requireArtistContext(requestedArtistId);
+  const { supabase } = await requireStudioAdmin();
+  const operational = asArtistScopedOperationalClient(supabase);
   const essence = text.parse(value(form, "essence"));
   const voice = text.parse(value(form, "voice"));
   const music = text.parse(value(form, "music"));
@@ -37,16 +42,17 @@ export async function saveBrandProfileV2(form: FormData) {
   } as const;
 
   for (const [section, textValue] of Object.entries(derived)) {
-    const { data: existing, error: lookupError } = await supabase
+    const { data: existing, error: lookupError } = await operational
       .from("brand_settings")
       .select("id")
-      .eq("owner_id", user.id)
+      .eq("owner_id", artist.userId)
+      .eq("artist_id", artist.artistId)
       .eq("section", section)
       .maybeSingle();
     if (lookupError) throw new Error(lookupError.message);
     const mutation = existing
-      ? supabase.from("brand_settings").update({ content: content(textValue) }).eq("id", existing.id).eq("owner_id", user.id)
-      : supabase.from("brand_settings").insert({ owner_id: user.id, section, content: content(textValue) });
+      ? operational.from("brand_settings").update({ content: content(textValue) }).eq("id", existing.id).eq("owner_id", artist.userId).eq("artist_id", artist.artistId)
+      : operational.from("brand_settings").insert({ owner_id: artist.userId, artist_id: artist.artistId, section, content: content(textValue) });
     const { error } = await mutation;
     if (error) throw new Error(error.message);
   }
