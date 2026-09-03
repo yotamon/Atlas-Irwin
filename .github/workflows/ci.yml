@@ -28,7 +28,10 @@ jobs:
       - run: npm ci
 
       - name: Audit production dependencies
-        run: npm audit --omit=dev --audit-level=high
+        # Audit the immutable lockfile rather than npm's installed-tree quick endpoint. High/critical
+        # advisories still fail CI, while registry-side "invalid package tree" 400s cannot mask the
+        # rest of the verification pipeline.
+        run: npm audit --package-lock-only --omit=dev --audit-level=high
 
       - name: Verify Studio V2 product contracts
         run: npm run test:studio
