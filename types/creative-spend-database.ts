@@ -10,6 +10,7 @@ type Table<Row> = {
 export type CampaignAiSpendEnvelope = {
   id: string;
   owner_id: string;
+  artist_id: string;
   campaign_id: string;
   enabled: boolean;
   hard_limit_usd: number;
@@ -26,6 +27,7 @@ export type CampaignAiSpendEnvelope = {
 export type CampaignAiSpendReservation = {
   id: string;
   owner_id: string;
+  artist_id: string;
   campaign_id: string;
   envelope_id: string;
   generation_run_id: string;
@@ -70,6 +72,36 @@ export type CreativeSpendDatabase = Omit<CreativeDerivativeDatabase, "public"> &
       release_campaign_ai_spend: {
         Args: {
           p_owner_id: string;
+          p_reservation_id: string;
+          p_reason?: string;
+        };
+        Returns: CampaignAiSpendReservation;
+      };
+      reserve_campaign_ai_spend_for_artist: {
+        Args: {
+          p_owner_id: string;
+          p_artist_id: string;
+          p_campaign_id: string;
+          p_generation_run_id: string;
+          p_media_kind: "image" | "video";
+          p_amount_usd: number;
+        };
+        Returns: CampaignAiSpendReservation;
+      };
+      settle_campaign_ai_spend_for_artist: {
+        Args: {
+          p_owner_id: string;
+          p_artist_id: string;
+          p_reservation_id: string;
+          p_actual_usd: number | null;
+          p_basis?: "provider_actual" | "estimated" | "conservative_reserve" | "not_billed";
+        };
+        Returns: CampaignAiSpendReservation;
+      };
+      release_campaign_ai_spend_for_artist: {
+        Args: {
+          p_owner_id: string;
+          p_artist_id: string;
           p_reservation_id: string;
           p_reason?: string;
         };
