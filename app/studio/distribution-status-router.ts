@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { getProviderCatalogIdentity } from "@/lib/distribution/provider-catalog-identity";
 import { syncDistributionStatus as syncProviderDistributionStatus } from "./distribution-status-action";
 import type { Json } from "@/types/database";
@@ -28,36 +29,45 @@ function normalized(value: unknown) {
 
 export async function syncDistributionStatus(form: FormData) {
   const releaseId = text(form, "release_id");
+  if (!releaseId) throw new Error("Release ID is required.");
   await syncProviderDistributionStatus(form);
 
   const { supabase, user } = await requireStudioAdmin();
+  const requestedArtistId = text(form, "artist_id");
+  const artist = requestedArtistId
+    ? await resolveArtistContext(supabase, user, requestedArtistId)
+    : await resolveDefaultArtistContext(supabase, user);
   const db = supabase as unknown as Db;
   const [releaseResult, configResult, accountResult, tracksResult, metadataResult] = await Promise.all([
-    db.from("releases").select("id,upc").eq("id", releaseId).eq("owner_id", user.id).single(),
-    db.from("release_distribution_configs").select("*").eq("release_id", releaseId).eq("owner_id", user.id).single(),
-    db.from("distribution_accounts").select("*").eq("owner_id", user.id).eq("provider", "revelator").single(),
+    db.from("releases").select("id,upc").eq("id", releaseId).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
+    db.from("release_distribution_configs").select("*").eq("release_id", releaseId).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
+    db.from("distribution_accounts").select("*").eq("owner_id", user.id).eq("provider", "revelator").maybeSingle(),
     db.from("tracks").select("id,title").eq("release_id", releaseId).eq("owner_id", user.id).order("display_order"),
-    db.from("distribution_track_metadata").select("*").eq("owner_id", user.id),
+    db.from("distribution_track_metadata").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId),
   ]);
   for (const result of [releaseResult, configResult, accountResult, tracksResult, metadataResult]) {
     if (result.error) throw new Error(result.error.message);
   }
+  const release = releaseResult.data;
   const config = configResult.data;
-  if (!config.provider_release_id) return;
+  const account = accountResult.data;
+  if (!release) throw new Error("Release not found for the active artist.");
+  if (!config?.provider_release_id) return;
+  if (!account) throw new Error("Distribution account is not configured.");
 
-  const identity = await getProviderCatalogIdentity(accountResult.data, config.provider_release_id);
+  const identity = await getProviderCatalogIdentity(account, config.provider_release_id);
   const tracks = tracksResult.data ?? [];
   if (identity.tracks.length && identity.tracks.length !== tracks.length) {
     throw new Error("Provider catalog track count no longer matches Ensemblis. Automatic identifier reconciliation was blocked.");
   }
 
-  const localUpc = normalized(releaseResult.data.upc);
+  const localUpc = normalized(release.upc);
   const providerUpc = normalized(identity.upc);
   if (localUpc && providerUpc && localUpc !== providerUpc) {
-    throw new Error(`Provider UPC ${identity.upc} conflicts with Ensemblis UPC ${releaseResult.data.upc}. Reconcile the catalog before further distribution changes.`);
+    throw new Error(`Provider UPC ${identity.upc} conflicts with Ensemblis UPC ${release.upc}. Reconcile the catalog before further distribution changes.`);
   }
   if (!localUpc && identity.upc) {
-    const upcWrite = await db.from("releases").update({ upc: identity.upc }).eq("id", releaseId).eq("owner_id", user.id);
+    const upcWrite = await db.from("releases").update({ upc: identity.upc }).eq("id", releaseId).eq("owner_id", user.id).eq("artist_id", artist.artistId);
     if (upcWrite.error) throw new Error(upcWrite.error.message);
   }
 
@@ -75,7 +85,7 @@ export async function syncDistributionStatus(form: FormData) {
       throw new Error(`Provider ISRC ${providerTrack.isrc} conflicts with Ensemblis ISRC ${row?.isrc} for '${track.title}'. Reconcile the track identity before further distribution changes.`);
     }
     if (row && !localIsrc && providerTrack.isrc) {
-      const isrcWrite = await db.from("distribution_track_metadata").update({ isrc: providerTrack.isrc }).eq("track_id", track.id).eq("owner_id", user.id);
+      const isrcWrite = await db.from("distribution_track_metadata").update({ isrc: providerTrack.isrc }).eq("track_id", track.id).eq("owner_id", user.id).eq("artist_id", artist.artistId);
       if (isrcWrite.error) throw new Error(isrcWrite.error.message);
     }
     assignedTracks.push({
@@ -98,10 +108,11 @@ export async function syncDistributionStatus(form: FormData) {
       tracks: assignedTracks,
     },
   };
-  const configWrite = await db.from("release_distribution_configs").update({ provider_metadata: json(providerMetadata) }).eq("release_id", releaseId).eq("owner_id", user.id);
+  const configWrite = await db.from("release_distribution_configs").update({ provider_metadata: json(providerMetadata) }).eq("release_id", releaseId).eq("owner_id", user.id).eq("artist_id", artist.artistId);
   if (configWrite.error) throw new Error(configWrite.error.message);
   const event = await db.from("distribution_events").insert({
     owner_id: user.id,
+    artist_id: artist.artistId,
     release_id: releaseId,
     submission_id: null,
     event_type: "distribution.provider_identity_synced",
