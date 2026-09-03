@@ -25,6 +25,7 @@ export type LyricTimingSource = "manual" | "music_intelligence" | "alignment";
 export type TrackLyrics = {
   id: string;
   owner_id: string;
+  artist_id: string;
   track_id: string;
   status: LyricsStatus;
   language: string | null;
@@ -40,6 +41,7 @@ export type TrackLyricsRevision = {
   id: string;
   lyrics_id: string;
   owner_id: string;
+  artist_id: string;
   version: number;
   status: LyricsStatus;
   language: string | null;
@@ -52,6 +54,7 @@ export type TrackLyricSection = {
   id: string;
   lyrics_id: string;
   owner_id: string;
+  artist_id: string;
   lyrics_version: number;
   section_key: string;
   section_type: LyricSectionType;
@@ -75,6 +78,7 @@ export type TrackLyricLine = {
   lyrics_id: string;
   section_id: string;
   owner_id: string;
+  artist_id: string;
   lyrics_version: number;
   display_order: number;
   text: string;
@@ -90,6 +94,7 @@ export type TrackLyricsAnalysis = {
   id: string;
   lyrics_id: string;
   owner_id: string;
+  artist_id: string;
   lyrics_version: number;
   prompt_version: string;
   model: string;
@@ -105,6 +110,7 @@ export type TrackLyricMoment = {
   id: string;
   lyrics_id: string;
   owner_id: string;
+  artist_id: string;
   track_id: string;
   lyrics_version: number;
   section_key: string | null;

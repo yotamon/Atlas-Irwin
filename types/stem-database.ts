@@ -43,6 +43,7 @@ export type AudioSceneStatus = "ready" | "stale" | "rendering" | "failed";
 export type TrackStem = {
   id: string;
   owner_id: string;
+  artist_id: string;
   track_id: string;
   media_asset_id: string;
   source_provider: StemProvider;
@@ -73,6 +74,7 @@ export type TrackStem = {
 export type AudioScene = {
   id: string;
   owner_id: string;
+  artist_id: string;
   track_id: string;
   name: string;
   scene_type: AudioSceneType;
@@ -98,6 +100,7 @@ export type AudioScene = {
 export type TrackStemJob = {
   id: string;
   owner_id: string;
+  artist_id: string;
   track_id: string;
   stem_id: string | null;
   scene_id: string | null;
@@ -117,6 +120,7 @@ export type TrackStemJob = {
 export type TrackMusicIntelligence = {
   track_id: string;
   owner_id: string;
+  artist_id: string;
   analysis_version: number;
   engine: string;
   quality: "full" | "fallback";

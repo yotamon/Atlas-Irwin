@@ -113,6 +113,31 @@ async function buildContext(
   };
 }
 
+/** Resolve one explicitly requested artist and validate active workspace membership. */
+export async function resolveArtistContext(
+  client: SupabaseClient<Database>,
+  identity: StudioIdentity,
+  artistId: string,
+): Promise<ArtistContext> {
+  const db = asEnsemblisClient(client);
+  const { data, error } = await db
+    .from("artists")
+    .select("id,workspace_id,name,slug,project_type,status,avatar_url,accent_color,legacy_owner_id,created_at,updated_at")
+    .eq("id", artistId)
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (error) throw new ArtistContextError("artist_context_invalid", error.message);
+  if (!data) {
+    throw new ArtistContextError(
+      "artist_context_forbidden",
+      "The requested artist does not exist or is not accessible.",
+    );
+  }
+
+  return buildContext(db, identity, data as Artist);
+}
+
 /**
  * Transitional resolver for the Ensemblis migration.
  *
@@ -204,7 +229,9 @@ export async function resolveDefaultArtistContext(
   return buildContext(db, identity, artists[0]);
 }
 
-export async function requireArtistContext(): Promise<ArtistContext> {
+export async function requireArtistContext(artistId?: string): Promise<ArtistContext> {
   const { supabase, user } = await requireStudioAdmin();
-  return resolveDefaultArtistContext(supabase, user);
+  return artistId
+    ? resolveArtistContext(supabase, user, artistId)
+    : resolveDefaultArtistContext(supabase, user);
 }

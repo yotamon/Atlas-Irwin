@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { asMarketingClient } from "@/lib/marketing/db";
 import {
   OBJECTIVE_KPIS,
@@ -44,17 +46,22 @@ function slugify(input: string) {
 async function uniqueReleaseSlug(
   supabase: Awaited<ReturnType<typeof requireStudioAdmin>>["supabase"],
   ownerId: string,
+  artistId: string,
   title: string,
   preferred?: string,
   currentId?: string,
 ) {
+  const db = asArtistScopedMusicClient(supabase);
   const base = slugify(preferred || title);
   for (let index = 0; index < 50; index += 1) {
     const slug = index === 0 ? base : `${base}-${index + 1}`;
-    let query = supabase
+    // owner_id remains part of the legacy uniqueness contract during the compatibility
+    // window, while artist_id prevents a release lookup from drifting into another artist.
+    let query = db
       .from("releases")
       .select("id")
       .eq("owner_id", ownerId)
+      .eq("artist_id", artistId)
       .eq("slug", slug);
     if (currentId) query = query.neq("id", currentId);
     const { data, error } = await query.maybeSingle();
@@ -221,17 +228,19 @@ async function shiftReleasePlan({
 
 export async function saveReleaseV2(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
+  const artist = await resolveDefaultArtistContext(supabase, user);
+  const db = asArtistScopedMusicClient(supabase);
   const id = value(form, "id");
   const title = required.parse(value(form, "title"));
   const releaseType = required.parse(value(form, "release_type") || "Single");
   const releaseDate = nullable(form, "release_date");
 
   const { data: existing, error: existingError } = id
-    ? await supabase
+    ? await db
         .from("releases")
         .select("id,slug,status,release_date")
         .eq("id", id)
-        .eq("owner_id", user.id)
+        .eq("artist_id", artist.artistId)
         .single()
     : { data: null, error: null };
   if (existingError) throw new Error(existingError.message);
@@ -240,6 +249,7 @@ export async function saveReleaseV2(form: FormData) {
   const slug = await uniqueReleaseSlug(
     supabase,
     user.id,
+    artist.artistId,
     title,
     requestedSlug || existing?.slug || undefined,
     id || undefined,
@@ -265,6 +275,7 @@ export async function saveReleaseV2(form: FormData) {
 
   const row = {
     owner_id: user.id,
+    artist_id: artist.artistId,
     title,
     slug,
     release_type: releaseType,
@@ -288,14 +299,14 @@ export async function saveReleaseV2(form: FormData) {
   };
 
   const query = id
-    ? supabase
+    ? db
         .from("releases")
         .update(row)
         .eq("id", id)
-        .eq("owner_id", user.id)
+        .eq("artist_id", artist.artistId)
         .select("id")
         .single()
-    : supabase.from("releases").insert(row).select("id").single();
+    : db.from("releases").insert(row).select("id").single();
   const { data, error } = await query;
   if (error) throw new Error(error.message);
 

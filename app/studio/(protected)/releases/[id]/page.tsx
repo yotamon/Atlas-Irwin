@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createMediaPreviewMap } from "@/lib/studio/media-previews";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { getPublicReleases } from "@/lib/public-catalog";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { asGrowthClient } from "@/lib/studio/growth-db";
@@ -22,6 +24,8 @@ export default async function ReleaseDetail({
   const advanced = view === "advanced";
   const renderedAt = new Date().toISOString();
   const { supabase, user } = await requireStudioAdmin();
+  const artist = await resolveDefaultArtistContext(supabase, user);
+  const music = asArtistScopedMusicClient(supabase);
   const marketing = asMarketingClient(supabase);
   const growth = asGrowthClient(supabase);
 
@@ -41,13 +45,33 @@ export default async function ReleaseDetail({
     campaignResult,
     vaultResult,
   ] = await Promise.all([
-    supabase.from("releases").select("*").eq("id", id).eq("owner_id", user.id).single(),
-    supabase.from("tracks").select("*").eq("release_id", id).order("display_order").order("is_primary", { ascending: false }),
-    supabase.from("homepage_placements").select("*").eq("release_id", id).maybeSingle(),
+    music
+      .from("releases")
+      .select("*")
+      .eq("id", id)
+      .eq("artist_id", artist.artistId)
+      .single(),
+    music
+      .from("tracks")
+      .select("*")
+      .eq("release_id", id)
+      .eq("artist_id", artist.artistId)
+      .order("display_order")
+      .order("is_primary", { ascending: false }),
+    music
+      .from("homepage_placements")
+      .select("*")
+      .eq("release_id", id)
+      .eq("artist_id", artist.artistId)
+      .maybeSingle(),
     supabase.from("media_links").select("*").eq("release_id", id),
     supabase.from("content_items").select("id", { count: "exact", head: true }).eq("release_id", id),
     supabase.from("outreach_messages").select("id", { count: "exact", head: true }).eq("release_id", id),
-    supabase.from("release_external_links").select("*").eq("release_id", id),
+    music
+      .from("release_external_links")
+      .select("*")
+      .eq("release_id", id)
+      .eq("artist_id", artist.artistId),
     supabase.from("content_items").select("*").eq("release_id", id).order("scheduled_at"),
     supabase.from("metric_snapshots").select("*").eq("release_id", id).order("date"),
     supabase.from("tasks").select("id,title,status,priority,due_at").eq("owner_id", user.id).eq("release_id", id).order("due_at", { ascending: true }),
@@ -61,7 +85,13 @@ export default async function ReleaseDetail({
   if (vaultResult.error) throw new Error(vaultResult.error.message);
 
   const trackIds = (tracks ?? []).map((track) => track.id);
-  const { data: externalTrackIds } = trackIds.length ? await supabase.from("track_external_ids").select("*").in("track_id", trackIds) : { data: [] };
+  const { data: externalTrackIds } = trackIds.length
+    ? await music
+        .from("track_external_ids")
+        .select("*")
+        .eq("artist_id", artist.artistId)
+        .in("track_id", trackIds)
+    : { data: [] };
   const assetIds = [...new Set((mediaLinks ?? []).map((link) => link.media_asset_id))];
   const { data: mediaAssets } = assetIds.length ? await supabase.from("media_assets").select("*").in("id", assetIds) : { data: [] };
   const contentIds = (contentItems ?? []).map((item) => item.id);
@@ -77,7 +107,7 @@ export default async function ReleaseDetail({
   const mediaPreviewUrls = await createMediaPreviewMap(supabase, mediaAssets ?? []);
   let videoProjects: MusicVideoProject[] = [];
   if (tab === "video") {
-    const { data, error } = await supabase.from("music_video_projects").select("*").eq("release_id", id).order("created_at", { ascending: false });
+    const { data, error } = await supabase.from("music_video_projects").select("*").eq("release_id", id).eq("owner_id", user.id).order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
     videoProjects = data ?? [];
   }
@@ -85,7 +115,9 @@ export default async function ReleaseDetail({
   const releaseTerms = new Set([release.title, ...(tracks ?? []).map((track) => track.title)].map((value) => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()));
   const relevantSoundCloud = (soundCloudPending ?? []).filter((item) => releaseTerms.has(item.title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()));
   const relevantSpotify = (spotifyPending ?? []).filter((item) => releaseTerms.has(item.name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()));
-  const publicReleases = await getPublicReleases();
+  const publicReleases = (await getPublicReleases()).filter(
+    (item) => item.artist === artist.artistName,
+  );
 
   return <>
     <div className="v2-advanced-banner"><div><strong>Advanced workspace</strong><span>Legacy controls for exceptional cases, migrations and debugging.</span></div><Link className="button" href={`/studio/releases/${release.id}`}>Back to simple view</Link></div>

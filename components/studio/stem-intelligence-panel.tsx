@@ -6,7 +6,7 @@ import {
   retryStemAnalysis,
   toggleAudioScenePin,
   updateStemIdentity,
-} from "@/app/studio/stem-actions";
+} from "@/app/studio/stem-actions-safe";
 import { AnalysisAutoRefresh } from "@/components/studio/analysis-auto-refresh";
 import { AudioSceneLivePlayer } from "@/components/studio/audio-scene-live-player";
 import { StemCustomMixer } from "@/components/studio/stem-custom-mixer";
@@ -81,6 +81,7 @@ export async function StemIntelligencePanel({
   releaseId: string;
   track: Track | null;
 }) {
+  void releaseId;
   if (!track?.audio_url) {
     return (
       <section className="v2-section v2-full-column stem-intelligence-panel" id="stem-intelligence">
@@ -90,7 +91,7 @@ export async function StemIntelligencePanel({
         </div>
         <div className="v2-calm-state compact">
           <strong>Attach the canonical master first.</strong>
-          <p>Atlas binds every stem analysis to the exact master so old layers can never silently drive a new version of the release.</p>
+          <p>Ensemblis binds every stem analysis to the exact master so old layers can never silently drive a new version of the release.</p>
         </div>
       </section>
     );
@@ -131,8 +132,8 @@ export async function StemIntelligencePanel({
       <div className="v2-section-heading stem-intelligence-heading">
         <div>
           <span className="section-label">Stem Intelligence</span>
-          <h2>{readyStems.length ? `${readyStems.length} musical layer${readyStems.length === 1 ? "" : "s"} Atlas can direct` : "Turn stems into reusable Audio Scenes"}</h2>
-          <p>Atlas understands what each layer contributes, where it works best, and which mix treatment fits different kinds of media.</p>
+          <h2>{readyStems.length ? `${readyStems.length} musical layer${readyStems.length === 1 ? "" : "s"} Ensemblis can direct` : "Turn stems into reusable Audio Scenes"}</h2>
+          <p>Ensemblis understands what each layer contributes, where it works best, and which mix treatment fits different kinds of media.</p>
         </div>
         <div className="stem-intelligence-summary">
           <span><strong>{readyStems.length}/{state.stems.length}</strong><small>analyzed</small></span>
@@ -149,14 +150,14 @@ export async function StemIntelligencePanel({
 
       <details className="workspace-drawer stem-import-drawer" open={!state.stems.length}>
         <summary>{state.stems.length ? "Import more stems" : "Import stems from Suno or your DAW"}</summary>
-        <p className="v2-muted-copy">Export synchronized stems from Suno, Cubase, Ableton, Logic, or another source and drop them together. Atlas recognizes common file names, verifies each layer against the current master, then builds scenes automatically as analyses finish.</p>
+        <p className="v2-muted-copy">Export synchronized stems from Suno, Cubase, Ableton, Logic, or another source and drop them together. Ensemblis recognizes common file names, verifies each layer against the current master, then builds scenes automatically as analyses finish.</p>
         <StemUploader trackId={track.id} />
       </details>
 
       {state.stems.length ? (
         <div className="stem-library">
           <div className="stem-subheading">
-            <div><span className="section-label">Layer map</span><h3>What Atlas hears inside the track</h3></div>
+            <div><span className="section-label">Layer map</span><h3>What Ensemblis hears inside the track</h3></div>
             <form action={regenerateAudioScenes}>
               <input type="hidden" name="track_id" value={track.id} />
               <button type="submit" className="button"><FiRefreshCw /> Refresh smart scenes</button>
@@ -221,7 +222,7 @@ export async function StemIntelligencePanel({
       ) : (
         <div className="v2-calm-state compact">
           <strong>No stems yet.</strong>
-          <p>The master already powers Track Intelligence. Add stems when you want Atlas to control which musical layers become foreground, background, reveal, or payoff.</p>
+          <p>The master already powers Track Intelligence. Add stems when you want Ensemblis to control which musical layers become foreground, background, reveal, or payoff.</p>
         </div>
       )}
 
@@ -279,7 +280,7 @@ export async function StemIntelligencePanel({
                 );
               })}
             </div>
-          ) : <div className="v2-calm-state compact"><strong>Smart scenes are forming.</strong><p>Atlas creates them incrementally as enough useful stems finish analysis.</p></div>}
+          ) : <div className="v2-calm-state compact"><strong>Smart scenes are forming.</strong><p>Ensemblis creates them incrementally as enough useful stems finish analysis.</p></div>}
 
           <details className="workspace-drawer stem-advanced-drawer">
             <summary>Advanced custom mixer</summary>

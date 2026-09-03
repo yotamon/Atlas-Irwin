@@ -8,7 +8,7 @@ import {
   discardMediaUpload,
   registerMediaUpload,
 } from "@/app/studio/catalog-actions";
-import { registerTrackStem } from "@/app/studio/stem-actions";
+import { registerTrackStem } from "@/app/studio/stem-actions-safe";
 import {
   STEM_CATEGORIES,
   STEM_CATEGORY_LABELS,
@@ -160,7 +160,7 @@ export function StemUploader({ trackId }: { trackId: string }) {
           content_hash: contentHash,
           original_name: item.file.name,
           title: item.label,
-          description: `Stem imported for Atlas Stem Intelligence from ${provider}.`,
+          description: `Stem imported for Ensemblis Stem Intelligence from ${provider}.`,
           tags: `stem,stem-intelligence,${provider},${item.category}`,
           release_id: "",
           is_primary: "",
@@ -184,7 +184,7 @@ export function StemUploader({ trackId }: { trackId: string }) {
         patch(item.id, {
           state: "done",
           message: result.analysisQueued
-            ? "Imported. Atlas is analyzing this layer."
+            ? "Imported. Ensemblis is analyzing this layer."
             : "Imported. Analysis worker is unavailable in this environment.",
         });
       } catch (error) {
@@ -216,7 +216,7 @@ export function StemUploader({ trackId }: { trackId: string }) {
             {PROVIDERS.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
           </select>
         </label>
-        <p>Atlas recognizes common stem names automatically. You can correct any role before import.</p>
+        <p>Ensemblis recognizes common stem names automatically. You can correct any role before import.</p>
       </div>
 
       <div
@@ -228,7 +228,7 @@ export function StemUploader({ trackId }: { trackId: string }) {
       >
         <FiUploadCloud aria-hidden />
         <strong>Drop all stems together</strong>
-        <span>WAV is ideal. MP3, FLAC, AIFF, M4A, OGG and Opus also work. Atlas analyzes each layer against the exact current master.</span>
+        <span>WAV is ideal. MP3, FLAC, AIFF, M4A, OGG and Opus also work. Ensemblis analyzes each layer against the exact current master.</span>
         <button type="button" className="button" onClick={() => inputRef.current?.click()}>Choose stems</button>
         <input
           ref={inputRef}
@@ -276,7 +276,7 @@ export function StemUploader({ trackId }: { trackId: string }) {
         <button className="button primary" type="button" onClick={importAll} disabled={!items.length || busy || !pending}>
           {busy ? `Importing ${Math.min(done + 1, items.length)} of ${items.length}…` : done === items.length && items.length ? "Import complete" : `Import & analyze ${items.length || ""} stem${items.length === 1 ? "" : "s"}`}
         </button>
-        <span>{done ? `${done}/${items.length} imported` : "No AI generation cost. Analysis runs in Atlas Media Worker."}</span>
+        <span>{done ? `${done}/${items.length} imported` : "No AI generation cost. Analysis runs in the Ensemblis Media Worker."}</span>
       </div>
     </div>
   );
