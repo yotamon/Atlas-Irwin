@@ -42,7 +42,7 @@ test("paid generation is prepared before provider submission", async () => {
   assert.ok(submitIndex > approveIndex, "provider submission must live behind the explicit approval action");
   assert.doesNotMatch(actions.slice(prepareIndex, approveIndex), /provider\.submit/);
   assert.match(actions, /approvalRequiredBeforeSpend: true/);
-  assert.match(actions, /\.eq\("artist_id", context\.artistId\)/);
+  assert.match(actions, /\.eq\("artist_id", artist\.artistId\)/);
 });
 
 test("generated assets retain reference provenance and require review", async () => {
