@@ -1,6 +1,8 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { requireStudioAdmin } from "@/lib/auth/studio";
+import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import * as actions from "./distribution-actions";
 
 function releaseDestination(form: FormData) {
@@ -12,9 +14,35 @@ function message(error: unknown) {
   return error instanceof Error ? error.message : "Distribution action could not be completed.";
 }
 
+async function validateReleaseArtistScope(form: FormData) {
+  const releaseId = String(form.get("release_id") ?? "").trim();
+  if (!releaseId) throw new Error("Release is required for this distribution action.");
+
+  const { supabase, user } = await requireStudioAdmin();
+  const requestedArtistId = String(form.get("artist_id") ?? "").trim();
+  const artist = requestedArtistId
+    ? await resolveArtistContext(supabase, user, requestedArtistId)
+    : await resolveDefaultArtistContext(supabase, user);
+
+  const { data: release, error } = await supabase
+    .from("releases")
+    .select("id,artist_id")
+    .eq("id", releaseId)
+    .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!release) throw new Error("Release not found for the active artist.");
+
+  form.set("artist_id", artist.artistId);
+  return artist;
+}
+
 async function runReleaseAction(form: FormData, action: (form: FormData) => Promise<unknown>, notice: string) {
   const destination = releaseDestination(form);
   try {
+    await validateReleaseArtistScope(form);
     await action(form);
   } catch (error) {
     redirect(`${destination}?error=${encodeURIComponent(message(error))}`);
@@ -86,6 +114,7 @@ export async function saveDistributionAccount(form: FormData) {
 export async function linkDistributionProviderRelease(form: FormData) {
   const releaseId = String(form.get("release_id") ?? "").trim();
   try {
+    await validateReleaseArtistScope(form);
     await actions.linkDistributionProviderRelease(form);
   } catch (error) {
     redirect(`/studio/distribution/operations?error=${encodeURIComponent(message(error))}`);
