@@ -1,0 +1,29 @@
+name: Artist Scope Audit
+
+on:
+  push:
+    branches:
+      - feat/ensemblis-operational-artist-scope
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enumerate owner-canonical operational paths
+        shell: bash
+        run: |
+          set +e
+          echo '=== owner_id filters in Studio + marketing ==='
+          rg -n '\.eq\(["'"']owner_id["'"']' app/studio lib/marketing || true
+          echo '=== owner_id inserts in Studio + marketing ==='
+          rg -n 'owner_id\s*:' app/studio lib/marketing || true
+          echo '=== service operational table reads without nearby artist_id ==='
+          rg -n 'from\(["'"'](campaigns|campaign_phases|campaign_experiments|campaign_moments|generation_runs|content_items|content_variants|publication_jobs|attribution_links|attribution_events|marketing_events|automation_jobs|marketing_learnings|metric_snapshots|outreach_contacts|outreach_sequences|outreach_sequence_steps|outreach_enrollments|outreach_messages|artist_growth_settings|track_vault|growth_plan_items|growth_opportunities|audience_interactions|marketing_opportunities|next_best_actions|social_channel_accounts|marketing_media_jobs|creative_derivatives|campaign_ai_spend_envelopes|campaign_ai_spend_reservations)["'"']\)' app/studio lib/marketing || true
+          echo '=== social auth entry points ==='
+          rg -n 'requireSocialAccess|social_channel_accounts|social_channel_tokens|oauth|OAuth' app/studio lib/marketing app/api || true
+          echo '=== current artist context usage ==='
+          rg -n 'requireArtistContext|resolveDefaultArtistContext|resolveArtistContext' app/studio lib/marketing || true
