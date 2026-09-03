@@ -4,7 +4,10 @@ import { requireStudioAdmin } from "@/lib/auth/studio";
 import { createAutonomyServiceClient } from "@/lib/marketing/autonomy-db";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { lifecycleLabel, releaseLifecycle } from "@/lib/marketing/release-lifecycle";
+import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { asGrowthClient } from "@/lib/studio/growth-db";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
+import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 import { asSocialClient } from "@/lib/studio/social-db";
 import { buildGrowthFunnel, diagnoseGrowthFunnel, rankVaultTracks } from "@/lib/studio/growth";
 
@@ -40,6 +43,9 @@ function isStale(value: string | null | undefined, days: number) {
 
 export default async function TodayPage() {
   const { supabase, user } = await requireStudioAdmin();
+  const artist = await resolveDefaultArtistContext(supabase, user);
+  const operational = asArtistScopedOperationalClient(supabase);
+  const music = asArtistScopedMusicClient(supabase);
   const marketing = asMarketingClient(supabase);
   const growth = asGrowthClient(supabase);
   const social = asSocialClient(supabase);
@@ -67,23 +73,23 @@ export default async function TodayPage() {
     spotifyPendingResult,
     outreachDraftsResult,
   ] = await Promise.all([
-    supabase.from("releases").select("id,title,release_date,artwork_url,cover_alt,status,active_release").eq("owner_id", user.id).order("updated_at", { ascending: false }),
-    supabase.from("tasks").select("id,title,due_at,priority,status").eq("owner_id", user.id).not("status", "in", '("Done","Skipped")').order("due_at", { ascending: true }).limit(30),
-    marketing.from("campaigns").select("id,release_id,name,status").eq("owner_id", user.id).in("status", ["draft", "planned", "active"]),
-    marketing.from("automation_jobs").select("id,campaign_id,job_type,status,approval_status,run_after").eq("owner_id", user.id).not("status", "in", '("completed","failed","cancelled")').order("run_after", { ascending: true }).limit(40),
-    marketing.from("publication_jobs").select("id,campaign_id,content_item_id,platform,status,approval_status,scheduled_at").eq("owner_id", user.id).not("status", "in", '("published","failed","cancelled")').order("scheduled_at", { ascending: true }).limit(40),
-    marketing.from("content_items").select("id,release_id,campaign_id,title,platform,status,asset_url,scheduled_at").eq("owner_id", user.id).not("status", "eq", "Archived").order("scheduled_at", { ascending: true }).limit(100),
-    marketing.from("marketing_learnings").select("id,finding,status,confidence,created_at").eq("owner_id", user.id).in("status", ["proposed", "approved"]).order("created_at", { ascending: false }).limit(20),
-    growth.from("growth_opportunities").select("*").eq("owner_id", user.id).in("status", ["new", "accepted"]).order("priority", { ascending: false }).limit(12),
-    growth.from("track_vault").select("*").eq("owner_id", user.id).neq("status", "archived"),
-    supabase.from("metric_snapshots").select("*").eq("owner_id", user.id),
-    autonomy.from("next_best_actions").select("*").eq("owner_id", user.id).eq("status", "proposed").order("score", { ascending: false }).limit(8),
+    music.from("releases").select("id,title,release_date,artwork_url,cover_alt,status,active_release").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("updated_at", { ascending: false }),
+    operational.from("tasks").select("id,title,due_at,priority,status").eq("owner_id", user.id).eq("artist_id", artist.artistId).not("status", "in", '("Done","Skipped")').order("due_at", { ascending: true }).limit(30),
+    marketing.from("campaigns").select("id,release_id,name,status").eq("owner_id", user.id).eq("artist_id", artist.artistId).in("status", ["draft", "planned", "active"]),
+    marketing.from("automation_jobs").select("id,campaign_id,job_type,status,approval_status,run_after").eq("owner_id", user.id).eq("artist_id", artist.artistId).not("status", "in", '("completed","failed","cancelled")').order("run_after", { ascending: true }).limit(40),
+    marketing.from("publication_jobs").select("id,campaign_id,content_item_id,platform,status,approval_status,scheduled_at").eq("owner_id", user.id).eq("artist_id", artist.artistId).not("status", "in", '("published","failed","cancelled")').order("scheduled_at", { ascending: true }).limit(40),
+    marketing.from("content_items").select("id,release_id,campaign_id,title,platform,status,asset_url,scheduled_at").eq("owner_id", user.id).eq("artist_id", artist.artistId).not("status", "eq", "Archived").order("scheduled_at", { ascending: true }).limit(100),
+    marketing.from("marketing_learnings").select("id,finding,status,confidence,created_at").eq("owner_id", user.id).eq("artist_id", artist.artistId).in("status", ["proposed", "approved"]).order("created_at", { ascending: false }).limit(20),
+    growth.from("growth_opportunities").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).in("status", ["new", "accepted"]).order("priority", { ascending: false }).limit(12),
+    growth.from("track_vault").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).neq("status", "archived"),
+    marketing.from("metric_snapshots").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId),
+    autonomy.from("next_best_actions").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).eq("status", "proposed").order("score", { ascending: false }).limit(8),
     supabase.from("spotify_accounts").select("last_synced_at").eq("owner_id", user.id).maybeSingle(),
     supabase.from("soundcloud_accounts").select("last_synced_at").eq("owner_id", user.id).maybeSingle(),
-    social.from("social_channel_accounts").select("platform,status,can_publish").eq("owner_id", user.id),
+    social.from("social_channel_accounts").select("platform,status,can_publish").eq("owner_id", user.id).eq("artist_id", artist.artistId),
     supabase.from("soundcloud_tracks").select("id,linked_track_id").eq("owner_id", user.id).eq("reconcile_status", "pending"),
     supabase.from("spotify_tracks").select("id,linked_track_id").eq("owner_id", user.id).eq("reconcile_status", "pending"),
-    marketing.from("outreach_messages").select("id").eq("owner_id", user.id).is("sent_at", null).eq("response_status", "Draft"),
+    marketing.from("outreach_messages").select("id").eq("owner_id", user.id).eq("artist_id", artist.artistId).is("sent_at", null).eq("response_status", "Draft"),
   ]);
 
   const firstError = [
@@ -136,17 +142,17 @@ export default async function TodayPage() {
     { label: "Social execution", value: connectedSocial.length ? `${connectedSocial.length} connected` : "Missing", kind: connectedSocial.length ? "Measured" : "Low evidence", detail: publishableSocial.length ? `${publishableSocial.length} can publish` : "No connected publishing permission" },
     { label: "Spotify data", value: spotifyConnected ? "Connected" : "Missing", kind: spotifyConnected ? "Measured" : "Low evidence", detail: spotifyConnected ? (isStale(spotifyAccountResult.data?.last_synced_at, 7) ? "Sync is stale" : "Recent sync available") : "Growth conclusions exclude Spotify account data" },
     { label: "SoundCloud data", value: soundCloudAccountResult.data ? (soundCloudStale ? "Stale" : "Connected") : "Missing", kind: soundCloudAccountResult.data ? "Measured" : "Low evidence", detail: soundCloudAccountResult.data?.last_synced_at ? `Last sync ${shortDate(soundCloudAccountResult.data.last_synced_at)}` : "No account sync" },
-    { label: "Creative learning", value: hasContentPerformance ? "Learning" : "Low evidence", kind: hasContentPerformance ? "Artist learned" : "Working benchmark", detail: hasContentPerformance ? "Content-level performance can train future decisions" : "Current funnel targets are working heuristics, not Atlas-specific truth yet" },
+    { label: "Creative learning", value: hasContentPerformance ? "Learning" : "Low evidence", kind: hasContentPerformance ? "Artist learned" : "Working benchmark", detail: hasContentPerformance ? "Content-level performance can train future decisions" : "Current funnel targets are working heuristics, not artist-specific truth yet" },
   ];
 
   const needsYou = [
     ...(workflowApprovalCount ? [{ id: "approvals", eyebrow: "Approval", title: `${workflowApprovalCount} workflow approval${workflowApprovalCount === 1 ? "" : "s"} ready`, detail: "External effects remain explicitly yours to authorize.", href: "/studio/inbox", tone: "important" }] : []),
     ...(outreachDraftCount ? [{ id: "outreach", eyebrow: "Outreach", title: `${outreachDraftCount} message${outreachDraftCount === 1 ? "" : "s"} prepared`, detail: "Approve delivery or receive a manual handoff.", href: "/studio/inbox", tone: "important" }] : []),
-    ...manualReady.slice(0, 1).map((job) => ({ id: `manual-${job.id}`, eyebrow: "Manual handoff", title: `${job.platform} is prepared`, detail: "Atlas prepared the exact handoff instead of pretending it published.", href: job.content_item_id ? `/studio/production?edit=${job.content_item_id}` : "/studio/inbox", tone: "warning" })),
+    ...manualReady.slice(0, 1).map((job) => ({ id: `manual-${job.id}`, eyebrow: "Manual handoff", title: `${job.platform} is prepared`, detail: "Ensemblis prepared the exact handoff instead of pretending it published.", href: job.content_item_id ? `/studio/production?edit=${job.content_item_id}` : "/studio/inbox", tone: "warning" })),
     ...(unmatched ? [{ id: "unmatched", eyebrow: "Ambiguous data", title: `${unmatched} catalog match${unmatched === 1 ? "" : "es"} need a decision`, detail: "Only ambiguous reconciliation reaches you.", href: "/studio/data-health?category=unmatched", tone: "warning" }] : []),
     ...missingAssets.slice(0, 2).map((item) => ({ id: `asset-${item.id}`, eyebrow: "Creative", title: `${item.title} is waiting for its asset`, detail: `${item.platform}${item.scheduled_at ? ` · ${shortDate(item.scheduled_at)}` : ""}`, href: `/studio/production?edit=${item.id}`, tone: "normal" })),
     ...dueTasks.slice(0, 2).map((task) => ({ id: `task-${task.id}`, eyebrow: "Task", title: task.title, detail: task.due_at ? `${task.priority} · ${dateDistance(task.due_at)}` : task.priority, href: activeRelease ? `/studio/releases/${activeRelease.id}` : "/studio/releases", tone: "normal" })),
-    ...(proposedLearnings.length ? [{ id: "learnings", eyebrow: "Learning", title: `${proposedLearnings.length} evidence-backed insight${proposedLearnings.length === 1 ? "" : "s"} to review`, detail: "Only approved findings become future Atlas memory.", href: "/studio/learn", tone: "normal" }] : []),
+    ...(proposedLearnings.length ? [{ id: "learnings", eyebrow: "Learning", title: `${proposedLearnings.length} evidence-backed insight${proposedLearnings.length === 1 ? "" : "s"} to review`, detail: `Only approved findings become future memory for ${artist.artistName}.`, href: "/studio/learn", tone: "normal" }] : []),
   ].slice(0, 8);
 
   const workingJobs = automation.filter((job) => job.status === "queued" || job.status === "running");
@@ -155,17 +161,17 @@ export default async function TodayPage() {
 
   return (
     <div className="studio-v2-page">
-      <PageHeader title="Today" description="One command center. Atlas handles safe internal work; this page interrupts you only for judgment, money, ambiguity or external effects." action={<Link className="button primary" href="/studio/inbox">Needs you{workflowApprovalCount ? ` (${workflowApprovalCount})` : ""}</Link>} />
+      <PageHeader title="Today" description={`One command center for ${artist.artistName}. Ensemblis handles safe internal work and interrupts you only for judgment, money, ambiguity or external effects.`} action={<Link className="button primary" href="/studio/inbox">Needs you{workflowApprovalCount ? ` (${workflowApprovalCount})` : ""}</Link>} />
 
       <section className="v2-section today-growth-diagnosis">
-        <div className="v2-section-heading"><div><span className="section-label">Next best action</span><h2>{nextAction?.title || "Atlas can keep moving without interrupting you"}</h2></div>{nextAction ? <Status>{Math.round(Number(nextAction.score))}/100 ranked signal</Status> : <Status>clear</Status>}</div>
+        <div className="v2-section-heading"><div><span className="section-label">Next best action</span><h2>{nextAction?.title || "Ensemblis can keep moving without interrupting you"}</h2></div>{nextAction ? <Status>{Math.round(Number(nextAction.score))}/100 ranked signal</Status> : <Status>clear</Status>}</div>
         {nextAction ? <><p className="v2-muted-copy">{nextAction.rationale}</p><div className="actions"><Link className="button primary" href={actionHref(nextAction)}>Act on this</Link><Link className="button" href="/studio/growth">Inspect evidence</Link></div></> : <div className="v2-calm-state compact"><strong>No higher-leverage human intervention is currently ranked.</strong><p>The marketing heartbeat will keep reconciling lifecycle, preparing production and surfacing approvals automatically.</p></div>}
       </section>
 
       <section className="v2-hero-grid">
         <article className="v2-focus-card">
           <div className="v2-section-heading"><div><span className="section-label">Needs you</span><h2>{needsYou.length ? `${needsYou.length} thing${needsYou.length === 1 ? "" : "s"}` : "You are clear"}</h2></div><Link href="/studio/inbox">Approval inbox</Link></div>
-          {needsYou.length ? <div className="v2-inbox">{needsYou.map((item) => <Link className={`v2-inbox-item ${item.tone}`} href={item.href} key={item.id}><div><span>{item.eyebrow}</span><strong>{item.title}</strong><small>{item.detail}</small></div><b aria-hidden>→</b></Link>)}</div> : <div className="v2-calm-state"><strong>Nothing is blocked on you.</strong><p>Atlas can keep moving with the context and approvals it already has.</p></div>}
+          {needsYou.length ? <div className="v2-inbox">{needsYou.map((item) => <Link className={`v2-inbox-item ${item.tone}`} href={item.href} key={item.id}><div><span>{item.eyebrow}</span><strong>{item.title}</strong><small>{item.detail}</small></div><b aria-hidden>→</b></Link>)}</div> : <div className="v2-calm-state"><strong>Nothing is blocked on you.</strong><p>Ensemblis can keep moving with the context and approvals it already has.</p></div>}
         </article>
         <article className="v2-release-card">
           <span className="section-label">Current music</span>
@@ -174,7 +180,7 @@ export default async function TodayPage() {
       </section>
 
       <section className="v2-section">
-        <div className="v2-section-heading"><div><span className="section-label">Evidence readiness</span><h2>Know what Atlas actually knows</h2></div><Link href="/studio/settings">Connections</Link></div>
+        <div className="v2-section-heading"><div><span className="section-label">Evidence readiness</span><h2>Know what Ensemblis actually knows</h2></div><Link href="/studio/settings">Connections</Link></div>
         <p className="v2-muted-copy">Measured data, derived calculations and working benchmarks are intentionally separated. A precise-looking score is never presented as learned truth when the evidence is thin.</p>
         <div className="v2-status-grid">{evidenceItems.map((item) => <article key={item.label}><strong>{item.value}</strong><span>{item.label}</span><small>{item.kind} · {item.detail}</small></article>)}</div>
       </section>
@@ -182,18 +188,18 @@ export default async function TodayPage() {
       <section className="growth-command-grid today-growth-pulse">
         <article className="v2-section">
           <div className="v2-section-heading"><div><span className="section-label">Portfolio risk</span><h2>{biggestRisk ? biggestRisk.title : "No evidence-backed release risk"}</h2></div></div>
-          {biggestRisk ? <><p className="v2-muted-copy">{biggestRisk.rationale}</p><Link className="button" href="/studio/growth#opportunities">Review evidence</Link></> : <div className="v2-calm-state compact"><strong>No red alert.</strong><p>Atlas prefers silence over manufacturing urgency.</p></div>}
+          {biggestRisk ? <><p className="v2-muted-copy">{biggestRisk.rationale}</p><Link className="button" href="/studio/growth#opportunities">Review evidence</Link></> : <div className="v2-calm-state compact"><strong>No red alert.</strong><p>Ensemblis prefers silence over manufacturing urgency.</p></div>}
         </article>
         <article className="v2-section">
           <div className="v2-section-heading"><div><span className="section-label">Portfolio opportunity</span><h2>{biggestOpportunity ? biggestOpportunity.title : topVaultCandidate ? `${topVaultCandidate.track.title} is the strongest current candidate` : "Waiting for stronger signal"}</h2></div></div>
-          {biggestOpportunity ? <><p className="v2-muted-copy">{biggestOpportunity.rationale}</p><Link className="button primary" href="/studio/growth#opportunities">Review opportunity</Link></> : topVaultCandidate ? <><p className="v2-muted-copy">Working portfolio score {Math.round(topVaultCandidate.score)}/100 · {topVaultCandidate.reasons.join(" · ")}. This is a deterministic heuristic until Atlas has enough artist-specific release outcomes.</p><Link className="button primary" href="/studio/growth#vault">Review candidate</Link></> : <div className="v2-calm-state compact"><strong>Add the unreleased backlog.</strong><p>The portfolio manager becomes useful when it can see the music waiting behind the current release.</p></div>}
+          {biggestOpportunity ? <><p className="v2-muted-copy">{biggestOpportunity.rationale}</p><Link className="button primary" href="/studio/growth#opportunities">Review opportunity</Link></> : topVaultCandidate ? <><p className="v2-muted-copy">Working portfolio score {Math.round(topVaultCandidate.score)}/100 · {topVaultCandidate.reasons.join(" · ")}. This is a deterministic heuristic until Ensemblis has enough artist-specific release outcomes.</p><Link className="button primary" href="/studio/growth#vault">Review candidate</Link></> : <div className="v2-calm-state compact"><strong>Add the unreleased backlog.</strong><p>The portfolio manager becomes useful when it can see the music waiting behind the current release.</p></div>}
         </article>
       </section>
 
-      {diagnosis ? <section className="v2-section today-growth-diagnosis"><div className="v2-section-heading"><div><span className="section-label">Working benchmark · funnel</span><h2>{diagnosis.label}</h2></div><Link href="/studio/growth#funnel">Full funnel</Link></div><p className="v2-muted-copy">{diagnosis.diagnosis}</p><div className="growth-action-note"><strong>Recommended move</strong><span>{diagnosis.action}</span></div><small className="v2-muted-copy">The comparison target is a working Atlas benchmark, not an artist-learned threshold yet.</small></section> : null}
+      {diagnosis ? <section className="v2-section today-growth-diagnosis"><div className="v2-section-heading"><div><span className="section-label">Working benchmark · funnel</span><h2>{diagnosis.label}</h2></div><Link href="/studio/growth#funnel">Full funnel</Link></div><p className="v2-muted-copy">{diagnosis.diagnosis}</p><div className="growth-action-note"><strong>Recommended move</strong><span>{diagnosis.action}</span></div><small className="v2-muted-copy">The comparison target is a working Ensemblis benchmark, not an artist-learned threshold yet.</small></section> : null}
 
       <section className="v2-section">
-        <div className="v2-section-heading"><div><span className="section-label">Atlas is working on</span><h2>Automation, not admin</h2></div><Link href="/studio/settings">Automation settings</Link></div>
+        <div className="v2-section-heading"><div><span className="section-label">Ensemblis is working on</span><h2>Automation, not admin</h2></div><Link href="/studio/settings">Automation settings</Link></div>
         <div className="v2-status-grid">
           <article><strong>{workingJobs.length}</strong><span>automation jobs</span><small>Queued or running</small></article>
           <article><strong>{scheduledPublications.length}</strong><span>publication jobs</span><small>{providerScheduled.length ? `${providerScheduled.length} scheduled at providers` : "Approved, scheduled or publishing"}</small></article>
@@ -204,12 +210,12 @@ export default async function TodayPage() {
 
       <section className="v2-two-column">
         <article className="v2-section v2-compact-section">
-          <div className="v2-section-heading"><div><span className="section-label">Next 7 days</span><h2>What Atlas is preparing</h2></div><Link href="/studio/calendar">Full timeline</Link></div>
+          <div className="v2-section-heading"><div><span className="section-label">Next 7 days</span><h2>What Ensemblis is preparing</h2></div><Link href="/studio/calendar">Full timeline</Link></div>
           {upcomingContent.length ? <div className="v2-simple-list">{upcomingContent.slice(0, 6).map((item) => <Link href={`/studio/production?edit=${item.id}`} key={item.id}><span>{shortDate(item.scheduled_at)}</span><strong>{item.title}</strong><small>{item.platform} · {item.asset_url ? "asset ready" : "creative pending"}</small></Link>)}</div> : <div className="v2-calm-state compact"><strong>No scheduled content this week.</strong><p>The lifecycle-aware campaign engine will populate only future connected-channel work when it is useful.</p></div>}
         </article>
         <article className="v2-section v2-compact-section">
           <div className="v2-section-heading"><div><span className="section-label">Artist-learned memory</span><h2>What worked</h2></div><Link href="/studio/learn">Learning memory</Link></div>
-          {approvedLearnings.length ? <div className="v2-learning-list">{approvedLearnings.slice(0, 4).map((learning) => <div key={learning.id}><strong>{Math.round(Number(learning.confidence) * 100)}%</strong><p>{learning.finding}</p></div>)}</div> : <div className="v2-calm-state compact"><strong>No approved learnings yet.</strong><p>Atlas will not pretend working benchmarks are artist-specific learning. This fills only after real campaigns produce attributable evidence.</p></div>}
+          {approvedLearnings.length ? <div className="v2-learning-list">{approvedLearnings.slice(0, 4).map((learning) => <div key={learning.id}><strong>{Math.round(Number(learning.confidence) * 100)}%</strong><p>{learning.finding}</p></div>)}</div> : <div className="v2-calm-state compact"><strong>No approved learnings yet.</strong><p>Ensemblis will not pretend working benchmarks are artist-specific learning. This fills only after real campaigns produce attributable evidence.</p></div>}
         </article>
       </section>
     </div>
