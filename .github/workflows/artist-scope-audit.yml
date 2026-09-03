@@ -18,15 +18,15 @@ jobs:
         run: |
           set +e
           echo '=== owner_id filters in Studio protected surfaces ==='
-          rg -n --fixed-strings '.eq("owner_id"' 'app/studio/(protected)' || true
+          grep -RInF '.eq("owner_id"' 'app/studio/(protected)' --include='*.ts' --include='*.tsx' || true
           echo '=== owner_id filters in Studio action files ==='
-          rg -n --fixed-strings '.eq("owner_id"' app/studio --glob '*.ts' --glob '*.tsx' || true
+          grep -RInF '.eq("owner_id"' app/studio --include='*.ts' --include='*.tsx' || true
           echo '=== owner_id filters in marketing services ==='
-          rg -n --fixed-strings '.eq("owner_id"' lib/marketing || true
+          grep -RInF '.eq("owner_id"' lib/marketing --include='*.ts' --include='*.tsx' || true
           echo '=== owner_id row writes in operational application code ==='
-          rg -n 'owner_id\s*:' app/studio lib/marketing || true
+          grep -RInE 'owner_id[[:space:]]*:' app/studio lib/marketing --include='*.ts' --include='*.tsx' || true
           echo '=== operational table access in protected surfaces ==='
-          rg -n 'campaigns|content_items|publication_jobs|marketing_learnings|metric_snapshots|outreach_|automation_jobs|next_best_actions|social_channel_accounts|generation_runs' 'app/studio/(protected)' || true
+          grep -RInE 'campaigns|content_items|publication_jobs|marketing_learnings|metric_snapshots|outreach_|automation_jobs|next_best_actions|social_channel_accounts|generation_runs' 'app/studio/(protected)' --include='*.ts' --include='*.tsx' || true
           echo '=== ArtistContext usage ==='
-          rg -n 'requireArtistContext|resolveDefaultArtistContext|resolveArtistContext' app/studio lib/marketing || true
+          grep -RInE 'requireArtistContext|resolveDefaultArtistContext|resolveArtistContext' app/studio lib/marketing --include='*.ts' --include='*.tsx' || true
           exit 0
