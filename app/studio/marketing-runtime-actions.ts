@@ -12,6 +12,7 @@ import {
   resolveDefaultArtistContext,
   type ArtistContext,
 } from "@/lib/studio/artist-context";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 
 function value(form: FormData, key: string) {
   return String(form.get(key) ?? "").trim();
@@ -124,6 +125,7 @@ export async function markPublicationPublished(form: FormData) {
 export async function saveCampaignMetric(form: FormData) {
   const { supabase, artist } = await runtimeContext(form);
   const marketing = asMarketingClient(supabase);
+  const music = asArtistScopedMusicClient(supabase);
   const campaignId = z.uuid().parse(value(form, "campaign_id"));
   const contentItemId = optionalUuid(form, "content_item_id");
   const variantId = optionalUuid(form, "content_variant_id");
@@ -139,7 +141,7 @@ export async function saveCampaignMetric(form: FormData) {
     assertScopedId(marketing, artist, "campaign_experiments", experimentId),
   ]);
   if (releaseId) {
-    const { data: release, error: releaseError } = await supabase.from("releases")
+    const { data: release, error: releaseError } = await music.from("releases")
       .select("id")
       .eq("id", releaseId)
       .eq("owner_id", artist.userId)
