@@ -33,7 +33,8 @@ function newAttributionCode() {
 }
 
 function isDuplicate(message: string) {
-  return message.toLowerCase().includes("duplicate") || message.toLowerCase().includes("unique");
+  const normalized = message.toLowerCase();
+  return normalized.includes("duplicate") || normalized.includes("unique");
 }
 
 async function enqueueJob({
@@ -88,7 +89,9 @@ export async function processMarketingEvents(limit = 50, artistId?: string) {
 
   let processed = 0;
   for (const event of events ?? []) {
+    if (!event.artist_id) throw new Error("Marketing event is missing artist scope.");
     const payload = objectPayload(event.payload);
+
     if (event.event_type === "metrics.updated") {
       const experimentId = stringPayload(payload.experimentId);
       if (experimentId) {
@@ -123,6 +126,7 @@ export async function processMarketingEvents(limit = 50, artistId?: string) {
       .from("marketing_events")
       .update({ processed_at: new Date().toISOString() })
       .eq("id", event.id)
+      .eq("owner_id", event.owner_id)
       .eq("artist_id", event.artist_id);
     if (markError) throw new Error(markError.message);
     processed += 1;
@@ -152,16 +156,24 @@ async function evaluateExperimentJob(job: ScopedAutomationJob) {
   if (!experimentId) throw new Error("evaluate_experiment job is missing experimentId.");
 
   const [experimentResult, variantsResult, metricsResult] = await Promise.all([
-    client.from("campaign_experiments").select("*").eq("id", experimentId).eq("artist_id", job.artist_id).single(),
-    client.from("content_variants").select("*").eq("experiment_id", experimentId).eq("artist_id", job.artist_id),
-    client.from("metric_snapshots").select("*").eq("experiment_id", experimentId).eq("artist_id", job.artist_id),
+    client.from("campaign_experiments").select("*")
+      .eq("id", experimentId).eq("owner_id", job.owner_id).eq("artist_id", job.artist_id).single(),
+    client.from("content_variants").select("*")
+      .eq("experiment_id", experimentId).eq("owner_id", job.owner_id).eq("artist_id", job.artist_id),
+    client.from("metric_snapshots").select("*")
+      .eq("experiment_id", experimentId).eq("owner_id", job.owner_id).eq("artist_id", job.artist_id),
   ]);
   if (experimentResult.error) throw new Error(experimentResult.error.message);
   if (variantsResult.error) throw new Error(variantsResult.error.message);
   if (metricsResult.error) throw new Error(metricsResult.error.message);
+
   const experiment = experimentResult.data;
   const summaries = (variantsResult.data ?? [])
-    .map((variant) => variantSummary(variant, metricsResult.data as unknown as Array<Record<string, unknown>>, experiment))
+    .map((variant) => variantSummary(
+      variant,
+      metricsResult.data as unknown as Array<Record<string, unknown>>,
+      experiment,
+    ))
     .filter((summary) => summary.sample >= experiment.minimum_sample)
     .sort((a, b) => b.signal - a.signal);
 
@@ -169,20 +181,21 @@ async function evaluateExperimentJob(job: ScopedAutomationJob) {
     const result = `Need at least two variants with ${experiment.minimum_sample.toLocaleString()} qualified observations.`;
     const { error } = await client.from("campaign_experiments")
       .update({ status: "evaluating", result_summary: result })
-      .eq("id", experiment.id)
-      .eq("artist_id", job.artist_id);
+      .eq("id", experiment.id).eq("owner_id", job.owner_id).eq("artist_id", job.artist_id);
     if (error) throw new Error(error.message);
     return { outcome: "waiting_for_sample", result };
   }
 
   const [best, second] = summaries;
-  const lift = second.signal > 0 ? (best.signal - second.signal) / second.signal : best.signal > 0 ? 1 : 0;
+  const lift = second.signal > 0
+    ? (best.signal - second.signal) / second.signal
+    : best.signal > 0 ? 1 : 0;
+
   if (lift < Number(experiment.minimum_lift)) {
     const result = `No reliable winner. Current lift is ${(lift * 100).toFixed(1)}%, below the ${(Number(experiment.minimum_lift) * 100).toFixed(0)}% threshold.`;
     const { error } = await client.from("campaign_experiments")
       .update({ status: "inconclusive", winner_variant_id: null, result_summary: result })
-      .eq("id", experiment.id)
-      .eq("artist_id", job.artist_id);
+      .eq("id", experiment.id).eq("owner_id", job.owner_id).eq("artist_id", job.artist_id);
     if (error) throw new Error(error.message);
     return { outcome: "inconclusive", lift, result };
   }
@@ -192,13 +205,13 @@ async function evaluateExperimentJob(job: ScopedAutomationJob) {
     status: "winner_found",
     winner_variant_id: best.variant.id,
     result_summary: result,
-  }).eq("id", experiment.id).eq("artist_id", job.artist_id);
+  }).eq("id", experiment.id).eq("owner_id", job.owner_id).eq("artist_id", job.artist_id);
   if (winnerError) throw new Error(winnerError.message);
 
-  const { data: campaign, error: campaignError } = await client
-    .from("campaigns")
+  const { data: campaign, error: campaignError } = await client.from("campaigns")
     .select("mode,release_id")
     .eq("id", experiment.campaign_id)
+    .eq("owner_id", job.owner_id)
     .eq("artist_id", job.artist_id)
     .single();
   if (campaignError) throw new Error(campaignError.message);
@@ -206,17 +219,31 @@ async function evaluateExperimentJob(job: ScopedAutomationJob) {
   const evidence = {
     metric: experiment.primary_metric,
     lift,
-    winner: { id: best.variant.id, label: best.variant.label, signal: best.signal, sample: best.sample, hook: best.variant.hook_text },
-    runnerUp: { id: second.variant.id, label: second.variant.label, signal: second.signal, sample: second.sample },
+    winner: {
+      id: best.variant.id,
+      label: best.variant.label,
+      signal: best.signal,
+      sample: best.sample,
+      hook: best.variant.hook_text,
+    },
+    runnerUp: {
+      id: second.variant.id,
+      label: second.variant.label,
+      signal: second.signal,
+      sample: second.sample,
+    },
   };
-  const { data: existingLearning } = await client
+  const { data: existingLearning, error: learningLookupError } = await client
     .from("marketing_learnings")
     .select("id")
     .eq("experiment_id", experiment.id)
+    .eq("owner_id", job.owner_id)
     .eq("artist_id", job.artist_id)
     .eq("source", "experiment")
     .limit(1)
     .maybeSingle();
+  if (learningLookupError) throw new Error(learningLookupError.message);
+
   const learningRow = {
     owner_id: experiment.owner_id,
     artist_id: job.artist_id,
@@ -232,7 +259,8 @@ async function evaluateExperimentJob(job: ScopedAutomationJob) {
     source: "experiment" as const,
   };
   const learningMutation = existingLearning
-    ? client.from("marketing_learnings").update(learningRow).eq("id", existingLearning.id).eq("artist_id", job.artist_id)
+    ? client.from("marketing_learnings").update(learningRow)
+        .eq("id", existingLearning.id).eq("owner_id", job.owner_id).eq("artist_id", job.artist_id)
     : client.from("marketing_learnings").insert(learningRow);
   const { error: learningError } = await learningMutation;
   if (learningError) throw new Error(learningError.message);
@@ -248,7 +276,7 @@ async function evaluateExperimentJob(job: ScopedAutomationJob) {
     idempotencyKey: `winner-derivatives:${experiment.id}:${best.variant.id}`,
   });
 
-  await client.from("marketing_events").insert({
+  const { error: eventError } = await client.from("marketing_events").insert({
     owner_id: experiment.owner_id,
     artist_id: job.artist_id,
     campaign_id: experiment.campaign_id,
@@ -257,6 +285,7 @@ async function evaluateExperimentJob(job: ScopedAutomationJob) {
     entity_id: experiment.id,
     payload: asJson({ winnerVariantId: best.variant.id, lift }),
   });
+  if (eventError) throw new Error(eventError.message);
   return { outcome: "winner_found", winnerVariantId: best.variant.id, lift, result };
 }
 
@@ -267,25 +296,39 @@ async function generateWinnerDerivatives(job: ScopedAutomationJob) {
   if (!winnerVariantId) throw new Error("generate_winner_derivatives job is missing winnerVariantId.");
 
   const { data: winner, error: winnerError } = await client.from("content_variants")
-    .select("*").eq("id", winnerVariantId).eq("artist_id", job.artist_id).single();
+    .select("*")
+    .eq("id", winnerVariantId).eq("owner_id", job.owner_id).eq("artist_id", job.artist_id).single();
   if (winnerError) throw new Error(winnerError.message);
   const { data: sourceItem, error: itemError } = await client.from("content_items")
-    .select("*").eq("id", winner.content_item_id).eq("artist_id", job.artist_id).single();
+    .select("*")
+    .eq("id", winner.content_item_id).eq("owner_id", job.owner_id).eq("artist_id", job.artist_id).single();
   if (itemError) throw new Error(itemError.message);
   if (!sourceItem.campaign_id) throw new Error("Winner content is not attached to a campaign.");
-  const { data: campaign, error: campaignError } = await client.from("campaigns")
-    .select("mode,release_anchor_date").eq("id", sourceItem.campaign_id).eq("artist_id", job.artist_id).single();
-  if (campaignError) throw new Error(campaignError.message);
-  const { data: sourceLink } = await client.from("attribution_links")
-    .select("destination_url").eq("content_variant_id", winner.id).eq("artist_id", job.artist_id).limit(1).maybeSingle();
 
-  const targetPlatforms = ["Instagram", "TikTok", "YouTube Shorts"].filter((platform) => platform !== sourceItem.platform).slice(0, 2);
+  const { data: campaign, error: campaignError } = await client.from("campaigns")
+    .select("mode,release_anchor_date")
+    .eq("id", sourceItem.campaign_id).eq("owner_id", job.owner_id).eq("artist_id", job.artist_id).single();
+  if (campaignError) throw new Error(campaignError.message);
+  const { data: sourceLink, error: sourceLinkError } = await client.from("attribution_links")
+    .select("destination_url")
+    .eq("content_variant_id", winner.id)
+    .eq("owner_id", job.owner_id)
+    .eq("artist_id", job.artist_id)
+    .limit(1)
+    .maybeSingle();
+  if (sourceLinkError) throw new Error(sourceLinkError.message);
+
+  const targetPlatforms = ["Instagram", "TikTok", "YouTube Shorts"]
+    .filter((platform) => platform !== sourceItem.platform)
+    .slice(0, 2);
   const createdIds: string[] = [];
+
   for (const [index, platform] of targetPlatforms.entries()) {
     const relativeDay = (sourceItem.relative_day ?? 0) + 2 + index * 2;
     const scheduledAt = releaseRelativeTimestamp(campaign.release_anchor_date, relativeDay);
     const approval = campaign.mode === "autopilot" ? "not_required" : "pending";
     const format = platform === "TikTok" ? "TikTok video" : platform === "YouTube Shorts" ? "Short" : "Reel";
+
     const { data: item, error: createError } = await client.from("content_items").insert({
       owner_id: sourceItem.owner_id,
       artist_id: job.artist_id,
@@ -338,6 +381,7 @@ async function generateWinnerDerivatives(job: ScopedAutomationJob) {
       attribution_code: code,
     }).select("id").single();
     if (variantError) throw new Error(variantError.message);
+
     if (code && sourceLink?.destination_url) {
       const { error: linkError } = await client.from("attribution_links").insert({
         owner_id: sourceItem.owner_id,
@@ -354,7 +398,7 @@ async function generateWinnerDerivatives(job: ScopedAutomationJob) {
     }
   }
 
-  await client.from("marketing_events").insert({
+  const { error: eventError } = await client.from("marketing_events").insert({
     owner_id: sourceItem.owner_id,
     artist_id: job.artist_id,
     campaign_id: sourceItem.campaign_id,
@@ -363,6 +407,7 @@ async function generateWinnerDerivatives(job: ScopedAutomationJob) {
     entity_id: winner.id,
     payload: asJson({ createdContentItemIds: createdIds }),
   });
+  if (eventError) throw new Error(eventError.message);
   return { createdContentItemIds: createdIds };
 }
 
@@ -371,13 +416,15 @@ async function collectMetricsJob(job: ScopedAutomationJob) {
   const payload = objectPayload(job.payload);
   const contentItemId = stringPayload(payload.contentItemId);
   if (!contentItemId) throw new Error("collect_metrics job is missing contentItemId.");
+
   const { data: item, error: itemError } = await client.from("content_items")
-    .select("*").eq("id", contentItemId).eq("artist_id", job.artist_id).single();
+    .select("*")
+    .eq("id", contentItemId).eq("owner_id", job.owner_id).eq("artist_id", job.artist_id).single();
   if (itemError) throw new Error(itemError.message);
-  const { data: publication, error: publicationError } = await client
-    .from("publication_jobs")
+  const { data: publication, error: publicationError } = await client.from("publication_jobs")
     .select("*")
     .eq("content_item_id", contentItemId)
+    .eq("owner_id", job.owner_id)
     .eq("artist_id", job.artist_id)
     .eq("status", "published")
     .order("published_at", { ascending: false })
@@ -393,6 +440,7 @@ async function collectMetricsJob(job: ScopedAutomationJob) {
   if (!metrics) {
     return { outcome: "manual_metrics_required", reason: adapter.capability().reason ?? "Channel metrics are not automated." };
   }
+
   const numeric = (key: string) => Math.max(0, Math.round(Number(metrics[key]) || 0));
   const { error: metricError } = await client.from("metric_snapshots").insert({
     owner_id: item.owner_id,
@@ -433,22 +481,34 @@ async function processJob(job: ScopedAutomationJob) {
   return { outcome: "unsupported_job", jobType: job.job_type };
 }
 
-export async function runDueAutomationJobs(limit = 20) {
+async function claimDueAutomationJobs(limit: number, artistId?: string) {
   const client = createMarketingServiceClient();
   const rpcClient = client as unknown as {
     rpc: (
-      fn: "claim_marketing_automation_jobs",
-      args: { p_limit: number },
+      fn: string,
+      args: Record<string, unknown>,
     ) => Promise<{ data: ScopedAutomationJob[] | null; error: { message: string } | null }>;
   };
-  const { data: jobs, error } = await rpcClient.rpc("claim_marketing_automation_jobs", {
-    p_limit: Math.max(1, Math.min(limit, 100)),
-  });
+  const boundedLimit = Math.max(1, Math.min(limit, 100));
+  return artistId
+    ? rpcClient.rpc("claim_marketing_automation_jobs_for_artist", {
+        p_artist_id: artistId,
+        p_limit: boundedLimit,
+      })
+    : rpcClient.rpc("claim_marketing_automation_jobs", { p_limit: boundedLimit });
+}
+
+export async function runDueAutomationJobs(limit = 20, artistId?: string) {
+  const client = createMarketingServiceClient();
+  const { data: jobs, error } = await claimDueAutomationJobs(limit, artistId);
   if (error) throw new Error(error.message);
 
   let completed = 0;
   let failed = 0;
   for (const job of jobs ?? []) {
+    if (artistId && job.artist_id !== artistId) {
+      throw new Error("Artist-scoped automation claim returned a sibling artist job.");
+    }
     try {
       const result = await processJob(job);
       const { error: completeError } = await client.from("automation_jobs").update({
@@ -457,18 +517,19 @@ export async function runDueAutomationJobs(limit = 20) {
         locked_at: null,
         result: asJson(result),
         error: null,
-      }).eq("id", job.id).eq("artist_id", job.artist_id);
+      }).eq("id", job.id).eq("owner_id", job.owner_id).eq("artist_id", job.artist_id);
       if (completeError) throw new Error(completeError.message);
       completed += 1;
-    } catch (error) {
+    } catch (jobError) {
       const terminal = job.attempt_count >= job.max_attempts;
       const backoffHours = Math.min(24, Math.max(1, 2 ** Math.max(0, job.attempt_count - 1)));
-      await client.from("automation_jobs").update({
+      const { error: retryError } = await client.from("automation_jobs").update({
         status: terminal ? "failed" : "queued",
         locked_at: null,
         run_after: new Date(Date.now() + backoffHours * 60 * 60 * 1000).toISOString(),
-        error: error instanceof Error ? error.message : "Automation job failed.",
-      }).eq("id", job.id).eq("artist_id", job.artist_id);
+        error: jobError instanceof Error ? jobError.message : "Automation job failed.",
+      }).eq("id", job.id).eq("owner_id", job.owner_id).eq("artist_id", job.artist_id);
+      if (retryError) throw new Error(retryError.message);
       failed += 1;
     }
   }
@@ -477,6 +538,6 @@ export async function runDueAutomationJobs(limit = 20) {
 
 export async function runMarketingAutomationCycle(artistId?: string) {
   const processedEvents = await processMarketingEvents(50, artistId);
-  const jobs = await runDueAutomationJobs();
+  const jobs = await runDueAutomationJobs(20, artistId);
   return { processedEvents, ...jobs };
 }
