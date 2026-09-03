@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { saveContact, saveOutreachMessage } from "@/app/studio/actions";
+import { saveContact, saveOutreachMessage } from "@/app/studio/outreach-actions";
 import {
   createOutreachSequence,
   enrollOutreachContact,
@@ -16,7 +16,10 @@ import {
 } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMarketingClient } from "@/lib/marketing/db";
+import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { CONTACT_TYPES, RELATIONSHIP_STATUSES } from "@/lib/studio/constants";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
+import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 
 export default async function OutreachPage({
   searchParams,
@@ -25,11 +28,14 @@ export default async function OutreachPage({
 }) {
   const p = await searchParams;
   const { supabase, user } = await requireStudioAdmin();
+  const artist = await resolveDefaultArtistContext(supabase, user);
   const marketing = asMarketingClient(supabase);
-  let query = supabase
-    .from("outreach_contacts")
-    .select("*")
-    .eq("owner_id", user.id)
+  const operational = asArtistScopedOperationalClient(supabase);
+  const music = asArtistScopedMusicClient(supabase);
+
+  let query = operational.from("outreach_contacts").select("*")
+    .eq("owner_id", artist.userId)
+    .eq("artist_id", artist.artistId)
     .order("updated_at", { ascending: false });
   if (p.q) query = query.or(`name.ilike.%${p.q}%,handle_or_url.ilike.%${p.q}%`);
   if (p.type) query = query.eq("contact_type", p.type);
@@ -46,20 +52,26 @@ export default async function OutreachPage({
     sequenceMessagesResult,
   ] = await Promise.all([
     query,
-    supabase.from("releases").select("id,title,story,smart_link_url").eq("owner_id", user.id).order("title"),
-    supabase
-      .from("outreach_messages")
-      .select("*,outreach_contacts(name)")
-      .eq("owner_id", user.id)
-      .lte("follow_up_at", new Date().toISOString())
-      .order("follow_up_at"),
-    marketing.from("campaigns").select("id,name,release_id,status").eq("owner_id", user.id).in("status", ["planned", "active", "paused"]).order("updated_at", { ascending: false }),
-    marketing.from("outreach_sequences").select("*").eq("owner_id", user.id).order("updated_at", { ascending: false }),
-    marketing.from("outreach_sequence_steps").select("*").eq("owner_id", user.id).order("step_order"),
-    marketing.from("outreach_enrollments").select("*").eq("owner_id", user.id).order("updated_at", { ascending: false }),
-    marketing.from("outreach_messages").select("*").eq("owner_id", user.id).not("sequence_enrollment_id", "is", null).order("created_at", { ascending: false }),
+    music.from("releases").select("id,title,story,smart_link_url")
+      .eq("owner_id", artist.userId).eq("artist_id", artist.artistId).order("title"),
+    operational.from("outreach_messages").select("*")
+      .eq("owner_id", artist.userId).eq("artist_id", artist.artistId)
+      .lte("follow_up_at", new Date().toISOString()).order("follow_up_at"),
+    marketing.from("campaigns").select("id,name,release_id,status")
+      .eq("owner_id", artist.userId).eq("artist_id", artist.artistId)
+      .in("status", ["planned", "active", "paused"]).order("updated_at", { ascending: false }),
+    marketing.from("outreach_sequences").select("*")
+      .eq("owner_id", artist.userId).eq("artist_id", artist.artistId).order("updated_at", { ascending: false }),
+    marketing.from("outreach_sequence_steps").select("*")
+      .eq("owner_id", artist.userId).eq("artist_id", artist.artistId).order("step_order"),
+    marketing.from("outreach_enrollments").select("*")
+      .eq("owner_id", artist.userId).eq("artist_id", artist.artistId).order("updated_at", { ascending: false }),
+    marketing.from("outreach_messages").select("*")
+      .eq("owner_id", artist.userId).eq("artist_id", artist.artistId)
+      .not("sequence_enrollment_id", "is", null).order("created_at", { ascending: false }),
   ]);
-  const firstError = [contactsResult, releasesResult, dueResult, campaignsResult, sequencesResult, stepsResult, enrollmentsResult, sequenceMessagesResult].find((result) => result.error)?.error;
+  const firstError = [contactsResult, releasesResult, dueResult, campaignsResult, sequencesResult, stepsResult, enrollmentsResult, sequenceMessagesResult]
+    .find((result) => result.error)?.error;
   if (firstError) throw new Error(firstError.message);
 
   const contacts = contactsResult.data ?? [];
@@ -74,7 +86,7 @@ export default async function OutreachPage({
   const campaignById = new Map(campaigns.map((campaign) => [campaign.id, campaign]));
   const draftMessages = sequenceMessages.filter((message) => !message.sent_at);
   const activeEnrollments = enrollments.filter((enrollment) => ["active", "paused"].includes(enrollment.status));
-  const template = (releaseTitle = "the new Atlas Irwin release") =>
+  const template = (releaseTitle = "the artist's new release") =>
     `Hi, I’m sharing ${releaseTitle}, a warm late-night electronic release built for movement. I thought it might fit your world. Happy to send context if useful.`;
 
   return (
@@ -99,19 +111,20 @@ export default async function OutreachPage({
                   <CopyButton value={message.message} label="Copy message" />
                 </div>
                 <form action={markSequenceMessageSent}>
+                  <input type="hidden" name="artist_id" value={artist.artistId} />
                   <input type="hidden" name="message_id" value={message.id} />
                   <button className="button primary" type="submit">I sent this</button>
                 </form>
               </article>
             );
-          }) : <EmptyState title="No sequence drafts waiting" body="When a sequence step becomes due, Atlas prepares the next message and stops until you review and send it." />}
+          }) : <EmptyState title="No sequence drafts waiting" body="When a sequence step becomes due, Ensemblis prepares the next message and stops until you review and send it." />}
         </section>
 
         <section className="studio-panel feature">
           <div className="panel-head"><h2>Manual follow-ups due</h2></div>
           {dueResult.data?.length ? dueResult.data.map((message) => (
             <div className="list-row" key={message.id}>
-              <span>{(message.outreach_contacts as unknown as { name: string })?.name}<br /><small>{message.channel} / {message.response_status || "Awaiting response"}</small></span>
+              <span>{contactById.get(message.contact_id)?.name || "Contact"}<br /><small>{message.channel} / {message.response_status || "Awaiting response"}</small></span>
               <Status>Due</Status>
             </div>
           )) : <EmptyState title="Follow-up queue clear" body="No manual follow-ups are due today." />}
@@ -133,6 +146,7 @@ export default async function OutreachPage({
                   <p>{sequenceSteps.map((step) => `${step.step_order + 1}. ${step.channel}, ${step.delay_days ? `after ${step.delay_days}d` : "now"}`).join(" / ")}</p>
                   <div className="actions">
                     <form action={updateOutreachSequenceStatus}>
+                      <input type="hidden" name="artist_id" value={artist.artistId} />
                       <input type="hidden" name="sequence_id" value={sequence.id} />
                       <select name="status" defaultValue={sequence.status}><option value="active">Active</option><option value="paused">Paused</option><option value="completed">Completed</option><option value="archived">Archived</option></select>
                       <button className="button" type="submit">Update</button>
@@ -140,6 +154,7 @@ export default async function OutreachPage({
                   </div>
                   {contacts.length ? (
                     <form action={enrollOutreachContact} className="studio-form">
+                      <input type="hidden" name="artist_id" value={artist.artistId} />
                       <input type="hidden" name="sequence_id" value={sequence.id} />
                       <Field label="Enroll contact">
                         <select name="contact_id" required defaultValue=""><option value="" disabled>Select contact</option>{contacts.map((contact) => <option value={contact.id} key={contact.id}>{contact.name} / {contact.contact_type}</option>)}</select>
@@ -152,12 +167,13 @@ export default async function OutreachPage({
               );
             })}
           </div>
-        ) : <EmptyState title="No outreach sequences" body="Create a two-step approval-first sequence for a live campaign. Atlas drafts each message at the right time and waits for you to send it." />}
+        ) : <EmptyState title="No outreach sequences" body="Create a two-step approval-first sequence for a live campaign. Ensemblis drafts each message at the right time and waits for you to send it." />}
 
         {campaigns.length ? (
           <details className="workspace-drawer">
             <summary>Create campaign sequence</summary>
             <form action={createOutreachSequence} className="studio-form">
+              <input type="hidden" name="artist_id" value={artist.artistId} />
               <div className="form-grid">
                 <Field label="Campaign"><select name="campaign_id" required>{campaigns.map((campaign) => <option value={campaign.id} key={campaign.id}>{campaign.name}</option>)}</select></Field>
                 <Field label="Sequence name"><input name="name" required placeholder="DJ selector outreach" /></Field>
@@ -189,6 +205,7 @@ export default async function OutreachPage({
       <section id="new" className="studio-panel feature">
         <div className="panel-head"><h2>Add contact</h2></div>
         <form action={saveContact} className="studio-form">
+          <input type="hidden" name="artist_id" value={artist.artistId} />
           <div className="form-grid">
             <Field label="Name"><input name="name" required /></Field>
             <Field label="Type"><select name="contact_type">{CONTACT_TYPES.map((type) => <option key={type}>{type}</option>)}</select></Field>
@@ -212,6 +229,7 @@ export default async function OutreachPage({
         <section className="studio-panel feature">
           <div className="panel-head"><h2>Log one-off message</h2></div>
           <form action={saveOutreachMessage} className="studio-form">
+            <input type="hidden" name="artist_id" value={artist.artistId} />
             <div className="form-grid">
               <Field label="Contact"><select name="contact_id">{contacts.map((contact) => <option value={contact.id} key={contact.id}>{contact.name}</option>)}</select></Field>
               <Field label="Release"><select name="release_id"><option value="">General</option>{releases.map((release) => <option value={release.id} key={release.id}>{release.title}</option>)}</select></Field>
