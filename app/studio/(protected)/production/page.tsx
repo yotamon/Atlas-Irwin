@@ -18,6 +18,7 @@ import { AI_PRICING_AS_OF, CREATIVE_PRESETS } from "@/lib/marketing/creative-pro
 import { creativeProviderReadiness } from "@/lib/marketing/creative-providers";
 import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { CONTENT_FORMATS, GOALS, PLATFORMS } from "@/lib/studio/constants";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { asMomentAwareMarketingClient, asMomentsClient } from "@/lib/studio/moments-db";
 import { higgsfieldReadiness } from "@/lib/video-providers/higgsfield/client";
 import type { Json } from "@/types/database";
@@ -87,11 +88,12 @@ export default async function ProductionPage({
   const params = await searchParams;
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveDefaultArtistContext(supabase, user);
+  const music = asArtistScopedMusicClient(supabase);
   const marketing = asMomentAwareMarketingClient(supabase);
   const momentsDb = asMomentsClient(supabase);
   const [itemsResult, releasesResult] = await Promise.all([
-    marketing.from("content_items").select("*").eq("owner_id", user.id).order("updated_at", { ascending: false }).limit(100),
-    supabase.from("releases").select("id,title,release_date").eq("owner_id", user.id).order("updated_at", { ascending: false }),
+    marketing.from("content_items").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("updated_at", { ascending: false }).limit(100),
+    music.from("releases").select("id,title,release_date").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("updated_at", { ascending: false }),
   ]);
   if (itemsResult.error) throw new Error(itemsResult.error.message);
   if (releasesResult.error) throw new Error(releasesResult.error.message);
@@ -141,6 +143,7 @@ export default async function ProductionPage({
           .from("publication_jobs")
           .select("id,platform,scheduled_at,external_url,external_post_id")
           .eq("owner_id", user.id)
+          .eq("artist_id", artist.artistId)
           .eq("content_item_id", editing.id)
           .eq("status", "provider_scheduled" as never)
           .order("updated_at", { ascending: false })
@@ -150,12 +153,14 @@ export default async function ProductionPage({
           .from("generation_runs")
           .select("*")
           .eq("owner_id", user.id)
+          .eq("artist_id", artist.artistId)
           .eq("purpose", `content_asset:${editing.id}`)
           .order("created_at", { ascending: false })
           .limit(8),
         loadCreativeReferenceContext({
           db: supabase as unknown as SupabaseClient<VideoDatabase>,
           ownerId: user.id,
+          artistId: artist.artistId,
           releaseId: editing.release_id,
           contentItemId: editing.id,
         }),
@@ -186,7 +191,7 @@ export default async function ProductionPage({
     <div className="studio-v2-page">
       <PageHeader
         title="Production"
-        description="Ensemblis turns approved musical Moments into traceable campaign creative, then keeps the provider route and price visible before any paid generation."
+        description={`Ensemblis turns approved ${artist.artistName} musical Moments into traceable campaign creative, then keeps the provider route and price visible before any paid generation.`}
         action={<Link className="button" href="/studio/content">Advanced Content Lab</Link>}
       />
 
@@ -225,7 +230,7 @@ export default async function ProductionPage({
             <div className="v2-provider-lock" role="status">
               <strong>Schedule owned by {providerSchedule.platform}</strong>
               <span>
-                Atlas already handed this exact creative and timing to the connected provider{providerSchedule.scheduled_at ? ` for ${shortDate(providerSchedule.scheduled_at)}` : ""}.
+                Ensemblis already handed this exact creative and timing to the connected provider{providerSchedule.scheduled_at ? ` for ${shortDate(providerSchedule.scheduled_at)}` : ""}.
                 Creative and schedule edits are locked here to prevent publishing a different version than the one you approved.
               </span>
               {providerSchedule.external_url ? <a href={providerSchedule.external_url} target="_blank" rel="noreferrer">Open provider item ↗</a> : null}
@@ -250,15 +255,15 @@ export default async function ProductionPage({
             <section className="studio-panel feature">
               <div className="panel-head">
                 <div>
-                  <span className="section-label">Atlas Creative Engine</span>
+                  <span className="section-label">Ensemblis Creative Engine</span>
                   <h2>Generate cohesive media</h2>
-                  <p>Choose the outcome-level quality preset. Atlas handles the provider and model routing, but shows the exact route and expected spend before you approve it.</p>
+                  <p>Choose the outcome-level quality preset. Ensemblis handles provider and model routing, but shows the exact route and expected spend before you approve it.</p>
                 </div>
                 <Status>{creativeContext.cohesionScore}/100 context cohesion</Status>
               </div>
 
               <div className="studio-smart-defaults">
-                <strong>{creativeContext.release.artworkUrl ? "Release artwork is locked as the primary anchor" : "Brand references are the primary anchor"}</strong>
+                <strong>{creativeContext.release.artworkUrl ? "Release artwork is locked as the primary anchor" : "Artist-specific brand references are the primary anchor"}</strong>
                 <span>{creativeContext.referenceSummary}. New media is instructed to extend this world rather than invent a fresh AI aesthetic.</span>
               </div>
 
@@ -281,7 +286,7 @@ export default async function ProductionPage({
                     </article>
                   ))}
                 </div>
-              ) : <div className="v2-calm-state compact"><strong>No reusable image reference found.</strong><p>Add Atlas Irwin reference media in Brand or attach artwork to this release before spending on generation.</p></div>}
+              ) : <div className="v2-calm-state compact"><strong>No reusable image reference found.</strong><p>Add artist-specific reference media in Brand or attach artwork to this release before spending on generation.</p></div>}
 
               {latestGeneration ? (
                 <div className="studio-smart-defaults">
@@ -294,14 +299,16 @@ export default async function ProductionPage({
               {latestGeneration?.status === "queued" && generationStage === "prepared" ? (
                 <div className="form-actions">
                   <form action={approvePreparedCreativeGeneration}>
+                    <input type="hidden" name="artist_id" value={artist.artistId} />
                     <input type="hidden" name="generation_run_id" value={latestGeneration.id} />
                     <button className="button primary" type="submit" disabled={!modelReady}>Approve {quoteLabel(quote)} and generate</button>
                   </form>
                   <form action={discardPreparedCreativeGeneration}>
+                    <input type="hidden" name="artist_id" value={artist.artistId} />
                     <input type="hidden" name="generation_run_id" value={latestGeneration.id} />
                     <button className="button" type="submit">Discard prepared run</button>
                   </form>
-                  {!modelReady ? <small>{activeProvider?.label || latestGeneration.provider} is not fully connected for this model. Atlas will not guess credentials or paid endpoints.</small> : null}
+                  {!modelReady ? <small>{activeProvider?.label || latestGeneration.provider} is not fully connected for this model. Ensemblis will not guess credentials or paid endpoints.</small> : null}
                 </div>
               ) : null}
 
@@ -310,10 +317,11 @@ export default async function ProductionPage({
                   <span>Generation is in progress at {activeProvider?.label || latestGeneration.provider}. Completed assets are imported into Media Library with full cost and visual lineage.</span>
                   {latestGeneration.provider_request_id ? (
                     <form action={refreshCreativeGeneration}>
+                      <input type="hidden" name="artist_id" value={artist.artistId} />
                       <input type="hidden" name="generation_run_id" value={latestGeneration.id} />
                       <button className="button" type="submit">Check provider now</button>
                     </form>
-                  ) : <small>Submission state is ambiguous, so Atlas will not retry and risk a duplicate paid generation.</small>}
+                  ) : <small>Submission state is ambiguous, so Ensemblis will not retry and risk a duplicate paid generation.</small>}
                 </div>
               ) : null}
 
@@ -324,16 +332,16 @@ export default async function ProductionPage({
               {editing.asset_url && editing.source === "ai" ? (
                 <div className="media-card">
                   <div className="media-thumb">
-                    {generatedOutputKind === "video" ? <video src={editing.asset_url} controls playsInline preload="metadata" /> : <img src={editing.asset_url} alt="Generated Atlas Irwin campaign creative" />}
+                    {generatedOutputKind === "video" ? <video src={editing.asset_url} controls playsInline preload="metadata" /> : <img src={editing.asset_url} alt={`Generated ${artist.artistName} campaign creative`} />}
                   </div>
                   <div className="media-card-body">
                     <span className="section-label">AI creative review</span>
                     <h3>{editing.approval_status === "approved" ? "Approved creative" : editing.approval_status === "rejected" ? "Rejected creative" : "Review before publishing"}</h3>
-                    <p>This asset is stored in the Media Library with its release artwork, brand references, provider, model, cost and generation lineage.</p>
+                    <p>This asset is stored in the Media Library with its release artwork, artist-specific references, provider, model, cost and generation lineage.</p>
                     {editing.approval_status === "pending" ? (
                       <div className="form-actions">
-                        <form action={approveGeneratedCreative}><input type="hidden" name="content_item_id" value={editing.id} /><button className="button primary" type="submit">Approve creative</button></form>
-                        <form action={rejectGeneratedCreative}><input type="hidden" name="content_item_id" value={editing.id} /><button className="button" type="submit">Reject</button></form>
+                        <form action={approveGeneratedCreative}><input type="hidden" name="artist_id" value={artist.artistId} /><input type="hidden" name="content_item_id" value={editing.id} /><button className="button primary" type="submit">Approve creative</button></form>
+                        <form action={rejectGeneratedCreative}><input type="hidden" name="artist_id" value={artist.artistId} /><input type="hidden" name="content_item_id" value={editing.id} /><button className="button" type="submit">Reject</button></form>
                       </div>
                     ) : null}
                   </div>
@@ -342,6 +350,7 @@ export default async function ProductionPage({
 
               {(!latestGeneration || latestGeneration.status === "completed" || latestGeneration.status === "failed") ? (
                 <form action={prepareContentCreativeGeneration} className="studio-form">
+                  <input type="hidden" name="artist_id" value={artist.artistId} />
                   <input type="hidden" name="content_item_id" value={editing.id} />
                   <fieldset>
                     <legend><strong>Generation quality</strong></legend>
@@ -363,7 +372,7 @@ export default async function ProductionPage({
                     <Field label="Media type"><select name="media_kind" defaultValue="auto"><option value="auto">Auto from content format</option><option value="image">Image</option><option value="video">Video</option></select></Field>
                   </div>
                   <div className="form-actions"><button className="button primary" type="submit">{editing.asset_url && editing.source === "ai" ? "Price another option" : "Show exact route and price"}</button></div>
-                  <small>Price check is free. Atlas chooses the first connected model inside the preset, shows any fallback, and requires a second explicit approval before the paid call. Pricing anchors last verified {AI_PRICING_AS_OF}.</small>
+                  <small>Price check is free. Ensemblis chooses the first connected model inside the preset, shows any fallback, and requires a second explicit approval before the paid call. Pricing anchors last verified {AI_PRICING_AS_OF}.</small>
                 </form>
               ) : null}
             </section>
@@ -372,11 +381,12 @@ export default async function ProductionPage({
           {editing && !locked ? (
             <div className="v2-contextual-upload">
               <div><strong>{editing.asset_url ? "Replace or add creative media manually" : "Or upload the creative asset yourself"}</strong><small>Manual media remains a fallback. Uploading here attaches it to this content item and updates workflow state automatically.</small></div>
-              <MediaUploader contentItemId={editing.id} releaseId={editing.release_id ?? undefined} defaultRole="social_image" />
+              <MediaUploader contentItemId={editing.id} releaseId={editing.release_id ?? undefined} artistId={artist.artistId} defaultRole="social_image" />
             </div>
           ) : null}
 
           <form action={saveContentV2} className="studio-form">
+            <input type="hidden" name="artist_id" value={artist.artistId} />
             <input type="hidden" name="id" value={editing?.id ?? ""} />
             <input type="hidden" name="moment_id" value={editing?.moment_id ?? selectedMoment?.id ?? ""} />
             <fieldset className="v2-production-fieldset" disabled={locked}>
