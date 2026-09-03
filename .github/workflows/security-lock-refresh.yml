@@ -1,0 +1,38 @@
+name: Security Lock Refresh
+
+on:
+  push:
+    branches:
+      - feat/ensemblis-operational-artist-scope
+    paths:
+      - .github/workflows/security-lock-refresh.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/ensemblis-operational-artist-scope
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Resolve patched Next.js security release
+        run: npm install next@16.3.4 eslint-config-next@16.3.4 --package-lock-only --ignore-scripts
+      - name: Commit generated manifest and lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Ensemblis CI"
+          git config user.email "actions@users.noreply.github.com"
+          git add package.json package-lock.json
+          if git diff --cached --quiet; then
+            echo "Lockfile already resolved to patched versions."
+            exit 0
+          fi
+          git commit -m "fix: upgrade Next.js to patched 16.3.4"
+          git push origin HEAD:feat/ensemblis-operational-artist-scope
