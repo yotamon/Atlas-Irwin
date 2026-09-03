@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { distributionProviderConfigured } from "@/lib/distribution/provider";
+import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { linkDistributionProviderRelease } from "@/app/studio/distribution-actions-safe";
 import type { DistributionDatabase } from "@/types/distribution-database";
 
@@ -20,14 +21,15 @@ export default async function DistributionOperations({
 }) {
   const feedback = await searchParams;
   const { supabase, user } = await requireStudioAdmin();
+  const artist = await resolveDefaultArtistContext(supabase, user);
   const db = supabase as unknown as Db;
   const [releasesResult, configsResult, submissionsResult, issuesResult, eventsResult, operationsResult] = await Promise.all([
-    db.from("releases").select("id,title,artist,release_date").eq("owner_id", user.id).eq("is_archived", false).order("updated_at", { ascending: false }),
-    db.from("release_distribution_configs").select("*").eq("owner_id", user.id).order("updated_at", { ascending: false }),
-    db.from("distribution_submissions").select("*").eq("owner_id", user.id).order("submitted_at", { ascending: false }).limit(20),
-    db.from("distribution_validation_issues").select("*").eq("owner_id", user.id).in("status", ["open", "acknowledged"]).order("severity").limit(30),
-    db.from("distribution_events").select("*").eq("owner_id", user.id).order("created_at", { ascending: false }).limit(30),
-    db.from("distribution_provider_operations").select("*").eq("owner_id", user.id).order("created_at", { ascending: false }).limit(50),
+    db.from("releases").select("id,title,artist,release_date").eq("owner_id", user.id).eq("artist_id", artist.artistId).eq("is_archived", false).order("updated_at", { ascending: false }),
+    db.from("release_distribution_configs").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("updated_at", { ascending: false }),
+    db.from("distribution_submissions").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("submitted_at", { ascending: false }).limit(20),
+    db.from("distribution_validation_issues").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).in("status", ["open", "acknowledged"]).order("severity").limit(30),
+    db.from("distribution_events").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("created_at", { ascending: false }).limit(30),
+    db.from("distribution_provider_operations").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("created_at", { ascending: false }).limit(50),
   ]);
   for (const result of [releasesResult, configsResult, submissionsResult, issuesResult, eventsResult, operationsResult]) {
     if (result.error) throw new Error(result.error.message);
@@ -53,7 +55,7 @@ export default async function DistributionOperations({
     : unresolvedCatalog[0]?.release_id ?? unprepared[0]?.id ?? releases[0]?.id ?? "";
 
   return <div className="distribution-page distribution-operations">
-    <header className="distribution-header"><div><Link className="v2-back-link" href="/studio/distribution">← Distribution hub</Link><span className="section-label">Internal operations</span><h1>Distribution operations</h1><p>Exception handling, ambiguous external writes, provider review state and immutable audit evidence. Normal release preparation happens in the artist workspace.</p></div><span className={`distribution-state ${distributionProviderConfigured() ? "state-live" : "state-error"}`}>{distributionProviderConfigured() ? "Provider connected" : "Credentials missing"}</span></header>
+    <header className="distribution-header"><div><Link className="v2-back-link" href="/studio/distribution">← Distribution hub</Link><span className="section-label">Internal operations · {artist.artistName}</span><h1>Distribution operations</h1><p>Exception handling, ambiguous external writes, provider review state and immutable audit evidence for the active artist. Normal release preparation happens in the artist workspace.</p></div><span className={`distribution-state ${distributionProviderConfigured() ? "state-live" : "state-error"}`}>{distributionProviderConfigured() ? "Provider connected" : "Credentials missing"}</span></header>
 
     {feedback.error ? <div className="distribution-feedback error" role="alert"><strong>Action needed</strong><span>{feedback.error}</span></div> : null}
     {feedback.notice ? <div className="distribution-feedback success" role="status"><strong>Reconciled</strong><span>{feedback.notice}</span></div> : null}
@@ -69,7 +71,7 @@ export default async function DistributionOperations({
 
     <section className="distribution-section">
       <div className="distribution-section-heading"><div><span className="section-label">Recovery only</span><h2>Reconcile an existing provider release ID</h2><p>Use this only after ambiguous provider creation or when migrating a pre-existing catalog record. It is not the normal preparation path.</p></div></div>
-      {releases.length ? <form action={linkDistributionProviderRelease} className="distribution-ops-bridge"><label>Ensemblis release<select name="release_id" defaultValue={selectedReleaseId}>{releases.map((release) => <option value={release.id} key={release.id}>{release.title} · {release.artist}</option>)}</select></label><label>Existing provider release ID<input name="provider_release_id" required placeholder="External release ID to reconcile" /></label><button className="button" type="submit">Reconcile existing record</button></form> : <p className="distribution-muted">There are no releases to reconcile.</p>}
+      {releases.length ? <form action={linkDistributionProviderRelease} className="distribution-ops-bridge"><input type="hidden" name="artist_id" value={artist.artistId} /><label>Ensemblis release<select name="release_id" defaultValue={selectedReleaseId}>{releases.map((release) => <option value={release.id} key={release.id}>{release.title} · {release.artist}</option>)}</select></label><label>Existing provider release ID<input name="provider_release_id" required placeholder="External release ID to reconcile" /></label><button className="button" type="submit">Reconcile existing record</button></form> : <p className="distribution-muted">There are no releases to reconcile.</p>}
       {unprepared.length ? <div className="distribution-ops-queue">{unprepared.slice(0, 12).map((release) => <Link href={`/studio/releases/${release.id}/distribution`} key={release.id}><strong>{release.title}</strong><span>{release.artist}</span><small>Not prepared yet · use the normal artist workflow unless this is a recovery case</small></Link>)}</div> : null}
     </section>
 
