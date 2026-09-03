@@ -30,6 +30,8 @@ import {
   primarySignalValue,
 } from "@/lib/marketing/domain";
 import { getSiteUrl } from "@/lib/site-url";
+import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import type { Json } from "@/types/database";
 
 function objectValue(value: Json) {
@@ -76,12 +78,15 @@ export default async function CampaignWorkspacePage({
 }) {
   const { id } = await params;
   const { supabase, user } = await requireStudioAdmin();
+  const artist = await resolveDefaultArtistContext(supabase, user);
   const marketing = asMarketingClient(supabase);
+  const music = asArtistScopedMusicClient(supabase);
   const { data: campaign, error: campaignError } = await marketing
     .from("campaigns")
     .select("*")
     .eq("id", id)
-    .eq("owner_id", user.id)
+    .eq("owner_id", artist.userId)
+    .eq("artist_id", artist.artistId)
     .maybeSingle();
   if (campaignError) throw new Error(campaignError.message);
   if (!campaign) notFound();
@@ -100,23 +105,24 @@ export default async function CampaignWorkspacePage({
     generationRunsResult,
   ] = await Promise.all([
     campaign.release_id
-      ? supabase
+      ? music
           .from("releases")
           .select("id,title,release_date,artwork_url,primary_hook,core_emotion,visual_direction,smart_link_url,spotify_url,soundcloud_url,status")
           .eq("id", campaign.release_id)
-          .eq("owner_id", user.id)
+          .eq("owner_id", artist.userId)
+          .eq("artist_id", artist.artistId)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
-    marketing.from("campaign_phases").select("*").eq("campaign_id", campaign.id).order("sort_order"),
-    marketing.from("campaign_experiments").select("*").eq("campaign_id", campaign.id).order("created_at"),
-    marketing.from("content_items").select("*").eq("campaign_id", campaign.id).order("scheduled_at", { ascending: true }),
-    marketing.from("content_variants").select("*").eq("owner_id", user.id).order("created_at"),
-    marketing.from("metric_snapshots").select("*").eq("campaign_id", campaign.id).order("captured_at", { ascending: false }),
-    marketing.from("attribution_links").select("*").eq("campaign_id", campaign.id).order("created_at"),
-    marketing.from("publication_jobs").select("*").eq("campaign_id", campaign.id).order("created_at", { ascending: false }),
-    marketing.from("automation_jobs").select("*").eq("campaign_id", campaign.id).order("created_at", { ascending: false }).limit(30),
-    marketing.from("marketing_learnings").select("*").eq("campaign_id", campaign.id).order("created_at", { ascending: false }),
-    marketing.from("generation_runs").select("*").eq("campaign_id", campaign.id).order("created_at", { ascending: false }).limit(10),
+    marketing.from("campaign_phases").select("*").eq("campaign_id", campaign.id).eq("owner_id", artist.userId).eq("artist_id", artist.artistId).order("sort_order"),
+    marketing.from("campaign_experiments").select("*").eq("campaign_id", campaign.id).eq("owner_id", artist.userId).eq("artist_id", artist.artistId).order("created_at"),
+    marketing.from("content_items").select("*").eq("campaign_id", campaign.id).eq("owner_id", artist.userId).eq("artist_id", artist.artistId).order("scheduled_at", { ascending: true }),
+    marketing.from("content_variants").select("*").eq("owner_id", artist.userId).eq("artist_id", artist.artistId).order("created_at"),
+    marketing.from("metric_snapshots").select("*").eq("campaign_id", campaign.id).eq("owner_id", artist.userId).eq("artist_id", artist.artistId).order("captured_at", { ascending: false }),
+    marketing.from("attribution_links").select("*").eq("campaign_id", campaign.id).eq("owner_id", artist.userId).eq("artist_id", artist.artistId).order("created_at"),
+    marketing.from("publication_jobs").select("*").eq("campaign_id", campaign.id).eq("owner_id", artist.userId).eq("artist_id", artist.artistId).order("created_at", { ascending: false }),
+    marketing.from("automation_jobs").select("*").eq("campaign_id", campaign.id).eq("owner_id", artist.userId).eq("artist_id", artist.artistId).order("created_at", { ascending: false }).limit(30),
+    marketing.from("marketing_learnings").select("*").eq("campaign_id", campaign.id).eq("owner_id", artist.userId).eq("artist_id", artist.artistId).order("created_at", { ascending: false }),
+    marketing.from("generation_runs").select("*").eq("campaign_id", campaign.id).eq("owner_id", artist.userId).eq("artist_id", artist.artistId).order("created_at", { ascending: false }).limit(10),
   ]);
   const results = [phasesResult, experimentsResult, contentResult, variantsResult, metricsResult, linksResult, publicationsResult, jobsResult, learningsResult, generationRunsResult];
   const firstError = results.find((result) => result.error)?.error;
@@ -157,12 +163,13 @@ export default async function CampaignWorkspacePage({
   const linkByVariantId = new Map(links.filter((link) => link.content_variant_id).map((link) => [link.content_variant_id!, link]));
   const experimentById = new Map(experiments.map((experiment) => [experiment.id, experiment]));
   const phaseById = new Map(phases.map((phase) => [phase.id, phase]));
+  const artistInput = <input type="hidden" name="artist_id" value={artist.artistId} />;
 
   return (
     <div className={styles.shell}>
       <PageHeader
         title={campaign.name}
-        description="One release strategy, one approval surface, one measurable learning loop."
+        description={`One release strategy, one approval surface and one measurable learning loop for ${artist.artistName}.`}
         action={
           <div className="actions">
             <Link className="button" href="/studio/campaigns">All campaigns</Link>
@@ -188,7 +195,7 @@ export default async function CampaignWorkspacePage({
           <div className={styles.controlGroup}>
             <span className={styles.miniLabel}>Automation mode</span>
             <form action={updateCampaignMode}>
-              <input type="hidden" name="campaign_id" value={campaign.id} />
+              {artistInput}<input type="hidden" name="campaign_id" value={campaign.id} />
               <select name="mode" defaultValue={campaign.mode}>{CAMPAIGN_MODES.map((mode) => <option value={mode} key={mode}>{mode}</option>)}</select>
               <button className="button" type="submit">Save</button>
             </form>
@@ -196,7 +203,7 @@ export default async function CampaignWorkspacePage({
           <div className={styles.controlGroup}>
             <span className={styles.miniLabel}>Campaign state</span>
             <form action={updateCampaignStatus}>
-              <input type="hidden" name="campaign_id" value={campaign.id} />
+              {artistInput}<input type="hidden" name="campaign_id" value={campaign.id} />
               <select name="status" defaultValue={campaign.status}>{CAMPAIGN_STATUSES.map((status) => <option value={status} key={status}>{status}</option>)}</select>
               <button className="button" type="submit">Save</button>
             </form>
@@ -204,7 +211,7 @@ export default async function CampaignWorkspacePage({
           <div className={styles.controlGroup}>
             <span className={styles.miniLabel}>Planner</span>
             <form action={generateCampaignStrategy}>
-              <input type="hidden" name="campaign_id" value={campaign.id} />
+              {artistInput}<input type="hidden" name="campaign_id" value={campaign.id} />
               {hasPlan ? <input type="hidden" name="force" value="1" /> : null}
               <button className="button primary" type="submit">{hasPlan ? "Regenerate draft plan" : "Generate campaign plan"}</button>
             </form>
@@ -213,7 +220,7 @@ export default async function CampaignWorkspacePage({
           <div className={styles.controlGroup}>
             <span className={styles.miniLabel}>Runtime</span>
             <form action={runMarketingAutomationNow}>
-              <input type="hidden" name="campaign_id" value={campaign.id} />
+              {artistInput}<input type="hidden" name="campaign_id" value={campaign.id} />
               <button className="button" type="submit">Run automation now</button>
             </form>
             <small>{waitingJobs} approval-gated jobs / {manualReady} manual publish handoffs</small>
@@ -261,7 +268,7 @@ export default async function CampaignWorkspacePage({
             </div>
           </div>
         ) : (
-          <div className={styles.emptyBrain}><div><span className={styles.eyebrow}>Zero automatic spend</span><h2>Generate when ready</h2><p>The planner call is explicit. Atlas will combine release identity, brand settings, approved learnings and historical performance. If the AI provider is unavailable, it falls back to an adaptive release-specific plan instead of generic templates.</p></div></div>
+          <div className={styles.emptyBrain}><div><span className={styles.eyebrow}>Zero automatic spend</span><h2>Generate when ready</h2><p>The planner call is explicit. Ensemblis combines release identity, brand settings, approved learnings and historical performance. If the AI provider is unavailable, it falls back to an adaptive release-specific plan instead of generic templates.</p></div></div>
         )}
       </section>
 
@@ -299,7 +306,7 @@ export default async function CampaignWorkspacePage({
                     <p>{experiment.hypothesis}</p>
                   </div>
                   <form action={evaluateExperiment}>
-                    <input type="hidden" name="experiment_id" value={experiment.id} />
+                    {artistInput}<input type="hidden" name="experiment_id" value={experiment.id} />
                     <button className="button" type="submit">Evaluate now</button>
                   </form>
                 </div>
@@ -330,15 +337,16 @@ export default async function CampaignWorkspacePage({
                         {publicLink ? <div className={styles.attribution}>Tracked destination: {publicLink}<br />Clicks: {link?.click_count.toLocaleString()} / unique {link?.unique_click_count.toLocaleString()}</div> : null}
                         <div className={styles.variantActions}>
                           {variant.approval_status === "pending" ? <>
-                            <form action={approveContentVariant}><input type="hidden" name="variant_id" value={variant.id} /><button className="button primary" type="submit">Approve</button></form>
-                            <form action={rejectContentVariant}><input type="hidden" name="variant_id" value={variant.id} /><button className="button" type="submit">Reject</button></form>
+                            <form action={approveContentVariant}>{artistInput}<input type="hidden" name="variant_id" value={variant.id} /><button className="button primary" type="submit">Approve</button></form>
+                            <form action={rejectContentVariant}>{artistInput}<input type="hidden" name="variant_id" value={variant.id} /><button className="button" type="submit">Reject</button></form>
                           </> : <span className={variant.approval_status === "approved" ? styles.statusChip : styles.chip}>{variant.approval_status}</span>}
-                          {variant.approval_status === "approved" && variant.status !== "published" ? <form action={queueVariantPublication}><input type="hidden" name="variant_id" value={variant.id} /><button className="button" type="submit">Queue publish</button></form> : null}
+                          {variant.approval_status === "approved" && variant.status !== "published" ? <form action={queueVariantPublication}>{artistInput}<input type="hidden" name="variant_id" value={variant.id} /><button className="button" type="submit">Queue publish</button></form> : null}
                         </div>
                         {item ? (
                           <details className={styles.metricForm}>
                             <summary>Add observed metrics</summary>
                             <form action={saveCampaignMetric}>
+                              {artistInput}
                               <input type="hidden" name="campaign_id" value={campaign.id} />
                               <input type="hidden" name="release_id" value={release?.id || ""} />
                               <input type="hidden" name="content_item_id" value={item.id} />
@@ -385,7 +393,7 @@ export default async function CampaignWorkspacePage({
       <section>
         <div className={styles.sectionHead}>
           <div><span className={styles.eyebrow}>Execution layer</span><h2>Publication queue</h2></div>
-          <p>Until a first-party channel adapter is authenticated, Atlas creates a truthful manual-ready handoff instead of pretending a post was published.</p>
+          <p>Until a first-party channel adapter is authenticated, Ensemblis creates a truthful manual-ready handoff instead of pretending a post was published.</p>
         </div>
         <div className={styles.queueList}>
           {publications.length ? publications.map((job) => {
@@ -402,7 +410,7 @@ export default async function CampaignWorkspacePage({
                   <details>
                     <summary className="button">Mark published</summary>
                     <form action={markPublicationPublished} className="studio-form">
-                      <input type="hidden" name="job_id" value={job.id} />
+                      {artistInput}<input type="hidden" name="job_id" value={job.id} />
                       <label className="field"><span>Post URL</span><input type="url" name="external_url" /></label>
                       <label className="field"><span>Platform post ID</span><input name="external_post_id" /></label>
                       <button className="button primary" type="submit">Confirm published</button>
@@ -422,7 +430,7 @@ export default async function CampaignWorkspacePage({
             {jobs.map((job) => (
               <article className={styles.queueItem} key={job.id}>
                 <div><span className={styles.eyebrow}>{statusLabel(job.status)}</span><h4>{statusLabel(job.job_type)}</h4><p>Attempts {job.attempt_count}/{job.max_attempts}{job.error ? ` / ${job.error}` : ""}</p></div>
-                {job.status === "awaiting_approval" ? <form action={approveAutomationJob}><input type="hidden" name="job_id" value={job.id} /><button className="button primary" type="submit">Approve job</button></form> : <span className={styles.chip}>{formatDate(job.run_after, true)}</span>}
+                {job.status === "awaiting_approval" ? <form action={approveAutomationJob}>{artistInput}<input type="hidden" name="job_id" value={job.id} /><button className="button primary" type="submit">Approve job</button></form> : <span className={styles.chip}>{formatDate(job.run_after, true)}</span>}
               </article>
             ))}
           </div>
@@ -439,11 +447,11 @@ export default async function CampaignWorkspacePage({
             <article className={styles.learning} key={learning.id}>
               <div><span className={styles.eyebrow}>{learning.scope} / {learning.status}</span><p>{learning.finding}</p><div className={styles.learningConfidence}>{Math.round(Number(learning.confidence) * 100)}% confidence</div></div>
               {learning.status === "proposed" ? <div className={styles.inlineActions}>
-                <form action={setLearningStatus}><input type="hidden" name="learning_id" value={learning.id} /><input type="hidden" name="status" value="approved" /><button className="button primary" type="submit">Approve learning</button></form>
-                <form action={setLearningStatus}><input type="hidden" name="learning_id" value={learning.id} /><input type="hidden" name="status" value="rejected" /><button className="button" type="submit">Reject</button></form>
+                <form action={setLearningStatus}>{artistInput}<input type="hidden" name="learning_id" value={learning.id} /><input type="hidden" name="status" value="approved" /><button className="button primary" type="submit">Approve learning</button></form>
+                <form action={setLearningStatus}>{artistInput}<input type="hidden" name="learning_id" value={learning.id} /><input type="hidden" name="status" value="rejected" /><button className="button" type="submit">Reject</button></form>
               </div> : <span className={styles.chip}>{learning.status}</span>}
             </article>
-          )) : <div className={styles.emptyBrain}><div><h2>No evidence yet</h2><p>Once experiments accumulate enough observations, Atlas will propose concise reusable learnings here.</p></div></div>}
+          )) : <div className={styles.emptyBrain}><div><h2>No evidence yet</h2><p>Once experiments accumulate enough observations, Ensemblis will propose concise reusable learnings here.</p></div></div>}
         </div>
       </section>
     </div>
