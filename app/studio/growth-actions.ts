@@ -4,17 +4,20 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { asMarketingClient } from "@/lib/marketing/db";
+import { OBJECTIVE_KPIS } from "@/lib/marketing/domain";
+import { plannerPlatformsFromConnections } from "@/lib/marketing/social-platforms";
+import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { asGrowthClient } from "@/lib/studio/growth-db";
 import {
   detectGrowthOpportunities,
   planReleaseQueue,
 } from "@/lib/studio/growth";
-import { asMarketingClient } from "@/lib/marketing/db";
-import { OBJECTIVE_KPIS } from "@/lib/marketing/domain";
-import { plannerPlatformsFromConnections } from "@/lib/marketing/social-platforms";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
+import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 import { asSocialClient } from "@/lib/studio/social-db";
 import type { Json } from "@/types/database";
-import type { GrowthSettings, VaultTrackStatus } from "@/types/growth-database";
+import type { VaultTrackStatus } from "@/types/growth-database";
 
 const uuid = z.uuid();
 const shortText = z.string().trim().min(1).max(300);
@@ -35,59 +38,88 @@ function json(input: unknown) {
   return input as Json;
 }
 function slugify(input: string) {
-  return input.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 70) || "atlas-track";
+  return input.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 70) || "artist-track";
 }
-async function uniqueReleaseSlug(
-  supabase: Awaited<ReturnType<typeof requireStudioAdmin>>["supabase"],
-  ownerId: string,
-  title: string,
-) {
+
+async function getGrowthActionContext() {
+  const { supabase, user } = await requireStudioAdmin();
+  const artist = await resolveDefaultArtistContext(supabase, user);
+  return {
+    supabase,
+    user,
+    artist,
+    growth: asGrowthClient(supabase),
+    marketing: asMarketingClient(supabase),
+    music: asArtistScopedMusicClient(supabase),
+    operational: asArtistScopedOperationalClient(supabase),
+    social: asSocialClient(supabase),
+  };
+}
+
+type GrowthActionContext = Awaited<ReturnType<typeof getGrowthActionContext>>;
+
+async function uniqueReleaseSlug(ctx: GrowthActionContext, title: string) {
   const base = slugify(title);
   for (let index = 0; index < 50; index += 1) {
     const slug = index === 0 ? base : `${base}-${index + 1}`;
-    const { data, error } = await supabase.from("releases").select("id").eq("owner_id", ownerId).eq("slug", slug).maybeSingle();
+    const { data, error } = await ctx.music
+      .from("releases")
+      .select("id")
+      .eq("owner_id", ctx.user.id)
+      .eq("artist_id", ctx.artist.artistId)
+      .eq("slug", slug)
+      .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return slug;
   }
   return `${base}-${Date.now()}`;
 }
 
-async function ensureGrowthSettings(ownerId: string) {
-  const { supabase } = await requireStudioAdmin();
-  const growth = asGrowthClient(supabase);
-  const { data, error } = await growth.from("artist_growth_settings").select("*").eq("owner_id", ownerId).maybeSingle();
+async function ensureGrowthSettings(ctx: GrowthActionContext) {
+  const { data, error } = await ctx.growth
+    .from("artist_growth_settings")
+    .select("*")
+    .eq("owner_id", ctx.user.id)
+    .eq("artist_id", ctx.artist.artistId)
+    .maybeSingle();
   if (error) throw new Error(error.message);
   if (data) return data;
-  const { data: created, error: createError } = await growth.from("artist_growth_settings").insert({ owner_id: ownerId }).select("*").single();
+  const { data: created, error: createError } = await ctx.growth
+    .from("artist_growth_settings")
+    .insert({ owner_id: ctx.user.id, artist_id: ctx.artist.artistId })
+    .select("*")
+    .single();
   if (createError) throw new Error(createError.message);
   return created;
 }
 
 export async function saveGrowthSettings(form: FormData) {
-  const { supabase, user } = await requireStudioAdmin();
-  const growth = asGrowthClient(supabase);
-  const row: Partial<GrowthSettings> = {
-    owner_id: user.id,
+  const ctx = await getGrowthActionContext();
+  const row = {
+    owner_id: ctx.user.id,
+    artist_id: ctx.artist.artistId,
     planning_horizon_days: integer(form, "planning_horizon_days", 90, 30, 365),
     release_cadence_days: integer(form, "release_cadence_days", 28, 7, 120),
     minimum_candidate_score: integer(form, "minimum_candidate_score", 55, 0, 100),
     catalog_engine_enabled: form.get("catalog_engine_enabled") === "on",
     autoplan_enabled: form.get("autoplan_enabled") === "on",
   };
-  const { error } = await growth.from("artist_growth_settings").upsert(row, { onConflict: "owner_id" });
+  const { error } = await ctx.growth
+    .from("artist_growth_settings")
+    .upsert(row, { onConflict: "artist_id" });
   if (error) throw new Error(error.message);
   revalidatePath("/studio/growth");
   revalidatePath("/studio");
 }
 
 export async function saveVaultTrack(form: FormData) {
-  const { supabase, user } = await requireStudioAdmin();
-  const growth = asGrowthClient(supabase);
+  const ctx = await getGrowthActionContext();
   const id = value(form, "id");
   const status = statusSchema.parse(value(form, "status") || "mastered") as VaultTrackStatus;
   const artistRatingRaw = value(form, "artist_rating");
   const row = {
-    owner_id: user.id,
+    owner_id: ctx.user.id,
+    artist_id: ctx.artist.artistId,
     title: shortText.parse(value(form, "title")),
     version: optional(form, "version"),
     status,
@@ -106,8 +138,13 @@ export async function saveVaultTrack(form: FormData) {
     source: id ? undefined : "manual" as const,
   };
   const query = id
-    ? growth.from("track_vault").update(row).eq("id", uuid.parse(id)).eq("owner_id", user.id)
-    : growth.from("track_vault").insert(row);
+    ? ctx.growth
+        .from("track_vault")
+        .update(row)
+        .eq("id", uuid.parse(id))
+        .eq("owner_id", ctx.user.id)
+        .eq("artist_id", ctx.artist.artistId)
+    : ctx.growth.from("track_vault").insert(row);
   const { error } = await query;
   if (error) throw new Error(error.message);
   revalidatePath("/studio/growth");
@@ -115,21 +152,34 @@ export async function saveVaultTrack(form: FormData) {
 }
 
 export async function archiveVaultTrack(form: FormData) {
-  const { supabase, user } = await requireStudioAdmin();
-  const growth = asGrowthClient(supabase);
+  const ctx = await getGrowthActionContext();
   const id = uuid.parse(value(form, "id"));
-  const { error } = await growth.from("track_vault").update({ status: "archived" }).eq("id", id).eq("owner_id", user.id);
+  const { error } = await ctx.growth
+    .from("track_vault")
+    .update({ status: "archived" })
+    .eq("id", id)
+    .eq("owner_id", ctx.user.id)
+    .eq("artist_id", ctx.artist.artistId);
   if (error) throw new Error(error.message);
   revalidatePath("/studio/growth");
 }
 
 export async function generateGrowthPlan() {
-  const { supabase, user } = await requireStudioAdmin();
-  const growth = asGrowthClient(supabase);
-  const settings = await ensureGrowthSettings(user.id);
+  const ctx = await getGrowthActionContext();
+  const settings = await ensureGrowthSettings(ctx);
   const [vaultResult, releasesResult] = await Promise.all([
-    growth.from("track_vault").select("*").eq("owner_id", user.id).neq("status", "archived"),
-    supabase.from("releases").select("id,release_date,status").eq("owner_id", user.id).in("status", ["Idea","In Progress","Scheduled"]),
+    ctx.growth
+      .from("track_vault")
+      .select("*")
+      .eq("owner_id", ctx.user.id)
+      .eq("artist_id", ctx.artist.artistId)
+      .neq("status", "archived"),
+    ctx.music
+      .from("releases")
+      .select("id,release_date,status")
+      .eq("owner_id", ctx.user.id)
+      .eq("artist_id", ctx.artist.artistId)
+      .in("status", ["Idea","In Progress","Scheduled"]),
   ]);
   if (vaultResult.error) throw new Error(vaultResult.error.message);
   if (releasesResult.error) throw new Error(releasesResult.error.message);
@@ -139,11 +189,18 @@ export async function generateGrowthPlan() {
     existingReleaseDates: (releasesResult.data ?? []).map((release) => release.release_date).filter((date): date is string => Boolean(date)),
     settings,
   });
-  const { error: deleteError } = await growth.from("growth_plan_items").delete().eq("owner_id", user.id).eq("status", "proposed").eq("source", "decision_engine");
+  const { error: deleteError } = await ctx.growth
+    .from("growth_plan_items")
+    .delete()
+    .eq("owner_id", ctx.user.id)
+    .eq("artist_id", ctx.artist.artistId)
+    .eq("status", "proposed")
+    .eq("source", "decision_engine");
   if (deleteError) throw new Error(deleteError.message);
   if (plan.length) {
-    const { error } = await growth.from("growth_plan_items").insert(plan.map((item, index) => ({
-      owner_id: user.id,
+    const { error } = await ctx.growth.from("growth_plan_items").insert(plan.map((item, index) => ({
+      owner_id: ctx.user.id,
+      artist_id: ctx.artist.artistId,
       track_vault_id: item.track.id,
       target_date: item.targetDate,
       sort_order: index,
@@ -159,19 +216,34 @@ export async function generateGrowthPlan() {
 }
 
 export async function promoteVaultTrack(form: FormData) {
-  const { supabase, user } = await requireStudioAdmin();
-  const growth = asGrowthClient(supabase);
+  const ctx = await getGrowthActionContext();
   const id = uuid.parse(value(form, "id"));
-  const { data: track, error } = await growth.from("track_vault").select("*").eq("id", id).eq("owner_id", user.id).single();
+  const { data: track, error } = await ctx.growth
+    .from("track_vault")
+    .select("*")
+    .eq("id", id)
+    .eq("owner_id", ctx.user.id)
+    .eq("artist_id", ctx.artist.artistId)
+    .single();
   if (error) throw new Error(error.message);
   if (track.linked_release_id) redirect(`/studio/releases/${track.linked_release_id}`);
 
-  const { data: planItem, error: planError } = await growth.from("growth_plan_items").select("*").eq("owner_id", user.id).eq("track_vault_id", id).in("status", ["proposed","accepted"]).order("target_date").limit(1).maybeSingle();
+  const { data: planItem, error: planError } = await ctx.growth
+    .from("growth_plan_items")
+    .select("*")
+    .eq("owner_id", ctx.user.id)
+    .eq("artist_id", ctx.artist.artistId)
+    .eq("track_vault_id", id)
+    .in("status", ["proposed","accepted"])
+    .order("target_date")
+    .limit(1)
+    .maybeSingle();
   if (planError) throw new Error(planError.message);
   const releaseDate = planItem?.target_date ?? optional(form, "release_date");
-  const slug = await uniqueReleaseSlug(supabase, user.id, track.title);
-  const { data: release, error: releaseError } = await supabase.from("releases").insert({
-    owner_id: user.id,
+  const slug = await uniqueReleaseSlug(ctx, track.title);
+  const { data: release, error: releaseError } = await ctx.music.from("releases").insert({
+    owner_id: ctx.user.id,
+    artist_id: ctx.artist.artistId,
     title: track.title,
     slug,
     release_type: "Single",
@@ -181,8 +253,9 @@ export async function promoteVaultTrack(form: FormData) {
     notes: track.notes,
   }).select("id").single();
   if (releaseError) throw new Error(releaseError.message);
-  const { error: trackError } = await supabase.from("tracks").insert({
-    owner_id: user.id,
+  const { error: trackError } = await ctx.music.from("tracks").insert({
+    owner_id: ctx.user.id,
+    artist_id: ctx.artist.artistId,
     release_id: release.id,
     title: track.title,
     version: track.version,
@@ -192,13 +265,20 @@ export async function promoteVaultTrack(form: FormData) {
     notes: track.notes,
   });
   if (trackError) throw new Error(trackError.message);
-  const { error: vaultError } = await growth.from("track_vault").update({
+  const { error: vaultError } = await ctx.growth.from("track_vault").update({
     linked_release_id: release.id,
     status: releaseDate ? "scheduled" : "release_candidate",
-  }).eq("id", id).eq("owner_id", user.id);
+  })
+    .eq("id", id)
+    .eq("owner_id", ctx.user.id)
+    .eq("artist_id", ctx.artist.artistId);
   if (vaultError) throw new Error(vaultError.message);
   if (planItem) {
-    const { error: planUpdateError } = await growth.from("growth_plan_items").update({ release_id: release.id, status: releaseDate ? "scheduled" : "accepted" }).eq("id", planItem.id);
+    const { error: planUpdateError } = await ctx.growth
+      .from("growth_plan_items")
+      .update({ release_id: release.id, status: releaseDate ? "scheduled" : "accepted" })
+      .eq("id", planItem.id)
+      .eq("artist_id", ctx.artist.artistId);
     if (planUpdateError) throw new Error(planUpdateError.message);
   }
   revalidatePath("/studio/growth");
@@ -208,15 +288,35 @@ export async function promoteVaultTrack(form: FormData) {
 }
 
 export async function refreshGrowthOpportunities() {
-  const { supabase, user } = await requireStudioAdmin();
-  const growth = asGrowthClient(supabase);
+  const ctx = await getGrowthActionContext();
   const [settings, vaultResult, releasesResult, metricsResult, contentResult, existingResult] = await Promise.all([
-    ensureGrowthSettings(user.id),
-    growth.from("track_vault").select("*").eq("owner_id", user.id).neq("status", "archived"),
-    supabase.from("releases").select("id,title,status,release_date").eq("owner_id", user.id),
-    supabase.from("metric_snapshots").select("*").eq("owner_id", user.id),
-    supabase.from("content_items").select("id,release_id,title,status,asset_url").eq("owner_id", user.id),
-    growth.from("growth_opportunities").select("id,dedupe_key,status").eq("owner_id", user.id),
+    ensureGrowthSettings(ctx),
+    ctx.growth
+      .from("track_vault")
+      .select("*")
+      .eq("owner_id", ctx.user.id)
+      .eq("artist_id", ctx.artist.artistId)
+      .neq("status", "archived"),
+    ctx.music
+      .from("releases")
+      .select("id,title,status,release_date")
+      .eq("owner_id", ctx.user.id)
+      .eq("artist_id", ctx.artist.artistId),
+    ctx.marketing
+      .from("metric_snapshots")
+      .select("*")
+      .eq("owner_id", ctx.user.id)
+      .eq("artist_id", ctx.artist.artistId),
+    ctx.marketing
+      .from("content_items")
+      .select("id,release_id,title,status,asset_url")
+      .eq("owner_id", ctx.user.id)
+      .eq("artist_id", ctx.artist.artistId),
+    ctx.growth
+      .from("growth_opportunities")
+      .select("id,dedupe_key,status")
+      .eq("owner_id", ctx.user.id)
+      .eq("artist_id", ctx.artist.artistId),
   ]);
   if (vaultResult.error) throw new Error(vaultResult.error.message);
   if (releasesResult.error) throw new Error(releasesResult.error.message);
@@ -239,7 +339,8 @@ export async function refreshGrowthOpportunities() {
       const previous = existing.get(draft.dedupeKey);
       const preservedStatus = previous && ["dismissed","completed"].includes(previous.status) ? previous.status : "new";
       return {
-        owner_id: user.id,
+        owner_id: ctx.user.id,
+        artist_id: ctx.artist.artistId,
         kind: draft.kind,
         release_id: draft.releaseId ?? null,
         track_vault_id: draft.trackVaultId ?? null,
@@ -255,20 +356,30 @@ export async function refreshGrowthOpportunities() {
         detected_at: new Date().toISOString(),
       };
     });
-    const { error } = await growth.from("growth_opportunities").upsert(rows, { onConflict: "owner_id,dedupe_key" });
+    const { error } = await ctx.growth
+      .from("growth_opportunities")
+      .upsert(rows, { onConflict: "artist_id,dedupe_key" });
     if (error) throw new Error(error.message);
   }
   revalidatePath("/studio/growth");
   revalidatePath("/studio");
 }
 
-async function createCatalogRevivalCampaign(ownerId: string, releaseId: string, opportunityId: string) {
-  const { supabase } = await requireStudioAdmin();
-  const marketing = asMarketingClient(supabase);
-  const social = asSocialClient(supabase);
+async function createCatalogRevivalCampaign(ctx: GrowthActionContext, releaseId: string, opportunityId: string) {
   const [{ data: release, error: releaseError }, socialResult] = await Promise.all([
-    supabase.from("releases").select("id,title,release_date,primary_hook,core_emotion").eq("id", releaseId).eq("owner_id", ownerId).single(),
-    social.from("social_channel_accounts").select("platform,status").eq("owner_id", ownerId).eq("status", "connected"),
+    ctx.music
+      .from("releases")
+      .select("id,title,release_date,primary_hook,core_emotion")
+      .eq("id", releaseId)
+      .eq("owner_id", ctx.user.id)
+      .eq("artist_id", ctx.artist.artistId)
+      .single(),
+    ctx.social
+      .from("social_channel_accounts")
+      .select("platform,status")
+      .eq("owner_id", ctx.user.id)
+      .eq("artist_id", ctx.artist.artistId)
+      .eq("status", "connected"),
   ]);
   if (releaseError) throw new Error(releaseError.message);
   if (socialResult.error) throw new Error(socialResult.error.message);
@@ -276,8 +387,9 @@ async function createCatalogRevivalCampaign(ownerId: string, releaseId: string, 
   const start = new Date();
   const end = new Date(start.getTime() + 7 * 86_400_000);
   const kpis = OBJECTIVE_KPIS.Streams;
-  const { data: campaign, error } = await marketing.from("campaigns").insert({
-    owner_id: ownerId,
+  const { data: campaign, error } = await ctx.marketing.from("campaigns").insert({
+    owner_id: ctx.user.id,
+    artist_id: ctx.artist.artistId,
     release_id: release.id,
     name: `${release.title} catalog revival`,
     status: "planned",
@@ -297,8 +409,9 @@ async function createCatalogRevivalCampaign(ownerId: string, releaseId: string, 
     end_date: end.toISOString().slice(0, 10),
   }).select("id").single();
   if (error) throw new Error(error.message);
-  const { error: phaseError } = await marketing.from("campaign_phases").insert({
-    owner_id: ownerId,
+  const { error: phaseError } = await ctx.marketing.from("campaign_phases").insert({
+    owner_id: ctx.user.id,
+    artist_id: ctx.artist.artistId,
     campaign_id: campaign.id,
     code: "catalog-revival",
     name: "Catalog revival sprint",
@@ -314,7 +427,8 @@ async function createCatalogRevivalCampaign(ownerId: string, releaseId: string, 
   if (connectedPlatforms.length) {
     const moments = connectedPlatforms.flatMap((platform, platformIndex) => [
       {
-        owner_id: ownerId,
+        owner_id: ctx.user.id,
+        artist_id: ctx.artist.artistId,
         release_id: release.id,
         campaign_id: campaign.id,
         title: `${release.title}: strongest hook rediscovery`,
@@ -330,7 +444,8 @@ async function createCatalogRevivalCampaign(ownerId: string, releaseId: string, 
         content_angle: "rediscovery / strongest hook",
       },
       {
-        owner_id: ownerId,
+        owner_id: ctx.user.id,
+        artist_id: ctx.artist.artistId,
         release_id: release.id,
         campaign_id: campaign.id,
         title: `${release.title}: world-building rediscovery`,
@@ -339,27 +454,32 @@ async function createCatalogRevivalCampaign(ownerId: string, releaseId: string, 
         status: "Idea",
         goal: "Streams",
         scheduled_at: new Date(start.getTime() + (4 + platformIndex) * 86_400_000).toISOString(),
-        hook_text: release.core_emotion || "Reconnect the track to the Atlas Irwin world instead of presenting it as old content.",
+        hook_text: release.core_emotion || `Reconnect the track to the ${ctx.artist.artistName} world instead of presenting it as old content.`,
         production_notes: "Second catalog hypothesis: context/world-building. Keep the same track and measurable destination; vary the reason to care.",
         source: "automation" as const,
         approval_status: "not_required" as const,
         content_angle: "rediscovery / artist world",
       },
     ]);
-    const { error: contentError } = await marketing.from("content_items").insert(moments);
+    const { error: contentError } = await ctx.marketing.from("content_items").insert(moments);
     if (contentError) throw new Error(contentError.message);
   }
   return campaign.id;
 }
 
-async function createWinnerDerivatives(ownerId: string, contentItemId: string) {
-  const { supabase } = await requireStudioAdmin();
-  const marketing = asMarketingClient(supabase);
-  const { data: original, error } = await marketing.from("content_items").select("*").eq("id", contentItemId).eq("owner_id", ownerId).single();
+async function createWinnerDerivatives(ctx: GrowthActionContext, contentItemId: string) {
+  const { data: original, error } = await ctx.marketing
+    .from("content_items")
+    .select("*")
+    .eq("id", contentItemId)
+    .eq("owner_id", ctx.user.id)
+    .eq("artist_id", ctx.artist.artistId)
+    .single();
   if (error) throw new Error(error.message);
   const now = Date.now();
   const rows = [1, 3, 5].map((days, index) => ({
-    owner_id: ownerId,
+    owner_id: ctx.user.id,
+    artist_id: ctx.artist.artistId,
     release_id: original.release_id,
     campaign_id: original.campaign_id,
     phase_id: original.phase_id,
@@ -377,33 +497,45 @@ async function createWinnerDerivatives(ownerId: string, contentItemId: string) {
     approval_status: "not_required" as const,
     content_angle: `winner derivative ${index + 1}`,
   }));
-  const { error: insertError } = await marketing.from("content_items").insert(rows);
+  const { error: insertError } = await ctx.marketing.from("content_items").insert(rows);
   if (insertError) throw new Error(insertError.message);
 }
 
 export async function activateGrowthOpportunity(form: FormData) {
-  const { supabase, user } = await requireStudioAdmin();
-  const growth = asGrowthClient(supabase);
+  const ctx = await getGrowthActionContext();
   const id = uuid.parse(value(form, "id"));
-  const { data: opportunity, error } = await growth.from("growth_opportunities").select("*").eq("id", id).eq("owner_id", user.id).single();
+  const { data: opportunity, error } = await ctx.growth
+    .from("growth_opportunities")
+    .select("*")
+    .eq("id", id)
+    .eq("owner_id", ctx.user.id)
+    .eq("artist_id", ctx.artist.artistId)
+    .single();
   if (error) throw new Error(error.message);
   if (opportunity.kind === "catalog_revival" && opportunity.release_id) {
-    await createCatalogRevivalCampaign(user.id, opportunity.release_id, opportunity.id);
+    await createCatalogRevivalCampaign(ctx, opportunity.release_id, opportunity.id);
   } else if (opportunity.kind === "content_breakout" && opportunity.content_item_id) {
-    await createWinnerDerivatives(user.id, opportunity.content_item_id);
+    await createWinnerDerivatives(ctx, opportunity.content_item_id);
   } else if (opportunity.kind === "funnel_bottleneck") {
     const action = opportunity.recommended_action && typeof opportunity.recommended_action === "object" && !Array.isArray(opportunity.recommended_action)
       ? String((opportunity.recommended_action as Record<string, Json>).action ?? opportunity.rationale)
       : opportunity.rationale;
-    await supabase.from("tasks").insert({
-      owner_id: user.id,
+    const { error: taskError } = await ctx.operational.from("tasks").insert({
+      owner_id: ctx.user.id,
+      artist_id: ctx.artist.artistId,
       title: `Growth bottleneck: ${opportunity.title}`,
       priority: "High",
       category: "growth" as never,
       metadata: json({ opportunityId: opportunity.id, action }) as never,
     } as never);
+    if (taskError) throw new Error(taskError.message);
   }
-  const { error: statusError } = await growth.from("growth_opportunities").update({ status: "accepted" }).eq("id", id).eq("owner_id", user.id);
+  const { error: statusError } = await ctx.growth
+    .from("growth_opportunities")
+    .update({ status: "accepted" })
+    .eq("id", id)
+    .eq("owner_id", ctx.user.id)
+    .eq("artist_id", ctx.artist.artistId);
   if (statusError) throw new Error(statusError.message);
   revalidatePath("/studio/growth");
   revalidatePath("/studio");
@@ -412,10 +544,14 @@ export async function activateGrowthOpportunity(form: FormData) {
 }
 
 export async function dismissGrowthOpportunity(form: FormData) {
-  const { supabase, user } = await requireStudioAdmin();
-  const growth = asGrowthClient(supabase);
+  const ctx = await getGrowthActionContext();
   const id = uuid.parse(value(form, "id"));
-  const { error } = await growth.from("growth_opportunities").update({ status: "dismissed" }).eq("id", id).eq("owner_id", user.id);
+  const { error } = await ctx.growth
+    .from("growth_opportunities")
+    .update({ status: "dismissed" })
+    .eq("id", id)
+    .eq("owner_id", ctx.user.id)
+    .eq("artist_id", ctx.artist.artistId);
   if (error) throw new Error(error.message);
   revalidatePath("/studio/growth");
   revalidatePath("/studio");
