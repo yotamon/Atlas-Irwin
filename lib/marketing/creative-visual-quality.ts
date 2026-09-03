@@ -77,7 +77,7 @@ const REVIEW_SCHEMA = {
   },
 } satisfies Record<string, unknown>;
 
-const REVIEW_INSTRUCTIONS = `You are the senior visual quality-control reviewer for Atlas Irwin, an independent electronic / nu-disco artist project.
+const REVIEW_INSTRUCTIONS = `You are the senior visual quality-control reviewer for the active independent music artist.
 You are reviewing a generated production plate before a human is asked to approve it for publishing.
 
 Judge the actual image, not the prompt quality. Be strict.
@@ -85,16 +85,16 @@ Judge the actual image, not the prompt quality. Be strict.
 BLOCKING PROBLEMS include:
 - obvious generative artifacts, impossible anatomy, broken hands, warped objects, duplicated geometry, smeared faces or malformed physical details;
 - pseudo-text, accidental letters, fake logos, UI fragments, watermarks or gibberish typography generated into the image;
-- generic AI spectacle that ignores the supplied Atlas/release world: random cyberpunk neon, chrome humanoids, anonymous glossy models, fake festival crowds, floating particles, meaningless holograms or synthetic luxury clichés;
+- generic AI spectacle that ignores the supplied artist/release world: random cyberpunk neon, chrome humanoids, anonymous glossy models, fake festival crowds, floating particles, meaningless holograms or synthetic luxury clichés;
 - composition that fails the supplied platform safe area or has no clear focal hierarchy;
-- major mismatch with release artwork, approved references or the stated Creative Treatment;
+- major mismatch with release artwork, artist-specific approved references or the stated Creative Treatment;
 - a result that looks like an AI demo rather than art-directed music media.
 
 QUALITY SIGNALS:
 - tactile, intentional lighting and materials;
 - one coherent visual idea;
 - believable detail and restraint;
-- continuity with the supplied release/brand references;
+- continuity with the supplied release/artist references;
 - enough clean structure for deterministic typography and graphics to be added later;
 - editorial or photographic craft rather than social-template aesthetics.
 
@@ -131,13 +131,14 @@ async function assertReviewBudget(ownerId: string) {
   if (!settings.hard_stop) return settings;
   const budget = await getAiBudgetSnapshot(ownerId, settings);
   if (budget.monthlyRemainingUsd <= 0 || budget.textRemainingUsd <= 0) {
-    throw new Error("Atlas AI text/reasoning budget is exhausted, so automated visual QC cannot run.");
+    throw new Error("Ensemblis AI text/reasoning budget is exhausted, so automated visual QC cannot run.");
   }
   return settings;
 }
 
 export async function reviewGeneratedCreativeImage(input: {
   ownerId: string;
+  artistId: string;
   parentGenerationRunId: string;
   campaignId: string | null;
   releaseId: string | null;
@@ -146,6 +147,7 @@ export async function reviewGeneratedCreativeImage(input: {
   treatment: CreativeTreatment;
   context: CreativeReferenceContext;
 }): Promise<CreativeVisualQualityReview> {
+  if (input.context.artistId !== input.artistId) throw new Error("Visual QC context does not match its artist lineage.");
   const settings = await assertReviewBudget(input.ownerId);
   const client = createMarketingServiceClient();
   const model = process.env.ATLAS_CREATIVE_REVIEW_MODEL?.trim() || "openai/gpt-5.6-terra";
@@ -153,6 +155,7 @@ export async function reviewGeneratedCreativeImage(input: {
   const started = new Date();
   const { data: run, error: createError } = await client.from("generation_runs").insert({
     owner_id: input.ownerId,
+    artist_id: input.artistId,
     campaign_id: input.campaignId,
     release_id: input.releaseId,
     parent_run_id: input.parentGenerationRunId,
@@ -163,6 +166,7 @@ export async function reviewGeneratedCreativeImage(input: {
     requested_model: model,
     prompt_version: "creative-visual-quality-v1",
     input_context: json({
+      artistId: input.artistId,
       contentItemId: input.contentItemId,
       assetUrl: input.assetUrl,
       treatmentVersion: input.treatment.version,
@@ -173,7 +177,7 @@ export async function reviewGeneratedCreativeImage(input: {
     status: "running",
     attempt_index: 0,
     started_at: started.toISOString(),
-    metadata: json({ providerSort: settings.provider_sort, parentCreativeRunId: input.parentGenerationRunId }),
+    metadata: json({ artistId: input.artistId, providerSort: settings.provider_sort, parentCreativeRunId: input.parentGenerationRunId }),
   }).select("id").single();
   if (createError || !run) throw new Error(createError?.message || "Visual quality review run could not be created.");
 
@@ -183,6 +187,7 @@ export async function reviewGeneratedCreativeImage(input: {
       schema: REVIEW_SCHEMA,
       instructions: REVIEW_INSTRUCTIONS,
       prompt: JSON.stringify({
+        artistId: input.artistId,
         task: "Review the generated asset against this production intent.",
         treatment: {
           concept: input.treatment.concept,
@@ -240,7 +245,7 @@ export async function reviewGeneratedCreativeImage(input: {
       quality_gate_passed: review.passed,
       quality_score: review.score / 100,
       quality_failures: json(review.issues.filter((issue) => issue.severity === "blocking").map((issue) => issue.detail)),
-    }).eq("id", run.id);
+    }).eq("id", run.id).eq("owner_id", input.ownerId).eq("artist_id", input.artistId);
     if (updateError) throw new Error(updateError.message);
     return review;
   } catch (error) {
@@ -250,7 +255,7 @@ export async function reviewGeneratedCreativeImage(input: {
       completed_at: completed.toISOString(),
       latency_ms: completed.getTime() - started.getTime(),
       error: error instanceof Error ? error.message : "Visual quality review failed.",
-    }).eq("id", run.id);
+    }).eq("id", run.id).eq("owner_id", input.ownerId).eq("artist_id", input.artistId);
     throw error;
   }
 }
