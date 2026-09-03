@@ -78,9 +78,7 @@ type GoogleTokenResponse = {
 function serviceSupabase() {
   const { url } = getSupabaseEnv();
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  if (!key) {
-    throw new Error("SUPABASE_SERVICE_ROLE_KEY is required for social connection token storage.");
-  }
+  if (!key) throw new Error("SUPABASE_SERVICE_ROLE_KEY is required for social connection token storage.");
   return createSupabaseClient<SocialDatabase>(url, key, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
@@ -106,12 +104,11 @@ function socialEnv(platform: SocialPlatformKey) {
 }
 
 function redirectUri(platform: SocialPlatformKey, origin: string) {
-  const explicit =
-    platform === "instagram"
-      ? process.env.INSTAGRAM_REDIRECT_URI?.trim()
-      : platform === "tiktok"
-        ? process.env.TIKTOK_REDIRECT_URI?.trim()
-        : process.env.YOUTUBE_REDIRECT_URI?.trim();
+  const explicit = platform === "instagram"
+    ? process.env.INSTAGRAM_REDIRECT_URI?.trim()
+    : platform === "tiktok"
+      ? process.env.TIKTOK_REDIRECT_URI?.trim()
+      : process.env.YOUTUBE_REDIRECT_URI?.trim();
   return explicit || `${origin.replace(/\/$/, "")}/studio/settings/social/${platform}/callback`;
 }
 
@@ -160,7 +157,6 @@ export function createSocialAuthorizeUrl(platform: SocialPlatformKey, origin: st
   const state = randomState();
   const callback = redirectUri(platform, origin);
   const scopes = requestedScopes(platform);
-
   if (platform === "instagram") {
     const url = new URL(INSTAGRAM_AUTHORIZE_URL);
     url.searchParams.set("client_id", clientId);
@@ -170,7 +166,6 @@ export function createSocialAuthorizeUrl(platform: SocialPlatformKey, origin: st
     url.searchParams.set("state", state);
     return { url, state };
   }
-
   if (platform === "tiktok") {
     const url = new URL(TIKTOK_AUTHORIZE_URL);
     url.searchParams.set("client_key", clientId);
@@ -180,7 +175,6 @@ export function createSocialAuthorizeUrl(platform: SocialPlatformKey, origin: st
     url.searchParams.set("state", state);
     return { url, state };
   }
-
   const url = new URL(GOOGLE_AUTHORIZE_URL);
   url.searchParams.set("client_id", clientId);
   url.searchParams.set("redirect_uri", callback);
@@ -210,7 +204,6 @@ async function exchangeInstagramCode(code: string, origin: string): Promise<Norm
   const shortToken = await jsonResponse<InstagramTokenResponse>(response, "Instagram token exchange");
   let accessToken = shortToken.access_token;
   let expiresIn = shortToken.expires_in;
-
   const longLivedUrl = new URL(`${INSTAGRAM_GRAPH_URL}/access_token`);
   longLivedUrl.searchParams.set("grant_type", "ig_exchange_token");
   longLivedUrl.searchParams.set("client_secret", clientSecret);
@@ -221,10 +214,7 @@ async function exchangeInstagramCode(code: string, origin: string): Promise<Norm
     accessToken = longLived.access_token || accessToken;
     expiresIn = longLived.expires_in || expiresIn;
   }
-
-  const grantedScopes = shortToken.permissions?.length
-    ? shortToken.permissions
-    : requestedScopes("instagram");
+  const grantedScopes = shortToken.permissions?.length ? shortToken.permissions : requestedScopes("instagram");
   return {
     accessToken,
     refreshToken: null,
@@ -365,9 +355,15 @@ async function fetchYouTubeProfile(accessToken: string): Promise<NormalizedProfi
   };
 }
 
-async function storeSocialToken(ownerId: string, platform: SocialPlatformKey, token: NormalizedToken) {
-  const { error } = await serviceSupabase().rpc("upsert_social_channel_token", {
+async function storeSocialToken(
+  ownerId: string,
+  artistId: string,
+  platform: SocialPlatformKey,
+  token: NormalizedToken,
+) {
+  const { error } = await serviceSupabase().rpc("upsert_social_channel_token_for_artist", {
     p_owner_id: ownerId,
+    p_artist_id: artistId,
     p_platform: platform,
     p_access_token: token.accessToken,
     p_refresh_token: token.refreshToken,
@@ -380,69 +376,72 @@ async function storeSocialToken(ownerId: string, platform: SocialPlatformKey, to
 
 export async function completeSocialOAuth({
   ownerId,
+  artistId,
   platform,
   code,
   origin,
 }: {
   ownerId: string;
+  artistId: string;
   platform: SocialPlatformKey;
   code: string;
   origin: string;
 }) {
-  const token =
-    platform === "instagram"
-      ? await exchangeInstagramCode(code, origin)
-      : platform === "tiktok"
-        ? await exchangeTikTokCode(code, origin)
-        : await exchangeYouTubeCode(code, origin);
+  const token = platform === "instagram"
+    ? await exchangeInstagramCode(code, origin)
+    : platform === "tiktok"
+      ? await exchangeTikTokCode(code, origin)
+      : await exchangeYouTubeCode(code, origin);
 
-  const profile =
-    platform === "instagram"
-      ? await fetchInstagramProfile(token.accessToken)
-      : platform === "tiktok"
-        ? await fetchTikTokProfile(token.accessToken)
-        : await fetchYouTubeProfile(token.accessToken);
+  const profile = platform === "instagram"
+    ? await fetchInstagramProfile(token.accessToken)
+    : platform === "tiktok"
+      ? await fetchTikTokProfile(token.accessToken)
+      : await fetchYouTubeProfile(token.accessToken);
 
-  await storeSocialToken(ownerId, platform, token);
+  await storeSocialToken(ownerId, artistId, platform, token);
   const publishScope = PUBLISH_SCOPES[platform];
   const canPublish = token.grantedScopes.includes(publishScope);
   const now = new Date().toISOString();
-  const { error } = await serviceSupabase()
-    .from("social_channel_accounts")
-    .upsert(
-      {
-        owner_id: ownerId,
-        platform,
-        external_account_id: profile.externalAccountId,
-        display_name: profile.displayName,
-        username: profile.username,
-        profile_url: profile.profileUrl,
-        image_url: profile.imageUrl,
-        status: "connected",
-        granted_scopes: token.grantedScopes,
-        can_publish: canPublish,
-        raw_profile: profile.raw,
-        connected_at: now,
-        last_verified_at: now,
-      },
-      { onConflict: "owner_id,platform" },
-    );
+  const { error } = await serviceSupabase().from("social_channel_accounts").upsert(
+    {
+      owner_id: ownerId,
+      artist_id: artistId,
+      platform,
+      external_account_id: profile.externalAccountId,
+      display_name: profile.displayName,
+      username: profile.username,
+      profile_url: profile.profileUrl,
+      image_url: profile.imageUrl,
+      status: "connected",
+      granted_scopes: token.grantedScopes,
+      can_publish: canPublish,
+      raw_profile: profile.raw,
+      connected_at: now,
+      last_verified_at: now,
+    },
+    { onConflict: "artist_id,platform" },
+  );
   if (error) throw new Error(error.message);
-
   return { profile, canPublish, grantedScopes: token.grantedScopes };
 }
 
-export async function disconnectSocialPlatform(ownerId: string, platform: SocialPlatformKey) {
+export async function disconnectSocialPlatform(
+  ownerId: string,
+  artistId: string,
+  platform: SocialPlatformKey,
+) {
   const supabase = serviceSupabase();
-  const { error: tokenError } = await supabase.rpc("delete_social_channel_token", {
+  const { error: tokenError } = await supabase.rpc("delete_social_channel_token_for_artist", {
     p_owner_id: ownerId,
+    p_artist_id: artistId,
     p_platform: platform,
   });
   if (tokenError) throw new Error(tokenError.message);
-  const { error } = await supabase
-    .from("social_channel_accounts")
+  const { error } = await supabase.from("social_channel_accounts")
     .delete()
     .eq("owner_id", ownerId)
+    .eq("artist_id", artistId)
     .eq("platform", platform);
   if (error) throw new Error(error.message);
 }
