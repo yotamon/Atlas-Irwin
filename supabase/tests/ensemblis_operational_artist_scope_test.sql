@@ -1,6 +1,6 @@
 begin;
 
-select plan(15);
+select plan(17);
 
 insert into auth.users (id,email,aud,role,created_at,updated_at)
 values ('15000000-0000-0000-0000-000000000001','ops@example.com','authenticated','authenticated',now(),now());
@@ -88,6 +88,20 @@ insert into public.automation_jobs(owner_id,campaign_id,job_type,payload,status)
 select owner_id,campaign_id,'test_job','{}'::jsonb,'queued' from public.marketing_events where event_type='test.event';
 select is((select artist_id from public.automation_jobs where job_type='test_job'),'35000000-0000-0000-0000-000000000002'::uuid,'automation job derives explicit artist from campaign/event lineage');
 select is((select payload->>'artistId' from public.automation_jobs where job_type='test_job'),'35000000-0000-0000-0000-000000000002','automation payload carries execution artist');
+
+insert into public.automation_jobs(owner_id,artist_id,campaign_id,job_type,payload,status,idempotency_key)
+values('15000000-0000-0000-0000-000000000001','35000000-0000-0000-0000-000000000001','55000000-0000-0000-0000-000000000001','primary_claim_guard','{}','queued','primary-claim-guard');
+
+select is(
+  (select count(*)::integer from public.claim_marketing_automation_jobs_for_artist('35000000-0000-0000-0000-000000000002', 10) where artist_id <> '35000000-0000-0000-0000-000000000002'),
+  0,
+  'artist-scoped automation claim never returns a sibling artist job'
+);
+select is(
+  (select status from public.automation_jobs where job_type='primary_claim_guard'),
+  'queued',
+  'artist-scoped automation claim leaves sibling artist jobs untouched'
+);
 
 select set_config('request.jwt.claim.sub','15000000-0000-0000-0000-000000000001',true);
 set local role authenticated;
