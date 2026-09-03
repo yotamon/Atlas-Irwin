@@ -117,17 +117,17 @@ const treatmentSchema = {
   },
 } satisfies Record<string, unknown>;
 
-const DIRECTOR_INSTRUCTIONS = `You are the production creative director for Atlas Irwin, an independent electronic / nu-disco artist.
+const DIRECTOR_INSTRUCTIONS = `You are the production creative director for the active independent music artist.
 Your job is not to make "AI content". Your job is to design a production-grade social creative that could plausibly come from a strong independent music art department using a mix of real footage, artwork, motion design, editing and selective generative media.
 
 NON-NEGOTIABLE RULES:
-- Start from the supplied music, release world, visual references and content objective. Do not invent a new aesthetic for every post.
-- Treat creativeDna as evidence. Approved patterns are useful continuity signals, not templates to clone. Rejected patterns are negative evidence and must not be repeated merely because they look on-brand.
+- Start from the supplied music, release world, artist-specific visual references and content objective. Do not invent a new aesthetic for every post.
+- Treat creativeDna as artist-local evidence. Approved patterns are useful continuity signals, not templates to clone. Rejected patterns are negative evidence and must not be repeated merely because they look on-brand.
 - The hardAntiPatterns inside creativeDna are mandatory exclusions and should be reflected in antiPatterns whenever relevant to the concept.
-- Prefer real Atlas source material and existing artwork when available. Generative imagery is supporting production material, not the default identity.
+- Prefer real artist source material and existing artwork when available. Generative imagery is supporting production material, not the default identity.
 - One strong visual idea is better than five unrelated spectacular ideas.
 - Avoid generic cyberpunk, random neon cities, chrome humanoids, anonymous fashion models, fake festival crowds, floating particles, meaningless holograms, synthetic luxury, motivational copy and generic "OUT NOW" advertising.
-- Do not ask image/video models to render the Atlas logo, legible captions, lyric typography, UI, buttons or promotional text. Those belong to deterministic post-production.
+- Do not ask image/video models to render the artist logo, legible captions, lyric typography, UI, buttons or promotional text. Those belong to deterministic post-production.
 - If lyric quoting is not explicitly permitted in the supplied lyrics context, use lyrics semantically only and do not reconstruct them.
 - Build the edit around the supplied musical hook, selected Audio Scene, lyric moment or track section. The visual must serve the music.
 - Platform adaptation is creative direction, not just cropping. Respect the supplied platform package and safe areas.
@@ -162,6 +162,7 @@ function durationHint(content: ContentInput, outputKind: SocialOutputKind, platf
 
 function contextPayload(content: ContentInput, context: CreativeReferenceContext, creativeDna: AtlasCreativeDna, platformPackage: SocialPlatformPackage, outputKind: SocialOutputKind) {
   return {
+    artistId: context.artistId,
     content: {
       title: content.title,
       platform: content.platform,
@@ -202,15 +203,20 @@ function contextPayload(content: ContentInput, context: CreativeReferenceContext
 
 export async function directContentCreative(input: {
   ownerId: string;
+  artistId: string;
   content: ContentInput;
   context: CreativeReferenceContext;
   outputKind: SocialOutputKind;
 }): Promise<{ treatment: CreativeTreatment; generationRunId: string }> {
+  if (input.context.artistId !== input.artistId) {
+    throw new Error("Creative reference context does not match the requested artist.");
+  }
   const platformPackage = socialPlatformPackage(input.content.platform, input.content.format, input.outputKind);
-  const creativeDna = await loadAtlasCreativeDna({ ownerId: input.ownerId, context: input.context });
+  const creativeDna = await loadAtlasCreativeDna({ ownerId: input.ownerId, artistId: input.artistId, context: input.context });
   const payload = contextPayload(input.content, input.context, creativeDna, platformPackage, input.outputKind);
   const generated = await runAtlasAiTask<Omit<CreativeTreatment, "version" | "platformPackage">>({
     ownerId: input.ownerId,
+    artistId: input.artistId,
     task: "marketing.creative_direction",
     purpose: `creative_treatment:${input.content.id}`,
     campaignId: input.content.campaign_id,
@@ -220,6 +226,7 @@ export async function directContentCreative(input: {
     instructions: DIRECTOR_INSTRUCTIONS,
     input: JSON.stringify(payload),
     inputContext: {
+      artistId: input.artistId,
       contentItemId: input.content.id,
       platformPackage,
       creativeDnaVersion: creativeDna.version,
