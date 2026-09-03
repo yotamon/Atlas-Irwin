@@ -61,6 +61,7 @@ function audioPlan(input: {
 
 export async function enqueueMarketingVideoFinishing(input: {
   ownerId: string;
+  artistId: string;
   campaignId: string | null;
   releaseId: string | null;
   contentItemId: string;
@@ -72,14 +73,17 @@ export async function enqueueMarketingVideoFinishing(input: {
   request: CreativeGenerationRequest | null;
   audioWindow?: { startSeconds: number | null; endSeconds: number | null } | null;
 }): Promise<MarketingMediaJob> {
+  if (input.context.artistId !== input.artistId) {
+    throw new Error("Video finishing context does not match its artist lineage.");
+  }
   const marketing = client();
   const service = createServiceClient();
   const durationMs = clampedDurationMs(input.request, input.treatment);
   const bucket = "public-media";
-  const outputPath = `${input.ownerId}/library/marketing/finished/${input.generationRunId}.mp4`;
+  const outputPath = `${input.ownerId}/library/marketing/${input.artistId}/finished/${input.generationRunId}.mp4`;
   const outputPublicUrl = service.storage.from(bucket).getPublicUrl(outputPath).data.publicUrl;
   const frameUploads = reviewFrameTimestamps(durationMs).map((timestampMs, index) => {
-    const path = `${input.ownerId}/library/marketing/qc/${input.generationRunId}/frame-${String(index + 1).padStart(2, "0")}.jpg`;
+    const path = `${input.ownerId}/library/marketing/${input.artistId}/qc/${input.generationRunId}/frame-${String(index + 1).padStart(2, "0")}.jpg`;
     return {
       index: index + 1,
       timestamp_ms: timestampMs,
@@ -95,14 +99,15 @@ export async function enqueueMarketingVideoFinishing(input: {
       .select("audio_timestamp_start,audio_timestamp_end")
       .eq("id", input.contentItemId)
       .eq("owner_id", input.ownerId)
+      .eq("artist_id", input.artistId)
       .maybeSingle();
     if (contentError) throw new Error(contentError.message);
-    audioWindow = content
-      ? { startSeconds: content.audio_timestamp_start, endSeconds: content.audio_timestamp_end }
-      : null;
+    if (!content) throw new Error("Video finishing content does not belong to the expected artist.");
+    audioWindow = { startSeconds: content.audio_timestamp_start, endSeconds: content.audio_timestamp_end };
   }
   const audio = audioPlan({ context: input.context, audioWindow });
   const payload = {
+    artist_id: input.artistId,
     source_url: input.rawAssetUrl,
     source_asset_id: input.rawAssetId,
     upload_bucket: bucket,
@@ -127,6 +132,7 @@ export async function enqueueMarketingVideoFinishing(input: {
 
   const { data: created, error } = await marketing.from("marketing_media_jobs").insert({
     owner_id: input.ownerId,
+    artist_id: input.artistId,
     campaign_id: input.campaignId,
     release_id: input.releaseId,
     content_item_id: input.contentItemId,
@@ -144,6 +150,7 @@ export async function enqueueMarketingVideoFinishing(input: {
     const existing = await marketing.from("marketing_media_jobs")
       .select("*")
       .eq("owner_id", input.ownerId)
+      .eq("artist_id", input.artistId)
       .eq("idempotency_key", idempotencyKey)
       .single();
     if (existing.error || !existing.data) throw new Error(existing.error?.message || "Could not recover existing marketing media job.");
@@ -151,11 +158,18 @@ export async function enqueueMarketingVideoFinishing(input: {
   }
   if (!job) throw new Error("Marketing video finishing job could not be created.");
 
-  const { data: run } = await marketing.from("generation_runs").select("output").eq("id", input.generationRunId).maybeSingle();
-  const currentOutput = run?.output && typeof run.output === "object" && !Array.isArray(run.output)
+  const { data: run, error: runError } = await marketing.from("generation_runs")
+    .select("output")
+    .eq("id", input.generationRunId)
+    .eq("owner_id", input.ownerId)
+    .eq("artist_id", input.artistId)
+    .maybeSingle();
+  if (runError) throw new Error(runError.message);
+  if (!run) throw new Error("Generation run does not belong to the video finishing artist.");
+  const currentOutput = run.output && typeof run.output === "object" && !Array.isArray(run.output)
     ? run.output as Record<string, unknown>
     : {};
-  await marketing.from("generation_runs").update({
+  const { error: runUpdateError } = await marketing.from("generation_runs").update({
     output: json({
       ...currentOutput,
       stage: "finishing_queued",
@@ -164,11 +178,12 @@ export async function enqueueMarketingVideoFinishing(input: {
       rawMediaAssetId: input.rawAssetId,
       approvalRequired: false,
     }),
-  }).eq("id", input.generationRunId);
+  }).eq("id", input.generationRunId).eq("owner_id", input.ownerId).eq("artist_id", input.artistId);
+  if (runUpdateError) throw new Error(runUpdateError.message);
 
   try {
     const { kickMarketingMediaWorkerQueue } = await import("@/lib/marketing/media-worker-queue");
-    await kickMarketingMediaWorkerQueue();
+    await kickMarketingMediaWorkerQueue({ ownerId: input.ownerId, artistId: input.artistId });
   } catch {
     // The job is durable. A terminal Media Worker callback will give this queue another chance.
   }
