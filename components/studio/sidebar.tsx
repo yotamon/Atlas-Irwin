@@ -6,6 +6,7 @@ const links = [
   ["/studio", "Today", "dashboard"],
   ["/studio/growth", "Growth", "analytics"],
   ["/studio/releases", "Releases", "releases"],
+  ["/studio/distribution", "Distribution", "distribution"],
   ["/studio/create", "Create", "musicLab"],
   ["/studio/library", "Library", "media"],
   ["/studio/settings", "Settings", "brand"],
