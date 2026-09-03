@@ -38,6 +38,16 @@ type CatalogBundle = {
   externalTrackIds: TrackExternalId[];
 };
 
+type PostgrestErrorLike = {
+  code?: string | null;
+  message?: string | null;
+};
+
+function isPreEnsemblisSchemaError(error: PostgrestErrorLike | null) {
+  return error?.code === "PGRST205"
+    || /Could not find the table 'public\.artists' in the schema cache/i.test(error?.message ?? "");
+}
+
 async function resolveCatalogOwnerId() {
   const explicit = getPublicCatalogOwnerId();
   if (explicit) return explicit;
@@ -67,7 +77,16 @@ async function resolveCatalogOwnerId() {
   return admin.id;
 }
 
-async function resolveCatalogArtistId(ownerId: string) {
+/**
+ * Expand/contract compatibility for the Ensemblis ownership rollout.
+ *
+ * Before the workspace/artist migrations land, the legacy Atlas database has no
+ * `artists` table and is inherently single-artist. Returning null in that one
+ * explicit schema state keeps the public site/build on its historical owner scope.
+ * As soon as the table exists, resolution is strict: a missing or ambiguous legacy
+ * Artist mapping is an error rather than a silent owner-wide fallback.
+ */
+async function resolveCatalogArtistId(ownerId: string): Promise<string | null> {
   const supabase = createCatalogClient();
   const ensemblis = supabase as unknown as SupabaseClient<EnsemblisDatabase>;
   const { data, error } = await ensemblis
@@ -76,7 +95,10 @@ async function resolveCatalogArtistId(ownerId: string) {
     .eq("legacy_owner_id", ownerId)
     .eq("status", "active")
     .limit(2);
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (isPreEnsemblisSchemaError(error)) return null;
+    throw new Error(error.message);
+  }
   const artists = data ?? [];
   if (artists.length !== 1) {
     throw new Error(
@@ -88,10 +110,52 @@ async function resolveCatalogArtistId(ownerId: string) {
   return artists[0].id;
 }
 
-async function loadCatalogBundle(ownerId: string, artistId?: string): Promise<CatalogBundle> {
+async function loadCatalogBundle(
+  ownerId: string,
+  artistId?: string | null,
+): Promise<CatalogBundle> {
   const supabase = createCatalogClient();
   const music = asArtistScopedMusicClient(supabase);
-  const resolvedArtistId = artistId ?? await resolveCatalogArtistId(ownerId);
+  const resolvedArtistId = artistId === undefined
+    ? await resolveCatalogArtistId(ownerId)
+    : artistId;
+
+  let releasesQuery = music
+    .from("releases")
+    .select("*")
+    .eq("owner_id", ownerId)
+    .eq("is_public", true)
+    .eq("publish_state", "live")
+    .eq("is_archived", false);
+  let placementsQuery = music
+    .from("homepage_placements")
+    .select("*")
+    .eq("owner_id", ownerId)
+    .eq("enabled", true)
+    .order("display_order", { ascending: true });
+  let tracksQuery = music
+    .from("tracks")
+    .select("*")
+    .eq("owner_id", ownerId);
+  let externalLinksQuery = music
+    .from("release_external_links")
+    .select("*")
+    .eq("owner_id", ownerId);
+  let externalTrackIdsQuery = music
+    .from("track_external_ids")
+    .select("*")
+    .eq("owner_id", ownerId);
+
+  // Do not mention artist_id to PostgREST until the Ensemblis schema actually exists.
+  // This keeps old Atlas production and new Ensemblis code deployable in either order.
+  if (resolvedArtistId) {
+    releasesQuery = releasesQuery.eq("artist_id", resolvedArtistId);
+    placementsQuery = placementsQuery.eq("artist_id", resolvedArtistId);
+    tracksQuery = tracksQuery.eq("artist_id", resolvedArtistId);
+    externalLinksQuery = externalLinksQuery.eq("artist_id", resolvedArtistId);
+    externalTrackIdsQuery = externalTrackIdsQuery.eq("artist_id", resolvedArtistId);
+  }
+
   const [
     releasesResult,
     placementsResult,
@@ -100,37 +164,12 @@ async function loadCatalogBundle(ownerId: string, artistId?: string): Promise<Ca
     externalLinksResult,
     externalTrackIdsResult,
   ] = await Promise.all([
-    music
-      .from("releases")
-      .select("*")
-      .eq("owner_id", ownerId)
-      .eq("artist_id", resolvedArtistId)
-      .eq("is_public", true)
-      .eq("publish_state", "live")
-      .eq("is_archived", false),
-    music
-      .from("homepage_placements")
-      .select("*")
-      .eq("owner_id", ownerId)
-      .eq("artist_id", resolvedArtistId)
-      .eq("enabled", true)
-      .order("display_order", { ascending: true }),
-    music
-      .from("tracks")
-      .select("*")
-      .eq("owner_id", ownerId)
-      .eq("artist_id", resolvedArtistId),
+    releasesQuery,
+    placementsQuery,
+    tracksQuery,
     supabase.from("media_links").select("*").eq("owner_id", ownerId),
-    music
-      .from("release_external_links")
-      .select("*")
-      .eq("owner_id", ownerId)
-      .eq("artist_id", resolvedArtistId),
-    music
-      .from("track_external_ids")
-      .select("*")
-      .eq("owner_id", ownerId)
-      .eq("artist_id", resolvedArtistId),
+    externalLinksQuery,
+    externalTrackIdsQuery,
   ]);
 
   for (const result of [
@@ -151,10 +190,11 @@ async function loadCatalogBundle(ownerId: string, artistId?: string): Promise<Ca
   const tracks = (tracksResult.data ?? []).filter((t) =>
     releaseIds.has(t.release_id),
   );
+  const trackIds = new Set(tracks.map((track) => track.id));
   const mediaLinks = (mediaLinksResult.data ?? []).filter(
     (link) =>
       (link.release_id && releaseIds.has(link.release_id)) ||
-      (link.track_id && tracks.some((t) => t.id === link.track_id)),
+      (link.track_id && trackIds.has(link.track_id)),
   );
   const assetIds = [...new Set(mediaLinks.map((link) => link.media_asset_id))];
   const mediaAssets =
@@ -178,7 +218,7 @@ async function loadCatalogBundle(ownerId: string, artistId?: string): Promise<Ca
       releaseIds.has(link.release_id),
     ),
     externalTrackIds: (externalTrackIdsResult.data ?? []).filter((item) =>
-      tracks.some((track) => track.id === item.track_id),
+      trackIds.has(item.track_id),
     ),
   };
 }
