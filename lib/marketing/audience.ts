@@ -14,14 +14,13 @@ const AUDIENCE_SYNC_INTERVAL_MS = 15 * 60 * 1000;
 const MAX_POSTS_PER_PLATFORM = 8;
 const MAX_REPLY_DRAFTS_PER_CYCLE = 5;
 
+export type AudienceArtistScope = {
+  ownerId: string;
+  artistId: string;
+};
+
 function instagramUrl(path: string) {
   return `${INSTAGRAM_GRAPH_URL}/${INSTAGRAM_API_VERSION}${path}`;
-}
-
-function record(value: unknown) {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
 }
 
 function asJson(value: unknown) {
@@ -47,19 +46,24 @@ function initialSentiment(body: string): AudienceInteraction["sentiment"] {
   return "neutral";
 }
 
-async function upsertInteraction(row: Partial<AudienceInteraction> & Pick<AudienceInteraction, "owner_id" | "platform" | "interaction_type" | "external_interaction_id" | "body">) {
+type InteractionUpsert = Partial<AudienceInteraction> &
+  Pick<AudienceInteraction, "owner_id" | "platform" | "interaction_type" | "external_interaction_id" | "body"> & {
+    artist_id: string;
+  };
+
+async function upsertInteraction(row: InteractionUpsert) {
   const db = createAutonomyServiceClient();
   const { error } = await db.from("audience_interactions").upsert({
     ...row,
     status: row.status ?? initialStatus(row.body),
     sentiment: row.sentiment ?? initialSentiment(row.body),
-  }, { onConflict: "owner_id,platform,external_interaction_id", ignoreDuplicates: true });
+  }, { onConflict: "artist_id,platform,external_interaction_id", ignoreDuplicates: true });
   if (error) throw new Error(error.message);
 }
 
-async function syncInstagramComments(ownerId: string, postIds: string[]) {
+async function syncInstagramComments(ownerId: string, artistId: string, postIds: string[]) {
   if (!postIds.length) return 0;
-  const access = await requireSocialAccess(ownerId, "instagram");
+  const access = await requireSocialAccess(ownerId, artistId, "instagram");
   let imported = 0;
   for (const postId of postIds.slice(0, MAX_POSTS_PER_PLATFORM)) {
     const url = new URL(instagramUrl(`/${postId}/comments`));
@@ -82,6 +86,7 @@ async function syncInstagramComments(ownerId: string, postIds: string[]) {
       if (!comment.id || !comment.text) continue;
       await upsertInteraction({
         owner_id: ownerId,
+        artist_id: artistId,
         platform: "instagram",
         interaction_type: comment.parent_id ? "reply" : "comment",
         external_interaction_id: comment.id,
@@ -99,9 +104,9 @@ async function syncInstagramComments(ownerId: string, postIds: string[]) {
   return imported;
 }
 
-async function syncYouTubeComments(ownerId: string, videoIds: string[]) {
+async function syncYouTubeComments(ownerId: string, artistId: string, videoIds: string[]) {
   if (!videoIds.length) return 0;
-  const access = await requireSocialAccess(ownerId, "youtube", ["https://www.googleapis.com/auth/youtube.readonly"]);
+  const access = await requireSocialAccess(ownerId, artistId, "youtube", ["https://www.googleapis.com/auth/youtube.readonly"]);
   let imported = 0;
   for (const videoId of videoIds.slice(0, MAX_POSTS_PER_PLATFORM)) {
     const url = new URL(`${YOUTUBE_API_URL}/commentThreads`);
@@ -138,6 +143,7 @@ async function syncYouTubeComments(ownerId: string, videoIds: string[]) {
       if (!comment?.id || !snippet?.textOriginal) continue;
       await upsertInteraction({
         owner_id: ownerId,
+        artist_id: artistId,
         platform: "youtube",
         interaction_type: "comment",
         external_interaction_id: comment.id,
@@ -155,22 +161,27 @@ async function syncYouTubeComments(ownerId: string, videoIds: string[]) {
   return imported;
 }
 
-async function ownerIdsWithRecentPublications() {
+async function artistScopesWithRecentPublications(): Promise<AudienceArtistScope[]> {
   const client = createMarketingServiceClient();
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await client.from("publication_jobs")
-    .select("owner_id")
+    .select("owner_id,artist_id")
     .eq("status", "published")
     .gte("published_at", since);
   if (error) throw new Error(error.message);
-  return Array.from(new Set((data ?? []).map((row) => row.owner_id)));
+  const unique = new Map<string, AudienceArtistScope>();
+  for (const row of data ?? []) {
+    unique.set(`${row.owner_id}:${row.artist_id}`, { ownerId: row.owner_id, artistId: row.artist_id });
+  }
+  return [...unique.values()];
 }
 
-async function recentPublishedIds(ownerId: string, platform: "Instagram" | "YouTube Shorts") {
+async function recentPublishedIds(ownerId: string, artistId: string, platform: "Instagram" | "YouTube Shorts") {
   const client = createMarketingServiceClient();
   const { data, error } = await client.from("publication_jobs")
     .select("external_post_id")
     .eq("owner_id", ownerId)
+    .eq("artist_id", artistId)
     .eq("platform", platform)
     .eq("status", "published")
     .not("external_post_id", "is", null)
@@ -180,12 +191,13 @@ async function recentPublishedIds(ownerId: string, platform: "Instagram" | "YouT
   return (data ?? []).map((row) => row.external_post_id).filter((id): id is string => Boolean(id));
 }
 
-async function syncDue(ownerId: string) {
+async function syncDue(ownerId: string, artistId: string) {
   const client = createMarketingServiceClient();
   const threshold = new Date(Date.now() - AUDIENCE_SYNC_INTERVAL_MS).toISOString();
   const { data, error } = await client.from("marketing_events")
     .select("occurred_at")
     .eq("owner_id", ownerId)
+    .eq("artist_id", artistId)
     .eq("event_type", "audience.sync.completed")
     .gte("occurred_at", threshold)
     .order("occurred_at", { ascending: false })
@@ -195,7 +207,7 @@ async function syncDue(ownerId: string) {
   return !data;
 }
 
-async function draftReply(ownerId: string, interaction: AudienceInteraction) {
+async function draftReply(ownerId: string, artistId: string, interaction: AudienceInteraction) {
   const result = await runAtlasAiTask<{
     reply: string;
     shouldReply: boolean;
@@ -205,7 +217,7 @@ async function draftReply(ownerId: string, interaction: AudienceInteraction) {
     ownerId,
     task: "community.reply",
     purpose: "community.reply",
-    promptVersion: "community-reply-v1",
+    promptVersion: "community-reply-v2-artist-scoped",
     schema: {
       type: "object",
       additionalProperties: false,
@@ -218,29 +230,31 @@ async function draftReply(ownerId: string, interaction: AudienceInteraction) {
       },
     },
     instructions: [
-      "You draft replies for Atlas Irwin, an electronic/nu-disco artist project.",
+      "You draft replies on behalf of the current music artist.",
       "Sound like a real artist replying personally, not a brand, marketer, assistant or AI.",
       "Be warm, short and specific to the person's message. Never add a sales pitch, streaming CTA, hashtags or generic engagement bait.",
-      "Do not invent production facts, collaborators, release dates or personal details.",
+      "Do not invent production facts, collaborators, release dates, identity details or personal details.",
       "For criticism, conflict, collaboration, booking, money, rights, legal or sensitive messages, set shouldReply=false and provide a neutral draft for human review.",
       "Simple emoji-only praise normally does not need a drafted reply.",
     ].join("\n"),
     input: JSON.stringify({
+      artistId,
       platform: interaction.platform,
       author: interaction.author_name || interaction.author_handle,
       message: interaction.body,
     }),
-    inputContext: { interactionId: interaction.id, platform: interaction.platform },
+    inputContext: { artistId, interactionId: interaction.id, platform: interaction.platform },
     cacheMode: "use",
   });
   return result.value;
 }
 
-async function draftPendingReplies(ownerId: string) {
+async function draftPendingReplies(ownerId: string, artistId: string) {
   const db = createAutonomyServiceClient();
   const { data, error } = await db.from("audience_interactions")
     .select("*")
     .eq("owner_id", ownerId)
+    .eq("artist_id", artistId)
     .eq("status", "needs_reply")
     .is("suggested_reply", null)
     .order("occurred_at", { ascending: false })
@@ -249,14 +263,14 @@ async function draftPendingReplies(ownerId: string) {
   let drafted = 0;
   for (const interaction of data ?? []) {
     try {
-      const suggestion = await draftReply(ownerId, interaction);
+      const suggestion = await draftReply(ownerId, artistId, interaction);
       const { error: updateError } = await db.from("audience_interactions").update({
         suggested_reply: suggestion.reply,
         reply_confidence: Math.max(0, Math.min(1, Number(suggestion.confidence) || 0)),
         sentiment: suggestion.sentiment,
         status: suggestion.shouldReply ? "drafted" : "needs_reply",
         auto_reply_eligible: false,
-      }).eq("id", interaction.id).eq("owner_id", ownerId);
+      }).eq("id", interaction.id).eq("owner_id", ownerId).eq("artist_id", artistId);
       if (updateError) throw new Error(updateError.message);
       drafted += 1;
     } catch {
@@ -266,50 +280,55 @@ async function draftPendingReplies(ownerId: string) {
   return drafted;
 }
 
-export async function syncAudienceInteractions() {
-  const owners = await ownerIdsWithRecentPublications();
+export async function syncAudienceInteractions(scope?: AudienceArtistScope) {
+  const scopes = scope ? [scope] : await artistScopesWithRecentPublications();
   const client = createMarketingServiceClient();
   let imported = 0;
   let drafted = 0;
-  let ownersSynced = 0;
-  for (const ownerId of owners) {
-    if (!await syncDue(ownerId)) continue;
+  let artistsSynced = 0;
+  for (const { ownerId, artistId } of scopes) {
+    if (!await syncDue(ownerId, artistId)) continue;
     const [instagramIds, youtubeIds] = await Promise.all([
-      recentPublishedIds(ownerId, "Instagram"),
-      recentPublishedIds(ownerId, "YouTube Shorts"),
+      recentPublishedIds(ownerId, artistId, "Instagram"),
+      recentPublishedIds(ownerId, artistId, "YouTube Shorts"),
     ]);
     const results = await Promise.allSettled([
-      syncInstagramComments(ownerId, instagramIds),
-      syncYouTubeComments(ownerId, youtubeIds),
+      syncInstagramComments(ownerId, artistId, instagramIds),
+      syncYouTubeComments(ownerId, artistId, youtubeIds),
     ]);
-    for (const result of results) if (result.status === "fulfilled") imported += result.value;
-    drafted += await draftPendingReplies(ownerId);
+    let artistImported = 0;
+    for (const result of results) if (result.status === "fulfilled") artistImported += result.value;
+    const artistDrafted = await draftPendingReplies(ownerId, artistId);
+    imported += artistImported;
+    drafted += artistDrafted;
     await client.from("marketing_events").insert({
       owner_id: ownerId,
+      artist_id: artistId,
       campaign_id: null,
       event_type: "audience.sync.completed",
       entity_type: "audience",
       entity_id: null,
-      payload: { imported },
+      payload: { imported: artistImported, drafted: artistDrafted },
     });
-    ownersSynced += 1;
+    artistsSynced += 1;
   }
-  return { ownersSynced, imported, drafted };
+  return { artistsSynced, ownersSynced: artistsSynced, imported, drafted };
 }
 
-export async function sendAudienceReply(ownerId: string, interactionId: string, reply: string) {
+export async function sendAudienceReply(ownerId: string, artistId: string, interactionId: string, reply: string) {
   const db = createAutonomyServiceClient();
   const { data: interaction, error } = await db.from("audience_interactions")
     .select("*")
     .eq("id", interactionId)
     .eq("owner_id", ownerId)
+    .eq("artist_id", artistId)
     .single();
-  if (error || !interaction) throw new Error(error?.message || "Audience interaction was not found.");
+  if (error || !interaction) throw new Error(error?.message || "Audience interaction was not found for this artist.");
   const message = reply.trim();
   if (!message || message.length > 1000) throw new Error("Reply must be between 1 and 1000 characters.");
 
   if (interaction.platform === "instagram") {
-    const access = await requireSocialAccess(ownerId, "instagram");
+    const access = await requireSocialAccess(ownerId, artistId, "instagram");
     const response = await fetch(instagramUrl(`/${interaction.external_interaction_id}/replies`), {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -321,7 +340,7 @@ export async function sendAudienceReply(ownerId: string, interactionId: string, 
       throw new Error(`Instagram reply failed (${response.status}): ${detail.slice(0, 400)}`);
     }
   } else if (interaction.platform === "youtube") {
-    const access = await requireSocialAccess(ownerId, "youtube", ["https://www.googleapis.com/auth/youtube.force-ssl"]);
+    const access = await requireSocialAccess(ownerId, artistId, "youtube", ["https://www.googleapis.com/auth/youtube.force-ssl"]);
     const url = new URL(`${YOUTUBE_API_URL}/comments`);
     url.searchParams.set("part", "snippet");
     const response = await fetch(url, {
@@ -342,7 +361,7 @@ export async function sendAudienceReply(ownerId: string, interactionId: string, 
     suggested_reply: message,
     status: "replied",
     auto_reply_eligible: false,
-  }).eq("id", interaction.id).eq("owner_id", ownerId);
+  }).eq("id", interaction.id).eq("owner_id", ownerId).eq("artist_id", artistId);
   if (updateError) throw new Error(updateError.message);
   return { replied: true };
 }
