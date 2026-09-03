@@ -63,6 +63,7 @@ export async function saveContact(form: FormData) {
   const { error } = await mutation;
   if (error) throw new Error(error.message);
   revalidatePath("/studio/outreach");
+  if (id) revalidatePath(`/studio/outreach/${id}`);
 }
 
 export async function saveOutreachMessage(form: FormData) {
@@ -103,5 +104,44 @@ export async function saveOutreachMessage(form: FormData) {
     response_notes: nullable(form, "response_notes"),
   });
   if (error) throw new Error(error.message);
+  revalidatePath("/studio/outreach");
+  revalidatePath(`/studio/outreach/${contactId}`);
+}
+
+export async function updateOutreachResponse(form: FormData) {
+  const { artist, operational } = await outreachContext(form);
+  const id = z.uuid().parse(value(form, "id"));
+  const { data: message, error: lookupError } = await operational.from("outreach_messages")
+    .select("id,contact_id")
+    .eq("id", id)
+    .eq("owner_id", artist.userId)
+    .eq("artist_id", artist.artistId)
+    .maybeSingle();
+  if (lookupError) throw new Error(lookupError.message);
+  if (!message) throw new Error("Outreach message does not belong to the active artist.");
+
+  const { error } = await operational.from("outreach_messages").update({
+    response_status: nullable(form, "response_status"),
+    response_notes: nullable(form, "response_notes"),
+    follow_up_at: nullable(form, "follow_up_at"),
+  }).eq("id", id).eq("owner_id", artist.userId).eq("artist_id", artist.artistId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/studio/outreach");
+  revalidatePath(`/studio/outreach/${message.contact_id}`);
+}
+
+export async function deleteOutreachRecord(form: FormData) {
+  const { artist, operational } = await outreachContext(form);
+  const id = z.uuid().parse(value(form, "id"));
+  const table = z.enum(["outreach_contacts", "outreach_messages"]).parse(value(form, "table"));
+  if (table === "outreach_contacts") {
+    const { error } = await operational.from("outreach_contacts").delete()
+      .eq("id", id).eq("owner_id", artist.userId).eq("artist_id", artist.artistId);
+    if (error) throw new Error(error.message);
+  } else {
+    const { error } = await operational.from("outreach_messages").delete()
+      .eq("id", id).eq("owner_id", artist.userId).eq("artist_id", artist.artistId);
+    if (error) throw new Error(error.message);
+  }
   revalidatePath("/studio/outreach");
 }
