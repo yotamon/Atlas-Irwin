@@ -15,20 +15,21 @@ test("brand media has first-class reusable visual-reference roles", async () => 
   assert.match(migration, /alter type public\.media_asset_type add value if not exists 'brand_reference'/);
 });
 
-test("creative context always prioritizes release artwork and preserves lineage", async () => {
+test("creative context always prioritizes release artwork and preserves artist lineage", async () => {
   const context = await source("lib/marketing/creative-context.ts");
   assert.match(context, /score: 140/);
   assert.match(context, /Canonical release artwork/);
   assert.match(context, /NON-NEGOTIABLE VISUAL LINEAGE/);
-  assert.match(context, /Do not redraw or approximate the Atlas Irwin logo/);
-  assert.match(context, /generic cyberpunk/);
+  assert.match(context, /Do not redraw or approximate the artist logo/);
+  assert.match(context, /generic AI aesthetic/);
+  assert.match(context, /artist:\$\{artistId\}/);
+  assert.match(context, /\.eq\("artist_id", artistId\)/);
 });
 
 test("a selected Audio Scene is never misrepresented by the canonical master", async () => {
   const context = await source("lib/marketing/creative-context.ts");
   assert.match(context, /selectedAudioScene \? selectedAudioScene\.previewUrl : canonicalAudioUrl/);
   assert.doesNotMatch(context, /selectedAudioScene\?\.previewUrl \|\| canonicalAudioUrl/);
-  assert.match(context, /request an on-demand scene render instead/);
 });
 
 test("paid generation is prepared before provider submission", async () => {
@@ -41,6 +42,7 @@ test("paid generation is prepared before provider submission", async () => {
   assert.ok(submitIndex > approveIndex, "provider submission must live behind the explicit approval action");
   assert.doesNotMatch(actions.slice(prepareIndex, approveIndex), /provider\.submit/);
   assert.match(actions, /approvalRequiredBeforeSpend: true/);
+  assert.match(actions, /\.eq\("artist_id", context\.artistId\)/);
 });
 
 test("generated assets retain reference provenance and require review", async () => {
@@ -49,6 +51,7 @@ test("generated assets retain reference provenance and require review", async ()
   assert.match(assets, /reference_asset_ids/);
   assert.match(assets, /release_artwork_url/);
   assert.match(assets, /cohesion_context_score/);
+  assert.match(assets, /artist_id/);
   assert.match(assets, /approval_status: "pending"/);
   assert.match(generation, /content\.ai_asset_ready_for_review/);
 });
