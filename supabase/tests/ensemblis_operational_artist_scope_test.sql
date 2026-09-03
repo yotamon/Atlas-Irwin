@@ -1,6 +1,6 @@
 begin;
 
-select plan(17);
+select plan(21);
 
 insert into auth.users (id,email,aud,role,created_at,updated_at)
 values ('15000000-0000-0000-0000-000000000001','ops@example.com','authenticated','authenticated',now(),now());
@@ -101,6 +101,51 @@ select is(
   (select status from public.automation_jobs where job_type='primary_claim_guard'),
   'queued',
   'artist-scoped automation claim leaves sibling artist jobs untouched'
+);
+
+-- Campaign AI spend is service-role sensitive: the same owner manages both artists, but one
+-- artist must never settle/release the sibling artist's paid-generation reservation.
+update public.campaigns
+set mode='autopilot'
+where id in ('55000000-0000-0000-0000-000000000001','55000000-0000-0000-0000-000000000002');
+
+insert into public.generation_runs(id,owner_id,artist_id,campaign_id,release_id,purpose,provider,model,status,estimated_cost_usd)
+values
+ ('85000000-0000-0000-0000-000000000001','15000000-0000-0000-0000-000000000001','35000000-0000-0000-0000-000000000001','55000000-0000-0000-0000-000000000001','45000000-0000-0000-0000-000000000001','content_asset:65000000-0000-0000-0000-000000000002','test','test','queued',1),
+ ('85000000-0000-0000-0000-000000000002','15000000-0000-0000-0000-000000000001','35000000-0000-0000-0000-000000000002','55000000-0000-0000-0000-000000000002','45000000-0000-0000-0000-000000000002','content_asset:65000000-0000-0000-0000-000000000002','test','test','queued',1);
+
+insert into public.campaign_ai_spend_envelopes(owner_id,artist_id,campaign_id,enabled,hard_limit_usd,max_single_generation_usd)
+values
+ ('15000000-0000-0000-0000-000000000001','35000000-0000-0000-0000-000000000001','55000000-0000-0000-0000-000000000001',true,10,5),
+ ('15000000-0000-0000-0000-000000000001','35000000-0000-0000-0000-000000000002','55000000-0000-0000-0000-000000000002',true,10,5);
+
+select lives_ok(
+ $$select public.reserve_campaign_ai_spend_for_artist(
+   '15000000-0000-0000-0000-000000000001','35000000-0000-0000-0000-000000000002',
+   '55000000-0000-0000-0000-000000000002','85000000-0000-0000-0000-000000000002','image',1
+ )$$,
+ 'side artist can reserve its own campaign AI spend'
+);
+select is(
+  (select artist_id from public.campaign_ai_spend_reservations where generation_run_id='85000000-0000-0000-0000-000000000002'),
+  '35000000-0000-0000-0000-000000000002'::uuid,
+  'campaign AI spend reservation persists the generation artist'
+);
+select throws_ok(
+ $$select public.settle_campaign_ai_spend_for_artist(
+   '15000000-0000-0000-0000-000000000001','35000000-0000-0000-0000-000000000001',
+   (select id from public.campaign_ai_spend_reservations where generation_run_id='85000000-0000-0000-0000-000000000002'),1,'provider_actual'
+ )$$,
+ 'P0001','Campaign AI spend reservation does not belong to the requested artist.',
+ 'service-role spend settlement cannot cross sibling artists'
+);
+select is(
+  (select status from public.settle_campaign_ai_spend_for_artist(
+    '15000000-0000-0000-0000-000000000001','35000000-0000-0000-0000-000000000002',
+    (select id from public.campaign_ai_spend_reservations where generation_run_id='85000000-0000-0000-0000-000000000002'),1,'provider_actual'
+  )),
+  'settled',
+  'the correct artist can settle its own campaign AI spend'
 );
 
 select set_config('request.jwt.claim.sub','15000000-0000-0000-0000-000000000001',true);
