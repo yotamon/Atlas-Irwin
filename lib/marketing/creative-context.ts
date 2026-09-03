@@ -3,6 +3,8 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { conciseLyricsPromptContext, EMPTY_LYRICS_CONTEXT, loadTrackLyricsContext, type TrackLyricsContext } from "@/lib/lyrics-intelligence/context";
 import { mediaKind, mediaMetadata } from "@/lib/studio/media";
+import type { ArtistScopedCoreOperationalDatabase } from "@/types/artist-scoped-operational-database";
+import type { ArtistScopedMusicDatabase } from "@/types/artist-scoped-music-database";
 import type { Json, MediaAsset, MediaLink } from "@/types/database";
 import type { LyricsDatabase } from "@/types/lyrics-database";
 import type { AudioScene, StemDatabase } from "@/types/stem-database";
@@ -38,6 +40,7 @@ export type CreativeAudioSceneReference = {
 };
 
 export type CreativeReferenceContext = {
+  artistId: string;
   release: {
     id: string | null;
     title: string;
@@ -65,13 +68,13 @@ export type CreativeReferenceContext = {
 type ContextInput = {
   db: SupabaseClient<VideoDatabase>;
   ownerId: string;
+  artistId: string;
   releaseId?: string | null;
   contentItemId?: string | null;
 };
 
 const BRAND_ASSET_TYPES = new Set(["brand_reference", "brand_logo", "brand_motion_reference"]);
 const APPROVED_REFERENCE_TAGS = new Set([
-  "atlas-brand",
   "brand-reference",
   "visual-language",
   "approved-reference",
@@ -112,21 +115,28 @@ function referenceReason(link: MediaLink | undefined, asset: MediaAsset, source:
   if (source === "release" && role === "alternate_artwork") return "Approved alternate artwork from the same release world.";
   if (source === "release") return `Existing ${role.replaceAll("_", " ")} already attached to this release.`;
   if (source === "content") return "Existing media already attached to this exact content item, useful for continuity when revising.";
-  if (source === "brand" && role === "brand_motion_reference") return "Approved Atlas Irwin motion language reference.";
-  if (source === "brand" && role === "brand_logo") return "Official Atlas Irwin identity asset. Use as identity evidence, not as a generative style shortcut.";
-  if (source === "brand") return "Approved Atlas Irwin visual-language reference.";
-  return "Library asset explicitly tagged as an approved creative reference.";
+  if (source === "brand" && role === "brand_motion_reference") return "Approved artist-specific motion-language reference.";
+  if (source === "brand" && role === "brand_logo") return "Official artist-specific identity asset. Use as identity evidence, not as a generative style shortcut.";
+  if (source === "brand") return "Approved artist-specific visual-language reference.";
+  return "Artist-specific library asset explicitly tagged as an approved creative reference.";
 }
 
 function tags(asset: MediaAsset) {
   return new Set(mediaMetadata(asset).tags.map((tag) => tag.toLowerCase()));
 }
 
-function sourceForAsset(asset: MediaAsset, link: MediaLink | undefined, releaseId?: string | null, contentItemId?: string | null): CreativeReferenceSource | null {
+function sourceForAsset(
+  asset: MediaAsset,
+  link: MediaLink | undefined,
+  artistId: string,
+  releaseId?: string | null,
+  contentItemId?: string | null,
+): CreativeReferenceSource | null {
   if (link?.content_item_id && link.content_item_id === contentItemId) return "content";
   if (link?.release_id && link.release_id === releaseId) return "release";
-  if (BRAND_ASSET_TYPES.has(asset.asset_type)) return "brand";
   const assetTags = tags(asset);
+  if (!assetTags.has(`artist:${artistId}`.toLowerCase())) return null;
+  if (BRAND_ASSET_TYPES.has(asset.asset_type)) return "brand";
   if ([...APPROVED_REFERENCE_TAGS].some((tag) => assetTags.has(tag))) return "approved_library";
   return null;
 }
@@ -238,33 +248,39 @@ function lyricSceneContext(lyrics: TrackLyricsContext, contentText: string) {
   ].filter(Boolean).join(" ");
 }
 
-export async function loadCreativeReferenceContext({ db, ownerId, releaseId, contentItemId }: ContextInput): Promise<CreativeReferenceContext> {
+export async function loadCreativeReferenceContext({ db, ownerId, artistId, releaseId, contentItemId }: ContextInput): Promise<CreativeReferenceContext> {
+  const musicDb = db as unknown as SupabaseClient<ArtistScopedMusicDatabase>;
+  const operationalDb = db as unknown as SupabaseClient<ArtistScopedCoreOperationalDatabase>;
   const stemDb = db as unknown as SupabaseClient<StemDatabase>;
   const lyricsDb = db as unknown as SupabaseClient<LyricsDatabase>;
   const [releaseResult, brandResult, assetResult, linkResult, tracksResult, contentResult] = await Promise.all([
     releaseId
-      ? db.from("releases")
+      ? musicDb.from("releases")
           .select("id,title,artwork_url,visual_direction,color_palette")
           .eq("id", releaseId)
           .eq("owner_id", ownerId)
+          .eq("artist_id", artistId)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
-    db.from("brand_settings").select("section,content").eq("owner_id", ownerId),
+    operationalDb.from("brand_settings").select("section,content").eq("owner_id", ownerId).eq("artist_id", artistId),
     db.from("media_assets").select("*").eq("owner_id", ownerId),
-    db.from("media_links").select("*").eq("owner_id", ownerId),
+    musicDb.from("media_links").select("*").eq("owner_id", ownerId).eq("artist_id", artistId),
     releaseId
-      ? db.from("tracks").select("id,title,audio_url,is_primary").eq("owner_id", ownerId).eq("release_id", releaseId).order("is_primary", { ascending: false })
+      ? musicDb.from("tracks").select("id,title,audio_url,is_primary").eq("owner_id", ownerId).eq("artist_id", artistId).eq("release_id", releaseId).order("is_primary", { ascending: false })
       : Promise.resolve({ data: [], error: null }),
     contentItemId
       ? stemDb.from("content_items")
           .select("id,title,platform,format,hook_text,production_notes,audio_scene_id")
           .eq("id", contentItemId)
           .eq("owner_id", ownerId)
+          .eq("artist_id", artistId)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
   ]);
   const firstError = [releaseResult, brandResult, assetResult, linkResult, tracksResult, contentResult].find((result) => result.error)?.error;
   if (firstError) throw new Error(firstError.message);
+  if (releaseId && !releaseResult.data) throw new Error("Creative release does not belong to the active artist.");
+  if (contentItemId && !contentResult.data) throw new Error("Creative content does not belong to the active artist.");
 
   const release = releaseResult.data;
   const assets = (assetResult.data ?? []) as MediaAsset[];
@@ -293,7 +309,7 @@ export async function loadCreativeReferenceContext({ db, ownerId, releaseId, con
     const kind = mediaKind(asset.mime_type);
     if (kind !== "image" && kind !== "video") continue;
     const link = linkedByAsset.get(asset.id);
-    const source = sourceForAsset(asset, link, releaseId, contentItemId);
+    const source = sourceForAsset(asset, link, artistId, releaseId, contentItemId);
     if (!source) continue;
     const metadata = mediaMetadata(asset);
     candidates.push({
@@ -353,6 +369,7 @@ export async function loadCreativeReferenceContext({ db, ownerId, releaseId, con
     const sceneResult = await stemDb.from("audio_scenes")
       .select("*")
       .eq("owner_id", ownerId)
+      .eq("artist_id", artistId)
       .eq("track_id", primaryTrack.id)
       .eq("status", "ready")
       .order("is_pinned", { ascending: false })
@@ -378,27 +395,24 @@ export async function loadCreativeReferenceContext({ db, ownerId, releaseId, con
       const preview = scene.preview_asset_id ? assetById.get(scene.preview_asset_id) : null;
       const reason = explicitId === scene.id
         ? "Artist-selected Audio Scene for this content item."
-        : `Atlas content-fit score ${Math.round(fit)} based on the brief, platform, Lyrics Intelligence and musical intent.`;
+        : `Ensemblis content-fit score ${Math.round(fit)} based on the brief, platform, Lyrics Intelligence and musical intent.`;
       return toAudioSceneReference(scene, httpUrl(preview?.public_url), reason);
     });
     if (selected) {
       selectedAudioScene = audioScenes.find((scene) => scene.id === selected.scene.id)
-        ?? toAudioSceneReference(selected.scene, null, `Atlas content-fit score ${Math.round(selected.fit)}.`);
+        ?? toAudioSceneReference(selected.scene, null, `Ensemblis content-fit score ${Math.round(selected.fit)}.`);
     }
   }
 
-  // A selected Audio Scene is a specific mix recipe. Never misrepresent the canonical master as
-  // that scene merely because no portable bounce has been materialized yet. Downstream callers
-  // that require one audio URL can request an on-demand scene render instead.
   const audioReferenceUrl = selectedAudioScene ? selectedAudioScene.previewUrl : canonicalAudioUrl;
   const visualDirection = release?.visual_direction?.trim() || "";
   const colorPalette = Array.isArray(release?.color_palette)
     ? release.color_palette.filter((value): value is string => typeof value === "string" && Boolean(value.trim()))
     : [];
-  const visualWorld = brand.get("Visual world") || "Warm electronic glow, elegant technology, sensual afterhours energy, analog warmth, movement, and restrained futurism.";
-  const visualExclusions = brand.get("Visual exclusions") || "Cheap cyberpunk, generic sci-fi, robotic clichés, faceless stock-like characters, neon overload, and obvious AI gimmicks.";
+  const visualWorld = brand.get("Visual world") || "No artist-specific visual world has been saved yet. Stay close to release artwork and artist-tagged references rather than inventing a generic aesthetic.";
+  const visualExclusions = brand.get("Visual exclusions") || "Avoid generic AI aesthetics, visual clichés, fake popularity signals, broken typography and unrelated spectacle.";
   const promptTemplate = brand.get("Visual prompt templates") || "";
-  const continuityRules = brand.get("Visual continuity rules") || "Treat approved Atlas Irwin references as art-direction evidence. New work should extend the same visual DNA rather than inventing a new identity for every post.";
+  const continuityRules = brand.get("Visual continuity rules") || "Treat release artwork and artist-tagged approved references as art-direction evidence. Extend the same visual DNA rather than inventing a new identity for every post.";
   const cohesionScore = Math.min(
     100,
     35 +
@@ -409,9 +423,10 @@ export async function loadCreativeReferenceContext({ db, ownerId, releaseId, con
   );
 
   return {
+    artistId,
     release: {
       id: release?.id ?? null,
-      title: release?.title || "Atlas Irwin",
+      title: release?.title || "Artist release",
       artworkUrl,
       visualDirection,
       colorPalette,
@@ -445,7 +460,7 @@ export function buildCohesiveVisualPrompt(input: {
   const motionManifest = context.videoReferences
     .map((reference, index) => `Motion reference ${index + 1}: ${reference.title}. ${reference.reason}`)
     .join("\n");
-  const palette = context.release.colorPalette.length ? context.release.colorPalette.join(", ") : "derive the palette from the supplied artwork and brand references";
+  const palette = context.release.colorPalette.length ? context.release.colorPalette.join(", ") : "derive the palette from the supplied artwork and artist-specific references";
   const outputRule = input.outputKind === "video"
     ? "Create a short, editorial music visual with believable motion, intentional camera behavior, tactile detail, and no fake crowd or stock-footage feeling. The motion should feel directed rather than generated."
     : "Create an editorial campaign image with intentional composition, believable material detail, restrained retouching, and a finish that could plausibly come from a professional art director and photographer/designer.";
@@ -463,16 +478,16 @@ export function buildCohesiveVisualPrompt(input: {
   const lyricsDirection = JSON.stringify(conciseLyricsPromptContext(context.lyrics), null, 2);
 
   return [
-    `Create one ${input.outputKind} asset for Atlas Irwin: ${input.contentTitle}.`,
+    `Create one ${input.outputKind} asset for this artist: ${input.contentTitle}.`,
     `Destination: ${input.platform} / ${input.format}.`,
     "NON-NEGOTIABLE VISUAL LINEAGE:",
     context.release.artworkUrl
       ? "The supplied release artwork is the primary art-direction anchor. The result must visibly belong to the exact same release world. Preserve recognisable palette, material, geometry, lighting logic and signature motifs. When composition allows, include the artwork as a recognisable intentional object or graphic element rather than replacing it with unrelated AI imagery."
-      : "No release artwork is available, so rely more heavily on the approved Atlas Irwin brand references and visual rules.",
-    `Atlas Irwin visual world: ${context.brand.visualWorld}`,
+      : "No release artwork is available, so rely only on the active artist's saved visual rules and artist-tagged approved references.",
+    `Artist visual world: ${context.brand.visualWorld}`,
     context.release.visualDirection ? `Release-specific visual direction: ${context.release.visualDirection}` : "",
     `Palette: ${palette}.`,
-    context.brand.promptTemplate ? `Reusable Atlas prompt language: ${context.brand.promptTemplate}` : "",
+    context.brand.promptTemplate ? `Reusable artist prompt language: ${context.brand.promptTemplate}` : "",
     `Continuity rule: ${context.brand.continuityRules}`,
     referenceManifest,
     motionManifest,
@@ -482,13 +497,13 @@ export function buildCohesiveVisualPrompt(input: {
     "MUSICAL DIRECTION:",
     audioDirection,
     "REFERENCE HANDLING:",
-    "Use the supplied references as concrete art-direction evidence, not as loose inspiration. Do not average them into generic cyberpunk. Do not make a collage unless the brief explicitly asks for one. Do not redraw or approximate the Atlas Irwin logo. If an exact logo treatment is required, leave clean composition space for deterministic placement later.",
+    "Use the supplied references as concrete art-direction evidence, not as loose inspiration. Do not average them into a generic AI aesthetic. Do not make a collage unless the brief explicitly asks for one. Do not redraw or approximate the artist logo. If an exact logo treatment is required, leave clean composition space for deterministic placement later.",
     "HUMAN-MADE QUALITY BAR:",
     "Avoid glossy AI perfection, plastic skin/materials, impossible micro-detail, over-symmetry, random decorative objects, meaningless pseudo-typography, generic neon city scenes, stock-looking people, excessive lens flare, and visual motifs unrelated to the release. Prefer one strong idea, real-world imperfection, controlled negative space, tactile surfaces, coherent lighting and editorial restraint.",
     `Avoid: ${context.brand.visualExclusions}`,
     `Creative brief: ${input.creativeBrief || input.hook || input.contentTitle}`,
     input.hook ? `Marketing hook for context only, do not automatically render it as text: ${input.hook}` : "",
     outputRule,
-    "Do not add readable text unless the creative brief explicitly requires typography. The final asset should feel authored, specific and recognisably Atlas Irwin, not like a prompt demo.",
+    "Do not add readable text unless the creative brief explicitly requires typography. The final asset should feel authored, specific and recognisably part of this artist's world, not like a prompt demo.",
   ].filter(Boolean).join("\n\n");
 }
