@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { updateModeFromProviderMetadata } from "@/lib/distribution/update-safety";
 import { beginDistributionUpdate, requestDistributionTakedown, syncDistributionStatus } from "@/app/studio/distribution-actions-safe";
 import type { DistributionDatabase } from "@/types/distribution-database";
@@ -9,15 +10,18 @@ type Db = SupabaseClient<DistributionDatabase>;
 export default async function ReleaseDistributionLifecycle({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { supabase, user } = await requireStudioAdmin();
+  const artist = await resolveDefaultArtistContext(supabase, user);
   const db = supabase as unknown as Db;
-  const [configResult, deliveriesResult, operationsResult] = await Promise.all([
-    db.from("release_distribution_configs").select("state,provider_release_id,provider_metadata").eq("release_id", id).eq("owner_id", user.id).maybeSingle(),
-    db.from("distribution_deliveries").select("id,store_id,store_name,state,provider_status,store_url").eq("release_id", id).eq("owner_id", user.id).order("store_name"),
-    db.from("distribution_provider_operations").select("id,state,operation_type").eq("release_id", id).eq("owner_id", user.id).in("state", ["started", "ambiguous"]),
+  const [releaseResult, configResult, deliveriesResult, operationsResult] = await Promise.all([
+    db.from("releases").select("id").eq("id", id).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
+    db.from("release_distribution_configs").select("state,provider_release_id,provider_metadata").eq("release_id", id).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
+    db.from("distribution_deliveries").select("id,store_id,store_name,state,provider_status,store_url").eq("release_id", id).eq("owner_id", user.id).eq("artist_id", artist.artistId).order("store_name"),
+    db.from("distribution_provider_operations").select("id,state,operation_type").eq("release_id", id).eq("owner_id", user.id).eq("artist_id", artist.artistId).in("state", ["started", "ambiguous"]),
   ]);
-  for (const result of [configResult, deliveriesResult, operationsResult]) {
+  for (const result of [releaseResult, configResult, deliveriesResult, operationsResult]) {
     if (result.error) throw new Error(result.error.message);
   }
+  if (!releaseResult.data) return null;
 
   const config = configResult.data;
   const deliveries = deliveriesResult.data ?? [];
@@ -29,6 +33,7 @@ export default async function ReleaseDistributionLifecycle({ params }: { params:
   const stableForCorrection = Boolean(config && ["delivered", "partially_live", "live", "rejected"].includes(config.state));
   const lifecycleVisible = Boolean(config?.provider_release_id && (stableForCorrection || updateMode.active || ["error", "takedown_pending"].includes(config.state) || eligible.length));
   if (!lifecycleVisible) return null;
+  const artistInput = <input type="hidden" name="artist_id" value={artist.artistId} />;
 
   return <div className="distribution-page distribution-release-workspace">
     <section className="distribution-section distribution-lifecycle-card">
@@ -39,7 +44,7 @@ export default async function ReleaseDistributionLifecycle({ params }: { params:
           <p>Once music is distributed, Ensemblis treats corrections and takedowns as explicit lifecycle operations. Identity-changing edits never overwrite an existing live release.</p>
         </div>
         <form action={syncDistributionStatus}>
-          <input type="hidden" name="release_id" value={id} />
+          {artistInput}<input type="hidden" name="release_id" value={id} />
           <button className="button" type="submit">Refresh store status</button>
         </form>
       </div>
@@ -57,7 +62,7 @@ export default async function ReleaseDistributionLifecycle({ params }: { params:
       </div> : stableForCorrection ? <div className="distribution-form-block distribution-correction-start">
         <div><h3>Need to correct a distributed release?</h3><p>Start a guarded correction to unlock safe metadata editing. Ensemblis first reconciles the provider-assigned UPC/ISRCs and blocks any identity-changing edit that requires a takedown + new release.</p></div>
         <form action={beginDistributionUpdate}>
-          <input type="hidden" name="release_id" value={id} />
+          {artistInput}<input type="hidden" name="release_id" value={id} />
           <button className="button" type="submit" disabled={hasAnyUnresolvedOperation}>Start correction</button>
         </form>
         {hasAnyUnresolvedOperation ? <small className="distribution-muted">Resolve the outstanding external operation before starting a correction.</small> : null}
@@ -66,7 +71,7 @@ export default async function ReleaseDistributionLifecycle({ params }: { params:
       {unresolvedTakedown ? <div className="distribution-feedback error" role="alert"><strong>Reconciliation required</strong><span>A previous takedown has an uncertain provider result. Refresh status or resolve it in Distribution Operations before another removal request.</span></div> : null}
 
       {eligible.length ? <form action={requestDistributionTakedown} className="distribution-form distribution-takedown-form">
-        <input type="hidden" name="release_id" value={id} />
+        {artistInput}<input type="hidden" name="release_id" value={id} />
         <div className="distribution-form-block">
           <h3>Choose services to remove</h3>
           <p>Only services with a delivered, live, rejected or provider-error state are eligible. Services already in takedown are intentionally excluded.</p>
