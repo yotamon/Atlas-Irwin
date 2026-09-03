@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { distributionProviderConfigured } from "@/lib/distribution/provider";
+import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { saveDistributionAccount } from "@/app/studio/distribution-actions-safe";
 import type { DistributionDatabase } from "@/types/distribution-database";
 
@@ -18,13 +19,14 @@ export default async function DistributionHub({
 }) {
   const feedback = await searchParams;
   const { supabase, user } = await requireStudioAdmin();
+  const artist = await resolveDefaultArtistContext(supabase, user);
   const db = supabase as unknown as SupabaseClient<DistributionDatabase>;
   const [accountResult, releasesResult, configsResult, issuesResult, deliveriesResult] = await Promise.all([
     db.from("distribution_accounts").select("*").eq("owner_id", user.id).eq("provider", "revelator").maybeSingle(),
-    supabase.from("releases").select("id,title,artist,release_type,release_date,artwork_url,cover_asset,status,is_archived").eq("owner_id", user.id).eq("is_archived", false).order("release_date", { ascending: false, nullsFirst: false }),
-    db.from("release_distribution_configs").select("*").eq("owner_id", user.id),
-    db.from("distribution_validation_issues").select("*").eq("owner_id", user.id).in("status", ["open", "acknowledged"]).order("severity").limit(12),
-    db.from("distribution_deliveries").select("release_id,state,store_id").eq("owner_id", user.id),
+    supabase.from("releases").select("id,title,artist,release_type,release_date,artwork_url,cover_asset,status,is_archived").eq("owner_id", user.id).eq("artist_id", artist.artistId).eq("is_archived", false).order("release_date", { ascending: false, nullsFirst: false }),
+    db.from("release_distribution_configs").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId),
+    db.from("distribution_validation_issues").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).in("status", ["open", "acknowledged"]).order("severity").limit(12),
+    db.from("distribution_deliveries").select("release_id,state,store_id").eq("owner_id", user.id).eq("artist_id", artist.artistId),
   ]);
   for (const result of [accountResult, releasesResult, configsResult, issuesResult, deliveriesResult]) {
     if (result.error) throw new Error(result.error.message);
@@ -46,7 +48,7 @@ export default async function DistributionHub({
 
   return <div className="distribution-page distribution-hub">
     <header className="distribution-header">
-      <div><span className="section-label">Ensemblis Distribution</span><h1>Distribution</h1><p>One control plane for release readiness, DSP delivery, catalog health and store-level issues.</p></div>
+      <div><span className="section-label">Ensemblis Distribution · {artist.artistName}</span><h1>Distribution</h1><p>One control plane for release readiness, DSP delivery, catalog health and store-level issues.</p></div>
       <div className="actions"><Link className="button" href="/studio/distribution/operations">Operations</Link></div>
     </header>
 
@@ -66,7 +68,7 @@ export default async function DistributionHub({
     </section>
 
     <section className="distribution-section">
-      <div className="distribution-section-heading"><div><span className="section-label">Catalog</span><h2>{releases.length} release{releases.length === 1 ? "" : "s"}</h2><p>Distribution is part of the canonical Ensemblis release, never a duplicate catalog.</p></div></div>
+      <div className="distribution-section-heading"><div><span className="section-label">Catalog</span><h2>{releases.length} release{releases.length === 1 ? "" : "s"}</h2><p>Distribution is part of {artist.artistName}&apos;s canonical Ensemblis catalog, never a duplicate catalog.</p></div></div>
       <div className="distribution-release-list">
         {releases.map((release) => {
           const config = configByRelease.get(release.id);
