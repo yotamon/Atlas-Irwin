@@ -3,9 +3,11 @@ import Link from "next/link";
 import { createCampaign } from "@/app/studio/marketing-actions";
 import styles from "@/components/studio/marketing-workspace.module.css";
 import { PageHeader } from "@/components/studio/ui";
-import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { CAMPAIGN_MODES, MARKETING_OBJECTIVES } from "@/lib/marketing/domain";
+import { requireArtistContext } from "@/lib/studio/artist-context";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
+import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/types/database";
 
 function strategySummary(strategy: Json) {
@@ -20,15 +22,17 @@ function dayLabel(value: string | null) {
 }
 
 export default async function CampaignsPage() {
-  const { supabase, user } = await requireStudioAdmin();
+  const artist = await requireArtistContext();
+  const supabase = await createClient();
+  const music = asArtistScopedMusicClient(supabase);
   const marketing = asMarketingClient(supabase);
   const [releasesResult, campaignsResult, experimentsResult, contentResult, variantsResult, jobsResult] = await Promise.all([
-    supabase.from("releases").select("id,title,release_date,artwork_url,primary_hook,core_emotion,status").eq("owner_id", user.id).order("release_date", { ascending: false }),
-    marketing.from("campaigns").select("*").eq("owner_id", user.id).order("updated_at", { ascending: false }),
-    marketing.from("campaign_experiments").select("id,campaign_id,status").eq("owner_id", user.id),
-    marketing.from("content_items").select("id,campaign_id,status,scheduled_at,approval_status").eq("owner_id", user.id),
-    marketing.from("content_variants").select("id,content_item_id,approval_status,status").eq("owner_id", user.id),
-    marketing.from("publication_jobs").select("id,campaign_id,status").eq("owner_id", user.id),
+    music.from("releases").select("id,title,release_date,artwork_url,primary_hook,core_emotion,status").eq("artist_id", artist.artistId).order("release_date", { ascending: false }),
+    marketing.from("campaigns").select("*").eq("owner_id", artist.userId).eq("artist_id", artist.artistId).order("updated_at", { ascending: false }),
+    marketing.from("campaign_experiments").select("id,campaign_id,status").eq("owner_id", artist.userId).eq("artist_id", artist.artistId),
+    marketing.from("content_items").select("id,campaign_id,status,scheduled_at,approval_status").eq("owner_id", artist.userId).eq("artist_id", artist.artistId),
+    marketing.from("content_variants").select("id,content_item_id,approval_status,status").eq("owner_id", artist.userId).eq("artist_id", artist.artistId),
+    marketing.from("publication_jobs").select("id,campaign_id,status").eq("owner_id", artist.userId).eq("artist_id", artist.artistId),
   ]);
   if (releasesResult.error) throw new Error(releasesResult.error.message);
   if (campaignsResult.error) throw new Error(campaignsResult.error.message);
@@ -59,7 +63,7 @@ export default async function CampaignsPage() {
     <div className={styles.shell}>
       <PageHeader
         title="Campaign Brain"
-        description="Plan releases as experiments, approve the right creative, keep timing relative to release day, and feed real performance back into the next decision."
+        description={`Plan ${artist.artistName} releases as experiments, approve the right creative, keep timing relative to release day, and feed real performance back into the next decision.`}
         action={
           <div className="actions">
             <Link className="button" href="/studio/content">Content Lab</Link>
@@ -78,7 +82,7 @@ export default async function CampaignsPage() {
       <section>
         <div className={styles.sectionHead}>
           <div><span className={styles.eyebrow}>Campaign intelligence</span><h2>Release systems</h2></div>
-          <p>Each campaign owns its objective, phases, experiments, variants, attribution and automation state.</p>
+          <p>Each campaign owns its objective, phases, experiments, variants, attribution and automation state inside the active artist.</p>
         </div>
         {campaigns.length ? (
           <div className={styles.campaignGrid}>
@@ -115,7 +119,7 @@ export default async function CampaignsPage() {
             <div>
               <span className={styles.eyebrow}>No first-class campaign yet</span>
               <h2>Start with an objective</h2>
-              <p>Your existing releases and content stay intact. Create a Campaign Brain record for the next release, then generate a strategy only when you explicitly choose to spend an AI call.</p>
+              <p>{artist.artistName}&apos;s existing releases and content stay intact. Create a Campaign Brain record for the next release, then generate a strategy only when you explicitly choose to spend an AI call.</p>
             </div>
           </div>
         )}
