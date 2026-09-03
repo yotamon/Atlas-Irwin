@@ -1,6 +1,8 @@
 import "server-only";
 
 import { createCatalogClient } from "@/lib/supabase/service";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
+import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 import { createMarketingServiceClient } from "./db";
 
 export type MarketingExecutionScope = {
@@ -15,6 +17,8 @@ function renderTemplate(template: string, values: Record<string, string>) {
 export async function processDueOutreachEnrollments(limit = 25, scope?: MarketingExecutionScope) {
   const marketing = createMarketingServiceClient();
   const catalog = createCatalogClient();
+  const operational = asArtistScopedOperationalClient(catalog);
+  const music = asArtistScopedMusicClient(catalog);
   const now = new Date().toISOString();
   let enrollmentQuery = marketing
     .from("outreach_enrollments")
@@ -45,7 +49,7 @@ export async function processDueOutreachEnrollments(limit = 25, scope?: Marketin
         .eq("artist_id", enrollment.artist_id)
         .eq("step_order", enrollment.next_step_order)
         .maybeSingle(),
-      marketing.from("outreach_contacts").select("*")
+      operational.from("outreach_contacts").select("*")
         .eq("id", enrollment.contact_id)
         .eq("owner_id", enrollment.owner_id)
         .eq("artist_id", enrollment.artist_id)
@@ -98,7 +102,7 @@ export async function processDueOutreachEnrollments(limit = 25, scope?: Marketin
     let smartLink = "";
     const releaseId = campaignResult.data?.release_id ?? null;
     if (releaseId) {
-      const { data: release, error: releaseError } = await catalog
+      const { data: release, error: releaseError } = await music
         .from("releases")
         .select("title,smart_link_url,spotify_url,soundcloud_url")
         .eq("id", releaseId)
