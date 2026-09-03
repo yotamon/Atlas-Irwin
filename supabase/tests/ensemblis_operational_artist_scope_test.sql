@@ -76,6 +76,12 @@ values
  ('15000000-0000-0000-0000-000000000001','35000000-0000-0000-0000-000000000002',current_date,'Spotify','45000000-0000-0000-0000-000000000002',200,150);
 select is((select sum(streams)::integer from public.metric_snapshots where artist_id='35000000-0000-0000-0000-000000000002'),200,'artist metrics aggregate without sibling data');
 
+insert into public.marketing_learnings(owner_id,artist_id,campaign_id,release_id,scope,finding,status)
+values
+ ('15000000-0000-0000-0000-000000000001','35000000-0000-0000-0000-000000000001','55000000-0000-0000-0000-000000000001','45000000-0000-0000-0000-000000000001','campaign','Primary learning','approved'),
+ ('15000000-0000-0000-0000-000000000001','35000000-0000-0000-0000-000000000002','55000000-0000-0000-0000-000000000002','45000000-0000-0000-0000-000000000002','campaign','Side learning','approved');
+select is((select count(*)::integer from public.marketing_learnings where artist_id='35000000-0000-0000-0000-000000000002'),1,'marketing learnings stay local to one artist');
+
 insert into public.marketing_events(owner_id,artist_id,campaign_id,event_type,payload)
 values('15000000-0000-0000-0000-000000000001','35000000-0000-0000-0000-000000000002','55000000-0000-0000-0000-000000000002','test.event','{}');
 insert into public.automation_jobs(owner_id,campaign_id,job_type,payload,status)
