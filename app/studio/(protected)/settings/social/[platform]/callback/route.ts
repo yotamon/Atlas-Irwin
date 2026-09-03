@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { isSocialPlatformKey } from "@/lib/marketing/social-platforms";
+import { resolveArtistContext } from "@/lib/studio/artist-context";
 import { completeSocialOAuth } from "@/lib/studio/social-connections";
 
 function requestOrigin(request: NextRequest) {
@@ -11,9 +12,7 @@ function requestOrigin(request: NextRequest) {
 }
 
 function redirectToPlatform(request: NextRequest, platform: string, query: string) {
-  return NextResponse.redirect(
-    new URL(`/studio/settings/social/${platform}?${query}`, request.url),
-  );
+  return NextResponse.redirect(new URL(`/studio/settings/social/${platform}?${query}`, request.url));
 }
 
 function clearStateCookie(response: NextResponse, platform: string) {
@@ -26,11 +25,21 @@ function clearStateCookie(response: NextResponse, platform: string) {
   });
 }
 
+function artistIdFromState(state: string) {
+  const separator = state.lastIndexOf(".");
+  if (separator < 1) throw new Error("OAuth state is missing artist context.");
+  const artistId = state.slice(separator + 1);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(artistId)) {
+    throw new Error("OAuth state contains an invalid artist context.");
+  }
+  return artistId;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ platform: string }> },
 ) {
-  const { user } = await requireStudioAdmin();
+  const { supabase, user } = await requireStudioAdmin();
   const { platform } = await params;
   if (!isSocialPlatformKey(platform)) {
     return NextResponse.redirect(new URL("/studio/settings?social_error=unsupported_platform", request.url));
@@ -60,13 +69,16 @@ export async function GET(
 
   let response: NextResponse;
   try {
+    const requestedArtistId = artistIdFromState(state);
+    const artist = await resolveArtistContext(supabase, user, requestedArtistId);
     await completeSocialOAuth({
-      ownerId: user.id,
+      ownerId: artist.userId,
+      artistId: artist.artistId,
       platform,
       code,
       origin: requestOrigin(request),
     });
-    response = redirectToPlatform(request, platform, "connected=1");
+    response = redirectToPlatform(request, platform, `connected=1&artist_id=${encodeURIComponent(artist.artistId)}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Social connection failed.";
     console.error(`${platform} OAuth callback failed:`, message, error);
