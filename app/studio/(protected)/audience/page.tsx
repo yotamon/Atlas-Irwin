@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { approveAudienceReply, ignoreAudienceInteraction, syncAudienceNow } from "@/app/studio/audience-actions";
 import { PageHeader, Status } from "@/components/studio/ui";
-import { requireStudioAdmin } from "@/lib/auth/studio";
 import { createAutonomyServiceClient } from "@/lib/marketing/autonomy-db";
+import { requireArtistContext } from "@/lib/studio/artist-context";
 
 function shortDate(value: string) {
   return new Intl.DateTimeFormat("en", {
@@ -15,11 +15,12 @@ function shortDate(value: string) {
 }
 
 export default async function AudiencePage() {
-  const { user } = await requireStudioAdmin();
+  const artist = await requireArtistContext();
   const db = createAutonomyServiceClient();
   const { data, error } = await db.from("audience_interactions")
     .select("*")
-    .eq("owner_id", user.id)
+    .eq("owner_id", artist.userId)
+    .eq("artist_id", artist.artistId)
     .not("status", "in", "(ignored,replied)")
     .order("occurred_at", { ascending: false })
     .limit(100);
@@ -31,7 +32,7 @@ export default async function AudiencePage() {
     <div className="studio-v2-page">
       <PageHeader
         title="Audience"
-        description="Comments and conversations that deserve a human Atlas Irwin response. Atlas drafts; you decide what leaves the Studio."
+        description={`Comments and conversations that deserve a human ${artist.artistName} response. Ensemblis drafts; you decide what leaves the Studio.`}
         action={<div className="actions"><form action={syncAudienceNow}><button className="button" type="submit">Sync now</button></form><Link className="button" href="/studio">Back to Today</Link></div>}
       />
 
@@ -58,7 +59,7 @@ export default async function AudiencePage() {
                     <form action={approveAudienceReply}>
                       <input type="hidden" name="id" value={item.id} />
                       <label>
-                        <small>Atlas draft</small>
+                        <small>Ensemblis draft</small>
                         <textarea name="reply" defaultValue={item.suggested_reply} rows={3} maxLength={1000} required />
                       </label>
                       <div className="actions">
@@ -77,7 +78,7 @@ export default async function AudiencePage() {
             ))}
           </div>
         ) : (
-          <div className="v2-calm-state compact"><strong>No audience messages need you.</strong><p>Atlas will keep listening to connected channels.</p></div>
+          <div className="v2-calm-state compact"><strong>No audience messages need you.</strong><p>Ensemblis will keep listening to connected channels for {artist.artistName}.</p></div>
         )}
       </section>
     </div>
