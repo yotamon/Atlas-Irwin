@@ -20,6 +20,9 @@ import {
 } from "@/lib/marketing/domain";
 import { planCampaign, type CampaignPlanningContext } from "@/lib/marketing/planner";
 import { releaseRelativeTimestamp } from "@/lib/marketing/schedule";
+import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
+import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 import type { Json } from "@/types/database";
 import type {
   CampaignExperiment,
@@ -33,6 +36,22 @@ const statusSchema = z.enum(CAMPAIGN_STATUSES);
 
 function value(form: FormData, key: string) {
   return String(form.get(key) ?? "").trim();
+}
+
+async function actionContext(form?: FormData) {
+  const { supabase, user } = await requireStudioAdmin();
+  const requestedArtistId = form ? value(form, "artist_id") : "";
+  const artist = requestedArtistId
+    ? await resolveArtistContext(supabase, user, uuid.parse(requestedArtistId))
+    : await resolveDefaultArtistContext(supabase, user);
+  return {
+    supabase,
+    user,
+    artist,
+    marketing: asMarketingClient(supabase),
+    music: asArtistScopedMusicClient(supabase),
+    operational: asArtistScopedOperationalClient(supabase),
+  };
 }
 
 function attributionCode() {
@@ -54,6 +73,7 @@ function brandRowText(section: string, content: Json) {
 
 async function emitEvent({
   ownerId,
+  artistId,
   campaignId,
   eventType,
   entityType,
@@ -61,16 +81,20 @@ async function emitEvent({
   payload,
 }: {
   ownerId: string;
+  artistId: string;
   campaignId: string | null;
   eventType: string;
   entityType?: string;
   entityId?: string;
   payload?: unknown;
 }) {
-  const { supabase } = await requireStudioAdmin();
+  const { supabase, user } = await requireStudioAdmin();
+  if (user.id !== ownerId) throw new Error("Marketing event owner does not match the authenticated Studio user.");
+  await resolveArtistContext(supabase, user, artistId);
   const marketing = asMarketingClient(supabase);
   const { error } = await marketing.from("marketing_events").insert({
     owner_id: ownerId,
+    artist_id: artistId,
     campaign_id: campaignId,
     event_type: eventType,
     entity_type: entityType ?? null,
@@ -81,16 +105,16 @@ async function emitEvent({
 }
 
 export async function createCampaign(form: FormData) {
-  const { supabase, user } = await requireStudioAdmin();
-  const marketing = asMarketingClient(supabase);
+  const { user, artist, marketing, music } = await actionContext(form);
   const releaseId = uuid.parse(value(form, "release_id"));
   const objective = objectiveSchema.parse(value(form, "objective") || "Streams");
   const mode = modeSchema.parse(value(form, "mode") || "assisted");
-  const { data: release, error: releaseError } = await supabase
+  const { data: release, error: releaseError } = await music
     .from("releases")
     .select("id,title,release_date")
     .eq("id", releaseId)
     .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId)
     .single();
   if (releaseError) throw new Error(releaseError.message);
 
@@ -100,6 +124,7 @@ export async function createCampaign(form: FormData) {
     .from("campaigns")
     .insert({
       owner_id: user.id,
+      artist_id: artist.artistId,
       release_id: release.id,
       name: value(form, "name") || `${release.title} campaign`,
       status: "draft",
@@ -120,6 +145,7 @@ export async function createCampaign(form: FormData) {
   const phases = campaignPhasePlan(release.release_date).map((phase) => ({
     ...phase,
     owner_id: user.id,
+    artist_id: artist.artistId,
     campaign_id: campaign.id,
   }));
   const { error: phaseError } = await marketing.from("campaign_phases").insert(phases);
@@ -127,6 +153,7 @@ export async function createCampaign(form: FormData) {
 
   await marketing.from("marketing_events").insert({
     owner_id: user.id,
+    artist_id: artist.artistId,
     campaign_id: campaign.id,
     event_type: "campaign.created",
     entity_type: "campaign",
@@ -139,8 +166,7 @@ export async function createCampaign(form: FormData) {
 }
 
 export async function generateCampaignStrategy(form: FormData) {
-  const { supabase, user } = await requireStudioAdmin();
-  const marketing = asMarketingClient(supabase);
+  const { user, artist, marketing, music, operational } = await actionContext(form);
   const campaignId = uuid.parse(value(form, "campaign_id"));
   const force = value(form, "force") === "1";
   const { data: campaign, error: campaignError } = await marketing
@@ -148,6 +174,7 @@ export async function generateCampaignStrategy(form: FormData) {
     .select("*")
     .eq("id", campaignId)
     .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId)
     .single();
   if (campaignError) throw new Error(campaignError.message);
   if (!campaign.release_id) throw new Error("This campaign must be linked to a release before it can be planned.");
@@ -160,17 +187,18 @@ export async function generateCampaignStrategy(form: FormData) {
   }
 
   const [releaseResult, brandResult, legacyLearningResult, learningResult, contentResult, metricResult] = await Promise.all([
-    supabase
+    music
       .from("releases")
       .select("id,title,release_type,release_date,story,core_emotion,audience,primary_hook,visual_direction,genre,subgenre,release_identity,smart_link_url,spotify_url,soundcloud_url")
       .eq("id", campaign.release_id)
       .eq("owner_id", user.id)
+      .eq("artist_id", artist.artistId)
       .single(),
-    supabase.from("brand_settings").select("section,content").eq("owner_id", user.id),
-    supabase.from("release_learnings").select("learning").eq("owner_id", user.id).order("created_at", { ascending: false }).limit(20),
-    marketing.from("marketing_learnings").select("finding").eq("owner_id", user.id).eq("status", "approved").order("created_at", { ascending: false }).limit(30),
-    marketing.from("content_items").select("*").eq("owner_id", user.id),
-    marketing.from("metric_snapshots").select("*").eq("owner_id", user.id),
+    operational.from("brand_settings").select("section,content").eq("owner_id", user.id).eq("artist_id", artist.artistId),
+    operational.from("release_learnings").select("learning").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("created_at", { ascending: false }).limit(20),
+    marketing.from("marketing_learnings").select("finding").eq("owner_id", user.id).eq("artist_id", artist.artistId).eq("status", "approved").order("created_at", { ascending: false }).limit(30),
+    marketing.from("content_items").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId),
+    marketing.from("metric_snapshots").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId),
   ]);
   if (releaseResult.error) throw new Error(releaseResult.error.message);
   if (brandResult.error) throw new Error(brandResult.error.message);
@@ -214,12 +242,13 @@ export async function generateCampaignStrategy(form: FormData) {
     approvedLearnings,
     performanceSummary,
   };
-  const { plan, generation } = await planCampaign(context);
+  const { plan, generation } = await planCampaign(context, artist.artistId);
 
   if (force) {
     const { data: draftItems, error: draftLookupError } = await marketing
       .from("content_items")
       .select("id")
+      .eq("artist_id", artist.artistId)
       .eq("campaign_id", campaignId)
       .in("source", ["planner", "ai"])
       .in("status", ["Idea", "Draft", "In Production", "Ready"]);
@@ -228,12 +257,14 @@ export async function generateCampaignStrategy(form: FormData) {
       const { error: deleteContentError } = await marketing
         .from("content_items")
         .delete()
+        .eq("artist_id", artist.artistId)
         .in("id", draftItems.map((item) => item.id));
       if (deleteContentError) throw new Error(deleteContentError.message);
     }
     const { error: deleteExperimentError } = await marketing
       .from("campaign_experiments")
       .delete()
+      .eq("artist_id", artist.artistId)
       .eq("campaign_id", campaignId)
       .eq("status", "planned");
     if (deleteExperimentError) throw new Error(deleteExperimentError.message);
@@ -252,15 +283,17 @@ export async function generateCampaignStrategy(form: FormData) {
       })
       .eq("id", controlPlaneRunId)
       .eq("owner_id", user.id)
+      .eq("artist_id", artist.artistId)
       .select("id")
       .single();
-    if (linkRunError || !linkedRun) throw new Error(linkRunError?.message || "AI generation run could not be linked to this campaign.");
+    if (linkRunError || !linkedRun) throw new Error(linkRunError?.message || "AI generation run could not be linked to this campaign artist.");
     generationRun = linkedRun;
   } else {
     const { data: fallbackRun, error: generationError } = await marketing
       .from("generation_runs")
       .insert({
         owner_id: user.id,
+        artist_id: artist.artistId,
         campaign_id: campaignId,
         release_id: campaign.release_id,
         purpose: "campaign_plan",
@@ -300,18 +333,22 @@ export async function generateCampaignStrategy(form: FormData) {
         learningsApplied: plan.learningsApplied,
       }),
     })
-    .eq("id", campaignId);
+    .eq("id", campaignId)
+    .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId);
   if (updateCampaignError) throw new Error(updateCampaignError.message);
 
   const { data: phases, error: phaseError } = await marketing
     .from("campaign_phases")
     .select("id,code")
+    .eq("artist_id", artist.artistId)
     .eq("campaign_id", campaignId);
   if (phaseError) throw new Error(phaseError.message);
   const phaseByCode = new Map((phases ?? []).map((phase) => [phase.code, phase.id]));
 
   const experimentRows = plan.experiments.map((experiment) => ({
     owner_id: user.id,
+    artist_id: artist.artistId,
     campaign_id: campaignId,
     phase_id: phaseByCode.get(experiment.phaseCode) ?? null,
     title: experiment.title,
@@ -339,6 +376,7 @@ export async function generateCampaignStrategy(form: FormData) {
       .from("content_items")
       .insert({
         owner_id: user.id,
+        artist_id: artist.artistId,
         release_id: releaseResult.data.id,
         campaign_id: campaignId,
         phase_id: phaseByCode.get(moment.phaseCode) ?? null,
@@ -372,6 +410,7 @@ export async function generateCampaignStrategy(form: FormData) {
     if (experimentId && experimentPlan) {
       const variantRows = experimentPlan.variants.map((variant, index) => ({
         owner_id: user.id,
+        artist_id: artist.artistId,
         content_item_id: contentItem.id,
         experiment_id: experimentId,
         generation_run_id: generationRun.id,
@@ -398,6 +437,7 @@ export async function generateCampaignStrategy(form: FormData) {
           .filter((variant) => variant.attribution_code)
           .map((variant) => ({
             owner_id: user.id,
+            artist_id: artist.artistId,
             campaign_id: campaignId,
             content_item_id: contentItem.id,
             content_variant_id: variant.id,
@@ -412,6 +452,7 @@ export async function generateCampaignStrategy(form: FormData) {
     } else if (destinationUrl) {
       const { error: linkError } = await marketing.from("attribution_links").insert({
         owner_id: user.id,
+        artist_id: artist.artistId,
         campaign_id: campaignId,
         content_item_id: contentItem.id,
         content_variant_id: null,
@@ -426,6 +467,7 @@ export async function generateCampaignStrategy(form: FormData) {
 
   const { error: eventError } = await marketing.from("marketing_events").insert({
     owner_id: user.id,
+    artist_id: artist.artistId,
     campaign_id: campaignId,
     event_type: "campaign.plan_generated",
     entity_type: "campaign",
@@ -440,67 +482,83 @@ export async function generateCampaignStrategy(form: FormData) {
 }
 
 export async function updateCampaignMode(form: FormData) {
-  const { supabase, user } = await requireStudioAdmin();
-  const marketing = asMarketingClient(supabase);
+  const { user, artist, marketing } = await actionContext(form);
   const campaignId = uuid.parse(value(form, "campaign_id"));
   const mode = modeSchema.parse(value(form, "mode"));
-  const { error } = await marketing.from("campaigns").update({ mode }).eq("id", campaignId).eq("owner_id", user.id);
+  const { error } = await marketing.from("campaigns").update({ mode })
+    .eq("id", campaignId)
+    .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId);
   if (error) throw new Error(error.message);
-  await emitEvent({ ownerId: user.id, campaignId, eventType: "campaign.mode_changed", entityType: "campaign", entityId: campaignId, payload: { mode } });
+  await emitEvent({ ownerId: user.id, artistId: artist.artistId, campaignId, eventType: "campaign.mode_changed", entityType: "campaign", entityId: campaignId, payload: { mode } });
   revalidatePath(`/studio/campaigns/${campaignId}`);
 }
 
 export async function updateCampaignStatus(form: FormData) {
-  const { supabase, user } = await requireStudioAdmin();
-  const marketing = asMarketingClient(supabase);
+  const { user, artist, marketing } = await actionContext(form);
   const campaignId = uuid.parse(value(form, "campaign_id"));
   const status = statusSchema.parse(value(form, "status"));
-  const { error } = await marketing.from("campaigns").update({ status }).eq("id", campaignId).eq("owner_id", user.id);
+  const { error } = await marketing.from("campaigns").update({ status })
+    .eq("id", campaignId)
+    .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId);
   if (error) throw new Error(error.message);
-  await emitEvent({ ownerId: user.id, campaignId, eventType: "campaign.status_changed", entityType: "campaign", entityId: campaignId, payload: { status } });
+  await emitEvent({ ownerId: user.id, artistId: artist.artistId, campaignId, eventType: "campaign.status_changed", entityType: "campaign", entityId: campaignId, payload: { status } });
   revalidatePath(`/studio/campaigns/${campaignId}`);
   revalidatePath("/studio/campaigns");
 }
 
 export async function approveContentVariant(form: FormData) {
-  const { supabase, user } = await requireStudioAdmin();
-  const marketing = asMarketingClient(supabase);
+  const { user, artist, marketing } = await actionContext(form);
   const variantId = uuid.parse(value(form, "variant_id"));
   const { data: variant, error: lookupError } = await marketing
     .from("content_variants")
     .select("id,content_item_id,experiment_id")
     .eq("id", variantId)
     .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId)
     .single();
   if (lookupError) throw new Error(lookupError.message);
   const { error } = await marketing
     .from("content_variants")
     .update({ approval_status: "approved", status: "approved" })
-    .eq("id", variantId);
+    .eq("id", variantId)
+    .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId);
   if (error) throw new Error(error.message);
-  const { data: item } = await marketing.from("content_items").select("campaign_id").eq("id", variant.content_item_id).single();
-  await emitEvent({ ownerId: user.id, campaignId: item?.campaign_id ?? null, eventType: "content.variant_approved", entityType: "content_variant", entityId: variantId, payload: { experimentId: variant.experiment_id } });
+  const { data: item } = await marketing.from("content_items").select("campaign_id")
+    .eq("id", variant.content_item_id)
+    .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId)
+    .single();
+  await emitEvent({ ownerId: user.id, artistId: artist.artistId, campaignId: item?.campaign_id ?? null, eventType: "content.variant_approved", entityType: "content_variant", entityId: variantId, payload: { experimentId: variant.experiment_id } });
   revalidatePath("/studio/campaigns");
   if (item?.campaign_id) revalidatePath(`/studio/campaigns/${item.campaign_id}`);
 }
 
 export async function rejectContentVariant(form: FormData) {
-  const { supabase, user } = await requireStudioAdmin();
-  const marketing = asMarketingClient(supabase);
+  const { user, artist, marketing } = await actionContext(form);
   const variantId = uuid.parse(value(form, "variant_id"));
   const { data: variant, error: lookupError } = await marketing
     .from("content_variants")
     .select("content_item_id")
     .eq("id", variantId)
     .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId)
     .single();
   if (lookupError) throw new Error(lookupError.message);
   const { error } = await marketing
     .from("content_variants")
     .update({ approval_status: "rejected", status: "rejected" })
-    .eq("id", variantId);
+    .eq("id", variantId)
+    .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId);
   if (error) throw new Error(error.message);
-  const { data: item } = await marketing.from("content_items").select("campaign_id").eq("id", variant.content_item_id).single();
+  const { data: item } = await marketing.from("content_items").select("campaign_id")
+    .eq("id", variant.content_item_id)
+    .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId)
+    .single();
   if (item?.campaign_id) revalidatePath(`/studio/campaigns/${item.campaign_id}`);
 }
 
@@ -509,14 +567,14 @@ function adapterForPlatform(platform: string) {
 }
 
 export async function queueVariantPublication(form: FormData) {
-  const { supabase, user } = await requireStudioAdmin();
-  const marketing = asMarketingClient(supabase);
+  const { user, artist, marketing } = await actionContext(form);
   const variantId = uuid.parse(value(form, "variant_id"));
   const { data: variant, error: variantError } = await marketing
     .from("content_variants")
     .select("*")
     .eq("id", variantId)
     .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId)
     .single();
   if (variantError) throw new Error(variantError.message);
   if (variant.approval_status !== "approved") throw new Error("Approve this creative variant before queueing publication.");
@@ -524,6 +582,8 @@ export async function queueVariantPublication(form: FormData) {
     .from("content_items")
     .select("*")
     .eq("id", variant.content_item_id)
+    .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId)
     .single();
   if (itemError) throw new Error(itemError.message);
   if (!item.campaign_id) throw new Error("This content item is not linked to a campaign.");
@@ -532,6 +592,7 @@ export async function queueVariantPublication(form: FormData) {
   const scheduledAt = variant.scheduled_at ?? item.scheduled_at ?? new Date().toISOString();
   const { error } = await marketing.from("publication_jobs").insert({
     owner_id: user.id,
+    artist_id: artist.artistId,
     campaign_id: item.campaign_id,
     content_item_id: item.id,
     content_variant_id: variant.id,
@@ -542,6 +603,7 @@ export async function queueVariantPublication(form: FormData) {
     approval_status: "approved",
     scheduled_at: scheduledAt,
     request_payload: json({
+      artistId: artist.artistId,
       hookText: variant.hook_text,
       caption: variant.caption,
       cta: variant.cta,
@@ -554,6 +616,7 @@ export async function queueVariantPublication(form: FormData) {
 
   await emitEvent({
     ownerId: user.id,
+    artistId: artist.artistId,
     campaignId: item.campaign_id,
     eventType: "publication.queued",
     entityType: "content_variant",
@@ -576,20 +639,20 @@ function variantMetricSummary(
 }
 
 export async function evaluateExperiment(form: FormData) {
-  const { supabase, user } = await requireStudioAdmin();
-  const marketing = asMarketingClient(supabase);
+  const { user, artist, marketing } = await actionContext(form);
   const experimentId = uuid.parse(value(form, "experiment_id"));
   const { data: experiment, error: experimentError } = await marketing
     .from("campaign_experiments")
     .select("*")
     .eq("id", experimentId)
     .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId)
     .single();
   if (experimentError) throw new Error(experimentError.message);
   const [variantsResult, metricsResult, campaignResult] = await Promise.all([
-    marketing.from("content_variants").select("*").eq("experiment_id", experimentId).eq("owner_id", user.id),
-    marketing.from("metric_snapshots").select("*").eq("experiment_id", experimentId).eq("owner_id", user.id),
-    marketing.from("campaigns").select("mode,release_id").eq("id", experiment.campaign_id).single(),
+    marketing.from("content_variants").select("*").eq("experiment_id", experimentId).eq("owner_id", user.id).eq("artist_id", artist.artistId),
+    marketing.from("metric_snapshots").select("*").eq("experiment_id", experimentId).eq("owner_id", user.id).eq("artist_id", artist.artistId),
+    marketing.from("campaigns").select("mode,release_id").eq("id", experiment.campaign_id).eq("owner_id", user.id).eq("artist_id", artist.artistId).single(),
   ]);
   if (variantsResult.error) throw new Error(variantsResult.error.message);
   if (metricsResult.error) throw new Error(metricsResult.error.message);
@@ -605,7 +668,9 @@ export async function evaluateExperiment(form: FormData) {
     const { error } = await marketing
       .from("campaign_experiments")
       .update({ status: "evaluating", result_summary: summary })
-      .eq("id", experimentId);
+      .eq("id", experimentId)
+      .eq("owner_id", user.id)
+      .eq("artist_id", artist.artistId);
     if (error) throw new Error(error.message);
     revalidatePath(`/studio/campaigns/${experiment.campaign_id}`);
     return;
@@ -624,7 +689,9 @@ export async function evaluateExperiment(form: FormData) {
       winner_variant_id: hasWinner ? best.variant.id : null,
       result_summary: resultSummary,
     })
-    .eq("id", experimentId);
+    .eq("id", experimentId)
+    .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId);
   if (updateError) throw new Error(updateError.message);
 
   if (hasWinner) {
@@ -647,6 +714,7 @@ export async function evaluateExperiment(form: FormData) {
     };
     const { error: learningError } = await marketing.from("marketing_learnings").insert({
       owner_id: user.id,
+      artist_id: artist.artistId,
       campaign_id: experiment.campaign_id,
       release_id: campaignResult.data.release_id,
       experiment_id: experiment.id,
@@ -663,6 +731,7 @@ export async function evaluateExperiment(form: FormData) {
     const requiresApproval = campaignResult.data.mode !== "autopilot";
     const { error: jobError } = await marketing.from("automation_jobs").insert({
       owner_id: user.id,
+      artist_id: artist.artistId,
       campaign_id: experiment.campaign_id,
       job_type: "generate_winner_derivatives",
       payload: json({ experimentId, winnerVariantId: best.variant.id }),
@@ -676,6 +745,7 @@ export async function evaluateExperiment(form: FormData) {
 
   await marketing.from("marketing_events").insert({
     owner_id: user.id,
+    artist_id: artist.artistId,
     campaign_id: experiment.campaign_id,
     event_type: "experiment.evaluated",
     entity_type: "campaign_experiment",
@@ -687,8 +757,7 @@ export async function evaluateExperiment(form: FormData) {
 }
 
 export async function setLearningStatus(form: FormData) {
-  const { supabase, user } = await requireStudioAdmin();
-  const marketing = asMarketingClient(supabase);
+  const { user, artist, marketing } = await actionContext(form);
   const learningId = uuid.parse(value(form, "learning_id"));
   const status = z.enum(["approved", "rejected"]).parse(value(form, "status"));
   const { data: learning, error: lookupError } = await marketing
@@ -696,32 +765,37 @@ export async function setLearningStatus(form: FormData) {
     .select("campaign_id")
     .eq("id", learningId)
     .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId)
     .single();
   if (lookupError) throw new Error(lookupError.message);
   const { error } = await marketing
     .from("marketing_learnings")
     .update({ status, approved_at: status === "approved" ? new Date().toISOString() : null })
-    .eq("id", learningId);
+    .eq("id", learningId)
+    .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId);
   if (error) throw new Error(error.message);
   if (learning.campaign_id) revalidatePath(`/studio/campaigns/${learning.campaign_id}`);
   revalidatePath("/studio/analytics");
 }
 
 export async function approveAutomationJob(form: FormData) {
-  const { supabase, user } = await requireStudioAdmin();
-  const marketing = asMarketingClient(supabase);
+  const { user, artist, marketing } = await actionContext(form);
   const jobId = uuid.parse(value(form, "job_id"));
   const { data: job, error: lookupError } = await marketing
     .from("automation_jobs")
     .select("campaign_id")
     .eq("id", jobId)
     .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId)
     .single();
   if (lookupError) throw new Error(lookupError.message);
   const { error } = await marketing
     .from("automation_jobs")
     .update({ status: "queued", approval_status: "approved" })
-    .eq("id", jobId);
+    .eq("id", jobId)
+    .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId);
   if (error) throw new Error(error.message);
   if (job.campaign_id) revalidatePath(`/studio/campaigns/${job.campaign_id}`);
 }
