@@ -31,6 +31,61 @@ create unique index if not exists growth_plan_one_active_track_artist_idx
 create unique index if not exists marketing_media_jobs_artist_idempotency_idx
   on public.marketing_media_jobs(artist_id,idempotency_key);
 
+-- Studio V2 predates artist scoping and used the retired owner-local publication idempotency key.
+-- Re-declare the bridge after the artist migration so every approval job carries the Content
+-- artist explicitly and sibling artists can safely produce identical deterministic keys.
+create or replace function private.sync_studio_v2_publication_approval()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_key text;
+begin
+  if new.status <> 'Scheduled' or new.scheduled_at is null or new.asset_url is null then return new; end if;
+  if new.artist_id is null then raise exception 'Studio V2 publication approval requires explicit artist scope'; end if;
+  if tg_op = 'UPDATE'
+     and old.platform is not distinct from new.platform
+     and old.scheduled_at is not distinct from new.scheduled_at
+     and old.asset_url is not distinct from new.asset_url
+     and old.caption is not distinct from new.caption
+     and old.hook_text is not distinct from new.hook_text
+     and old.cta is not distinct from new.cta then return new; end if;
+
+  update public.publication_jobs
+  set status = 'cancelled', last_error = 'Superseded by a newer Studio V2 content payload.'
+  where artist_id = new.artist_id
+    and content_item_id = new.id
+    and status in ('draft','awaiting_approval','approved','scheduled','manual_ready');
+
+  v_key := 'studio-v2:' || new.id::text || ':' || md5(coalesce(new.platform::text, '') || '|' || coalesce(new.scheduled_at::text, '') || '|' || coalesce(new.asset_url, '') || '|' || coalesce(new.caption, '') || '|' || coalesce(new.hook_text, '') || '|' || coalesce(new.cta, ''));
+
+  insert into public.publication_jobs (
+    owner_id,artist_id,campaign_id,content_item_id,platform,adapter,status,
+    requires_approval,approval_status,scheduled_at,request_payload,idempotency_key
+  ) values (
+    new.owner_id,new.artist_id,new.campaign_id,new.id,new.platform::text,'studio-v2','awaiting_approval',
+    true,'pending',new.scheduled_at,
+    jsonb_build_object('artistId',new.artist_id,'hookText',new.hook_text,'caption',new.caption,'cta',new.cta,'assetUrl',new.asset_url),
+    v_key
+  )
+  on conflict (artist_id, idempotency_key) where idempotency_key is not null
+  do update set campaign_id=excluded.campaign_id,
+                content_item_id=excluded.content_item_id,
+                platform=excluded.platform,
+                status='awaiting_approval',
+                approval_status='pending',
+                scheduled_at=excluded.scheduled_at,
+                request_payload=excluded.request_payload,
+                last_error=null,
+                updated_at=now();
+
+  return new;
+end;
+$$;
+revoke all on function private.sync_studio_v2_publication_approval() from public,anon,authenticated;
+
 -- External-effect and paid-worker rows must agree with every durable linked entity, not merely the
 -- nearest parent. These checks execute for service_role too because RLS is not a worker boundary.
 create or replace function private.validate_marketing_media_job_artist_lineage()
