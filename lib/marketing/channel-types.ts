@@ -43,5 +43,5 @@ export interface MarketingChannelAdapter {
   capability(): ChannelCapability;
   publish(request: PublishRequest): Promise<PublishResult>;
   fetchMetrics(externalPostId: string): Promise<ChannelMetrics | null>;
-  fetchPublicationStatus?(ownerId: string, artistId: string, externalPostId: string): Promise<ProviderPublicationStatus>;
+  fetchPublicationStatus?(ownerId: string, externalPostId: string): Promise<ProviderPublicationStatus>;
 }
