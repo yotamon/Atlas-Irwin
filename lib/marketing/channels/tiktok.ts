@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { Json } from "@/types/database";
-import { requireSocialAccess, socialOwnerForExternalPost } from "../social-auth";
+import { requireSocialAccess, socialContextForExternalPost } from "../social-auth";
 import type { ChannelCapability, ChannelMetrics, MarketingChannelAdapter, PublishRequest, PublishResult } from "../channel-types";
 import { captionFor, isVideoRequest, jsonOrThrow, readAsset, record, truthyEnv, type SocialAsset } from "../channel-utils";
 
@@ -112,7 +112,7 @@ async function publishTikTokPhotos(request: PublishRequest, audited: boolean): P
   if (!photos.length) throw new Error("TikTok photo publishing requires at least one HTTPS photo URL.");
   assertVerifiedPhotoUrls(photos);
   const scope = audited ? "video.publish" : "video.upload";
-  const access = await requireSocialAccess(request.ownerId, "tiktok", [scope]);
+  const access = await requireSocialAccess(request.ownerId, request.artistId, "tiktok", [scope]);
   const fullCaption = captionFor(request);
   const title = (request.hookText || fullCaption.split("\n")[0] || "Atlas Irwin").trim().slice(0, 90);
   const description = fullCaption.trim().slice(0, 4000);
@@ -208,7 +208,7 @@ export class TikTokChannelAdapter implements MarketingChannelAdapter {
     if (!request.assetUrl) throw new Error("TikTok video publishing requires an attached video asset.");
 
     const scope = audited ? "video.publish" : "video.upload";
-    const access = await requireSocialAccess(request.ownerId, "tiktok", [scope]);
+    const access = await requireSocialAccess(request.ownerId, request.artistId, "tiktok", [scope]);
     const asset = await readAsset(request.assetUrl);
     const { chunkSize, totalChunks } = tiktokUploadPlan(asset.bytes.length);
     const title = captionFor(request).slice(0, 2200);
@@ -284,9 +284,9 @@ export class TikTokChannelAdapter implements MarketingChannelAdapter {
   }
 
   async fetchMetrics(externalPostId: string): Promise<ChannelMetrics | null> {
-    const ownerId = await socialOwnerForExternalPost("TikTok", externalPostId);
-    if (!ownerId) return null;
-    const access = await requireSocialAccess(ownerId, "tiktok", ["video.list"]);
+    const context = await socialContextForExternalPost("TikTok", externalPostId);
+    if (!context) return null;
+    const access = await requireSocialAccess(context.ownerId, context.artistId, "tiktok", ["video.list"]);
     let postId = externalPostId;
     if (externalPostId.startsWith("tiktok-publish:")) {
       const publishId = externalPostId.slice("tiktok-publish:".length);
