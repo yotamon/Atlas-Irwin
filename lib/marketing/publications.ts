@@ -28,6 +28,7 @@ function inFuture(value: string | null) {
 async function markPublicationPublished(job: {
   id: string;
   owner_id: string;
+  artist_id: string;
   campaign_id: string | null;
   content_item_id: string | null;
   content_variant_id: string | null;
@@ -41,24 +42,25 @@ async function markPublicationPublished(job: {
     published_at: publishedAt,
     result,
     last_error: null,
-  }).eq("id", job.id);
+  }).eq("id", job.id).eq("artist_id", job.artist_id);
   if (publishError) throw new Error(publishError.message);
   if (job.content_variant_id) {
     await client.from("content_variants").update({
       status: "published",
       published_at: publishedAt,
       external_post_id: job.external_post_id,
-    }).eq("id", job.content_variant_id);
+    }).eq("id", job.content_variant_id).eq("artist_id", job.artist_id);
   }
   if (job.content_item_id) {
     await client.from("content_items").update({
       status: "Published",
       published_at: publishedAt,
       schedule_locked: true,
-    }).eq("id", job.content_item_id);
+    }).eq("id", job.content_item_id).eq("artist_id", job.artist_id);
   }
   await client.from("marketing_events").insert({
     owner_id: job.owner_id,
+    artist_id: job.artist_id,
     campaign_id: job.campaign_id,
     event_type: "content.published",
     entity_type: "content_item",
@@ -88,11 +90,19 @@ async function reconcileProviderScheduledPublications(limit = 20) {
   let failed = 0;
   let pending = 0;
   for (const job of jobs ?? []) {
+    if (!job.artist_id) {
+      await client.from("publication_jobs").update({
+        status: "failed",
+        last_error: "Artist scope is missing; provider reconciliation is blocked.",
+      }).eq("id", job.id);
+      failed += 1;
+      continue;
+    }
     if (!job.external_post_id) {
       await client.from("publication_jobs").update({
         status: "failed",
         last_error: "Provider-scheduled publication has no external post ID to reconcile.",
-      }).eq("id", job.id);
+      }).eq("id", job.id).eq("artist_id", job.artist_id);
       failed += 1;
       continue;
     }
@@ -104,7 +114,7 @@ async function reconcileProviderScheduledPublications(limit = 20) {
     try {
       const provider = await adapter.fetchPublicationStatus(job.owner_id, job.external_post_id);
       if (provider.status === "scheduled") {
-        await client.from("publication_jobs").update({ result: provider.details ?? {}, last_error: null }).eq("id", job.id);
+        await client.from("publication_jobs").update({ result: provider.details ?? {}, last_error: null }).eq("id", job.id).eq("artist_id", job.artist_id);
         pending += 1;
         continue;
       }
@@ -113,12 +123,13 @@ async function reconcileProviderScheduledPublications(limit = 20) {
           status: "failed",
           result: provider.details ?? {},
           last_error: "The provider reported that the scheduled publication failed.",
-        }).eq("id", job.id);
+        }).eq("id", job.id).eq("artist_id", job.artist_id);
         if (job.content_item_id) {
-          await client.from("content_items").update({ status: "Ready", schedule_locked: false }).eq("id", job.content_item_id);
+          await client.from("content_items").update({ status: "Ready", schedule_locked: false }).eq("id", job.content_item_id).eq("artist_id", job.artist_id);
         }
         await client.from("marketing_events").insert({
           owner_id: job.owner_id,
+          artist_id: job.artist_id,
           campaign_id: job.campaign_id,
           event_type: "publication.failed",
           entity_type: "content_item",
@@ -133,7 +144,7 @@ async function reconcileProviderScheduledPublications(limit = 20) {
     } catch (error) {
       await client.from("publication_jobs").update({
         last_error: error instanceof Error ? error.message : "Provider schedule reconciliation failed.",
-      }).eq("id", job.id);
+      }).eq("id", job.id).eq("artist_id", job.artist_id);
       pending += 1;
     }
   }
@@ -159,6 +170,15 @@ export async function processDuePublicationJobs(limit = 20) {
   let failed = 0;
   let deferred = 0;
   for (const job of jobs ?? []) {
+    if (!job.artist_id) {
+      await client.from("publication_jobs").update({
+        status: "failed",
+        last_error: "Artist scope is missing; publication is blocked.",
+      }).eq("id", job.id);
+      failed += 1;
+      continue;
+    }
+
     const adapter = channelAdapter(job.platform);
     const future = inFuture(job.scheduled_at);
     if (future && !adapter.capability().providerScheduling) {
@@ -170,6 +190,7 @@ export async function processDuePublicationJobs(limit = 20) {
       .from("publication_jobs")
       .update({ status: "publishing", attempt_count: job.attempt_count + 1 })
       .eq("id", job.id)
+      .eq("artist_id", job.artist_id)
       .in("status", ["approved", "scheduled"])
       .select("id")
       .maybeSingle();
@@ -184,21 +205,24 @@ export async function processDuePublicationJobs(limit = 20) {
           .from("content_variants")
           .select("attribution_code")
           .eq("id", job.content_variant_id)
+          .eq("artist_id", job.artist_id)
           .maybeSingle();
         if (variant?.attribution_code) attributionUrl = `${getSiteUrl()}/go/${variant.attribution_code}`;
       }
       const { data: sourceContent, error: sourceContentError } = job.content_item_id
-        ? await client.from("content_items").select("source,format").eq("id", job.content_item_id).maybeSingle()
+        ? await client.from("content_items").select("source,format").eq("id", job.content_item_id).eq("artist_id", job.artist_id).maybeSingle()
         : { data: null, error: null };
       if (sourceContentError) throw new Error(sourceContentError.message);
       const publicationMetadata = json({
         ...requestPayload,
+        artistId: job.artist_id,
         source: sourceContent?.source ?? requestPayload.source ?? null,
         format: sourceContent?.format ?? requestPayload.format ?? null,
         aiGenerated: sourceContent?.source === "ai" || requestPayload.aiGenerated === true,
       });
       const result = await adapter.publish({
         ownerId: job.owner_id,
+        artistId: job.artist_id,
         platform: job.platform,
         caption: text(requestPayload.caption),
         hookText: text(requestPayload.hookText),
@@ -214,7 +238,7 @@ export async function processDuePublicationJobs(limit = 20) {
           status: "manual_ready",
           result: result.details ?? {},
           last_error: null,
-        }).eq("id", job.id);
+        }).eq("id", job.id).eq("artist_id", job.artist_id);
         if (handoffError) throw new Error(handoffError.message);
         manualReady += 1;
         continue;
@@ -228,16 +252,17 @@ export async function processDuePublicationJobs(limit = 20) {
           external_url: result.externalUrl ?? null,
           result: result.details ?? {},
           last_error: null,
-        }).eq("id", job.id);
+        }).eq("id", job.id).eq("artist_id", job.artist_id);
         if (scheduleError) throw new Error(scheduleError.message);
         if (job.content_variant_id) {
-          await client.from("content_variants").update({ status: "scheduled", external_post_id: result.externalPostId }).eq("id", job.content_variant_id);
+          await client.from("content_variants").update({ status: "scheduled", external_post_id: result.externalPostId }).eq("id", job.content_variant_id).eq("artist_id", job.artist_id);
         }
         if (job.content_item_id) {
-          await client.from("content_items").update({ status: "Scheduled", schedule_locked: true }).eq("id", job.content_item_id);
+          await client.from("content_items").update({ status: "Scheduled", schedule_locked: true }).eq("id", job.content_item_id).eq("artist_id", job.artist_id);
         }
         await client.from("marketing_events").insert({
           owner_id: job.owner_id,
+          artist_id: job.artist_id,
           campaign_id: job.campaign_id,
           event_type: "publication.provider_scheduled",
           entity_type: "content_item",
@@ -263,7 +288,7 @@ export async function processDuePublicationJobs(limit = 20) {
       const { error: identityError } = await client.from("publication_jobs").update({
         external_post_id: externalJob.external_post_id,
         external_url: externalJob.external_url,
-      }).eq("id", job.id);
+      }).eq("id", job.id).eq("artist_id", job.artist_id);
       if (identityError) throw new Error(identityError.message);
       await markPublicationPublished(externalJob, publishedAt, result.details ?? {});
       published += 1;
@@ -275,7 +300,7 @@ export async function processDuePublicationJobs(limit = 20) {
         status: terminal ? "failed" : "scheduled",
         scheduled_at: terminal ? job.scheduled_at : new Date(Date.now() + backoffMinutes * 60 * 1000).toISOString(),
         last_error: error instanceof Error ? error.message : "Publication failed.",
-      }).eq("id", job.id);
+      }).eq("id", job.id).eq("artist_id", job.artist_id);
       failed += 1;
     }
   }
