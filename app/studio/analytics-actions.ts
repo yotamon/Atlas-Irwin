@@ -7,6 +7,7 @@ import { asMarketingClient } from "@/lib/marketing/db";
 import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
+import type { MarketingMetricSnapshot } from "@/types/marketing-database";
 
 const required = z.string().trim().min(1).max(300);
 const text = z.string().trim().max(10000);
@@ -48,7 +49,7 @@ export async function saveMetric(form: FormData) {
   }
 
   const numeric = ["reach","views","watch_time","likes","comments","shares","saves","profile_visits","follows","link_clicks","streams","listeners","playlist_adds"] as const;
-  const row: Record<string, unknown> = {
+  const row: Partial<MarketingMetricSnapshot> = {
     owner_id: artist.userId,
     artist_id: artist.artistId,
     date: required.parse(value(form, "date")),
