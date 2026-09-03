@@ -11,6 +11,7 @@ type Table<Row> = {
 export type MarketingMediaJob = {
   id: string;
   owner_id: string;
+  artist_id: string;
   campaign_id: string | null;
   release_id: string | null;
   content_item_id: string;
