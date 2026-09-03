@@ -20,7 +20,7 @@ test("Today resolves one ArtistContext and scopes operational state", async () =
     '.eq("artist_id", artist.artistId)',
     'from("next_best_actions")',
     'from("publication_jobs")',
-    'from("audience_interactions")',
+    'from("outreach_messages")',
   ]);
   assert.ok((text.match(/\.eq\("artist_id", artist\.artistId\)/g) ?? []).length >= 10,
     "Today should keep artist filters across the operational dashboard, not only one query");
@@ -78,8 +78,10 @@ test("Audience and social OAuth carry owner plus artist", async () => {
     "get_social_channel_token_for_artist",
   ]);
   await requireSnippets("app/studio/(protected)/settings/social/[platform]/callback/route.ts", [
-    "artistId",
-    "workspace",
+    "artistIdFromState",
+    "resolveArtistContext",
+    "completeSocialOAuth",
+    "artistId: artist.artistId",
   ]);
 });
 
