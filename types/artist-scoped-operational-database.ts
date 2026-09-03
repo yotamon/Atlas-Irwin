@@ -1,4 +1,5 @@
 import type { AutonomyDatabase } from "./autonomy-database";
+import type { Database } from "./database";
 import type { GrowthDatabase } from "./growth-database";
 import type { MarketingDatabase } from "./marketing-database";
 import type { SocialDatabase } from "./social-database";
@@ -19,6 +20,21 @@ type ArtistScopedTable<T> = T extends {
 
 type ScopeTables<Tables, Names extends PropertyKey> = {
   [Key in keyof Tables]: Key extends Names ? ArtistScopedTable<Tables[Key]> : Tables[Key];
+};
+
+type CoreOperationalScopedTableName =
+  | "content_items"
+  | "outreach_contacts"
+  | "outreach_messages"
+  | "metric_snapshots"
+  | "brand_settings"
+  | "tasks"
+  | "release_learnings";
+
+export type ArtistScopedCoreOperationalDatabase = Omit<Database, "public"> & {
+  public: Omit<Database["public"], "Tables"> & {
+    Tables: ScopeTables<Database["public"]["Tables"], CoreOperationalScopedTableName>;
+  };
 };
 
 type MarketingScopedTableName =
