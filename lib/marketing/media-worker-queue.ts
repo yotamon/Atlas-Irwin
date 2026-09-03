@@ -15,6 +15,7 @@ import type { MarketingMediaDatabase, MarketingMediaJob } from "@/types/marketin
 
 const STALE_JOB_MS = 50 * 60 * 1000;
 const DISPATCH_CLAIM_MS = 2 * 60 * 1000;
+type WorkerScope = { ownerId: string; artistId: string };
 
 function client() {
   return createMarketingServiceClient() as unknown as SupabaseClient<MarketingMediaDatabase>;
@@ -47,18 +48,19 @@ function withoutCredential(payload: Record<string, unknown>) {
   return clean;
 }
 
-async function state(db: ReturnType<typeof client>) {
-  const { data, error } = await db.from("marketing_media_jobs")
+async function state(db: ReturnType<typeof client>, scope?: WorkerScope) {
+  let query = db.from("marketing_media_jobs")
     .select("*")
-    .in("status", ["planned", "queued", "running"])
-    .order("created_at")
-    .limit(100);
+    .in("status", ["planned", "queued", "running"]);
+  if (scope) query = query.eq("owner_id", scope.ownerId).eq("artist_id", scope.artistId);
+  const { data, error } = await query.order("created_at").limit(100);
   if (error) throw new Error(error.message);
   const planned: MarketingMediaJob[] = [];
   let active = false;
 
   for (const row of data ?? []) {
     const job = row as MarketingMediaJob;
+    const jobFilter = (mutation: ReturnType<typeof db.from>) => mutation;
     if (job.status === "planned") {
       planned.push(job);
       continue;
@@ -74,7 +76,8 @@ async function state(db: ReturnType<typeof client>) {
         error: nextStatus === "failed" ? "Marketing media dispatch repeatedly stalled before worker ownership was established." : null,
         started_at: null,
         completed_at: nextStatus === "failed" ? new Date().toISOString() : null,
-      }).eq("id", job.id).eq("status", "queued").is("external_job_id", null);
+      }).eq("id", job.id).eq("owner_id", job.owner_id).eq("artist_id", job.artist_id).eq("status", "queued").is("external_job_id", null);
+      void jobFilter;
       if (recoverError) throw new Error(recoverError.message);
       if (nextStatus === "planned") planned.push({ ...job, status: "planned", external_job_id: null });
       continue;
@@ -91,7 +94,7 @@ async function state(db: ReturnType<typeof client>) {
       error: nextStatus === "failed" ? "Marketing media job became stale before a terminal callback was received." : null,
       started_at: null,
       completed_at: nextStatus === "failed" ? new Date().toISOString() : null,
-    }).eq("id", job.id).in("status", ["queued", "running"]);
+    }).eq("id", job.id).eq("owner_id", job.owner_id).eq("artist_id", job.artist_id).in("status", ["queued", "running"]);
     if (staleError) throw new Error(staleError.message);
     if (nextStatus === "planned") planned.push({ ...job, status: "planned", external_job_id: null });
   }
@@ -130,6 +133,7 @@ async function freshUploadPayload(payload: Record<string, unknown>) {
 
 async function dispatch(db: ReturnType<typeof client>, job: MarketingMediaJob) {
   const requestPayload = withoutCredential(record(job.request_payload));
+  if (requestPayload.artist_id !== job.artist_id) throw new Error("Marketing media job payload does not match its artist lineage.");
   const credential = createMediaWorkerCallbackCredential();
   const { data: claimed, error: claimError } = await db.from("marketing_media_jobs").update({
     status: "queued",
@@ -139,7 +143,7 @@ async function dispatch(db: ReturnType<typeof client>, job: MarketingMediaJob) {
     error: null,
     started_at: null,
     completed_at: null,
-  }).eq("id", job.id).eq("status", "planned").select("*").maybeSingle();
+  }).eq("id", job.id).eq("owner_id", job.owner_id).eq("artist_id", job.artist_id).eq("status", "planned").select("*").maybeSingle();
   if (claimError) throw new Error(claimError.message);
   if (!claimed) return false;
 
@@ -154,7 +158,7 @@ async function dispatch(db: ReturnType<typeof client>, job: MarketingMediaJob) {
     });
     const { error: updateError } = await db.from("marketing_media_jobs")
       .update({ external_job_id: result.sandboxName })
-      .eq("id", claimed.id);
+      .eq("id", claimed.id).eq("owner_id", claimed.owner_id).eq("artist_id", claimed.artist_id);
     if (updateError) throw new Error(updateError.message);
     return true;
   } catch (error) {
@@ -164,7 +168,7 @@ async function dispatch(db: ReturnType<typeof client>, job: MarketingMediaJob) {
         request_payload: json(requestPayload),
         external_job_id: null,
         error: null,
-      }).eq("id", claimed.id);
+      }).eq("id", claimed.id).eq("owner_id", claimed.owner_id).eq("artist_id", claimed.artist_id);
       return false;
     }
     const message = error instanceof Error ? error.message : "Marketing Media Worker dispatch failed.";
@@ -175,22 +179,23 @@ async function dispatch(db: ReturnType<typeof client>, job: MarketingMediaJob) {
       external_job_id: null,
       error: message,
       completed_at: terminal ? new Date().toISOString() : null,
-    }).eq("id", claimed.id);
+    }).eq("id", claimed.id).eq("owner_id", claimed.owner_id).eq("artist_id", claimed.artist_id);
     if (terminal && claimed.generation_run_id) {
-      const { data: run } = await db.from("generation_runs").select("output").eq("id", claimed.generation_run_id).maybeSingle();
+      const { data: run } = await db.from("generation_runs").select("output")
+        .eq("id", claimed.generation_run_id).eq("owner_id", claimed.owner_id).eq("artist_id", claimed.artist_id).maybeSingle();
       const output = record(run?.output);
       await db.from("generation_runs").update({
         output: json({ ...output, stage: "finishing_failed", finishingError: message }),
-      }).eq("id", claimed.generation_run_id);
+      }).eq("id", claimed.generation_run_id).eq("owner_id", claimed.owner_id).eq("artist_id", claimed.artist_id);
     }
     return false;
   }
 }
 
-export async function kickMarketingMediaWorkerQueue() {
+export async function kickMarketingMediaWorkerQueue(scope?: WorkerScope) {
   if (!mediaWorkerReadiness().configured) return { dispatched: false, reason: "unavailable" as const };
   const db = client();
-  const current = await state(db);
+  const current = await state(db, scope);
   if (current.active) return { dispatched: false, reason: "busy" as const };
   const job = current.planned[0] ?? null;
   if (!job) return { dispatched: false, reason: "empty" as const };
