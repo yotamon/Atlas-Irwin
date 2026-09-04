@@ -1,5 +1,6 @@
 import type { Json, MediaAsset, MusicVideoProject, Release, Track } from "@/types/database";
 import type { TrackLyricsContext } from "@/lib/lyrics-intelligence/context";
+import type { CreativeMemoryRecommendation } from "@/lib/creative-memory/server";
 
 export type MusicMapSection = {
   id: string;
@@ -264,6 +265,7 @@ export type DirectorPreferences = {
 };
 
 export type VideoProjectContext = {
+  artistId: string;
   project: MusicVideoProject;
   release: Release;
   track: Track;
@@ -272,6 +274,11 @@ export type VideoProjectContext = {
   brandSettings: Json[];
   media: Array<Pick<MediaAsset, "id" | "asset_type" | "mime_type" | "metadata" | "public_url">>;
   preferences: DirectorPreferences;
+  creativeMemory: {
+    summary: string;
+    evidenceCount: number;
+    recommendations: CreativeMemoryRecommendation[];
+  };
 };
 
 export interface MusicVideoCreativeDirector {
@@ -287,9 +294,9 @@ export interface MusicVideoCreativeDirector {
   }): Promise<StoryboardShot>;
 }
 
-export function parseMusicMap(value: unknown): MusicMap | null {
+export function parseMusicMap(value: Json): MusicMap | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const map = value as Partial<MusicMap>;
-  if (!Array.isArray(map.sections) || !Array.isArray(map.energy_curve) || typeof map.duration_ms !== "number") return null;
-  return map as MusicMap;
+  const candidate = value as unknown as Partial<MusicMap>;
+  if (!Array.isArray(candidate.sections) || typeof candidate.duration_ms !== "number") return null;
+  return candidate as MusicMap;
 }
