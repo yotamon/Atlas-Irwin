@@ -182,7 +182,7 @@ export default async function SitesPage() {
           <Link className="button primary" href={`/site-preview/${site.id}`} target="_blank" rel="noreferrer">
             Preview private draft
           </Link>
-          {draft ? (
+          {hasPublishableDraft && draft ? (
             <form action={publishArtistSiteAction}>
               <input type="hidden" name="siteId" value={site.id} />
               <button className="button primary" type="submit">Publish reviewed changes</button>
