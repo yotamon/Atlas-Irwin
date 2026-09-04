@@ -11,9 +11,18 @@ type Command = {
   href: string;
 };
 
+type ObjectSearchResult = {
+  id: string;
+  type: string;
+  label: string;
+  detail: string;
+  href: string;
+};
+
 export function CommandPalette({ artistId }: { artistId: string }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [objectResults, setObjectResults] = useState<ObjectSearchResult[]>([]);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const commands = useMemo<Command[]>(() => [
@@ -40,11 +49,13 @@ export function CommandPalette({ artistId }: { artistId: string }) {
 
   const close = useCallback(() => {
     setOpen(false);
+    setObjectResults([]);
     requestAnimationFrame(() => triggerRef.current?.focus());
   }, []);
 
   const openPalette = useCallback(() => {
     setQuery("");
+    setObjectResults([]);
     setOpen(true);
   }, []);
 
@@ -69,6 +80,31 @@ export function CommandPalette({ artistId }: { artistId: string }) {
     return () => cancelAnimationFrame(frame);
   }, [open]);
 
+  useEffect(() => {
+    if (!open || normalized.length < 2) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams({ q: query.trim(), artist: artistId });
+      void fetch(`/api/studio/search?${params.toString()}`, { signal: controller.signal })
+        .then((response) => response.ok ? response.json() as Promise<{ results?: ObjectSearchResult[] }> : null)
+        .then((payload) => {
+          if (payload?.results) setObjectResults(payload.results);
+        })
+        .catch((error) => {
+          if (error instanceof DOMException && error.name === "AbortError") return;
+        });
+    }, 160);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [artistId, normalized, open, query]);
+
+  function changeQuery(value: string) {
+    setQuery(value);
+    if (value.trim().length < 2) setObjectResults([]);
+  }
+
   return (
     <>
       <button
@@ -92,13 +128,25 @@ export function CommandPalette({ artistId }: { artistId: string }) {
               <input
                 ref={inputRef}
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search Ensemblis or choose an action…"
-                aria-label="Search commands"
+                onChange={(event) => changeQuery(event.target.value)}
+                placeholder="Search tracks, releases, campaigns, content or actions…"
+                aria-label="Search commands and artist objects"
               />
               <button type="button" onClick={close} aria-label="Close search">Esc</button>
             </div>
             <div className="ensemblis-command-results">
+              {objectResults.length ? (
+                <div className="ensemblis-command-group ensemblis-command-object-results">
+                  <span>Artist results</span>
+                  {objectResults.map((result) => (
+                    <Link href={result.href} key={result.id} onClick={close}>
+                      <strong>{result.label}</strong>
+                      <small>{result.type} · {result.detail}</small>
+                      <b aria-hidden>↵</b>
+                    </Link>
+                  ))}
+                </div>
+              ) : null}
               {(["Navigate", "Create", "Manage"] as const).map((group) => {
                 const groupCommands = filtered.filter((command) => command.group === group);
                 if (!groupCommands.length) return null;
@@ -115,7 +163,7 @@ export function CommandPalette({ artistId }: { artistId: string }) {
                   </div>
                 );
               })}
-              {!filtered.length ? <div className="ensemblis-command-empty">No matching workspace or action.</div> : null}
+              {!objectResults.length && !filtered.length ? <div className="ensemblis-command-empty">No matching workspace, action or artist object.</div> : null}
             </div>
           </section>
         </div>

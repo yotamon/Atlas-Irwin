@@ -9,11 +9,7 @@ async function source(path) {
 test("UX polish styles load after the Ensemblis compatibility layers", async () => {
   const layout = await source("app/studio/layout.tsx");
   const shell = layout.indexOf('import "./ensemblis-shell.css"');
-  const polishFiles = [
-    "ux-polish.css", "music-polish.css", "release-polish.css", "create-polish.css",
-    "growth-polish.css", "audience-polish.css", "library-polish.css", "inbox-polish.css",
-    "shared-interactions.css", "loading-polish.css", "object-workspace-polish.css",
-  ];
+  const polishFiles = ["ux-polish.css", "music-polish.css", "release-polish.css", "create-polish.css", "growth-polish.css", "audience-polish.css", "library-polish.css", "inbox-polish.css", "shared-interactions.css", "loading-polish.css", "object-workspace-polish.css"];
   assert.ok(shell >= 0);
   for (const file of polishFiles) {
     const index = layout.indexOf(`import "./${file}"`);
@@ -22,11 +18,15 @@ test("UX polish styles load after the Ensemblis compatibility layers", async () 
   }
 });
 
-test("global command search is functional, keyboard accessible and artist aware", async () => {
+test("global command search is keyboard accessible, artist aware and object aware", async () => {
   const palette = await source("components/studio/command-palette.tsx");
   const context = await source("components/studio/context-bar.tsx");
-  for (const snippet of ["event.metaKey || event.ctrlKey", 'event.key.toLowerCase() === "k"', 'role="dialog"', 'aria-modal="true"', "ensemblisArtistHref", "New release", "Generate music", "Distribution"]) assert.ok(palette.includes(snippet), `command palette is missing ${snippet}`);
+  const search = await source("app/api/studio/search/route.ts");
+  for (const snippet of ["event.metaKey || event.ctrlKey", 'event.key.toLowerCase() === "k"', 'role="dialog"', 'aria-modal="true"', "ensemblisArtistHref", "New release", "Generate music", "Artist results"]) assert.ok(palette.includes(snippet), `command palette is missing ${snippet}`);
   assert.ok(context.includes("<CommandPalette artistId={artistId}"));
+  assert.ok(search.includes("resolveArtistContext"));
+  assert.ok(search.includes('.eq("artist_id", artist.artistId)'));
+  for (const sourceName of ['from("releases")', 'from("track_vault")', 'from("campaigns")', 'from("content_items")']) assert.ok(search.includes(sourceName));
 });
 
 test("protected Studio routes have product-specific transition feedback", async () => {
@@ -55,6 +55,11 @@ test("track objects have one readable workspace for source, intelligence, stems 
   for (const snippet of ["<ObjectHeader", 'from("track_vault")', '.eq("artist_id", artist.artistId)', "<MusicIntelligencePreview", "<StemIntelligencePanel", "<LyricsIntelligencePanel", "Detailed track signals"]) assert.ok(track.includes(snippet), `track workspace is missing ${snippet}`);
   assert.ok(header.includes("ensemblis-object-header"));
   assert.ok(header.includes("ensemblis-object-tabs"));
+});
+
+test("Track Intelligence exposes real musical timeline data instead of decorative waveform UI", async () => {
+  const preview = await source("components/studio/music-intelligence-preview.tsx");
+  for (const snippet of ["map.energy_curve", "map.edit_points", "sectionOverlay", "hookOverlay", "playhead"]) assert.ok(preview.includes(snippet));
 });
 
 test("release workspace uses the shared object grammar and no Atlas product copy", async () => {
