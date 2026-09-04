@@ -144,7 +144,6 @@ export async function uploadResumableMedia({
 }: {
   file: File;
   target: ResumableUploadTarget;
-  accessToken?: string;
   onProgress?: (progress: number) => void;
 }) {
   const key = resumeKey(file, target);
@@ -165,7 +164,7 @@ export async function uploadResumableMedia({
 
   while (offset < file.size) {
     const chunk = file.slice(offset, Math.min(file.size, offset + TUS_CHUNK_SIZE));
-    let uploaded = false;
+    let chunkHandled = false;
     let lastError: unknown = null;
 
     for (const delay of RETRY_DELAYS) {
@@ -173,7 +172,7 @@ export async function uploadResumableMedia({
       try {
         offset = await patchChunk(uploadUrl, target, chunk, offset);
         onProgress?.(file.size ? Math.min(1, offset / file.size) : 1);
-        uploaded = true;
+        chunkHandled = true;
         break;
       } catch (error) {
         if (error instanceof ResumableUploadAuthorizationError) throw error;
@@ -184,17 +183,19 @@ export async function uploadResumableMedia({
           uploadUrl = await createUpload(file, target);
           rememberResumeUrl(key, uploadUrl);
           offset = 0;
+          onProgress?.(0);
+          chunkHandled = true;
           break;
         }
         offset = serverOffset;
         if (offset >= file.size) {
-          uploaded = true;
+          chunkHandled = true;
           break;
         }
       }
     }
 
-    if (!uploaded && offset < file.size) {
+    if (!chunkHandled && offset < file.size) {
       throw lastError instanceof Error ? lastError : new Error("Upload interrupted after automatic retries.");
     }
   }
