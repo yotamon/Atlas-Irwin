@@ -43,11 +43,28 @@
   line-height: 1.45;
 }
 
+.waveformBlock,
 .timelineBlock {
   display: grid;
   gap: 0.45rem;
   padding-top: 0.2rem;
 }
+
+.waveform {
+  min-height: 4.1rem;
+  overflow: hidden;
+  border: 1px solid var(--en-line, rgba(255,255,255,.09));
+  border-radius: 0.72rem;
+  background: color-mix(in srgb, var(--en-bg, #080b09) 78%, transparent);
+  opacity: 0.72;
+  transition: opacity 160ms ease, border-color 160ms ease;
+}
+
+.waveformReady {
+  border-color: color-mix(in srgb, var(--en-line-strong, #35443b) 82%, transparent);
+  opacity: 1;
+}
+
 .timelineHeading small,
 .hookHeading small {
   color: var(--en-subtle, rgba(255,255,255,.55));
@@ -200,12 +217,17 @@
 
 @media (max-width: 620px) {
   .preview { padding: 0.75rem; }
+  .waveform { min-height: 3.6rem; }
   .timeline { min-height: 6.1rem; }
   .sections button { min-width: 4.9rem; }
   .hooks button { grid-template-columns: 1.5rem minmax(0, 1fr) auto; }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .waveform,
   .sections button,
-  .hooks button { scroll-behavior: auto; }
+  .hooks button {
+    scroll-behavior: auto;
+    transition: none;
+  }
 }
