@@ -87,6 +87,16 @@ test("release workspace uses the shared object grammar and no Atlas product copy
   assert.equal(/\bAtlas\b/.test(release), false, "Atlas product language leaked into the Ensemblis release workspace");
 });
 
+test("campaign workspace uses Ensemblis chrome without Atlas-era editorial styling", async () => {
+  const css = await source("components/studio/marketing-workspace.module.css");
+  assert.ok(css.includes("var(--en-surface)"));
+  assert.ok(css.includes("var(--font-body)"));
+  assert.ok(css.includes("text-transform: none"));
+  assert.ok(css.includes("var(--en-accent-soft)"));
+  for (const legacyColor of ["#0c100e", "#d7ccb3", "#ddd2ba", "#d9cfb8", "#d8cdb5"]) assert.equal(css.includes(legacyColor), false, `${legacyColor} leaked into Campaign chrome`);
+  assert.equal(css.includes("heroCard::after"), false, "decorative orbit styling should not define Campaign hierarchy");
+});
+
 test("core workspaces follow the outcome-first UX information architecture", async () => {
   const create = await source("app/studio/(protected)/create/page.tsx");
   const grow = await source("app/studio/(protected)/growth/page.tsx");
