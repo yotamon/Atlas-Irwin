@@ -23,7 +23,8 @@ insert into public.track_music_intelligence(
   track_id,owner_id,analysis_version,engine,quality,semantic_structure,source_audio_url,audio_sha256,analysis
 ) values (
   '57000000-0000-0000-0000-000000000001','17000000-0000-0000-0000-000000000001',1,'test','full',true,
-  'https://example.com/learning.wav','learning-sha','{}'::jsonb
+  'https://example.com/learning.wav','learning-sha',
+  '{"source":"worker","version":1,"hook_candidates":[{"id":"closed-loop-high","start_ms":10000,"end_ms":18000,"kind":"instant_hook","label":"High vocal Moment","score":0.9,"metrics":{"energy":0.7,"novelty":0.7},"intent_scores":{"instant_hook":0.9}},{"id":"closed-loop-low","start_ms":30000,"end_ms":39000,"kind":"instant_hook","label":"Low vocal Moment","score":0.8,"metrics":{"energy":0.7,"novelty":0.7},"intent_scores":{"instant_hook":0.8}}]}'::jsonb
 );
 
 insert into public.moments(
