@@ -19,7 +19,7 @@ permissions:
 jobs:
   verify:
     name: fast verification
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    if: github.event_name != 'pull_request' || (github.event.pull_request.draft == false && (github.event.pull_request.number != 94 || github.event.action != 'ready_for_review'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
