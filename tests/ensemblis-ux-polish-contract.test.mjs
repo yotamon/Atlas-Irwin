@@ -86,9 +86,61 @@ test("track objects have one readable workspace for source, intelligence, stems 
   assert.ok(header.includes("ensemblis-object-tabs"));
 });
 
-test("Track Intelligence exposes real musical timeline data instead of decorative waveform UI", async () => {
+test("Track Intelligence exposes a real native waveform plus semantic musical timeline data", async () => {
   const preview = await source("components/studio/music-intelligence-preview.tsx");
-  for (const snippet of ["map.energy_curve", "map.edit_points", "sectionOverlay", "hookOverlay", "playhead"]) assert.ok(preview.includes(snippet));
+  const css = await source("components/studio/music-intelligence-preview.module.css");
+  for (const snippet of [
+    "sampleWaveform",
+    "new AudioContext()",
+    'role="slider"',
+    "onPointerDown",
+    'event.key === "ArrowLeft"',
+    'event.key === "ArrowRight"',
+    "waveformPeaks",
+    "map.energy_curve",
+    "map.edit_points",
+    "sectionOverlay",
+    "hookOverlay",
+    "playhead",
+  ]) assert.ok(preview.includes(snippet), `Track Intelligence preview is missing ${snippet}`);
+  assert.ok(css.includes(".waveformBars"));
+  assert.ok(css.includes(".waveformPlayed"));
+  assert.equal(preview.includes("wavesurfer.js"), false, "native waveform should not require a package dependency");
+});
+
+test("Media Library uses signed resumable TUS above 6 MB without expanding storage policy", async () => {
+  const uploader = await source("components/studio/media-uploader.tsx");
+  const resumable = await source("lib/supabase/resumable-upload.ts");
+  const catalog = await source("app/studio/catalog-actions.ts");
+  const interactions = await source("app/studio/shared-interactions.css");
+  const packageJson = JSON.parse(await source("package.json"));
+
+  assert.ok(uploader.includes("RESUMABLE_THRESHOLD = 6 * 1024 * 1024"));
+  assert.ok(uploader.includes("PUBLIC_LIMIT = 100 * 1024 * 1024"));
+  assert.ok(uploader.includes("uploadResumableMedia"));
+  assert.ok(uploader.includes("upload-progress"));
+  assert.ok(uploader.includes("Retry to resume from the last confirmed chunk"));
+  assert.ok(uploader.includes("ResumableUploadAuthorizationError"));
+  assert.equal(uploader.includes("auth.getSession"), false, "signed resumable upload must not depend on browser session retrieval");
+
+  for (const snippet of [
+    "TUS_CHUNK_SIZE = 6 * 1024 * 1024",
+    '"Tus-Resumable"',
+    '"x-signature"',
+    '"Upload-Length"',
+    '"Upload-Metadata"',
+    '"Upload-Offset"',
+    'method: "HEAD"',
+    'method: "PATCH"',
+    "sessionStorage",
+    "RETRY_DELAYS",
+  ]) assert.ok(resumable.includes(snippet), `resumable transport is missing ${snippet}`);
+
+  assert.ok(catalog.includes("createSignedUploadUrl(storagePath)"));
+  assert.ok(catalog.includes("max(104857600)"));
+  assert.ok(interactions.includes(".upload-progress"));
+  assert.equal(Boolean(packageJson.dependencies?.["tus-js-client"]), false);
+  assert.equal(Boolean(packageJson.dependencies?.["wavesurfer.js"]), false);
 });
 
 test("release workspace uses the shared object grammar and no Atlas product copy", async () => {
