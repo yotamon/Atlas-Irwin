@@ -4,11 +4,14 @@ import { access, readFile } from "node:fs/promises";
 
 const requiredRoutes = [
   "app/studio/(protected)/page.tsx",
+  "app/studio/(protected)/music/page.tsx",
   "app/studio/(protected)/growth/page.tsx",
   "app/studio/(protected)/growth/import/page.tsx",
   "app/studio/(protected)/releases/page.tsx",
   "app/studio/(protected)/create/page.tsx",
+  "app/studio/(protected)/audience/page.tsx",
   "app/studio/(protected)/library/page.tsx",
+  "app/studio/(protected)/connections/page.tsx",
   "app/studio/(protected)/settings/page.tsx",
   "app/studio/(protected)/production/page.tsx",
   "app/studio/(protected)/learn/page.tsx",
@@ -21,14 +24,57 @@ test("Studio V2 keeps every daily outcome route present", async () => {
   await Promise.all(requiredRoutes.map((path) => access(path)));
 });
 
-test("primary navigation stays intentionally small and growth-led", async () => {
+test("Ensemblis primary navigation matches the product roadmap and keeps specialist tools advanced", async () => {
+  const product = await readFile("lib/ensemblis-product.ts", "utf8");
   const sidebar = await readFile("components/studio/sidebar.tsx", "utf8");
-  for (const route of ["/studio", "/studio/growth", "/studio/releases", "/studio/create", "/studio/library", "/studio/settings"]) {
-    assert.match(sidebar, new RegExp(route.replaceAll("/", "\\/")));
+
+  const primaryRoutes = [
+    "/studio",
+    "/studio/music",
+    "/studio/releases",
+    "/studio/create",
+    "/studio/growth",
+    "/studio/audience",
+    "/studio/library",
+    "/studio/connections",
+    "/studio/settings",
+  ];
+
+  for (const route of primaryRoutes) {
+    assert.match(product, new RegExp(route.replaceAll("/", "\\/")));
   }
-  for (const advancedRoute of ["/studio/campaigns", "/studio/content", "/studio/outreach", "/studio/analytics", "/studio/data-health"]) {
-    assert.equal(sidebar.includes(`\"${advancedRoute}\"`), false, `${advancedRoute} leaked back into the primary navigation`);
+
+  for (const advancedRoute of [
+    "/studio/distribution",
+    "/studio/campaigns",
+    "/studio/content",
+    "/studio/outreach",
+    "/studio/analytics",
+    "/studio/data-health",
+  ]) {
+    assert.equal(
+      product.includes(`\"${advancedRoute}\"`),
+      false,
+      `${advancedRoute} leaked into Ensemblis primary navigation`,
+    );
   }
+
+  assert.ok(sidebar.includes("ENSEMBLIS_PRIMARY_NAV"));
+  assert.ok(sidebar.includes("Active artist"));
+  assert.equal(sidebar.includes("ATLAS"), false, "Atlas product branding leaked back into the Ensemblis shell");
+});
+
+test("Ensemblis auth and shell keep artist identity separate from product identity", async () => {
+  const login = await readFile("app/studio/login/page.tsx", "utf8");
+  const layout = await readFile("app/studio/(protected)/layout.tsx", "utf8");
+  const product = await readFile("lib/ensemblis-product.ts", "utf8");
+
+  assert.ok(product.includes('name: "Ensemblis"'));
+  assert.ok(login.includes("ENSEMBLIS_PRODUCT"));
+  assert.equal(login.includes("Atlas Irwin"), false);
+  assert.ok(layout.includes("resolveDefaultArtistContext"));
+  assert.ok(layout.includes("artistName={artist.artistName}"));
+  assert.ok(layout.includes("workspaceName={artist.workspaceName}"));
 });
 
 test("release workspace exposes lifecycle-aware growth stages and preserves an advanced escape hatch", async () => {
