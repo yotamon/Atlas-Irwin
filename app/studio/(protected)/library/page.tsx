@@ -80,7 +80,7 @@ export default async function LibraryPage() {
       <section className="library-reusable-strip" aria-label="Creative Memory recommendations">
         <div className="v2-section-heading">
           <div>
-            <span className="section-label">Creative Memory</span>
+            <span className="section-label">Creative Memory · Recent visual memory</span>
             <h2>{creativeMemory.recommendations.length ? "Ensemblis would reuse these first" : "Learning starts with your real decisions"}</h2>
             <p>{creativeMemory.preferences.summary}</p>
           </div>
