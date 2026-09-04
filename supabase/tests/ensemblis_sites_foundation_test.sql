@@ -1,6 +1,6 @@
 begin;
 
-select plan(18);
+select plan(19);
 
 select has_table('public', 'artist_sites', 'artist_sites table exists');
 select has_table('public', 'artist_site_versions', 'artist_site_versions table exists');
@@ -25,13 +25,13 @@ values
     '24100000-0000-0000-0000-000000000001',
     (select id from public.artists where legacy_owner_id='24000000-0000-0000-0000-000000000001'),
     'sites-a',
-    'artist-editorial'
+    'editorial-retrofuture'
   ),
   (
     '24100000-0000-0000-0000-000000000002',
     (select id from public.artists where legacy_owner_id='24000000-0000-0000-0000-000000000002'),
     'sites-b',
-    'artist-editorial'
+    'editorial-retrofuture'
   );
 
 insert into public.artist_site_versions (
@@ -50,7 +50,7 @@ insert into public.artist_site_versions (
     '24100000-0000-0000-0000-000000000001',
     1,
     'draft',
-    'artist-editorial',
+    'editorial-retrofuture',
     1,
     '{"theme":{"background":"#111111"}}',
     '{"schemaVersion":1,"artist":{"id":"24000000-0000-0000-0000-000000000001"}}',
@@ -61,7 +61,7 @@ insert into public.artist_site_versions (
     '24100000-0000-0000-0000-000000000002',
     1,
     'draft',
-    'artist-editorial',
+    'editorial-retrofuture',
     1,
     '{"theme":{"background":"#222222"}}',
     '{"schemaVersion":1,"artist":{"id":"24000000-0000-0000-0000-000000000002"}}',
@@ -106,7 +106,7 @@ select is(
 );
 select is(
   (select template_key from public.artist_site_versions where id='24200000-0000-0000-0000-000000000001'),
-  'artist-editorial',
+  'editorial-retrofuture',
   'published version pins template identity'
 );
 select is(
@@ -138,6 +138,7 @@ reset role;
 select set_config('request.jwt.claim.sub', '24000000-0000-0000-0000-000000000002', true);
 set local role authenticated;
 select is((select slug from public.artist_sites limit 1), 'sites-b', 'switching identity cannot expose Artist A site');
+select is((select template_key from public.artist_site_versions limit 1), 'editorial-retrofuture', 'Artist B independently uses the same reusable template');
 reset role;
 
 select * from finish();
