@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { Json } from "@/types/database";
+import type { Moment, MomentsDatabase } from "@/types/moments-database";
 import type { ExtendedMusicVideoProject, ExtendedMusicVideoShot, VideoDatabase } from "@/types/video-database";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { parseMusicMap } from "./creative-director";
@@ -16,9 +17,14 @@ function json(value: unknown): Json {
   return value as Json;
 }
 
+function clamp01(value: number | null | undefined) {
+  return Math.max(0, Math.min(1, Number(value ?? 0)));
+}
+
 // `master_16_9` is retained as the persisted legacy render-type key. The actual master
 // dimensions now follow project.primary_aspect_ratio so existing rows/migrations stay compatible.
 export type VideoRenderType = "master_16_9" | "social_9_16" | "promo_30" | "hook_15";
+export const QUICK_VIDEO_DERIVED_RENDER_TYPES = ["social_9_16", "promo_30", "hook_15"] as const satisfies readonly VideoRenderType[];
 
 function primaryMasterDimensions(project: ExtendedMusicVideoProject) {
   switch (project.primary_aspect_ratio) {
@@ -49,6 +55,82 @@ function isVerticalSafe(shot: ExtendedMusicVideoShot) {
   return record(shot.generation_params).vertical_safe === true;
 }
 
+function momentScore(moment: Moment) {
+  const tags = new Set(moment.purpose_tags ?? []);
+  const purposeBoost = tags.has("hook") || tags.has("social") || tags.has("short_form") ? 0.07 : 0;
+  return clamp01(
+    clamp01(moment.confidence) * 0.32
+    + clamp01(moment.hook_score) * 0.24
+    + clamp01(moment.energy_score) * 0.12
+    + clamp01(moment.emotional_score) * 0.10
+    + clamp01(moment.vocal_score) * 0.08
+    + clamp01(moment.uniqueness_score) * 0.14
+    + purposeBoost,
+  );
+}
+
+function overlapRatio(a: Moment, b: Moment) {
+  const overlap = Math.max(0, Math.min(a.end_ms, b.end_ms) - Math.max(a.start_ms, b.start_ms));
+  return overlap / Math.max(1, Math.min(a.end_ms - a.start_ms, b.end_ms - b.start_ms));
+}
+
+async function approvedMoments(
+  db: SupabaseClient<VideoDatabase>,
+  ownerId: string,
+  project: ExtendedMusicVideoProject,
+) {
+  const { data: release } = await db.from("releases")
+    .select("artist_id")
+    .eq("id", project.release_id)
+    .eq("owner_id", ownerId)
+    .maybeSingle();
+  if (!release?.artist_id) return [];
+
+  const momentsDb = db as unknown as SupabaseClient<MomentsDatabase>;
+  const { data, error } = await momentsDb.from("moments")
+    .select("*")
+    .eq("owner_id", ownerId)
+    .eq("artist_id", release.artist_id)
+    .eq("release_id", project.release_id)
+    .eq("track_id", project.track_id)
+    .eq("state", "approved")
+    .order("confidence", { ascending: false })
+    .order("start_ms", { ascending: true })
+    .limit(12);
+  if (error) return [];
+  return (data ?? [])
+    .filter((moment) => moment.end_ms > moment.start_ms)
+    .sort((a, b) => momentScore(b) - momentScore(a) || a.start_ms - b.start_ms || a.id.localeCompare(b.id));
+}
+
+function fitMomentWindow(moment: Moment, durationMs: number) {
+  const available = moment.end_ms - moment.start_ms;
+  if (available <= durationMs) return { start: moment.start_ms, end: moment.end_ms };
+  const center = Math.round((moment.start_ms + moment.end_ms) / 2);
+  const start = Math.max(moment.start_ms, Math.min(moment.end_ms - durationMs, center - Math.round(durationMs / 2)));
+  return { start, end: start + durationMs };
+}
+
+function approvedMomentHighlight(
+  moments: Moment[],
+  durationMs: number,
+  type: VideoRenderType,
+) {
+  if (!moments.length || !["hook_15", "promo_30"].includes(type)) return null;
+  const strongest = moments[0];
+  const selected = type === "promo_30"
+    ? moments.find((moment, index) => index > 0 && overlapRatio(moment, strongest) < 0.45) ?? moments[1] ?? strongest
+    : strongest;
+  const fitted = fitMomentWindow(selected, durationMs);
+  return {
+    ...fitted,
+    source: "approved_moment" as const,
+    candidateId: null,
+    momentId: selected.id,
+    momentLabel: selected.label,
+  };
+}
+
 function chooseHighlightWindow(
   project: ExtendedMusicVideoProject,
   durationMs: number,
@@ -63,6 +145,8 @@ function chooseHighlightWindow(
       end: Math.min(trackDuration || scoredCut.end_ms, scoredCut.end_ms),
       source: "music_intelligence" as const,
       candidateId: scoredCut.candidate_id,
+      momentId: null,
+      momentLabel: null,
     };
   }
 
@@ -78,6 +162,8 @@ function chooseHighlightWindow(
       end: candidate.end_ms,
       source: "hook_candidate" as const,
       candidateId: candidate.id,
+      momentId: null,
+      momentLabel: null,
     };
   }
 
@@ -88,7 +174,14 @@ function chooseHighlightWindow(
     ? Math.round((strongest.start_ms + strongest.end_ms) / 2)
     : map?.peaks_ms?.[0] ?? Math.round(trackDuration / 2);
   const start = Math.max(0, Math.min(Math.max(0, trackDuration - durationMs), center - Math.round(durationMs / 2)));
-  return { start, end: start + durationMs, source: "legacy_energy" as const, candidateId: null };
+  return {
+    start,
+    end: start + durationMs,
+    source: "legacy_energy" as const,
+    candidateId: null,
+    momentId: null,
+    momentLabel: null,
+  };
 }
 
 async function timelineSources(
@@ -142,8 +235,10 @@ export async function buildRenderManifest(input: {
 
   const fullStart = sources[0].shot.start_ms;
   const fullEnd = sources.at(-1)!.shot.end_ms;
+  const moments = spec.durationMs ? await approvedMoments(input.db, input.ownerId, input.project) : [];
   const highlighted = spec.durationMs
-    ? chooseHighlightWindow(input.project, Math.min(spec.durationMs, fullEnd - fullStart))
+    ? approvedMomentHighlight(moments, Math.min(spec.durationMs, fullEnd - fullStart), input.type)
+      ?? chooseHighlightWindow(input.project, Math.min(spec.durationMs, fullEnd - fullStart))
     : null;
   const window = highlighted
     ? { start: Math.max(fullStart, highlighted.start), end: Math.min(fullEnd, highlighted.end) }
@@ -165,7 +260,7 @@ export async function buildRenderManifest(input: {
     }];
   });
   return {
-    version: 2,
+    version: 3,
     type: input.type,
     primary_aspect_ratio: input.project.primary_aspect_ratio,
     width: spec.width,
@@ -175,6 +270,8 @@ export async function buildRenderManifest(input: {
     audio_start_ms: window.start,
     duration_ms: window.end - window.start,
     music_window_source: highlighted?.source ?? "full_timeline",
+    music_moment_id: highlighted?.momentId ?? null,
+    music_moment_label: highlighted?.momentLabel ?? null,
     music_hook_candidate_id: highlighted?.candidateId ?? null,
     clips,
     unsafe_vertical_shot_ids: unsafeShotIds,
@@ -239,4 +336,33 @@ export async function queueVideoRender(input: {
     .eq("owner_id", input.ownerId);
   if (projectError) throw new Error(projectError.message);
   return { render, worker, manifest };
+}
+
+export async function queueVideoRenderIfMissing(input: {
+  db: SupabaseClient<VideoDatabase>;
+  ownerId: string;
+  project: ExtendedMusicVideoProject;
+  type: VideoRenderType;
+  audioUrl: string;
+  allowUnsafeVertical?: boolean;
+}) {
+  const { data: existing, error } = await input.db.from("music_video_renders")
+    .select("*")
+    .eq("owner_id", input.ownerId)
+    .eq("project_id", input.project.id)
+    .eq("render_type", input.type)
+    .neq("status", "failed")
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (error) throw new Error(error.message);
+  if (existing?.[0]) {
+    return {
+      queued: false as const,
+      render: existing[0],
+      worker: null,
+      manifest: existing[0].render_spec,
+    };
+  }
+  const queued = await queueVideoRender(input);
+  return { queued: true as const, ...queued };
 }
