@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { ENSEMBLIS_PRODUCT } from "@/lib/ensemblis-product";
 import "./studio.css";
 import "./studio-v2.css";
@@ -50,10 +50,11 @@ export const metadata: Metadata = {
   },
   robots: { index: false, follow: false, nocache: true },
   referrer: "no-referrer",
-  other: {
-    "theme-color": "#090c0a",
-    "color-scheme": "dark",
-  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#080b09",
+  colorScheme: "dark",
 };
 
 export default function StudioRootLayout({ children }: { children: React.ReactNode }) {
