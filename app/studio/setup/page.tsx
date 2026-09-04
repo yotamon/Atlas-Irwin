@@ -1,22 +1,30 @@
-import Image from "next/image";
 import Link from "next/link";
+import { EnsemblisMark } from "@/components/ensemblis-logo";
+import { ENSEMBLIS_PRODUCT } from "@/lib/ensemblis-product";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+
+function SetupBrand() {
+  return (
+    <div className="ensemblis-auth-brand">
+      <span className="ensemblis-auth-symbol" aria-hidden><EnsemblisMark /></span>
+      <div>
+        <strong>{ENSEMBLIS_PRODUCT.name}</strong>
+        <small>{ENSEMBLIS_PRODUCT.descriptor}</small>
+      </div>
+    </div>
+  );
+}
 
 export default function StudioSetupPage() {
   if (hasSupabaseEnv()) {
     return (
       <main className="studio-auth">
         <section>
-          <Image
-            src="/atlas-irwin-logo-sign.svg"
-            alt="Atlas Irwin"
-            width={48}
-            height={48}
-          />
-          <h1>Studio is configured</h1>
-          <p>Supabase environment variables are loaded. Continue into Studio.</p>
+          <SetupBrand />
+          <h1>Ensemblis is configured</h1>
+          <p>Supabase is connected and the workspace can be opened normally.</p>
           <Link className="button primary" href="/studio">
-            Open Studio
+            Open Ensemblis
           </Link>
         </section>
       </main>
@@ -26,15 +34,11 @@ export default function StudioSetupPage() {
   return (
     <main className="studio-auth">
       <section>
-        <Image
-          src="/atlas-irwin-logo-sign.svg"
-          alt="Atlas Irwin"
-          width={48}
-          height={48}
-        />
-        <h1>Configure Studio</h1>
+        <SetupBrand />
+        <h1>Configure Ensemblis</h1>
         <p>
-          Studio requires Supabase. Create a local env file before opening protected
+          Ensemblis requires Supabase for authentication, workspace data and durable
+          artist state. Configure the local environment before opening protected
           routes.
         </p>
         <ol>
@@ -44,20 +48,21 @@ export default function StudioSetupPage() {
             <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> from your Supabase project
           </li>
           <li>
-            Set <code>SUPABASE_SERVICE_ROLE_KEY</code> for local Studio bootstrap and
-            catalog import
+            Set <code>SUPABASE_SERVICE_ROLE_KEY</code> for local bootstrap and catalog
+            import
           </li>
           <li>
-            Set <code>STUDIO_ADMIN_EMAILS</code> and <code>STUDIO_PASSWORD</code>
+            Configure <code>STUDIO_ADMIN_EMAILS</code> and <code>STUDIO_PASSWORD</code>{" "}
+            when using the legacy local administrator bootstrap
           </li>
           <li>Restart <code>npm run dev</code></li>
         </ol>
         <p>
           Apply migrations in <code>supabase/migrations/</code>, then run{" "}
-          <code>npm run studio:import</code> to migrate legacy releases.
+          <code>npm run studio:import</code> only when migrating legacy release data.
         </p>
         <Link className="button" href="/">
-          Back to site
+          Back to artist site
         </Link>
       </section>
     </main>
