@@ -56,13 +56,68 @@ test("proxy strips spoofable site headers and fails unknown tenant hosts closed"
     "isTrustedNonTenantHost(host)",
     'new NextResponse(null, { status: 404 })',
     'new NextResponse("Site temporarily unavailable.", { status: 503 })',
-    "requestHeaders.set(INTERNAL_SITE_ID_HEADER, resolved.siteId)",
     "NextResponse.rewrite(rewriteUrl",
   ]);
   assert.doesNotMatch(proxy, /Atlas Irwin|atlasirwin\.com/i, "routing boundary must not special-case Atlas identity");
 });
 
-test("internal host runtime revalidates canonical hostname before rendering", async () => {
+test("tenant rewrite cannot re-enter the protected internal runtime", async () => {
+  const proxy = await requireSnippets("proxy.ts", [
+    "function publishedSiteRewritePath",
+    "`/sites/${encodeURIComponent(siteSlug)}`",
+    "publishedSiteRewritePath(resolved.siteSlug, pathname)",
+    'pathname === "/__sites" || pathname.startsWith("/__sites/")',
+    '"/sites",',
+  ]);
+
+  assert.doesNotMatch(
+    proxy,
+    /rewriteUrl\.pathname\s*=\s*`\/__sites\//,
+    "tenant host rewrites must never target the direct-internal route that proxy itself blocks",
+  );
+  assert.ok(
+    proxy.indexOf("resolveSiteHostForProxy(host)") < proxy.indexOf("publishedSiteRewritePath(resolved.siteSlug, pathname)"),
+    "hostname must resolve to one published site before the public runtime destination is selected",
+  );
+});
+
+test("published shadow runtime remains globally unique and canonical-domain aware", async () => {
+  const foundation = await requireSnippets("supabase/migrations/20260904154500_ensemblis_sites_foundation.sql", [
+    "unique (slug)",
+  ]);
+  const runtime = await requireSnippets("lib/sites/runtime.ts", [
+    '.eq("slug", slug)',
+    '.eq("state", "published")',
+    '.eq("is_primary", true)',
+    '.eq("verification_status", "verified")',
+    '.eq("ssl_status", "active")',
+  ]);
+  assert.ok(foundation.includes("unique (slug)"));
+  assert.ok(runtime.includes("loadPublishedSiteBySlug"));
+});
+
+test("tenant SEO identity endpoints use the same non-looping published runtime", async () => {
+  for (const path of [
+    "app/sites/[slug]/robots.txt/route.ts",
+    "app/sites/[slug]/sitemap.xml/route.ts",
+    "app/sites/[slug]/manifest.webmanifest/route.ts",
+    "app/sites/[slug]/favicon.ico/route.ts",
+  ]) {
+    await requireSnippets(path, ["loadPublishedSiteBySlug(slug)"]);
+  }
+
+  const robots = await source("app/sites/[slug]/robots.txt/route.ts");
+  assert.ok(robots.includes('runtime.primaryHostname'));
+  assert.ok(robots.includes('"Disallow: /"'), "unmapped shadow hosts must not be promoted as canonical crawl targets");
+
+  const sitemap = await source("app/sites/[slug]/sitemap.xml/route.ts");
+  assert.ok(sitemap.includes("runtime?.primaryHostname"));
+
+  const favicon = await source("app/sites/[slug]/favicon.ico/route.ts");
+  assert.ok(favicon.includes("status: 204"));
+});
+
+test("legacy internal host runtime still revalidates canonical hostname before rendering", async () => {
   await requireSnippets("app/__sites/[siteId]/[[...path]]/page.tsx", [
     'requestHeaders.get("x-ensemblis-site-id")',
     'requestHeaders.get("x-ensemblis-site-host")',
