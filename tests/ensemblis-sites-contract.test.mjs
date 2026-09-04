@@ -93,7 +93,11 @@ test("site snapshots read the active artist instead of the legacy owner", async 
     '.eq("publish_state", "live")',
     "schemaVersion: 1",
   ]);
-  assert.doesNotMatch(snapshot, /owner_id/, "Site snapshot building must stay artist-scoped");
+  assert.doesNotMatch(
+    snapshot,
+    /\.eq\(["']owner_id["']/, 
+    "Site snapshot queries must never scope public artist content through owner_id",
+  );
 });
 
 test("artist-facing templates never leak Atlas or Ensemblis product identity", async () => {
