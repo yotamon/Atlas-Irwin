@@ -15,6 +15,7 @@ import "./ai-control.css";
 import "./distribution.css";
 import "./distribution-release.css";
 import "./ensemblis-shell.css";
+import "./ensemblis-states.css";
 
 export const metadata: Metadata = {
   title: {
