@@ -18,6 +18,7 @@ import "./ensemblis-shell.css";
 import "./ensemblis-screens.css";
 import "./ensemblis-root-isolation.css";
 import "./ensemblis-states.css";
+import "./ux-polish.css";
 
 export const metadata: Metadata = {
   title: {
