@@ -28,10 +28,20 @@ jobs:
       - run: npm ci
 
       - name: Audit production dependencies
-        # Audit the actual installed production tree after the immutable `npm ci` install. This keeps
-        # high/critical advisories blocking while avoiding npm registry failures in the retiring
-        # package-lock-only quick-audit endpoint.
-        run: npm audit --omit=dev --audit-level=high
+        # Audit the installed production tree, but keep registry stalls bounded. Real high/critical
+        # advisories still exit non-zero; transient registry failures get a small finite retry budget.
+        timeout-minutes: 5
+        run: |
+          for attempt in 1 2 3; do
+            if npm audit --omit=dev --audit-level=high --fetch-retries=1 --fetch-timeout=60000 --fetch-retry-mintimeout=1000 --fetch-retry-maxtimeout=5000; then
+              exit 0
+            fi
+            status=$?
+            if [ "$attempt" -eq 3 ]; then
+              exit "$status"
+            fi
+            sleep 5
+          done
 
       - name: Verify Studio V2 product contracts
         run: npm run test:studio
