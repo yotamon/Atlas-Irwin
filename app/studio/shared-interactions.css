@@ -1,0 +1,251 @@
+/* Shared interaction polish: global command search, keyboard navigation and durable upload feedback. */
+
+.studio-root .ensemblis-command-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 2.15rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-sm);
+  background: color-mix(in srgb, var(--en-surface-raised) 72%, transparent);
+  color: var(--en-muted);
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 660;
+  cursor: pointer;
+}
+
+.studio-root .ensemblis-command-trigger:hover,
+.studio-root .ensemblis-command-trigger:focus-visible {
+  border-color: var(--en-line-strong);
+  color: var(--en-ink);
+  outline: none;
+}
+
+.studio-root .ensemblis-command-trigger kbd {
+  padding: 0.1rem 0.3rem;
+  border: 1px solid var(--en-line);
+  border-radius: 0.28rem;
+  background: var(--en-bg);
+  color: var(--en-subtle);
+  font: 600 0.57rem var(--font-body);
+}
+
+.studio-root .ensemblis-command-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: start center;
+  padding: min(14vh, 8rem) 1rem 1rem;
+  background: rgba(3, 5, 4, 0.72);
+  backdrop-filter: blur(10px);
+}
+
+.studio-root .ensemblis-command-dialog {
+  width: min(100%, 38rem);
+  max-height: min(68vh, 40rem);
+  overflow: hidden;
+  border: 1px solid var(--en-line-strong);
+  border-radius: var(--en-radius-lg);
+  background: color-mix(in srgb, var(--en-surface) 97%, black);
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.5);
+}
+
+.studio-root .ensemblis-command-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.6rem;
+  align-items: center;
+  padding: 0.8rem;
+  border-bottom: 1px solid var(--en-line);
+}
+
+.studio-root .ensemblis-command-search input {
+  width: 100%;
+  min-height: 2.6rem;
+  padding: 0.5rem 0.65rem;
+  border: 0;
+  background: transparent;
+  color: var(--en-ink);
+  font: inherit;
+  font-size: 0.9rem;
+  outline: none;
+}
+
+.studio-root .ensemblis-command-search input::placeholder {
+  color: var(--en-subtle);
+}
+
+.studio-root .ensemblis-command-search button {
+  min-width: 2.5rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-sm);
+  background: transparent;
+  color: var(--en-subtle);
+  font-size: 0.61rem;
+  cursor: pointer;
+}
+
+.studio-root .ensemblis-command-results {
+  max-height: calc(min(68vh, 40rem) - 4.3rem);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 0.55rem;
+  scroll-padding-block: 0.7rem;
+}
+
+.studio-root .ensemblis-command-searching {
+  padding: 0.45rem 0.55rem 0.2rem;
+  color: var(--en-subtle);
+  font-size: 0.59rem;
+  font-weight: 620;
+}
+
+.studio-root .ensemblis-command-group {
+  display: grid;
+  gap: 0.12rem;
+  padding: 0.35rem 0;
+}
+
+.studio-root .ensemblis-command-group > span {
+  padding: 0.35rem 0.55rem;
+  color: var(--en-subtle);
+  font-size: 0.56rem;
+  font-weight: 760;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.studio-root .ensemblis-command-group > a {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(7rem, auto) auto;
+  gap: 0.8rem;
+  align-items: center;
+  padding: 0.65rem 0.7rem;
+  border-radius: var(--en-radius-sm);
+}
+
+.studio-root .ensemblis-command-group > a:hover,
+.studio-root .ensemblis-command-group > a:focus-visible {
+  background: var(--en-surface-hover);
+  outline: none;
+}
+
+.studio-root .ensemblis-command-group strong {
+  color: var(--en-ink);
+  font-size: 0.78rem;
+  font-weight: 660;
+}
+
+.studio-root .ensemblis-command-group small {
+  overflow: hidden;
+  color: var(--en-subtle);
+  font-size: 0.59rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-root .ensemblis-command-group b {
+  color: var(--en-subtle);
+  font-size: 0.62rem;
+  font-weight: 500;
+}
+
+.studio-root .ensemblis-command-empty {
+  padding: 2rem 1rem;
+  color: var(--en-muted);
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.studio-root .media-dropzone > small {
+  max-width: 34rem;
+  color: var(--en-subtle);
+  font-size: 0.61rem;
+  line-height: 1.45;
+}
+
+.studio-root .upload-item-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.28rem;
+}
+
+.studio-root .upload-progress {
+  display: block;
+  width: min(100%, 28rem);
+  height: 0.28rem;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: var(--en-line);
+  accent-color: var(--en-accent);
+}
+
+.studio-root .upload-progress::-webkit-progress-bar {
+  border-radius: 999px;
+  background: var(--en-line);
+}
+
+.studio-root .upload-progress::-webkit-progress-value {
+  border-radius: 999px;
+  background: var(--en-accent);
+}
+
+.studio-root .upload-progress::-moz-progress-bar {
+  border-radius: 999px;
+  background: var(--en-accent);
+}
+
+.studio-root .upload-item.uploading .upload-file-icon {
+  color: var(--en-accent);
+}
+
+.studio-root .upload-item.error {
+  background: color-mix(in srgb, var(--en-danger, #ff7668) 5%, transparent);
+}
+
+@media (max-width: 680px) {
+  .studio-root .ensemblis-command-trigger span,
+  .studio-root .ensemblis-command-trigger kbd {
+    display: none;
+  }
+
+  .studio-root .ensemblis-command-trigger {
+    width: 2.15rem;
+    min-width: 2.15rem;
+    padding: 0;
+  }
+
+  .studio-root .ensemblis-command-trigger::before {
+    content: "⌕";
+    margin: auto;
+    font-size: 1rem;
+  }
+
+  .studio-root .ensemblis-command-backdrop {
+    padding-top: 4.6rem;
+  }
+
+  .studio-root .ensemblis-command-group > a {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .studio-root .ensemblis-command-group small {
+    display: none;
+  }
+
+  .studio-root .upload-progress {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-root .ensemblis-command-backdrop,
+  .studio-root .ensemblis-command-dialog {
+    scroll-behavior: auto;
+  }
+}

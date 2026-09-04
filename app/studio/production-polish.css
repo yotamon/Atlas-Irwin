@@ -1,0 +1,169 @@
+/* Ensemblis Production: keep the selected creative dominant and configuration secondary. */
+
+.studio-root .v2-production-layout {
+  display: grid;
+  grid-template-columns: minmax(15rem, 0.34fr) minmax(0, 1fr);
+  gap: clamp(1.2rem, 3vw, 2.2rem);
+  align-items: start;
+}
+
+.studio-root .v2-production-layout > .v2-compact-section {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-top: 1px solid var(--en-line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.studio-root .v2-production-list {
+  display: grid;
+}
+
+.studio-root .v2-production-list > a {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: start;
+  padding: 0.78rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--en-line) 72%, transparent);
+  color: var(--en-muted);
+}
+
+.studio-root .v2-production-list > a > div {
+  display: grid;
+  gap: 0.16rem;
+  min-width: 0;
+}
+
+.studio-root .v2-production-list > a strong {
+  overflow: hidden;
+  color: var(--en-ink);
+  font-size: 0.79rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-root .v2-production-list > a small,
+.studio-root .v2-production-list > a > span {
+  color: var(--en-subtle);
+  font-size: 0.59rem;
+  line-height: 1.4;
+}
+
+.studio-root .v2-production-list > a:hover,
+.studio-root .v2-production-list > a:focus-visible,
+.studio-root .v2-production-list > a.active {
+  color: var(--en-ink);
+  outline: none;
+}
+
+.studio-root .v2-production-list > a.active {
+  margin-inline: -0.65rem;
+  padding-inline: 0.65rem;
+  border-radius: var(--en-radius-sm);
+  background: var(--en-accent-soft);
+  box-shadow: inset 2px 0 var(--en-accent);
+}
+
+.studio-root .v2-production-editor {
+  min-width: 0;
+  padding: clamp(1rem, 2.2vw, 1.35rem);
+  border-color: var(--en-line-strong);
+  background: color-mix(in srgb, var(--en-surface) 96%, transparent);
+}
+
+.studio-root .v2-production-editor > .v2-section-heading {
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--en-line);
+}
+
+.studio-root .v2-provider-lock,
+.studio-root .v2-contextual-upload,
+.studio-root .studio-smart-defaults {
+  border-color: var(--en-line);
+  border-radius: var(--en-radius-sm);
+  background: color-mix(in srgb, var(--en-surface-raised) 64%, transparent);
+}
+
+.studio-root .v2-provider-lock {
+  display: grid;
+  gap: 0.28rem;
+  padding: 0.85rem 0.95rem;
+  border-left: 2px solid var(--en-violet);
+}
+
+.studio-root .v2-provider-lock strong,
+.studio-root .v2-contextual-upload strong,
+.studio-root .studio-smart-defaults strong {
+  color: var(--en-ink);
+}
+
+.studio-root .v2-provider-lock span,
+.studio-root .v2-contextual-upload small,
+.studio-root .studio-smart-defaults span,
+.studio-root .studio-smart-defaults small {
+  color: var(--en-muted);
+  line-height: 1.5;
+}
+
+.studio-root .v2-contextual-upload {
+  display: grid;
+  gap: 0.8rem;
+  margin-block: 1rem;
+  padding: 0.9rem;
+}
+
+.studio-root .v2-contextual-upload > div {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.studio-root .v2-production-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.studio-root .v2-production-editor .studio-panel.feature {
+  margin-block: 1rem;
+  box-shadow: none;
+}
+
+.studio-root .v2-production-editor .studio-advanced-details {
+  margin-top: 1rem;
+  border-top-color: var(--en-line);
+}
+
+.studio-root .v2-production-editor .studio-advanced-details summary {
+  color: var(--en-muted);
+}
+
+.studio-root .v2-production-editor .studio-advanced-details[open] summary {
+  color: var(--en-ink);
+}
+
+@media (max-width: 960px) {
+  .studio-root .v2-production-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .studio-root .v2-production-layout > .v2-compact-section {
+    max-height: 18rem;
+    overflow: auto;
+    padding-right: 0.35rem;
+  }
+}
+
+@media (max-width: 620px) {
+  .studio-root .v2-production-editor {
+    padding: 0.9rem;
+  }
+
+  .studio-root .v2-production-list > a {
+    grid-template-columns: 1fr;
+    gap: 0.18rem;
+  }
+}

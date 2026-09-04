@@ -55,7 +55,7 @@ function LyricsForm({
         className={styles.textarea}
         name="canonical_text"
         defaultValue={lyrics?.canonical_text ?? ""}
-        placeholder={`[Verse 1]\nPaste the exact lyrics here…\n\n[Chorus]\nAtlas also understands section labels when you have them.`}
+        placeholder={`[Verse 1]\nPaste the exact lyrics here…\n\n[Chorus]\nEnsemblis also understands section labels when you have them.`}
         required
       />
     </label>
@@ -66,11 +66,11 @@ function LyricsForm({
     <div className={styles.permissions}>
       <label className={styles.permission}>
         <input type="checkbox" name="allow_ai_context" defaultChecked={lyrics?.allow_ai_context ?? true} />
-        <span>Use lyrics for creative intelligence<small>Lets Atlas understand meaning, narrative, imagery and hooks across campaigns and video.</small></span>
+        <span>Use lyrics for creative intelligence<small>Lets Ensemblis understand meaning, narrative, imagery and hooks across campaigns and video.</small></span>
       </label>
       <label className={styles.permission}>
         <input type="checkbox" name="allow_media_quotes" defaultChecked={lyrics?.allow_media_quotes ?? true} />
-        <span>Allow exact lyric excerpts in generated media<small>Atlas may quote only approved excerpts grounded in these official lyrics. It never invents lyric text.</small></span>
+        <span>Allow exact lyric excerpts in generated media<small>Ensemblis may quote only approved excerpts grounded in these official lyrics. It never invents lyric text.</small></span>
       </label>
     </div>
     <div className={styles.actions}>
@@ -90,7 +90,7 @@ export async function LyricsIntelligencePanel({
   if (!track) {
     return <section className="v2-section v2-full-column" id="lyrics-intelligence">
       <div className="v2-section-heading"><div><span className="section-label">Lyrics Intelligence</span><h2>Add a track before adding lyrics</h2></div><span className="v2-count">Waiting</span></div>
-      <p className="v2-muted-copy">Lyrics belong to a specific track, so Atlas will enable this as soon as the release has one.</p>
+      <p className="v2-muted-copy">Lyrics belong to a specific track, so Ensemblis will enable this as soon as the release has one.</p>
     </section>;
   }
 
@@ -107,11 +107,11 @@ export async function LyricsIntelligencePanel({
   if (!lyrics) {
     return <section className="v2-section v2-full-column" id="lyrics-intelligence">
       <div className="v2-section-heading">
-        <div><span className="section-label">Lyrics Intelligence</span><h2>Give Atlas the words behind {track.title}</h2></div>
+        <div><span className="section-label">Lyrics Intelligence</span><h2>Give Ensemblis the words behind {track.title}</h2></div>
         <span className="v2-count has-items">Optional source</span>
       </div>
       <div className={`${styles.panel} ${styles.empty}`}>
-        <p className={`v2-muted-copy ${styles.emptyIntro}`}>Paste the official lyrics once. Atlas will structure them, understand the song’s meaning and hooks, connect lyric moments to Track Intelligence, and reuse that context across campaign creative and Video Director.</p>
+        <p className={`v2-muted-copy ${styles.emptyIntro}`}>Paste the official lyrics once. Ensemblis will structure them, understand the song’s meaning and hooks, connect lyric moments to Track Intelligence, and reuse that context across campaign creative and Video Director.</p>
         <LyricsForm releaseId={releaseId} trackId={track.id} primary />
         <div className={styles.actions}>
           <span className="v2-muted-copy">No vocals on this track?</span>
@@ -130,7 +130,7 @@ export async function LyricsIntelligencePanel({
         <div><span className="section-label">Lyrics Intelligence</span><h2>{track.title} is marked instrumental</h2></div>
         <span className="growth-active-label">No lyrics needed</span>
       </div>
-      <div className="v2-calm-state compact"><strong>Atlas will not ask for lyrics on this track.</strong><p>Track Intelligence and Stem Intelligence remain available as the creative source of truth.</p></div>
+      <div className="v2-calm-state compact"><strong>Ensemblis will not ask for lyrics on this track.</strong><p>Track Intelligence and Stem Intelligence remain available as the creative source of truth.</p></div>
       <details className={styles.editor}>
         <summary>Add lyrics instead</summary>
         <LyricsForm releaseId={releaseId} trackId={track.id} lyrics={{ ...lyrics, canonical_text: "", status: "verified" }} />
@@ -172,7 +172,7 @@ export async function LyricsIntelligencePanel({
           <p>{aligned ? `${aligned}/${sections.length} sections aligned to the current Track Intelligence map.` : "Semantic intelligence is ready. Timing will attach automatically when matching Track Intelligence sections are available."}</p>
           {primaryHook ? <span className={styles.chip}>Primary hook · {primaryHook.label}</span> : null}
         </aside>
-      </div> : <div className={styles.notice}>The exact lyrics are safe and current, but the semantic analysis is missing or stale. Re-analyze before Atlas uses derived themes, hooks or Lyric Moments.</div>}
+      </div> : <div className={styles.notice}>The exact lyrics are safe and current, but the semantic analysis is missing or stale. Re-analyze before Ensemblis uses derived themes, hooks or Lyric Moments.</div>}
 
       {current && analysis ? <div className={styles.workspace}>
         <div className={styles.column}>
@@ -189,7 +189,7 @@ export async function LyricsIntelligencePanel({
             {lyrics.allow_media_quotes && moment.allow_media ? <p className={styles.quote}>“{moment.excerpt}”</p> : <p className={styles.quote}>Lyric text protected from public quoting</p>}
             <p className={styles.momentReason}>{moment.interpretation}</p>
             <div className={styles.chips}>{moment.purpose_tags.slice(0, 4).map((tag) => <span className={styles.chip} key={tag}>{tag}</span>)}</div>
-          </article>) : <div className="v2-calm-state compact"><strong>No high-confidence lyric moments yet.</strong><p>Atlas keeps weak suggestions out rather than filling the release with generic ideas.</p></div>}</div>
+          </article>) : <div className="v2-calm-state compact"><strong>No high-confidence lyric moments yet.</strong><p>Ensemblis keeps weak suggestions out rather than filling the release with generic ideas.</p></div>}</div>
         </div>
       </div> : null}
 
@@ -202,7 +202,7 @@ export async function LyricsIntelligencePanel({
 
       <details className={styles.editor} open={!current}>
         <summary>{current ? "Edit official lyrics & usage" : "Review official lyrics"}</summary>
-        <p>Editing the words or language creates a new canonical version. Atlas keeps revision history and will never silently rewrite your lyrics.</p>
+        <p>Editing the words or language creates a new canonical version. Ensemblis keeps revision history and will never silently rewrite your lyrics.</p>
         <LyricsForm releaseId={releaseId} trackId={track.id} lyrics={lyrics} />
       </details>
     </div>

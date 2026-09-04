@@ -21,6 +21,10 @@ function metadataTags(metadata: unknown) {
   return Array.isArray(tags) ? tags.filter((tag): tag is string => typeof tag === "string") : [];
 }
 
+function assetTypeLabel(value: string) {
+  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 export default async function LibraryPage() {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveActiveArtistContext(supabase, user);
@@ -42,56 +46,77 @@ export default async function LibraryPage() {
   const usage = new Map<string, number>();
   links.forEach((link) => usage.set(link.media_asset_id, (usage.get(link.media_asset_id) ?? 0) + 1));
   const unassigned = assets.filter((asset) => !usage.get(asset.id));
+  const inUse = assets.filter((asset) => Boolean(usage.get(asset.id)));
+  const visualCount = assets.filter((asset) => asset.mime_type?.startsWith("image/") || asset.mime_type?.startsWith("video/")).length;
 
   return (
-    <div className="studio-v2-page">
+    <div className="studio-v2-page library-polish-page">
       <PageHeader
         title="Library"
-        description={`Reusable media for ${artist.artistName}. Shared binaries stay workspace-safe, while artist tags and usages decide what appears in this library.`}
-        action={<Link className="button" href={ensemblisArtistHref("/studio/media", artist.artistId)}>Advanced media library</Link>}
+        description={`Reusable source media for ${artist.artistName}. See what is already in use, what is still available, and add new material only when it has a real role.`}
+        action={<a className="button primary" href="#add-media">Add media</a>}
       />
 
-      <section className="v2-status-grid">
-        <article><strong>{assets.length}</strong><span>recent assets</span><small>Active artist library</small></article>
-        <article><strong>{links.length}</strong><span>assignments</span><small>Release and content usage</small></article>
-        <article><strong>{unassigned.length}</strong><span>unassigned</span><small>Reusable or needs context</small></article>
-        <article><strong>{assets.filter((asset) => asset.asset_type === "cover").length}</strong><span>covers</span><small>Artwork in library</small></article>
+      <section className="library-polish-summary" aria-label="Library summary">
+        <div><strong>{assets.length}</strong><span>assets</span></div>
+        <div><strong>{inUse.length}</strong><span>in use</span></div>
+        <div><strong>{unassigned.length}</strong><span>reusable</span></div>
+        <div><strong>{visualCount}</strong><span>visual</span></div>
+        <Link href={ensemblisArtistHref("/studio/media", artist.artistId)}>Advanced media controls →</Link>
       </section>
 
-      <section className="v2-section">
-        <div className="v2-section-heading"><div><span className="section-label">Add media</span><h2>Upload once, reuse for {artist.artistName}</h2></div></div>
-        <MediaUploader artistId={artist.artistId} defaultRole="social_image" />
-      </section>
+      {unassigned.length ? (
+        <section className="library-reusable-strip">
+          <div className="v2-section-heading"><div><span className="section-label">Available material</span><h2>{unassigned.length} asset{unassigned.length === 1 ? " is" : "s are"} not attached to a release or content item</h2></div></div>
+          <div className="library-reusable-list">
+            {unassigned.slice(0, 6).map((asset) => {
+              const title = metadataTitle(asset.metadata, asset.storage_path.split("/").at(-1) || asset.asset_type);
+              return <div key={asset.id}><span>{assetTypeLabel(asset.asset_type)}</span><strong>{title}</strong><small>Reusable source material</small></div>;
+            })}
+          </div>
+        </section>
+      ) : null}
 
-      <section className="v2-section">
-        <div className="v2-section-heading"><div><span className="section-label">Recent</span><h2>Visual memory</h2></div></div>
+      <section className="library-visual-section">
+        <div className="v2-section-heading"><div><span className="section-label">Media</span><h2>{assets.length ? "Recent visual memory" : "The artist library is empty"}</h2></div></div>
         {assets.length ? (
-          <div className="v2-library-grid">
+          <div className="library-visual-grid">
             {assets.map((asset) => {
               const title = metadataTitle(asset.metadata, asset.storage_path.split("/").at(-1) || asset.asset_type);
+              const useCount = usage.get(asset.id) ?? 0;
               return (
-                <article key={asset.id}>
-                  <div className="v2-library-preview">
+                <article className="library-visual-item" key={asset.id}>
+                  <div className="library-visual-preview">
                     {asset.public_url && asset.mime_type?.startsWith("image/") ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={asset.public_url} alt="" />
                     ) : asset.public_url && asset.mime_type?.startsWith("video/") ? (
                       <video src={asset.public_url} muted playsInline preload="metadata" />
+                    ) : asset.public_url && asset.mime_type?.startsWith("audio/") ? (
+                      <div className="library-audio-preview"><span>Audio</span><audio controls preload="metadata" src={asset.public_url} /></div>
                     ) : (
-                      <div aria-hidden>{asset.asset_type.slice(0, 2).toUpperCase()}</div>
+                      <div className="library-type-preview" aria-hidden>{asset.asset_type.slice(0, 2).toUpperCase()}</div>
                     )}
                   </div>
-                  <div className="v2-library-meta">
-                    <span>{asset.asset_type.replaceAll("_", " ")}</span>
+                  <div className="library-visual-meta">
+                    <span>{assetTypeLabel(asset.asset_type)}</span>
                     <strong title={title}>{title}</strong>
-                    <small>{usage.get(asset.id) ? `Used ${usage.get(asset.id)} time${usage.get(asset.id) === 1 ? "" : "s"}` : "Not assigned yet"}</small>
+                    <small>{useCount ? `Used ${useCount} time${useCount === 1 ? "" : "s"}` : "Available"}</small>
                   </div>
                 </article>
               );
             })}
           </div>
-        ) : <div className="v2-calm-state compact"><strong>The artist library is empty.</strong><p>Upload media here or directly inside a release. Ensemblis will keep its artist context attached automatically.</p></div>}
+        ) : <div className="v2-calm-state compact"><strong>No reusable media yet.</strong><p>Upload here or directly inside a release. Ensemblis keeps artist context attached automatically.</p></div>}
       </section>
+
+      <details className="library-add-media" id="add-media">
+        <summary>Add media to {artist.artistName}</summary>
+        <div className="library-add-media-body">
+          <p>Upload once and reuse it across releases, campaign content and visual references. Add context at the point of use rather than creating duplicate files.</p>
+          <MediaUploader artistId={artist.artistId} defaultRole="social_image" />
+        </div>
+      </details>
     </div>
   );
 }

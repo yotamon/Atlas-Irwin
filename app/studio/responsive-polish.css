@@ -1,0 +1,115 @@
+/* Narrow-screen shell behavior after the primary Ensemblis IA stabilized. */
+
+@media (max-width: 900px) {
+  .studio-root .studio-shell {
+    grid-template-columns: 4.8rem minmax(0, 1fr);
+  }
+
+  .studio-root .studio-sidebar-section-label,
+  .studio-root .studio-nav-text,
+  .studio-root .ensemblis-artist-switcher-heading,
+  .studio-root .ensemblis-artist-workspace {
+    display: none;
+  }
+
+  .studio-root .studio-sidebar nav {
+    padding-block: 0.35rem;
+  }
+
+  .studio-root .studio-sidebar nav a,
+  .studio-root .studio-sidebar-foot a,
+  .studio-root .studio-sidebar-foot button {
+    justify-content: center;
+    min-height: 2.75rem;
+    padding: 0.7rem;
+  }
+
+  .studio-root .studio-sidebar nav a svg,
+  .studio-root .studio-sidebar-foot a svg,
+  .studio-root .studio-sidebar-foot button svg {
+    width: 1.18rem;
+    height: 1.18rem;
+  }
+
+  .studio-root .studio-sidebar nav a.is-active::after,
+  .studio-root .studio-sidebar-foot a.is-active::after {
+    right: 0.38rem;
+  }
+
+  .studio-root .studio-sidebar-foot {
+    padding: 0.55rem 0.25rem;
+  }
+
+  .studio-root .studio-sidebar-foot form {
+    margin: 0;
+  }
+
+  .studio-root .ensemblis-artist-switcher {
+    margin: 0.5rem;
+    padding: 0.35rem;
+  }
+
+  .studio-root .ensemblis-artist-switcher select {
+    min-height: 2.55rem;
+    padding: 0.35rem 0.1rem;
+    font-size: 0.58rem;
+    text-align: center;
+  }
+}
+
+@media (max-width: 620px) {
+  .studio-root .studio-shell {
+    grid-template-columns: 4.35rem minmax(0, 1fr);
+  }
+
+  .studio-root .studio-main {
+    padding-inline: clamp(0.75rem, 3vw, 1rem);
+  }
+
+  .studio-root .studio-sidebar nav a,
+  .studio-root .studio-sidebar-foot a,
+  .studio-root .studio-sidebar-foot button {
+    min-height: 2.9rem;
+    margin-inline: 0.25rem;
+    width: calc(100% - 0.5rem);
+  }
+
+  .studio-root .ensemblis-context-bar {
+    align-items: center;
+    gap: 0.65rem;
+  }
+
+  .studio-root .ensemblis-context-identity {
+    min-width: 0;
+  }
+
+  .studio-root .ensemblis-context-identity strong {
+    overflow: hidden;
+    max-width: 10rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .studio-root .ensemblis-context-actions {
+    gap: 0.35rem;
+  }
+
+  .studio-root .ensemblis-context-link {
+    display: none;
+  }
+
+  .studio-root .ensemblis-context-actions .button,
+  .studio-root .ensemblis-command-trigger {
+    min-height: 2.55rem;
+  }
+}
+
+@media (pointer: coarse) {
+  .studio-root .button,
+  .studio-root .text-button,
+  .studio-root .ensemblis-command-trigger,
+  .studio-root .ensemblis-object-tabs a,
+  .studio-root .growth-polish-tabs a {
+    min-height: 2.75rem;
+  }
+}

@@ -1,0 +1,158 @@
+/* Focused Grow workspace navigation and overview hierarchy. */
+
+.studio-root .growth-polish-page {
+  width: min(100%, 90rem);
+  margin: 0 auto;
+}
+
+.studio-root .growth-polish-tabs {
+  display: flex;
+  gap: 0.25rem;
+  overflow-x: auto;
+  margin: -0.45rem 0 clamp(1.5rem, 3vw, 2.4rem);
+  padding-bottom: 0.7rem;
+  border-bottom: 1px solid var(--en-line);
+  scrollbar-width: none;
+}
+
+.studio-root .growth-polish-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.studio-root .growth-polish-tabs a {
+  flex: 0 0 auto;
+  padding: 0.48rem 0.7rem;
+  border-radius: var(--en-radius-sm);
+  color: var(--en-muted);
+  font-size: 0.7rem;
+  font-weight: 680;
+}
+
+.studio-root .growth-polish-tabs a:hover,
+.studio-root .growth-polish-tabs a:focus-visible,
+.studio-root .growth-polish-tabs a.active {
+  background: var(--en-surface-hover);
+  color: var(--en-ink);
+  outline: none;
+}
+
+.studio-root .growth-polish-tabs a.active {
+  box-shadow: inset 0 -2px var(--en-accent);
+}
+
+.studio-root .growth-polish-north-star {
+  display: grid;
+  grid-template-columns: minmax(15rem, 1.5fr) repeat(4, minmax(7rem, 0.55fr));
+  margin-bottom: clamp(1.6rem, 3vw, 2.6rem);
+  border-block: 1px solid var(--en-line);
+}
+
+.studio-root .growth-polish-north-star > div {
+  display: grid;
+  align-content: center;
+  gap: 0.12rem;
+  min-width: 0;
+  padding: 0.95rem 1rem;
+  border-right: 1px solid color-mix(in srgb, var(--en-line) 75%, transparent);
+}
+
+.studio-root .growth-polish-north-star > div:last-child {
+  border-right: 0;
+}
+
+.studio-root .growth-polish-north-star strong {
+  color: var(--en-ink);
+  font-size: 1.18rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+
+.studio-root .growth-polish-north-star > div:first-child strong {
+  color: var(--en-accent);
+  font-size: 1.8rem;
+}
+
+.studio-root .growth-polish-north-star span,
+.studio-root .growth-polish-north-star small {
+  color: var(--en-subtle);
+  font-size: 0.61rem;
+  line-height: 1.35;
+}
+
+.studio-root .growth-polish-plan-preview,
+.studio-root .growth-polish-opportunity-preview,
+.studio-root .growth-polish-view-section,
+.studio-root .growth-polish-rules {
+  margin-top: clamp(1.8rem, 3vw, 2.8rem);
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--en-line);
+}
+
+.studio-root .growth-polish-simple-list {
+  display: grid;
+}
+
+.studio-root .growth-polish-simple-list > div {
+  display: grid;
+  grid-template-columns: minmax(9rem, 0.3fr) minmax(0, 1fr) auto;
+  gap: 0.8rem;
+  align-items: center;
+  padding: 0.78rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--en-line) 72%, transparent);
+}
+
+.studio-root .growth-polish-simple-list span,
+.studio-root .growth-polish-simple-list small,
+.studio-root .growth-inline-link {
+  color: var(--en-muted);
+  font-size: 0.68rem;
+}
+
+.studio-root .growth-polish-simple-list strong {
+  color: var(--en-ink);
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+
+.studio-root .growth-inline-link {
+  display: inline-flex;
+  margin-top: 1rem;
+  font-weight: 700;
+}
+
+.studio-root .growth-inline-link:hover,
+.studio-root .growth-inline-link:focus-visible {
+  color: var(--en-accent);
+}
+
+.studio-root .growth-performance-diagnosis {
+  margin-top: 1.2rem;
+}
+
+@media (max-width: 1000px) {
+  .studio-root .growth-polish-north-star {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .studio-root .growth-polish-north-star > div:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .studio-root .growth-polish-north-star > div:nth-child(odd) {
+    border-right: 0;
+  }
+}
+
+@media (max-width: 650px) {
+  .studio-root .growth-polish-north-star {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .studio-root .growth-polish-simple-list > div {
+    grid-template-columns: 1fr auto;
+  }
+
+  .studio-root .growth-polish-simple-list > div > span:first-child {
+    grid-column: 1 / -1;
+  }
+}

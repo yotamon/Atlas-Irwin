@@ -1,3 +1,4 @@
+import { StudioContextBar } from "@/components/studio/context-bar";
 import { StudioSidebar } from "@/components/studio/sidebar";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import {
@@ -28,7 +29,10 @@ export default async function ProtectedStudioLayout({
           workspaceName: item.workspaceName,
         }))}
       />
-      <main className="studio-main">{children}</main>
+      <div className="ensemblis-workspace-shell">
+        <StudioContextBar artistId={artist.artistId} artistName={artist.artistName} />
+        <main className="studio-main">{children}</main>
+      </div>
     </div>
   );
 }

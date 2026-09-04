@@ -250,28 +250,12 @@ export function MusicGenerator({
     <div className={styles.lab}>
       <section className={styles.controls}>
         <div className={styles.sectionIntro}>
-          <span className="section-label">01 / Engine</span>
-          <h2>Choose the spend</h2>
-          <p>MiniMax is the cheap ideation engine. Eleven is the control engine. Both use the same artist-aware Ensemblis prompt architecture.</p>
+          <span className="section-label">01 / Direction</span>
+          <h2>Start with the idea</h2>
+          <p>Describe the track you want to hear. Ensemblis starts with a sensible low-cost route and keeps technical generation controls out of the way until you need them.</p>
         </div>
 
-        <div className={styles.providers}>
-          {providers.map((option) => (
-            <button
-              type="button"
-              key={option.id}
-              disabled={!option.enabled || busy}
-              className={`${styles.provider}${provider === option.id ? ` ${styles.activeProvider}` : ""}`}
-              onClick={() => setProvider(option.id)}
-            >
-              <span className={styles.providerTop}><strong>{option.name}</strong><em>{option.price}</em></span>
-              <span>{option.model}</span>
-              <small>{option.enabled ? option.note : "Add the API key in the server environment to enable this provider."}</small>
-            </button>
-          ))}
-        </div>
-
-        <div className={styles.formSection}>
+        <div className={styles.coreForm}>
           <div className="form-grid">
             <label className="field">
               <span>Working title</span>
@@ -285,68 +269,104 @@ export function MusicGenerator({
             </label>
             <label className="field wide">
               <span>Creative direction</span>
-              <textarea rows={4} value={idea} onChange={(event) => setIdea(event.target.value)} maxLength={900} />
+              <textarea rows={5} value={idea} onChange={(event) => setIdea(event.target.value)} maxLength={900} />
             </label>
             <label className="field wide">
               <span>One signature idea</span>
-              <input value={signatureIdea} onChange={(event) => setSignatureIdea(event.target.value)} maxLength={400} placeholder="Example: one rhythmic, melodic or textural idea that can evolve across the track" />
-            </label>
-            <label className="field">
-              <span>BPM</span>
-              <input type="number" min={80} max={150} value={bpm} onChange={(event) => setBpm(Number(event.target.value))} />
-            </label>
-            <label className="field">
-              <span>{provider === "eleven" ? "Duration" : "Target duration hint"}</span>
-              <select value={durationSeconds} onChange={(event) => setDurationSeconds(Number(event.target.value))}>
-                <option value={180}>3:00</option>
-                <option value={210}>3:30</option>
-                <option value={240}>4:00</option>
-                <option value={270}>4:30</option>
-                <option value={300}>5:00</option>
-              </select>
+              <input value={signatureIdea} onChange={(event) => setSignatureIdea(event.target.value)} maxLength={400} placeholder="One rhythmic, melodic or textural idea worth remembering" />
             </label>
           </div>
-
-          <div className={styles.switches}>
-            <label className="checkbox-field">
-              <input
-                type="checkbox"
-                checked={hasArtistDna && preserveArtistDna}
-                disabled={!hasArtistDna}
-                onChange={(event) => setPreserveArtistDna(event.target.checked)}
-              />
-              Preserve {artistName} DNA
-            </label>
-            <label className="checkbox-field"><input type="checkbox" checked={instrumental} onChange={(event) => setInstrumental(event.target.checked)} /> Instrumental</label>
-            <label className="field">
-              <span>Variants</span>
-              <select value={variants} onChange={(event) => setVariants(Number(event.target.value))}>
-                <option value={1}>1 draft</option>
-                <option value={2}>2 drafts</option>
-              </select>
-            </label>
-          </div>
-
-          {!hasArtistDna ? <small>Add Brand essence or Music world guidance in this artist&apos;s Brand profile to enable DNA preservation.</small> : null}
-
-          {!instrumental ? (
-            <label className="field">
-              <span>Lyrics</span>
-              <textarea rows={10} value={lyrics} onChange={(event) => setLyrics(event.target.value)} maxLength={3500} placeholder="Use section tags such as [Intro], [Verse], [Chorus], [Bridge], [Outro]" />
-            </label>
-          ) : null}
         </div>
 
-        <details className={styles.promptPreview}>
-          <summary>Inspect generated prompt</summary>
-          <p>{prompt}</p>
+        <div className={styles.defaultRoute}>
+          <div>
+            <span>Default generation path</span>
+            <strong>{selectedProvider?.name ?? "No provider configured"}</strong>
+            <small>{hasArtistDna && preserveArtistDna ? `${artistName} DNA on` : "Artist DNA off"} · {instrumental ? "Instrumental" : "Vocal"} · {Math.floor(durationSeconds / 60)}:{String(durationSeconds % 60).padStart(2, "0")}</small>
+          </div>
+          <div className={styles.costPreview}><small>Estimated</small><strong>${estimatedCost.toFixed(2)}</strong></div>
+        </div>
+
+        <details className={styles.advancedControls}>
+          <summary>
+            <span>Advanced controls</span>
+            <small>Provider, timing, vocals, variants and prompt</small>
+          </summary>
+          <div className={styles.advancedBody}>
+            <div className={styles.providers}>
+              {providers.map((option) => (
+                <button
+                  type="button"
+                  key={option.id}
+                  disabled={!option.enabled || busy}
+                  className={`${styles.provider}${provider === option.id ? ` ${styles.activeProvider}` : ""}`}
+                  onClick={() => setProvider(option.id)}
+                >
+                  <span className={styles.providerTop}><strong>{option.name}</strong><em>{option.price}</em></span>
+                  <span>{option.model}</span>
+                  <small>{option.enabled ? option.note : "Add the API key in the server environment to enable this provider."}</small>
+                </button>
+              ))}
+            </div>
+
+            <div className={styles.tuningGrid}>
+              <label className="field">
+                <span>BPM</span>
+                <input type="number" min={80} max={150} value={bpm} onChange={(event) => setBpm(Number(event.target.value))} />
+              </label>
+              <label className="field">
+                <span>{provider === "eleven" ? "Duration" : "Target duration hint"}</span>
+                <select value={durationSeconds} onChange={(event) => setDurationSeconds(Number(event.target.value))}>
+                  <option value={180}>3:00</option>
+                  <option value={210}>3:30</option>
+                  <option value={240}>4:00</option>
+                  <option value={270}>4:30</option>
+                  <option value={300}>5:00</option>
+                </select>
+              </label>
+              <label className="field">
+                <span>Variants</span>
+                <select value={variants} onChange={(event) => setVariants(Number(event.target.value))}>
+                  <option value={1}>1 draft</option>
+                  <option value={2}>2 drafts</option>
+                </select>
+              </label>
+            </div>
+
+            <div className={styles.switches}>
+              <label className="checkbox-field">
+                <input
+                  type="checkbox"
+                  checked={hasArtistDna && preserveArtistDna}
+                  disabled={!hasArtistDna}
+                  onChange={(event) => setPreserveArtistDna(event.target.checked)}
+                />
+                Preserve {artistName} DNA
+              </label>
+              <label className="checkbox-field"><input type="checkbox" checked={instrumental} onChange={(event) => setInstrumental(event.target.checked)} /> Instrumental</label>
+            </div>
+
+            {!hasArtistDna ? <small className={styles.helperCopy}>Add Brand essence or Music world guidance in this artist&apos;s Brand profile to enable DNA preservation.</small> : null}
+
+            {!instrumental ? (
+              <label className="field">
+                <span>Lyrics</span>
+                <textarea rows={10} value={lyrics} onChange={(event) => setLyrics(event.target.value)} maxLength={3500} placeholder="Use section tags such as [Intro], [Verse], [Chorus], [Bridge], [Outro]" />
+              </label>
+            ) : null}
+
+            <details className={styles.promptPreview}>
+              <summary>Inspect generated prompt</summary>
+              <p>{prompt}</p>
+            </details>
+          </div>
         </details>
 
         <div className={styles.generateBar}>
           <div>
             <span>Estimated spend</span>
             <strong>${estimatedCost.toFixed(2)}</strong>
-            <small>{variants} generation{variants === 1 ? "" : "s"} via {selectedProvider?.name ?? provider}</small>
+            <small>{variants} generation{variants === 1 ? "" : "s"} via {selectedProvider?.name ?? provider}. Nothing is charged until you generate.</small>
           </div>
           <button className="button primary" type="button" disabled={busy || !selectedProvider?.enabled} onClick={generate}>
             <FiZap aria-hidden />
@@ -360,14 +380,14 @@ export function MusicGenerator({
         <div className={styles.sectionIntro}>
           <span className="section-label">02 / Candidates</span>
           <h2>Keep only what works</h2>
-          <p>Listen, download, then deliberately save the good drafts for {artistName}. Unfinished ideas stay local unless you choose to add them to the reusable library.</p>
+          <p>Listen first. Save only the drafts that deserve to become reusable source material for {artistName}.</p>
         </div>
 
         {busy && !generations.length ? (
           <div className={styles.generatingState}>
             <FiMusic aria-hidden />
             <strong>Building the track</strong>
-            <span>The provider is composing the full audio now.</span>
+            <span>The provider is composing the full audio now. You can evaluate the result before saving anything.</span>
           </div>
         ) : null}
 
@@ -393,7 +413,7 @@ export function MusicGenerator({
           <div className={styles.emptyResult}>
             <FiMusic aria-hidden />
             <strong>No drafts yet</strong>
-            <span>Start with one cheap generation, then spend on a second provider only if the idea deserves it.</span>
+            <span>Start with one generation. Spend on alternatives only when the musical idea is worth exploring further.</span>
           </div>
         ) : null}
       </aside>

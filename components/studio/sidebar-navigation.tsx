@@ -30,6 +30,8 @@ export function StudioPrimaryNavigation({ items }: { items: NavigationItem[] }) 
             key={route}
             className={active ? "is-active" : undefined}
             aria-current={active ? "page" : undefined}
+            aria-label={label}
+            title={label}
           >
             <Icon aria-hidden />
             <span className="studio-nav-text">{label}</span>
@@ -50,6 +52,8 @@ export function StudioAdvancedNavigation({ item }: { item: NavigationItem }) {
       href={item.href}
       className={active ? "is-active" : undefined}
       aria-current={active ? "page" : undefined}
+      aria-label={item.label}
+      title={item.label}
     >
       <Icon aria-hidden />
       <span className="studio-nav-text">{item.label}</span>

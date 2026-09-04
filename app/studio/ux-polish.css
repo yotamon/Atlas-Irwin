@@ -1,0 +1,485 @@
+/*
+ * Ensemblis UX polish layer
+ *
+ * This file is intentionally loaded after the existing Studio styles. It establishes
+ * the new shell and Today v3 hierarchy without coupling the first UX milestone to a
+ * wholesale stylesheet migration.
+ */
+
+.studio-root .ensemblis-workspace-shell {
+  min-width: 0;
+  min-height: 100svh;
+}
+
+.studio-root .ensemblis-context-bar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 4.35rem;
+  padding: 0.72rem clamp(1.2rem, 3vw, 3.2rem);
+  border-bottom: 1px solid color-mix(in srgb, var(--en-line) 88%, transparent);
+  background: color-mix(in srgb, var(--en-bg) 88%, transparent);
+  backdrop-filter: blur(22px) saturate(125%);
+}
+
+.studio-root .ensemblis-context-identity {
+  display: grid;
+  gap: 0.08rem;
+  min-width: 0;
+}
+
+.studio-root .ensemblis-context-kicker {
+  color: var(--en-subtle);
+  font-size: 0.61rem;
+  font-weight: 720;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.studio-root .ensemblis-context-identity strong {
+  overflow: hidden;
+  color: var(--en-ink);
+  font-size: 0.91rem;
+  font-weight: 690;
+  letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-root .ensemblis-context-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex: 0 0 auto;
+}
+
+.studio-root .ensemblis-context-actions .button {
+  min-height: 2.15rem;
+  padding: 0.55rem 0.82rem;
+}
+
+.studio-root .ensemblis-context-link,
+.studio-root .today-v3-secondary-link {
+  color: var(--en-muted);
+  font-size: 0.75rem;
+  font-weight: 680;
+  transition: color 150ms ease;
+}
+
+.studio-root .ensemblis-context-link:hover,
+.studio-root .ensemblis-context-link:focus-visible,
+.studio-root .today-v3-secondary-link:hover,
+.studio-root .today-v3-secondary-link:focus-visible {
+  color: var(--en-accent);
+}
+
+.studio-root .ensemblis-sidebar-group {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.studio-root .ensemblis-sidebar-group .studio-sidebar-section-label {
+  display: block;
+  padding: 0.85rem 1.45rem 0.2rem;
+}
+
+.studio-root .ensemblis-sidebar-group nav {
+  padding: 0.25rem 0 0.35rem;
+}
+
+.studio-root .ensemblis-sidebar-manage {
+  margin-top: 0.15rem;
+  border-top: 1px solid color-mix(in srgb, var(--en-line) 72%, transparent);
+}
+
+.studio-root .ensemblis-sidebar-settings {
+  margin-bottom: 0.45rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--en-line) 72%, transparent);
+}
+
+.studio-root .ensemblis-sidebar-settings > a {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  width: 100%;
+  padding: 0.72rem 0.48rem;
+  border-radius: var(--en-radius-sm);
+  color: color-mix(in srgb, var(--en-ink) 82%, var(--en-muted));
+  font-size: 0.82rem;
+}
+
+.studio-root .ensemblis-sidebar-settings > a:hover,
+.studio-root .ensemblis-sidebar-settings > a:focus-visible,
+.studio-root .ensemblis-sidebar-settings > a.is-active {
+  background: var(--en-surface-hover);
+  color: var(--en-ink);
+}
+
+.studio-root .ensemblis-sidebar-settings svg {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+/* Today v3: a decision surface, not a dashboard. */
+.studio-root .ensemblis-today-v3 {
+  width: min(100%, 86rem);
+  margin: 0 auto;
+}
+
+.studio-root .ensemblis-today-v3 .studio-page-header {
+  margin-bottom: 1.55rem;
+}
+
+.studio-root .ensemblis-today-v3 .studio-page-header h1 {
+  font-size: clamp(2.8rem, 5vw, 4.6rem);
+}
+
+.studio-root .ensemblis-today-v3 .studio-page-header p {
+  max-width: 48rem;
+  line-height: 1.55;
+}
+
+.studio-root .today-v3-next {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(1.35rem, 2.6vw, 2.2rem);
+  border: 1px solid color-mix(in srgb, var(--en-accent) 28%, var(--en-line));
+  border-radius: var(--en-radius-lg);
+  background:
+    radial-gradient(circle at 92% 8%, rgba(183, 243, 106, 0.1), transparent 32%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.035), transparent 48%),
+    color-mix(in srgb, var(--en-surface) 96%, transparent);
+  box-shadow: 0 20px 62px rgba(0, 0, 0, 0.2);
+}
+
+.studio-root .today-v3-next h2 {
+  max-width: 52rem;
+  margin: 0.28rem 0 0;
+  font-size: clamp(1.65rem, 3vw, 2.65rem);
+  font-weight: 690;
+  letter-spacing: -0.048em;
+  line-height: 1.06;
+}
+
+.studio-root .today-v3-next > p {
+  max-width: 50rem;
+  margin: 0.9rem 0 0;
+  color: var(--en-muted);
+  font-size: 0.94rem;
+  line-height: 1.6;
+}
+
+.studio-root .today-v3-next .actions {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  margin-top: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.studio-root .today-v3-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.studio-root .today-v3-section-heading.compact {
+  align-items: center;
+  padding-bottom: 1rem;
+}
+
+.studio-root .today-v3-section-heading h2 {
+  margin: 0.2rem 0 0;
+  color: var(--en-ink);
+  font-size: 1.28rem;
+  font-weight: 690;
+  letter-spacing: -0.035em;
+}
+
+.studio-root .today-v3-two-column {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: clamp(1.4rem, 3vw, 2.6rem);
+  margin-top: clamp(1.7rem, 3vw, 2.7rem);
+}
+
+.studio-root .today-v3-section {
+  min-width: 0;
+  padding-top: 1.15rem;
+  border-top: 1px solid var(--en-line);
+}
+
+.studio-root .today-v3-upcoming {
+  margin-top: clamp(1.7rem, 3vw, 2.8rem);
+  padding-bottom: 2rem;
+}
+
+.studio-root .today-v3-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.85rem;
+  min-height: 1.85rem;
+  padding: 0.15rem 0.45rem;
+  border: 1px solid var(--en-line);
+  border-radius: 999px;
+  background: var(--en-surface-raised);
+  color: var(--en-muted);
+  font-size: 0.7rem;
+  font-weight: 760;
+}
+
+.studio-root .today-v3-count.has-items {
+  border-color: color-mix(in srgb, var(--en-violet) 38%, var(--en-line));
+  background: var(--en-violet-soft);
+  color: color-mix(in srgb, var(--en-violet) 82%, white);
+}
+
+.studio-root .today-v3-count.is-working {
+  border-color: color-mix(in srgb, var(--en-mint) 34%, var(--en-line));
+  background: var(--en-mint-soft);
+  color: var(--en-mint);
+}
+
+.studio-root .today-v3-list {
+  display: grid;
+}
+
+.studio-root .today-v3-row,
+.studio-root .today-v3-work-row,
+.studio-root .today-v3-upcoming-row {
+  display: grid;
+  align-items: center;
+  gap: 0.9rem;
+  min-width: 0;
+  padding: 0.9rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--en-line) 76%, transparent);
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    padding-inline 150ms ease;
+}
+
+.studio-root .today-v3-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.studio-root .today-v3-work-row {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.studio-root .today-v3-upcoming-row {
+  grid-template-columns: minmax(8.8rem, 0.32fr) minmax(0, 1fr) auto;
+}
+
+.studio-root .today-v3-row:hover,
+.studio-root .today-v3-row:focus-visible,
+.studio-root .today-v3-work-row:hover,
+.studio-root .today-v3-work-row:focus-visible,
+.studio-root .today-v3-upcoming-row:hover,
+.studio-root .today-v3-upcoming-row:focus-visible {
+  margin-inline: -0.7rem;
+  padding-inline: 0.7rem;
+  border-bottom-color: var(--en-line-strong);
+  border-radius: var(--en-radius-sm);
+  background: color-mix(in srgb, var(--en-surface-hover) 62%, transparent);
+  outline: none;
+}
+
+.studio-root .today-v3-row.important:hover,
+.studio-root .today-v3-row.important:focus-visible {
+  background: color-mix(in srgb, var(--en-violet-soft) 74%, var(--en-surface));
+}
+
+.studio-root .today-v3-row.warning:hover,
+.studio-root .today-v3-row.warning:focus-visible {
+  background: color-mix(in srgb, var(--en-danger-soft) 70%, var(--en-surface));
+}
+
+.studio-root .today-v3-row-copy {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.studio-root .today-v3-row-copy small {
+  color: var(--en-subtle);
+  font-size: 0.62rem;
+  font-weight: 720;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.studio-root .today-v3-row-copy strong {
+  overflow: hidden;
+  color: var(--en-ink);
+  font-size: 0.86rem;
+  font-weight: 660;
+  letter-spacing: -0.015em;
+  text-overflow: ellipsis;
+}
+
+.studio-root .today-v3-row-copy > span {
+  overflow: hidden;
+  color: var(--en-muted);
+  font-size: 0.74rem;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+}
+
+.studio-root .today-v3-arrow {
+  color: var(--en-subtle);
+  font-size: 0.95rem;
+  transition: color 150ms ease, transform 150ms ease;
+}
+
+.studio-root .today-v3-row:hover .today-v3-arrow,
+.studio-root .today-v3-upcoming-row:hover .today-v3-arrow {
+  color: var(--en-accent);
+  transform: translateX(2px);
+}
+
+.studio-root .today-v3-working-dot {
+  width: 0.48rem;
+  height: 0.48rem;
+  border-radius: 999px;
+  background: var(--en-mint);
+  box-shadow: 0 0 0 0 rgba(92, 225, 198, 0.28);
+  animation: ensemblis-working-pulse 1.8s ease-out infinite;
+}
+
+.studio-root .today-v3-upcoming-row time {
+  color: var(--en-muted);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+}
+
+.studio-root .today-v3-calm-state {
+  margin-top: 1rem;
+  padding: 1rem 1.05rem;
+  border: 1px dashed var(--en-line);
+  border-radius: var(--en-radius);
+  background: color-mix(in srgb, var(--en-surface-raised) 48%, transparent);
+}
+
+.studio-root .today-v3-calm-state.compact {
+  margin-top: 0;
+}
+
+.studio-root .today-v3-calm-state.inline {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem 0.8rem;
+  flex-wrap: wrap;
+}
+
+.studio-root .today-v3-calm-state strong {
+  color: var(--en-ink);
+  font-size: 0.82rem;
+}
+
+.studio-root .today-v3-calm-state p {
+  margin: 0.25rem 0 0;
+  color: var(--en-muted);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.studio-root .today-v3-calm-state.inline p {
+  margin: 0;
+}
+
+@keyframes ensemblis-working-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(92, 225, 198, 0.28); }
+  70%, 100% { box-shadow: 0 0 0 0.48rem rgba(92, 225, 198, 0); }
+}
+
+@media (max-width: 1080px) {
+  .studio-root .today-v3-two-column {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .studio-root .ensemblis-sidebar-group .studio-sidebar-section-label {
+    height: 1px;
+    width: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+    padding: 0;
+    position: absolute;
+  }
+
+  .studio-root .ensemblis-sidebar-manage {
+    margin-top: 0.2rem;
+    padding-top: 0.2rem;
+  }
+
+  .studio-root .ensemblis-context-bar {
+    padding-inline: clamp(1rem, 3vw, 2rem);
+  }
+}
+
+@media (max-width: 650px) {
+  .studio-root .ensemblis-context-bar {
+    min-height: 3.85rem;
+    gap: 0.65rem;
+    padding: 0.58rem 1rem;
+  }
+
+  .studio-root .ensemblis-context-kicker {
+    display: none;
+  }
+
+  .studio-root .ensemblis-context-actions {
+    gap: 0.45rem;
+  }
+
+  .studio-root .ensemblis-context-link {
+    font-size: 0.7rem;
+  }
+
+  .studio-root .ensemblis-context-actions .button {
+    min-height: 2rem;
+    padding: 0.48rem 0.68rem;
+  }
+
+  .studio-root .today-v3-next {
+    padding: 1.15rem;
+  }
+
+  .studio-root .today-v3-section-heading {
+    gap: 0.65rem;
+  }
+
+  .studio-root .today-v3-upcoming-row {
+    grid-template-columns: 1fr auto;
+  }
+
+  .studio-root .today-v3-upcoming-row time {
+    grid-column: 1 / -1;
+  }
+
+  .studio-root .today-v3-work-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .studio-root .today-v3-work-row .status-chip {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-root .today-v3-working-dot {
+    animation: none;
+  }
+}
