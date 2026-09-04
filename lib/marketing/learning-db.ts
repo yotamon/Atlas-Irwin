@@ -49,16 +49,18 @@ type View<Row> = {
   Relationships: [];
 };
 
+type EmptySchemaRecord = Record<never, never>;
+
 type LearningEvidenceDatabase = {
   public: {
-    Tables: {};
+    Tables: EmptySchemaRecord;
     Views: {
       verified_moment_learning_evidence: View<VerifiedMomentLearningEvidence>;
       verified_creative_learning_evidence: View<VerifiedMomentLearningEvidence>;
     };
-    Functions: {};
-    Enums: {};
-    CompositeTypes: {};
+    Functions: EmptySchemaRecord;
+    Enums: EmptySchemaRecord;
+    CompositeTypes: EmptySchemaRecord;
   };
 };
 
