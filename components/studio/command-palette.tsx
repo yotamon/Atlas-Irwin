@@ -145,7 +145,6 @@ export function CommandPalette({ artistId }: { artistId: string }) {
   useEffect(() => {
     if (!open || normalized.length < 2) return;
     const controller = new AbortController();
-    setSearchingObjects(true);
     const timer = window.setTimeout(() => {
       const params = new URLSearchParams({ q: query.trim(), artist: artistId });
       void fetch(`/api/studio/search?${params.toString()}`, { signal: controller.signal })
