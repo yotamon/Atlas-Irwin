@@ -6,6 +6,7 @@ import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 import { asMomentsClient } from "@/lib/studio/moments-db";
+import { curateReleaseMoments } from "@/lib/studio/moments-curator";
 import { getPublicReleases } from "@/lib/public-catalog";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { asGrowthClient } from "@/lib/studio/growth-db";
@@ -88,16 +89,43 @@ export default async function ReleaseDetail({
   if (momentsError) throw new Error(momentsError.message);
   if (performanceError) throw new Error(performanceError.message);
 
-  const lyricMomentIds = [...new Set((moments ?? []).map((moment) => moment.lyric_moment_id).filter((value): value is string => Boolean(value)))];
-  const { data: lyricSources, error: lyricSourcesError } = lyricMomentIds.length
-    ? await music.from("track_lyric_moments").select("id,excerpt").in("id", lyricMomentIds)
+  const { data: trackLyrics, error: trackLyricsError } = trackIds.length
+    ? await music.from("track_lyrics").select("id,track_id").eq("artist_id", artist.artistId).in("track_id", trackIds)
     : { data: [], error: null };
+  if (trackLyricsError) throw new Error(trackLyricsError.message);
+  const lyricsIds = (trackLyrics ?? []).map((lyrics) => lyrics.id);
+  const [{ data: lyricSections, error: lyricSectionsError }, { data: lyricSources, error: lyricSourcesError }] = await Promise.all([
+    lyricsIds.length
+      ? music.from("track_lyric_sections").select("id,lyrics_id,section_key,section_type,label,start_ms,end_ms,confidence,is_primary_hook").eq("artist_id", artist.artistId).in("lyrics_id", lyricsIds)
+      : Promise.resolve({ data: [], error: null }),
+    trackIds.length
+      ? music.from("track_lyric_moments").select("id,track_id,section_key,excerpt,start_ms,end_ms,score").eq("artist_id", artist.artistId).in("track_id", trackIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (lyricSectionsError) throw new Error(lyricSectionsError.message);
   if (lyricSourcesError) throw new Error(lyricSourcesError.message);
+
+  const trackByLyricsId = new Map((trackLyrics ?? []).map((lyrics) => [lyrics.id, lyrics.track_id]));
+  const momentCuration = curateReleaseMoments({
+    moments: moments ?? [],
+    sections: (lyricSections ?? []).map((section) => ({
+      id: section.id,
+      track_id: trackByLyricsId.get(section.lyrics_id) ?? "",
+      section_key: section.section_key,
+      section_type: section.section_type,
+      label: section.label,
+      start_ms: section.start_ms,
+      end_ms: section.end_ms,
+      confidence: section.confidence,
+      is_primary_hook: section.is_primary_hook,
+    })).filter((section) => Boolean(section.track_id)),
+    lyricMoments: lyricSources ?? [],
+  });
 
   if (!advanced) {
     return <>
       <ReleaseWorkspaceV2 release={release} tracks={tracks ?? []} mediaLinks={mediaLinks ?? []} mediaAssets={mediaAssets ?? []} contentItems={contentItems ?? []} metrics={metrics ?? []} campaign={campaignResult.data} stage={stage} renderedAt={renderedAt} playbookTasks={playbookTasks ?? []} providerScheduledCount={providerScheduledCount ?? 0} vaultTrack={vaultResult.data} />
-      {stage === "create" ? <MomentReviewPanel releaseId={release.id} moments={moments ?? []} tracks={(tracks ?? []).map((track) => ({ id: track.id, title: track.title, audio_url: track.audio_url }))} performance={momentPerformance ?? []} lyricSources={lyricSources ?? []} /> : null}
+      {stage === "create" ? <MomentReviewPanel releaseId={release.id} moments={momentCuration.curated} historicalMoments={momentCuration.historical} rawCandidateCount={momentCuration.raw_active_count} suppressedCount={momentCuration.suppressed_count} tracks={(tracks ?? []).map((track) => ({ id: track.id, title: track.title, audio_url: track.audio_url }))} performance={momentPerformance ?? []} lyricSources={lyricSources ?? []} /> : null}
     </>;
   }
 
