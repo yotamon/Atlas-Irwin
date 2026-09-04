@@ -134,6 +134,9 @@ test("Media Library uses signed resumable TUS above 6 MB without expanding stora
     'method: "PATCH"',
     "sessionStorage",
     "RETRY_DELAYS",
+    "const chunkOffset = offset",
+    "patchChunk(uploadUrl, target, chunk, chunkOffset)",
+    "serverOffset !== chunkOffset",
   ]) assert.ok(resumable.includes(snippet), `resumable transport is missing ${snippet}`);
 
   assert.ok(catalog.includes("createSignedUploadUrl(storagePath)"));
