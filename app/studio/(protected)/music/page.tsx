@@ -1,13 +1,19 @@
 import { MusicGenerator } from "@/components/studio/music-generator";
 import { PageHeader } from "@/components/studio/ui";
-import { miniMaxGenerationCost } from "@/lib/music/atlas-generator";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { miniMaxGenerationCost } from "@/lib/music/atlas-generator";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
+import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 
 export default async function MusicLabPage() {
-  const { supabase } = await requireStudioAdmin();
-  const { data: brandRows } = await supabase
+  const { supabase, user } = await requireStudioAdmin();
+  const artist = await resolveActiveArtistContext(supabase, user);
+  const operational = asArtistScopedOperationalClient(supabase);
+  const { data: brandRows } = await operational
     .from("brand_settings")
     .select("section,content")
+    .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId)
     .in("section", ["Brand essence", "Music world"]);
   const brandContext = (brandRows ?? [])
     .map((row) => `${row.section}: ${(row.content as { text?: string } | null)?.text ?? ""}`)
@@ -37,7 +43,7 @@ export default async function MusicLabPage() {
     <>
       <PageHeader
         title="Music Lab"
-        description="Generate Atlas Irwin drafts inside the Studio. The prompt architecture keeps the project DNA, pushes one signature idea per track, and makes provider cost visible before you spend."
+        description={`Generate drafts for ${artist.artistName} inside Ensemblis. The prompt architecture keeps this artist's own music and brand context, pushes one signature idea per track, and makes provider cost visible before you spend.`}
       />
       <MusicGenerator providers={providers} brandContext={brandContext} />
     </>
