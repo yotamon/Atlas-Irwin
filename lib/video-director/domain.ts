@@ -97,6 +97,7 @@ export type VideoCreativeBrief = {
   target: VideoProjectKind;
   workflow_mode: "quick_video" | "director_pro";
   concept_id: string | null;
+  anchor_moment_id: string | null;
   concept_snapshot: {
     title: string;
     description: string;
@@ -124,6 +125,7 @@ export function parseVideoCreativeBrief(value: unknown): VideoCreativeBrief {
       : "full_music_video",
     workflow_mode: record.workflow_mode === "quick_video" ? "quick_video" : "director_pro",
     concept_id: typeof record.concept_id === "string" && record.concept_id.trim() ? record.concept_id : null,
+    anchor_moment_id: typeof record.anchor_moment_id === "string" && record.anchor_moment_id.trim() ? record.anchor_moment_id : null,
     concept_snapshot: snapshot
       && typeof snapshot.title === "string"
       && typeof snapshot.description === "string"
