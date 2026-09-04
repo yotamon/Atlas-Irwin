@@ -15,6 +15,7 @@ export function CommandPalette({ artistId }: { artistId: string }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const commands = useMemo<Command[]>(() => [
     { label: "Today", group: "Navigate", keywords: "home next action needs you working", href: ensemblisArtistHref("/studio", artistId) },
     { label: "Music", group: "Navigate", keywords: "tracks vault intelligence stems lyrics", href: ensemblisArtistHref("/studio/music", artistId) },
@@ -37,18 +38,24 @@ export function CommandPalette({ artistId }: { artistId: string }) {
     ? commands.filter((command) => `${command.label} ${command.group} ${command.keywords}`.toLowerCase().includes(normalized))
     : commands;
 
+  function close() {
+    setOpen(false);
+    requestAnimationFrame(() => triggerRef.current?.focus());
+  }
+
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setOpen((current) => !current);
-      } else if (event.key === "Escape") {
-        setOpen(false);
+      } else if (event.key === "Escape" && open) {
+        event.preventDefault();
+        close();
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [open]);
 
   useEffect(() => {
     if (!open) {
@@ -62,8 +69,10 @@ export function CommandPalette({ artistId }: { artistId: string }) {
   return (
     <>
       <button
+        ref={triggerRef}
         type="button"
         className="ensemblis-command-trigger"
+        aria-label="Search Ensemblis. Command or Control K"
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen(true)}
@@ -73,7 +82,7 @@ export function CommandPalette({ artistId }: { artistId: string }) {
       </button>
       {open ? (
         <div className="ensemblis-command-backdrop" onMouseDown={(event) => {
-          if (event.target === event.currentTarget) setOpen(false);
+          if (event.target === event.currentTarget) close();
         }}>
           <section className="ensemblis-command-dialog" role="dialog" aria-modal="true" aria-label="Search Ensemblis">
             <div className="ensemblis-command-search">
@@ -84,7 +93,7 @@ export function CommandPalette({ artistId }: { artistId: string }) {
                 placeholder="Search Ensemblis or choose an action…"
                 aria-label="Search commands"
               />
-              <button type="button" onClick={() => setOpen(false)} aria-label="Close search">Esc</button>
+              <button type="button" onClick={close} aria-label="Close search">Esc</button>
             </div>
             <div className="ensemblis-command-results">
               {(["Navigate", "Create", "Manage"] as const).map((group) => {

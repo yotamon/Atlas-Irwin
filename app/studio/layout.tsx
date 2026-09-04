@@ -26,6 +26,7 @@ import "./growth-polish.css";
 import "./audience-polish.css";
 import "./library-polish.css";
 import "./shared-interactions.css";
+import "./loading-polish.css";
 
 export const metadata: Metadata = {
   title: {
