@@ -80,19 +80,25 @@ async function loadContext(releaseId: string): Promise<UpdateContext> {
   for (const result of [releaseResult, tracksResult, configResult, accountResult, metadataResult, writersResult, contributorsResult, profilesResult]) {
     if (result.error) throw new Error(result.error.message);
   }
+  if (!releaseResult.data) throw new Error("Release not found or unauthorized.");
+  if (!configResult.data) throw new Error("Distribution configuration not found for this release.");
+  if (!accountResult.data) throw new Error("Distribution account not found.");
+  const release = releaseResult.data;
+  const config = configResult.data;
+  const account = accountResult.data;
   const tracks = tracksResult.data ?? [];
   const trackIds = new Set(tracks.map((track) => track.id));
   return {
     db,
     userId: user.id,
-    release: releaseResult.data,
+    release,
     tracks,
-    config: configResult.data,
-    account: accountResult.data,
+    config,
+    account,
     trackMetadata: (metadataResult.data ?? []).filter((row) => trackIds.has(row.track_id)),
     writers: (writersResult.data ?? []).filter((row) => trackIds.has(row.track_id)),
     contributors: (contributorsResult.data ?? []).filter((row) => trackIds.has(row.track_id)),
-    artistProfiles: (profilesResult.data ?? []).filter((profile) => profile.artist_name === releaseResult.data.artist),
+    artistProfiles: (profilesResult.data ?? []).filter((profile) => profile.artist_name === release.artist),
   };
 }
 
