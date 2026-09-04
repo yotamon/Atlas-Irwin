@@ -72,12 +72,13 @@ test("AI Control Center exposes cost quality configured and learned routing with
   assert.match(page, /Recent AI attempts/);
   assert.doesNotMatch(page, /AI_GATEWAY_API_KEY/);
   assert.doesNotMatch(page, /VERCEL_OIDC_TOKEN/);
+  assert.doesNotMatch(page, /\bAtlas\b/);
 });
 
 test("specialist paid media remains outside semantic retry transport", async () => {
   const director = await source("lib/video-director/openai-director.ts");
   const generation = await source("lib/video-director/generation.ts");
-  assert.match(director, /runAtlasAiTask/);
+  assert.match(director, /runAtlasAiTask|runEnsemblisAiTask/);
   assert.doesNotMatch(director, /HiggsfieldProvider/);
   assert.match(generation, /createApprovalEnvelope/);
   assert.match(generation, /reserved_credits/);
@@ -92,6 +93,8 @@ test("Zero Cost mode blocks specialist media at the provider boundary", async ()
   const videoGeneration = await source("lib/video-director/generation.ts");
   assert.match(controlPlane, /ZERO_COST_TEXT_BUDGET_USD = 2\.25/);
   assert.match(controlPlane, /assertSpecialistMediaSpendAllowed/);
+  assert.match(controlPlane, /EnsemblisAiBudgetError/);
+  assert.doesNotMatch(controlPlane, /`Atlas /);
   assert.match(actions, /applyZeroCostPreset/);
   assert.match(actions, /image_budget_usd: 0/);
   assert.match(actions, /video_budget_usd: 0/);
@@ -122,8 +125,9 @@ test("AI tasks reuse quality-approved deterministic results and escalate cheaply
   assert.ok(controlPlane.indexOf('if (cacheMode === "use")') < controlPlane.indexOf("const budget = await enforceBudget"));
   assert.match(controlPlane, /quality_gate_passed", true/);
   assert.match(controlPlane, /cacheHit: true/);
-  assert.match(controlPlane, /provider: "atlas-cache"/);
+  assert.match(controlPlane, /provider: "ensemblis-cache"/);
   assert.match(controlPlane, /cacheSourceRunId/);
+  assert.match(controlPlane, /runEnsemblisAiTask/);
   assert.match(tasks, /zai\/glm-4\.7-flash/);
   assert.match(tasks, /openai\/gpt-5\.6-luna/);
   assert.match(tasks, /openai\/gpt-5\.6-sol/);

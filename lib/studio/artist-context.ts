@@ -1,7 +1,9 @@
 import "server-only";
 
+import { cookies } from "next/headers";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { ENSEMBLIS_ACTIVE_ARTIST_COOKIE } from "@/lib/ensemblis-product";
 import type { Database } from "@/types/database";
 import type {
   Artist,
@@ -24,6 +26,18 @@ export type ArtistContext = {
   artistId: string;
   artistName: string;
   artistSlug: string;
+  role: WorkspaceRole;
+};
+
+export type AccessibleArtist = {
+  artistId: string;
+  artistName: string;
+  artistSlug: string;
+  avatarUrl: string | null;
+  accentColor: string | null;
+  workspaceId: string;
+  workspaceName: string;
+  workspaceSlug: string;
   role: WorkspaceRole;
 };
 
@@ -138,16 +152,82 @@ export async function resolveArtistContext(
   return buildContext(db, identity, data as Artist);
 }
 
+/** Return every active artist available through the user's active workspace memberships. */
+export async function listAccessibleArtists(
+  client: SupabaseClient<Database>,
+  identity: StudioIdentity,
+): Promise<AccessibleArtist[]> {
+  const db = asEnsemblisClient(client);
+  const membershipsResult = await db
+    .from("workspace_memberships")
+    .select("workspace_id,profile_id,role,status,created_at,updated_at")
+    .eq("profile_id", identity.id)
+    .eq("status", "active");
+
+  if (membershipsResult.error) {
+    throw new ArtistContextError("artist_context_invalid", membershipsResult.error.message);
+  }
+
+  const memberships = (membershipsResult.data ?? []) as WorkspaceMembership[];
+  if (!memberships.length) return [];
+
+  const workspaceIds = Array.from(new Set(memberships.map((membership) => membership.workspace_id)));
+  const [workspacesResult, artistsResult] = await Promise.all([
+    db
+      .from("workspaces")
+      .select("id,name,slug,kind,created_by,legacy_owner_id,created_at,updated_at")
+      .in("id", workspaceIds),
+    db
+      .from("artists")
+      .select("id,workspace_id,name,slug,project_type,status,avatar_url,accent_color,legacy_owner_id,created_at,updated_at")
+      .in("workspace_id", workspaceIds)
+      .eq("status", "active")
+      .order("name", { ascending: true }),
+  ]);
+
+  if (workspacesResult.error) {
+    throw new ArtistContextError("artist_context_invalid", workspacesResult.error.message);
+  }
+  if (artistsResult.error) {
+    throw new ArtistContextError("artist_context_invalid", artistsResult.error.message);
+  }
+
+  const membershipsByWorkspace = new Map(
+    memberships.map((membership) => [membership.workspace_id, membership]),
+  );
+  const workspacesById = new Map(
+    ((workspacesResult.data ?? []) as Workspace[]).map((workspace) => [workspace.id, workspace]),
+  );
+
+  return ((artistsResult.data ?? []) as Artist[])
+    .flatMap((artist) => {
+      const workspace = workspacesById.get(artist.workspace_id);
+      const membership = membershipsByWorkspace.get(artist.workspace_id);
+      if (!workspace || !membership) return [];
+      return [{
+        artistId: artist.id,
+        artistName: artist.name,
+        artistSlug: artist.slug,
+        avatarUrl: artist.avatar_url,
+        accentColor: artist.accent_color,
+        workspaceId: workspace.id,
+        workspaceName: workspace.name,
+        workspaceSlug: workspace.slug,
+        role: membership.role,
+      } satisfies AccessibleArtist];
+    })
+    .sort((left, right) =>
+      left.workspaceName.localeCompare(right.workspaceName) ||
+      left.artistName.localeCompare(right.artistName),
+    );
+}
+
 /**
- * Transitional resolver for the Ensemblis migration.
- *
- * During the compatibility window the existing production owner has a deterministic
- * legacy_owner_id mapping to its default artist. Future users without that mapping
- * resolve automatically only when their active membership/artist choice is
- * unambiguous. Once a workspace contains multiple selectable artists, callers must
- * move to an explicit validated artist selection rather than guessing.
+ * Last-resort transitional fallback for accounts that have not persisted an active
+ * artist yet. This function must remain internal so product callers cannot bypass
+ * the active-artist preference by asking for the legacy/default artist directly.
  */
-export async function resolveDefaultArtistContext(
+async function resolveLegacyFallbackArtistContext(
   client: SupabaseClient<Database>,
   identity: StudioIdentity,
 ): Promise<ArtistContext> {
@@ -229,9 +309,42 @@ export async function resolveDefaultArtistContext(
   return buildContext(db, identity, artists[0]);
 }
 
+/** Resolve the validated request preference, falling back only when a persisted choice is stale. */
+export async function resolveActiveArtistContext(
+  client: SupabaseClient<Database>,
+  identity: StudioIdentity,
+  artistId?: string,
+): Promise<ArtistContext> {
+  if (artistId) return resolveArtistContext(client, identity, artistId);
+
+  const cookieStore = await cookies();
+  const preferredArtistId = cookieStore.get(ENSEMBLIS_ACTIVE_ARTIST_COOKIE)?.value?.trim();
+  if (preferredArtistId) {
+    try {
+      return await resolveArtistContext(client, identity, preferredArtistId);
+    } catch (error) {
+      if (!(error instanceof ArtistContextError)) throw error;
+      if (error.code !== "artist_context_forbidden" && error.code !== "artist_context_invalid") {
+        throw error;
+      }
+    }
+  }
+
+  return resolveLegacyFallbackArtistContext(client, identity);
+}
+
+/**
+ * @deprecated Existing callers receive the active artist for safety. New product code
+ * should use resolveActiveArtistContext or requireArtistContext explicitly.
+ */
+export async function resolveDefaultArtistContext(
+  client: SupabaseClient<Database>,
+  identity: StudioIdentity,
+): Promise<ArtistContext> {
+  return resolveActiveArtistContext(client, identity);
+}
+
 export async function requireArtistContext(artistId?: string): Promise<ArtistContext> {
   const { supabase, user } = await requireStudioAdmin();
-  return artistId
-    ? resolveArtistContext(supabase, user, artistId)
-    : resolveDefaultArtistContext(supabase, user);
+  return resolveActiveArtistContext(supabase, user, artistId);
 }

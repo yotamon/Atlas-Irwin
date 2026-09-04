@@ -1,0 +1,309 @@
+.studio-root {
+  /* Ensemblis owns a neutral product system. Artist visual identity belongs to
+     generated creative and artist data, never to product chrome. */
+  --font-heading: var(--font-body);
+  --en-bg: #090c0a;
+  --en-surface: #101512;
+  --en-surface-raised: #151c18;
+  --en-ink: #f5f7f2;
+  --en-muted: #94a098;
+  --en-line: #263029;
+  --en-accent: #b7f36a;
+  --en-violet: #8a7cff;
+  --en-mint: #5ce1c6;
+  --en-danger: #ff786c;
+  --s-bg: var(--en-bg);
+  --s-surface: var(--en-surface);
+  --s-surface-2: var(--en-surface-raised);
+  --s-ink: var(--en-ink);
+  --s-muted: var(--en-muted);
+  --s-line: var(--en-line);
+  --s-accent: var(--en-accent);
+  --s-coral: var(--en-danger);
+  --s-teal: var(--en-mint);
+  background:
+    radial-gradient(circle at 82% -8%, rgba(138, 124, 255, 0.1), transparent 28%),
+    radial-gradient(circle at 18% 0%, rgba(92, 225, 198, 0.06), transparent 24%),
+    var(--en-bg);
+}
+
+.studio-root .studio-sidebar {
+  background: color-mix(in srgb, var(--en-bg) 94%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+.studio-root .studio-page-header h1,
+.studio-root .section-head h2,
+.studio-root .command-overview strong,
+.studio-root .next-action-marker {
+  font-family: var(--font-body), sans-serif;
+  font-weight: 680;
+  letter-spacing: -0.05em;
+  text-transform: none;
+}
+
+.studio-root .studio-page-header h1 {
+  line-height: 0.98;
+}
+
+.studio-root .hero-release h2,
+.studio-root .soundcloud-profile h2 {
+  font-family: var(--font-body), sans-serif;
+  letter-spacing: -0.04em;
+  text-transform: none;
+}
+
+.studio-root .button,
+.studio-root .studio-tabs a,
+.studio-root .catalog-card,
+.studio-root .kanban-card,
+.studio-root .empty-state,
+.studio-root .studio-auth section {
+  border-radius: 0.8rem;
+}
+
+.studio-root .button.primary {
+  border-color: var(--en-accent);
+  background: var(--en-accent);
+  color: #0a0d0b;
+}
+
+.studio-root .button.primary:hover,
+.studio-root .button.primary:focus-visible {
+  background: color-mix(in srgb, var(--en-accent) 88%, white);
+}
+
+.studio-mark.ensemblis-product-mark {
+  min-height: 5.8rem;
+  height: auto;
+  gap: 0.78rem;
+  border-bottom-color: var(--en-line);
+  font-family: var(--font-body), sans-serif;
+  letter-spacing: 0;
+}
+
+.ensemblis-mark-symbol,
+.ensemblis-auth-symbol {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0.38rem;
+  border: 1px solid color-mix(in srgb, var(--en-accent) 28%, var(--en-line));
+  border-radius: 0.78rem;
+  background: linear-gradient(145deg, rgba(183, 243, 106, 0.08), rgba(138, 124, 255, 0.08));
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.04), 0 8px 28px rgba(0, 0, 0, 0.16);
+}
+
+.ensemblis-mark-symbol svg,
+.ensemblis-auth-symbol svg {
+  width: 100%;
+  height: 100%;
+}
+
+.ensemblis-mark-wave-a { color: var(--en-accent); }
+.ensemblis-mark-wave-b { color: var(--en-violet); }
+.ensemblis-mark-wave-c { color: var(--en-mint); }
+
+.ensemblis-wordmark {
+  display: grid !important;
+  gap: 0.12rem;
+}
+
+.ensemblis-wordmark strong {
+  font-size: 1.16rem;
+  font-weight: 760;
+  letter-spacing: -0.045em;
+}
+
+.ensemblis-wordmark small {
+  color: var(--en-muted);
+  font: 600 0.61rem/1.2 var(--font-body), sans-serif;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.ensemblis-artist-switcher {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0.85rem 0.95rem 0.35rem;
+  padding: 0.8rem;
+  border: 1px solid var(--en-line);
+  border-radius: 0.8rem;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.025), rgba(138, 124, 255, 0.025));
+}
+
+.ensemblis-artist-switcher-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.ensemblis-artist-switcher-heading span,
+.studio-sidebar-section-label {
+  color: var(--en-muted);
+  font-size: 0.6rem;
+  font-weight: 720;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ensemblis-artist-switcher-heading small {
+  color: color-mix(in srgb, var(--en-accent) 78%, var(--en-muted));
+  font-size: 0.56rem;
+}
+
+.ensemblis-artist-switcher select {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--en-line) 80%, transparent);
+  background: transparent;
+  color: var(--en-ink);
+  padding: 0.25rem 1.2rem 0.38rem 0;
+  font: 680 0.86rem/1.25 var(--font-body), sans-serif;
+  letter-spacing: -0.02em;
+  cursor: pointer;
+}
+
+.ensemblis-artist-switcher select:focus-visible {
+  outline: 1px solid var(--en-accent);
+  outline-offset: 3px;
+}
+
+.ensemblis-artist-switcher select:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.ensemblis-artist-switcher option {
+  background: var(--en-surface-raised);
+  color: var(--en-ink);
+}
+
+.ensemblis-artist-workspace {
+  overflow: hidden;
+  color: var(--en-muted);
+  font-size: 0.62rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-sidebar-section-label {
+  display: block;
+  padding: 0.78rem 1.45rem 0.22rem;
+}
+
+.studio-sidebar-advanced {
+  display: grid;
+  gap: 0.2rem;
+  margin-bottom: 0.6rem;
+}
+
+.studio-root .studio-sidebar nav a:hover,
+.studio-root .studio-sidebar nav a:focus-visible {
+  background: linear-gradient(90deg, rgba(183, 243, 106, 0.065), transparent);
+  color: var(--en-ink);
+  box-shadow: inset 2px 0 var(--en-accent);
+}
+
+.studio-root .studio-sidebar svg {
+  color: var(--en-muted);
+}
+
+.studio-root .studio-sidebar nav a:hover svg,
+.studio-root .studio-sidebar nav a:focus-visible svg {
+  color: var(--en-accent);
+}
+
+.studio-auth {
+  background:
+    radial-gradient(circle at 80% 5%, rgba(138, 124, 255, 0.13), transparent 30%),
+    radial-gradient(circle at 15% 85%, rgba(92, 225, 198, 0.08), transparent 28%),
+    var(--en-bg);
+}
+
+.studio-auth section {
+  position: relative;
+  border-color: var(--en-line);
+  background: color-mix(in srgb, var(--en-surface) 92%, transparent);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28);
+}
+
+.studio-root .studio-auth h1 {
+  font: 720 clamp(2.25rem, 8vw, 4.4rem)/0.98 var(--font-body), sans-serif;
+  letter-spacing: -0.065em;
+  text-transform: none;
+}
+
+.ensemblis-auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.ensemblis-auth-brand strong {
+  font-size: 1.1rem;
+  font-weight: 760;
+  letter-spacing: -0.04em;
+}
+
+.ensemblis-auth-brand small {
+  display: block;
+  margin-top: 0.1rem;
+  color: var(--en-muted);
+  font-size: 0.65rem;
+}
+
+.ensemblis-auth-symbol {
+  width: 2.75rem;
+  height: 2.75rem;
+}
+
+@media (max-width: 900px) {
+  .studio-root .studio-shell {
+    grid-template-columns: 5.25rem minmax(0, 1fr);
+  }
+
+  .studio-mark.ensemblis-product-mark {
+    min-height: 4.9rem;
+    height: 4.9rem;
+    padding: 0;
+  }
+
+  .studio-mark.ensemblis-product-mark::after {
+    content: none !important;
+  }
+
+  .studio-mark.ensemblis-product-mark > .ensemblis-mark-symbol {
+    display: grid;
+    width: 2.45rem;
+    height: 2.45rem;
+  }
+
+  .studio-mark.ensemblis-product-mark > .ensemblis-wordmark {
+    display: none !important;
+  }
+
+  .ensemblis-artist-switcher {
+    margin: 0.55rem;
+    padding: 0.5rem;
+  }
+
+  .ensemblis-artist-switcher-heading,
+  .ensemblis-artist-workspace,
+  .studio-sidebar > .studio-sidebar-section-label {
+    display: none;
+  }
+
+  .ensemblis-artist-switcher select {
+    width: 100%;
+    padding: 0.45rem 0.15rem;
+    border: 0;
+    font-size: 0.58rem;
+    text-align: center;
+  }
+}

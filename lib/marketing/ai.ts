@@ -1,15 +1,15 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { requireStudioAdmin } from "@/lib/auth/studio";
-import { atlasAiGatewayConfigured } from "@/lib/ai/gateway";
+import { ensemblisAiGatewayConfigured } from "@/lib/ai/gateway";
 import { runAtlasAiTask } from "@/lib/ai/control-plane";
-import { strictQualityResult, type AtlasQualityGate } from "@/lib/ai/quality";
-import type { AtlasAiTaskType } from "@/lib/ai/tasks";
+import { strictQualityResult, type AiQualityGate } from "@/lib/ai/quality";
+import type { AiTaskType } from "@/lib/ai/tasks";
+import { requireStudioAdmin } from "@/lib/auth/studio";
 import { conciseLyricsPromptContext, loadTrackLyricsContext } from "@/lib/lyrics-intelligence/context";
 import { conciseCreativeGraphContext } from "@/lib/music-intelligence/creative-graph";
 import { loadTrackCreativeIntelligenceGraph } from "@/lib/music-intelligence/creative-graph-loader";
-import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext, resolveArtistContext } from "@/lib/studio/artist-context";
 import type { LyricsDatabase } from "@/types/lyrics-database";
 
 export type MarketingTextProvider = "vercel-gateway" | "openai" | "google" | "zai";
@@ -46,8 +46,8 @@ function stringValue(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function taskForName(name: string): AtlasAiTaskType {
-  if (name === "atlas_campaign_plan") return "marketing.campaign_plan";
+function taskForName(name: string): AiTaskType {
+  if (name === "atlas_campaign_plan" || name === "ensemblis_campaign_plan") return "marketing.campaign_plan";
   if (name.includes("caption")) return "marketing.caption";
   return "marketing.strategy";
 }
@@ -117,14 +117,12 @@ async function enrichMarketingContextWithLyrics({
       ...("trackCreativeIntelligence" in context ? {} : { trackCreativeIntelligence: conciseCreativeGraphContext(graph) }),
     };
   } catch (error) {
-    // Creative intelligence is optional context. A migration/read problem must not prevent otherwise
-    // valid campaign/caption work; it remains visible in server logs for repair.
     console.warn("Unable to enrich marketing AI with track creative intelligence:", error instanceof Error ? error.message : error);
     return context;
   }
 }
 
-function campaignQualityGate(input: string): AtlasQualityGate<unknown> {
+function campaignQualityGate(input: string): AiQualityGate<unknown> {
   const context = parseInputContext(input);
   const connected = new Set(asArray(context.connectedSocialChannels).filter((item): item is string => typeof item === "string"));
   return (value) => {
@@ -163,17 +161,19 @@ function campaignQualityGate(input: string): AtlasQualityGate<unknown> {
   };
 }
 
-function qualityGateFor<T>(name: string, input: string): AtlasQualityGate<T> | undefined {
-  if (name === "atlas_campaign_plan") return campaignQualityGate(input) as AtlasQualityGate<T>;
+function qualityGateFor<T>(name: string, input: string): AiQualityGate<T> | undefined {
+  if (name === "atlas_campaign_plan" || name === "ensemblis_campaign_plan") return campaignQualityGate(input) as AiQualityGate<T>;
   return undefined;
 }
 
 export function marketingAiConfigured() {
-  return atlasAiGatewayConfigured();
+  return ensemblisAiGatewayConfigured();
 }
 
 export function marketingAiModel() {
-  return process.env.ATLAS_MARKETING_MODEL?.trim() || "auto via Atlas AI Control Plane";
+  return process.env.ENSEMBLIS_MARKETING_MODEL?.trim()
+    || process.env.ATLAS_MARKETING_MODEL?.trim()
+    || "auto via Ensemblis AI Control Plane";
 }
 
 export async function generateStructured<T>({
@@ -191,14 +191,14 @@ export async function generateStructured<T>({
 }): Promise<StructuredGenerationResult<T>> {
   if (!marketingAiConfigured()) {
     throw new Error(
-      "Atlas marketing AI is not configured. Production uses Vercel OIDC automatically; set AI_GATEWAY_API_KEY for local development.",
+      "Ensemblis marketing AI is not configured. Production uses Vercel OIDC automatically; set AI_GATEWAY_API_KEY for local development.",
     );
   }
 
   const { supabase, user } = await requireStudioAdmin();
   const artist = artistId
     ? await resolveArtistContext(supabase, user, artistId)
-    : await resolveDefaultArtistContext(supabase, user);
+    : await resolveActiveArtistContext(supabase, user);
   const parsedInputContext = parseInputContext(input);
   const inputContext = await enrichMarketingContextWithLyrics({
     context: parsedInputContext,
@@ -208,13 +208,14 @@ export async function generateStructured<T>({
   });
   const enrichedInput = JSON.stringify(inputContext, null, 2);
   const releaseId = releaseIdFromContext(inputContext);
+  const campaignPlan = name === "atlas_campaign_plan" || name === "ensemblis_campaign_plan";
   const result = await runAtlasAiTask<T>({
     ownerId: user.id,
     artistId: artist.artistId,
     task: taskForName(name),
-    purpose: name === "atlas_campaign_plan" ? "campaign_plan" : name,
+    purpose: campaignPlan ? "campaign_plan" : name,
     releaseId,
-    promptVersion: name === "atlas_campaign_plan" ? "marketing-v4-creative-graph" : "marketing-control-v3-creative-graph",
+    promptVersion: campaignPlan ? "marketing-v4-creative-graph" : "marketing-control-v3-creative-graph",
     schema,
     instructions: `${instructions}\n\nTRACK CREATIVE INTELLIGENCE RULES:\nWhen trackCreativeIntelligence is present, treat it as the shared cross-modal timeline joining master-audio hooks, Lyrics Intelligence, active stem roles and Audio Scenes. Prefer highlights supported by multiple modalities. Respect supplied start/end timing and provenance. Do not infer that a lyric is sung merely because a music section has the same structural label. Use materially different highlights instead of repeatedly choosing near-identical chorus windows.\n\nLYRICS INTELLIGENCE RULES:\nWhen lyricsIntelligence is present, treat it as authoritative song-specific narrative context. It may inform hooks, captions, visual briefs and campaign angles. Quote only excerpts explicitly supplied with mayQuote=true. Never invent, complete, reconstruct or paraphrase text as if it were an official lyric. If quoting is disabled, use only semantic themes and meaning without reproducing lyric text.`,
     input: enrichedInput,

@@ -1,5 +1,6 @@
-import Image from "next/image";
+import { EnsemblisMark } from "@/components/ensemblis-logo";
 import { adminEmails } from "@/lib/auth/studio";
+import { ENSEMBLIS_PRODUCT } from "@/lib/ensemblis-product";
 import { signInStudio } from "../login-actions";
 
 export default async function LoginPage({
@@ -14,14 +15,15 @@ export default async function LoginPage({
   return (
     <main className="studio-auth">
       <section>
-        <Image
-          src="/atlas-irwin-logo-sign.svg"
-          alt="Atlas Irwin"
-          width={48}
-          height={48}
-        />
-        <h1>Release Engine</h1>
-        <p>Private access to the Atlas Irwin release studio.</p>
+        <div className="ensemblis-auth-brand">
+          <span className="ensemblis-auth-symbol" aria-hidden><EnsemblisMark /></span>
+          <div>
+            <strong>{ENSEMBLIS_PRODUCT.name}</strong>
+            <small>{ENSEMBLIS_PRODUCT.descriptor}</small>
+          </div>
+        </div>
+        <h1>{ENSEMBLIS_PRODUCT.promise}</h1>
+        <p>{ENSEMBLIS_PRODUCT.positioning}</p>
         <form action={signInStudio}>
           <label>
             Email
@@ -30,7 +32,7 @@ export default async function LoginPage({
               type="email"
               autoComplete="username"
               defaultValue={defaultEmail}
-              placeholder="Studio administrator email"
+              placeholder="Ensemblis account email"
               required
             />
           </label>
@@ -41,13 +43,13 @@ export default async function LoginPage({
               type="password"
               autoComplete="current-password"
               required
-              placeholder="Studio password"
+              placeholder="Password"
             />
           </label>
           <button className="button primary">Sign in</button>
         </form>
         {params.error && <p className="form-error">{params.error}</p>}
-        <small>Access is restricted to approved Studio administrators.</small>
+        <small>Secure access to your Ensemblis workspace.</small>
       </section>
     </main>
   );

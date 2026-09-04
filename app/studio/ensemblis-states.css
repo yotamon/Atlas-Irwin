@@ -1,0 +1,40 @@
+.ensemblis-loading {
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.9rem;
+  background:
+    radial-gradient(circle at 60% 25%, rgba(138, 124, 255, 0.12), transparent 28%),
+    #090c0a;
+  color: #f5f7f2;
+  font-family: var(--font-body), sans-serif;
+}
+
+.ensemblis-loading > svg {
+  width: 2.7rem;
+  height: 2.7rem;
+  padding: 0.45rem;
+  border: 1px solid #263029;
+  border-radius: 0.82rem;
+  background: #101512;
+}
+
+.ensemblis-loading .ensemblis-mark-wave-a { color: #b7f36a; }
+.ensemblis-loading .ensemblis-mark-wave-b { color: #8a7cff; }
+.ensemblis-loading .ensemblis-mark-wave-c { color: #5ce1c6; }
+
+.ensemblis-loading > div {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.ensemblis-loading strong {
+  font-size: 0.95rem;
+  letter-spacing: -0.03em;
+}
+
+.ensemblis-loading span {
+  color: #94a098;
+  font-size: 0.68rem;
+}

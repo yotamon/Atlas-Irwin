@@ -3,8 +3,8 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { generateGatewayStructured } from "./gateway";
 import { learnedRouteForTask } from "./learning";
-import { atlasAiTaskPolicy, type AtlasAiTaskType } from "./tasks";
-import { noQualityGate, type AtlasQualityGate, type AtlasQualityResult } from "./quality";
+import { aiTaskPolicy, type AiTaskType } from "./tasks";
+import { noQualityGate, type AiQualityGate, type AiQualityResult } from "./quality";
 import { createMarketingServiceClient } from "@/lib/marketing/db";
 import type { Json } from "@/types/database";
 import type { AiControlSettings } from "@/types/marketing-database";
@@ -128,30 +128,36 @@ export async function getAiBudgetSnapshot(ownerId: string, settings?: AiControlS
   };
 }
 
-export class AtlasAiBudgetError extends Error {
+export class EnsemblisAiBudgetError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "AtlasAiBudgetError";
+    this.name = "EnsemblisAiBudgetError";
   }
 }
 
-export class AtlasAiQualityError extends Error {
-  readonly quality: AtlasQualityResult;
-  constructor(task: AtlasAiTaskType, quality: AtlasQualityResult) {
-    super(`Atlas AI quality gate failed for ${task}: ${quality.failures.join("; ") || `score ${quality.score.toFixed(2)} below threshold`}`);
-    this.name = "AtlasAiQualityError";
+/** @deprecated Use EnsemblisAiBudgetError. */
+export { EnsemblisAiBudgetError as AtlasAiBudgetError };
+
+export class EnsemblisAiQualityError extends Error {
+  readonly quality: AiQualityResult;
+  constructor(task: AiTaskType, quality: AiQualityResult) {
+    super(`Ensemblis AI quality gate failed for ${task}: ${quality.failures.join("; ") || `score ${quality.score.toFixed(2)} below threshold`}`);
+    this.name = "EnsemblisAiQualityError";
     this.quality = quality;
   }
 }
+
+/** @deprecated Use EnsemblisAiQualityError. */
+export { EnsemblisAiQualityError as AtlasAiQualityError };
 
 async function enforceBudget(ownerId: string, settings: AiControlSettings) {
   if (!settings.hard_stop) return getAiBudgetSnapshot(ownerId, settings);
   const budget = await getAiBudgetSnapshot(ownerId, settings);
   if (budget.monthlyBudgetUsd <= 0 || budget.totalSpentUsd >= budget.monthlyBudgetUsd) {
-    throw new AtlasAiBudgetError(`Atlas monthly AI budget is exhausted ($${budget.totalSpentUsd.toFixed(2)} / $${budget.monthlyBudgetUsd.toFixed(2)}).`);
+    throw new EnsemblisAiBudgetError(`Ensemblis monthly AI budget is exhausted ($${budget.totalSpentUsd.toFixed(2)} / $${budget.monthlyBudgetUsd.toFixed(2)}).`);
   }
   if (budget.textBudgetUsd <= 0 || budget.textSpentUsd >= budget.textBudgetUsd) {
-    throw new AtlasAiBudgetError(`Atlas text/reasoning AI budget is exhausted ($${budget.textSpentUsd.toFixed(2)} / $${budget.textBudgetUsd.toFixed(2)}).`);
+    throw new EnsemblisAiBudgetError(`Ensemblis text/reasoning AI budget is exhausted ($${budget.textSpentUsd.toFixed(2)} / $${budget.textBudgetUsd.toFixed(2)}).`);
   }
   return budget;
 }
@@ -168,14 +174,14 @@ export async function assertSpecialistMediaSpendAllowed(input: {
 
   const limit = Number(input.kind === "image" ? settings.image_budget_usd : settings.video_budget_usd);
   if (limit <= 0) {
-    throw new AtlasAiBudgetError(
-      `Atlas Zero Cost guard blocks paid ${input.kind} generation. Increase the ${input.kind} budget explicitly in AI & Generation before approving spend.`,
+    throw new EnsemblisAiBudgetError(
+      `Ensemblis Zero Cost guard blocks paid ${input.kind} generation. Increase the ${input.kind} budget explicitly in AI & Generation before approving spend.`,
     );
   }
 
   if (input.estimatedUsd === null || input.estimatedUsd === undefined || !Number.isFinite(input.estimatedUsd) || input.estimatedUsd < 0) {
-    throw new AtlasAiBudgetError(
-      `Atlas cannot verify the ${input.kind} hard cap because this provider request has no reliable USD estimate. Keep Zero Cost enabled or configure verified provider pricing before approving spend.`,
+    throw new EnsemblisAiBudgetError(
+      `Ensemblis cannot verify the ${input.kind} hard cap because this provider request has no reliable USD estimate. Keep Zero Cost enabled or configure verified provider pricing before approving spend.`,
     );
   }
 
@@ -183,7 +189,7 @@ export async function assertSpecialistMediaSpendAllowed(input: {
   const requested = numeric(input.estimatedUsd);
   const externalTotalSpent = numeric(input.externalTotalSpentUsd ?? 0);
   if (budget.monthlyBudgetUsd <= 0 || budget.totalSpentUsd + externalTotalSpent + requested > budget.monthlyBudgetUsd + 0.000001) {
-    throw new AtlasAiBudgetError(
+    throw new EnsemblisAiBudgetError(
       `This ${input.kind} generation would exceed the monthly AI budget ($${(budget.totalSpentUsd + externalTotalSpent).toFixed(2)} + $${requested.toFixed(2)} > $${budget.monthlyBudgetUsd.toFixed(2)}).`,
     );
   }
@@ -206,7 +212,7 @@ export async function assertSpecialistMediaSpendAllowed(input: {
     }, 0);
     const spent = marketingSpent + numeric(input.externalKindSpentUsd ?? 0);
     if (spent + requested > limit + 0.000001) {
-      throw new AtlasAiBudgetError(
+      throw new EnsemblisAiBudgetError(
         `This ${input.kind} generation would exceed its budget ($${spent.toFixed(2)} + $${requested.toFixed(2)} > $${limit.toFixed(2)}).`,
       );
     }
@@ -215,7 +221,7 @@ export async function assertSpecialistMediaSpendAllowed(input: {
   return settings;
 }
 
-export type AtlasAiTaskResult<T> = {
+export type EnsemblisAiTaskResult<T> = {
   value: T;
   provider: "vercel-gateway";
   model: string;
@@ -231,13 +237,16 @@ export type AtlasAiTaskResult<T> = {
   escalated: boolean;
   learnedRoutingApplied: boolean;
   cacheHit: boolean;
-  quality: AtlasQualityResult;
+  quality: AiQualityResult;
 };
+
+/** @deprecated Use EnsemblisAiTaskResult. */
+export type AtlasAiTaskResult<T> = EnsemblisAiTaskResult<T>;
 
 type RunTaskInput<T> = {
   ownerId: string;
   artistId?: string | null;
-  task: AtlasAiTaskType;
+  task: AiTaskType;
   purpose?: string;
   campaignId?: string | null;
   releaseId?: string | null;
@@ -247,13 +256,13 @@ type RunTaskInput<T> = {
   instructions: string;
   input: string;
   inputContext?: unknown;
-  qualityGate?: AtlasQualityGate<T>;
+  qualityGate?: AiQualityGate<T>;
   timeoutMs?: number;
   metadata?: unknown;
   cacheMode?: "use" | "refresh" | "off";
 };
 
-async function cachedTaskResult<T>(input: RunTaskInput<T>, cacheKey: string): Promise<AtlasAiTaskResult<T> | null> {
+async function cachedTaskResult<T>(input: RunTaskInput<T>, cacheKey: string): Promise<EnsemblisAiTaskResult<T> | null> {
   const client = createMarketingServiceClient();
   let sourceQuery = client.from("generation_runs")
     .select("id,output,model,requested_model,routed_provider,quality_score,quality_failures")
@@ -280,7 +289,7 @@ async function cachedTaskResult<T>(input: RunTaskInput<T>, cacheKey: string): Pr
     parent_run_id: null,
     purpose: input.purpose ?? input.task,
     task_type: input.task,
-    provider: "atlas-cache",
+    provider: "ensemblis-cache",
     model: source.model,
     requested_model: source.requested_model || source.model,
     routed_provider: source.routed_provider,
@@ -339,7 +348,7 @@ async function cachedTaskResult<T>(input: RunTaskInput<T>, cacheKey: string): Pr
   };
 }
 
-export async function runAtlasAiTask<T>(input: RunTaskInput<T>): Promise<AtlasAiTaskResult<T>> {
+export async function runEnsemblisAiTask<T>(input: RunTaskInput<T>): Promise<EnsemblisAiTaskResult<T>> {
   const client = createMarketingServiceClient();
   const settings = await loadAiControlSettings(input.ownerId);
   const cacheMode = input.cacheMode ?? "use";
@@ -350,8 +359,8 @@ export async function runAtlasAiTask<T>(input: RunTaskInput<T>): Promise<AtlasAi
   }
 
   const budget = await enforceBudget(input.ownerId, settings);
-  const policy = atlasAiTaskPolicy(input.task, settings);
-  if (!policy.models.length) throw new Error(`Atlas AI task ${input.task} has no configured models.`);
+  const policy = aiTaskPolicy(input.task, settings);
+  if (!policy.models.length) throw new Error(`Ensemblis AI task ${input.task} has no configured models.`);
   const learnedRouting = await learnedRouteForTask({ ownerId: input.ownerId, settings, policy }).catch(() => ({
     applied: false,
     reason: "Adaptive evidence is temporarily unavailable; using the configured route.",
@@ -429,7 +438,7 @@ export async function runAtlasAiTask<T>(input: RunTaskInput<T>): Promise<AtlasAi
         providerSort: settings.provider_sort,
       });
       const rawQuality = input.qualityGate ? await input.qualityGate(gateway.value) : noQualityGate();
-      const quality: AtlasQualityResult = {
+      const quality: AiQualityResult = {
         ...rawQuality,
         passed: rawQuality.passed && rawQuality.score >= policy.qualityThreshold,
       };
@@ -477,7 +486,7 @@ export async function runAtlasAiTask<T>(input: RunTaskInput<T>): Promise<AtlasAi
     attempt: Awaited<ReturnType<typeof runAttempt>>,
     rootRunId: string,
     escalated: boolean,
-  ): AtlasAiTaskResult<T> => ({
+  ): EnsemblisAiTaskResult<T> => ({
     value: attempt.gateway.value,
     provider: "vercel-gateway",
     model: attempt.gateway.model,
@@ -499,7 +508,7 @@ export async function runAtlasAiTask<T>(input: RunTaskInput<T>): Promise<AtlasAi
   const first = await runAttempt({ models: primaryModels, attemptIndex: 0, parentRunId: null });
   if (first.quality.passed) return result(first, first.runId, false);
   if (!settings.quality_escalation || !policy.escalationModels.length) {
-    throw new AtlasAiQualityError(input.task, first.quality);
+    throw new EnsemblisAiQualityError(input.task, first.quality);
   }
 
   let last = first;
@@ -532,5 +541,8 @@ export async function runAtlasAiTask<T>(input: RunTaskInput<T>): Promise<AtlasAi
     if (escalationUpdateError) throw new Error(escalationUpdateError.message);
   }
 
-  throw new AtlasAiQualityError(input.task, last.quality);
+  throw new EnsemblisAiQualityError(input.task, last.quality);
 }
+
+/** @deprecated Use runEnsemblisAiTask. */
+export const runAtlasAiTask = runEnsemblisAiTask;

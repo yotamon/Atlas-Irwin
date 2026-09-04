@@ -59,33 +59,39 @@ test("Vercel AI Gateway is the shared structured inference backbone", async () =
   assert.match(gateway, /generationId/);
   assert.match(gateway, /inputTokens/);
   assert.match(gateway, /outputTokens/);
+  assert.match(gateway, /ENSEMBLIS_AI_GATEWAY_PROVIDER_SORT/);
+  assert.match(gateway, /"x-title": "Ensemblis"/);
 });
 
-test("Atlas owns task routing above the Gateway", async () => {
+test("Ensemblis owns task routing above the Gateway while old env names remain fallback-only", async () => {
   const tasks = await source("lib/ai/tasks.ts");
   const control = await source("lib/ai/control-plane.ts");
   assert.match(tasks, /marketing\.campaign_plan/);
   assert.match(tasks, /video\.concepts/);
   assert.match(tasks, /video\.production_plan/);
   assert.match(tasks, /video\.shot_revision/);
+  assert.match(tasks, /ENSEMBLIS_MARKETING_ECONOMY_MODELS/);
+  assert.match(tasks, /ENSEMBLIS_MARKETING_BALANCED_MODELS/);
+  assert.match(tasks, /ENSEMBLIS_MARKETING_PREMIUM_MODELS/);
   assert.match(tasks, /ATLAS_MARKETING_ECONOMY_MODELS/);
-  assert.match(tasks, /ATLAS_MARKETING_BALANCED_MODELS/);
-  assert.match(tasks, /ATLAS_MARKETING_PREMIUM_MODELS/);
   assert.match(tasks, /VIDEO_DIRECTOR_LLM_MODEL/);
-  assert.match(control, /runAtlasAiTask/);
+  assert.match(tasks, /export function aiTaskPolicy/);
+  assert.match(control, /runEnsemblisAiTask/);
   assert.match(control, /quality_escalation/);
   assert.match(control, /parent_run_id/);
-  assert.match(control, /AtlasAiBudgetError/);
-  assert.match(control, /AtlasAiQualityError/);
+  assert.match(control, /EnsemblisAiBudgetError/);
+  assert.match(control, /EnsemblisAiQualityError/);
   assert.match(control, /generateGatewayStructured/);
 });
 
-test("marketing structured text uses Control Plane quality gates instead of provider clients", async () => {
+test("marketing structured text uses the Ensemblis Control Plane quality gates instead of provider clients", async () => {
   const ai = await source("lib/marketing/ai.ts");
-  assert.match(ai, /runAtlasAiTask/);
+  assert.match(ai, /runAtlasAiTask|runEnsemblisAiTask/);
   assert.match(ai, /marketing\.campaign_plan/);
   assert.match(ai, /campaignQualityGate/);
   assert.match(ai, /disconnected social platform/);
+  assert.match(ai, /Ensemblis marketing AI is not configured/);
+  assert.match(ai, /resolveActiveArtistContext/);
   assert.doesNotMatch(ai, /api\.openai\.com/);
   assert.doesNotMatch(ai, /generativelanguage\.googleapis\.com/);
   assert.doesNotMatch(ai, /api\.z\.ai\/api\/paas\/v4\/chat/);
@@ -94,13 +100,13 @@ test("marketing structured text uses Control Plane quality gates instead of prov
 test("Video Creative Director uses Control Plane but creative media providers stay direct", async () => {
   const director = await source("lib/video-director/openai-director.ts");
   const providers = await source("lib/marketing/creative-providers.ts");
-  assert.match(director, /runAtlasAiTask/);
+  assert.match(director, /runAtlasAiTask|runEnsemblisAiTask/);
   assert.match(director, /video\.concepts/);
   assert.match(director, /video\.production_plan/);
   assert.match(director, /video\.shot_revision/);
   assert.match(director, /conceptQualityGate/);
   assert.match(director, /planQualityGate/);
-  assert.match(director, /atlasAiGatewayConfigured/);
+  assert.match(director, /atlasAiGatewayConfigured|ensemblisAiGatewayConfigured/);
   assert.doesNotMatch(director, /api\.openai\.com/);
   assert.match(providers, /https:\/\/api\.bfl\.ai\/v1/);
   assert.match(providers, /https:\/\/generativelanguage\.googleapis\.com\/v1beta/);

@@ -1,18 +1,18 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/studio/ui";
+import { ensemblisAiGatewayConfigured } from "@/lib/ai/gateway";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { atlasAiGatewayConfigured } from "@/lib/ai/gateway";
 import {
   SOCIAL_PLATFORM_DEFINITIONS,
   SOCIAL_PLATFORM_KEYS,
 } from "@/lib/marketing/social-platforms";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asSocialClient } from "@/lib/studio/social-db";
 import { hasSocialPlatformEnv } from "@/lib/studio/social-connections";
 
 export default async function SettingsPage() {
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const social = asSocialClient(supabase);
   const [spotifyResult, soundCloudResult, socialResult] = await Promise.all([
     supabase
@@ -156,10 +156,10 @@ export default async function SettingsPage() {
         <div className="v2-settings-grid">
           <Link href="/studio/settings/ai">
             <div>
-              <span className={`v2-dot ${atlasAiGatewayConfigured() ? "connected" : ""}`} aria-hidden />
+              <span className={`v2-dot ${ensemblisAiGatewayConfigured() ? "connected" : ""}`} aria-hidden />
               <strong>AI Control Center</strong>
             </div>
-            <p>{atlasAiGatewayConfigured() ? "Gateway healthy · task routing, quality gates, budgets and learning are active" : "Gateway needs configuration before AI tasks can run"}</p>
+            <p>{ensemblisAiGatewayConfigured() ? "Gateway healthy · task routing, quality gates, budgets and learning are active" : "Gateway needs configuration before AI tasks can run"}</p>
             <small>Review AI intelligence →</small>
           </Link>
         </div>
