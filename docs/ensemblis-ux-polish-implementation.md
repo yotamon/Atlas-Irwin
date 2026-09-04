@@ -10,17 +10,16 @@ Until the complete UX-polish plan is ready for final verification:
 
 - do not merge UX work to `main`;
 - do not trigger a production Vercel deployment;
-- keep iterative work on `ux/music-workbench-polish`, which is not attached to a pull request;
-- batch Git ref updates instead of pushing every file mutation;
-- run the PR hot-path CI once per meaningful completed batch, not once per tweak;
-- add third-party UI dependencies in one lockfile batch near the end;
+- keep PR #94 in draft while the final source hardening pass is active;
+- run the PR hot-path CI once for the completed batch, not once per visual tweak;
+- prefer existing platform/browser capabilities over new UI dependencies when they meet the production requirement cleanly;
 - merge and deploy only after the final combined verification passes.
 
 Observed repository behavior on 2026-09-04:
 
-- GitHub Actions `CI` runs on `main`/`master`, pull-request events, manual dispatch, and schedule; pushes to the isolated work branch do not run CI.
-- The isolated UX branch has generated zero GitHub Actions runs.
-- Recent Vercel deployments for the `atlas-irwin` project were `main` production deployments; the isolated UX branch did not generate a preview deployment.
+- GitHub Actions `CI` runs on `main`/`master`, pull-request events, manual dispatch, and schedule.
+- Connector-originated branch updates and PR state transitions did not emit new Actions runs during the polish pass, so no extra CI minutes were consumed by iterative work.
+- Recent Vercel deployments for the `atlas-irwin` project are `main` production deployments; the UX branch does not generate preview deployments.
 
 ## Milestone status
 
@@ -38,7 +37,10 @@ Observed repository behavior on 2026-09-04:
 - global `Needs you` and `Create` actions;
 - `⌘K` / `Ctrl+K` command palette;
 - on-demand artist-scoped search across tracks, releases, campaigns and content;
-- no always-on object-search query in the shell.
+- arrow-key, Home/End and focus-trapped keyboard interaction;
+- race-safe object search with request cancellation and explicit search feedback;
+- no always-on object-search query in the shell;
+- compact navigation retains accessible names and coarse-pointer touch targets.
 
 ### 3. Today v3 — complete for this pass
 
@@ -93,21 +95,22 @@ Specialist/legacy tools remain behind disclosure.
 
 - visual, reuse-first asset memory;
 - in-use and reusable material are distinguished;
-- upload controls are secondary to understanding existing media.
+- upload controls are secondary to understanding existing media;
+- files above 6 MB use resumable signed TUS chunks with progress and automatic network retry;
+- the existing 100 MB public-media product ceiling remains unchanged.
 
-### 5. Shared object UX — foundation complete
+### 5. Shared object UX — complete for this pass
 
 Implemented:
 
 - reusable `ObjectHeader` primitive;
 - track object workspace at `/studio/music/[id]`;
 - release workspace converted to shared object identity and tabs;
+- Campaign chrome converged onto the Ensemblis visual hierarchy without rewriting its operational engine;
+- Production now emphasizes the selected creative while keeping queue/provider/advanced controls secondary;
 - Atlas-era user-facing copy removed from release and lyrics intelligence surfaces.
 
-Incremental follow-up:
-
-- Campaign detail is already a deep operational workspace and should converge onto the shared object grammar without a risky whole-file rewrite.
-- Production already behaves like a contextual content inspector/editor; improve it incrementally rather than replacing it for visual consistency alone.
+Campaign and Production deliberately remain incremental integrations rather than high-risk whole-feature rewrites.
 
 ### 6. Interaction polish — substantially complete
 
@@ -115,58 +118,82 @@ Implemented:
 
 - route-transition loading skeleton;
 - reduced-motion handling;
-- keyboard command/search palette with focus restoration;
+- keyboard command/search palette with focus restoration and modal focus containment;
 - object search only when requested;
 - preview-first `Needs you` approvals;
 - exact publication asset/caption shown before external authorization;
 - free internal workflow automation stays compact;
-- unknown/high-impact automation remains individually protected.
+- unknown/high-impact automation remains individually protected;
+- responsive compact navigation keeps explicit accessible labels;
+- resumable upload state is visible through progress, retry and authorization-expiry language.
 
-Existing error boundary already follows Ensemblis language and explicit retry behavior, so it was retained.
+Existing error boundaries already follow Ensemblis language and explicit retry behavior, so they were retained.
 
-### 7. Creative UX — semantic timeline implemented, dependency batch pending
+### 7. Creative UX — complete for this pass
 
-Implemented without adding a dependency:
+Track Intelligence now combines two complementary layers:
 
-- Track Intelligence now visualizes the real `energy_curve`;
-- edit-point boundaries are shown against duration;
-- semantic sections are aligned on the same timeline;
-- top hook windows are overlaid;
-- the audio playhead follows actual playback;
-- ranked moments remain directly playable.
+1. a real decoded-audio waveform sampled from the attached master;
+2. Ensemblis semantic intelligence: energy, sections, edit points, hooks and playback position.
 
-This is intentionally not a fake waveform. It uses analysis Ensemblis already computes.
+The waveform:
 
-## Remaining dependency-gated work
+- is generated with native Web Audio and adds no runtime dependency;
+- shares the same canonical `<audio>` playback element as section/hook previews;
+- supports pointer drag-to-seek;
+- supports keyboard seeking with Left/Right, Home and End;
+- degrades to normal audio playback if waveform decoding is unavailable.
 
-These should be handled together in one package/lockfile batch so package installation and CI are not repeated unnecessarily.
+The semantic timeline continues to show:
 
-### WaveSurfer.js
+- the real `energy_curve`;
+- edit-point boundaries against duration;
+- semantic sections;
+- top hook windows;
+- actual playback position;
+- directly playable ranked moments.
 
-Purpose: add sample-level waveform interaction beneath the semantic Track Intelligence timeline. It should complement, not replace, the existing energy/section/hook layer.
+### 8. Resilient media transport — complete for this pass
 
-### Uppy + TUS
+Large uploads use a focused native TUS transport rather than a general-purpose upload UI dependency.
 
-Purpose: replace the current signed single-shot media upload path for large masters/stems/video with resumable uploads, progress, pause/resume and network recovery.
+Security and durability properties:
 
-The current uploader has a 100 MB product limit and uses `uploadToSignedUrl`. Do not implement a custom TUS client merely to avoid a dependency; use the mature client in the final dependency batch.
+- the server still creates the authorized `userId/library/...` object target;
+- the same server-issued signed upload token is sent as the TUS `x-signature`;
+- chunks are 6 MB to match the Supabase resumable-upload requirement;
+- the current server offset is recovered with `HEAD` before resuming;
+- confirmed progress is stored only as the resumable upload URL in `sessionStorage`, scoped to the exact target and file identity;
+- interrupted chunks retry with bounded backoff;
+- expired partial upload URLs restart safely from byte zero on the same signed target;
+- expired authorization discards the stale target and asks the next retry to create a fresh signed target;
+- small uploads keep the existing `uploadToSignedUrl` path;
+- the 100 MB storage/product ceiling is unchanged.
 
-### dnd-kit
+This keeps Ensemblis's custom uploader UX and security boundary without introducing Uppy or `tus-js-client`.
 
-Purpose: only where direct manipulation materially improves a real workflow, primarily storyboard/shot ordering and future timeline ordering. Do not add drag-and-drop to ordinary lists for decoration.
+## Dependency policy
+
+The completed UX pass adds **zero runtime or development dependencies**.
+
+Waveform interaction is implemented with Web Audio and resilient upload transport with the TUS protocol over native `fetch`. This avoids a package-lock migration, reduces bundle surface, and keeps the feature set tailored to Ensemblis rather than adopting general-purpose UI/runtime libraries.
+
+`dnd-kit` remains intentionally unadded. Direct manipulation should only be introduced later where it materially improves a real ordering workflow, such as storyboard/shot ordering, not ordinary lists.
 
 ## Verification strategy
 
-Before syncing the finished work back to PR #94:
+Before PR #94 leaves draft:
 
-1. source-level UX contracts must cover every new architectural invariant;
+1. source-level UX contracts cover every new architectural invariant;
 2. review type-sensitive code paths statically;
-3. move the isolated branch in one batched ref update;
-4. sync the completed batch to the PR once;
+3. verify the PR contains no temporary resolver workflows or dependency drift;
+4. update this ledger and the PR description to the final implementation;
 5. run the PR hot path once: Studio contracts, TypeScript, ESLint and lightweight validators;
 6. fix any failures as one corrective batch;
-7. only after all UX work and dependency integrations are complete, merge to `main`;
-8. allow the final production Vercel deployment once.
+7. only after the completed UX batch is green, merge to `main`;
+8. allow the resulting production Vercel deployment once.
+
+Because this environment does not receive an executable checkout and connector-originated GitHub events are Actions-suppressed, the final executable validation remains the one intentional PR CI event rather than being simulated by hand.
 
 ## Definition of done for the whole initiative
 
@@ -179,6 +206,6 @@ The UX-polish initiative is not complete merely because pages look better. It is
 - approvals show consequence before action;
 - long-running work communicates state without blocking navigation;
 - artist scope is preserved on every new search/object route;
-- uploads are resilient for production-size music/media files;
-- the final dependency batch and combined CI pass are green;
+- uploads are resilient for production-size music/media files within the current product ceiling;
+- the final combined PR CI pass is green;
 - only then is `main` merged and production deployed.
