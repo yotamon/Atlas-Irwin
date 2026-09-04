@@ -247,6 +247,7 @@ export type AttributionEvent = {
 export type MarketingEvent = {
   id: string;
   owner_id: string;
+  artist_id: string;
   campaign_id: string | null;
   event_type: string;
   entity_type: string | null;
