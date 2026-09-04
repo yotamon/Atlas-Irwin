@@ -38,6 +38,7 @@ export async function uploadResumableMedia({
       chunkSize: TUS_CHUNK_SIZE,
       uploadDataDuringCreation: true,
       removeFingerprintOnSuccess: true,
+      fingerprint: () => Promise.resolve(`ensemblis:${target.bucketName}:${target.storagePath}:${file.size}`),
       metadata: {
         bucketName: target.bucketName,
         objectName: target.storagePath,
