@@ -1,0 +1,486 @@
+/*
+ * Ensemblis specialist-screen integration.
+ *
+ * Feature stylesheets keep ownership of domain layout and information density.
+ * This late layer owns product chrome so Growth, Video, Distribution and
+ * operational workflows cannot drift back into Atlas-era or one-off palettes.
+ */
+
+.studio-root {
+  /* Compatibility aliases for older specialist styles that still reference
+     public-site-era generic tokens. Keep them product-scoped. */
+  --ink: var(--en-ink);
+  --line: var(--en-line);
+  --surface-soft: var(--en-surface-raised);
+  --teal: var(--en-mint);
+}
+
+/* Navigation orientation -------------------------------------------------- */
+.studio-root .studio-sidebar nav a.is-active,
+.studio-root .studio-sidebar-foot a.is-active {
+  position: relative;
+  background:
+    linear-gradient(90deg, rgba(183, 243, 106, 0.12), rgba(183, 243, 106, 0.025) 72%, transparent);
+  color: var(--en-ink);
+  box-shadow: inset 2px 0 var(--en-accent);
+}
+
+.studio-root .studio-sidebar nav a.is-active::after,
+.studio-root .studio-sidebar-foot a.is-active::after {
+  content: "";
+  position: absolute;
+  right: 0.8rem;
+  width: 0.34rem;
+  height: 0.34rem;
+  border-radius: 999px;
+  background: var(--en-accent);
+  box-shadow: 0 0 0 4px rgba(183, 243, 106, 0.08);
+}
+
+.studio-root .studio-sidebar nav a.is-active svg,
+.studio-root .studio-sidebar-foot a.is-active svg {
+  color: var(--en-accent);
+}
+
+/* Shared specialist surfaces --------------------------------------------- */
+.studio-root .v2-production-list > a,
+.studio-root .v2-learning-review > article,
+.studio-root .v2-approval-list > label,
+.studio-root .v2-outreach-approval-list > label,
+.studio-root .v2-data-coverage > div,
+.studio-root .v2-policy-grid > div,
+.studio-root .v2-connection-grid > article,
+.studio-root .v2-library-grid > article,
+.studio-root .v2-release-summary-card,
+.studio-root .v2-plan-card,
+.studio-root .v2-publish-grid article,
+.studio-root .v2-advanced-banner {
+  border-color: var(--en-line);
+  background: color-mix(in srgb, var(--en-surface) 92%, transparent);
+  box-shadow: none;
+}
+
+.studio-root .v2-production-list > a:hover,
+.studio-root .v2-production-list > a.active {
+  border-color: var(--en-line-strong);
+  background: var(--en-surface-hover);
+}
+
+.studio-root .v2-production-list > a.active {
+  box-shadow: inset 2px 0 var(--en-accent);
+}
+
+.studio-root .v2-contextual-upload {
+  border-color: color-mix(in srgb, var(--en-mint) 28%, var(--en-line));
+  background: var(--en-mint-soft);
+}
+
+.studio-root .v2-provider-lock {
+  border-color: color-mix(in srgb, var(--en-violet) 34%, var(--en-line));
+  background: var(--en-violet-soft);
+}
+
+.studio-root .v2-provider-lock a {
+  color: color-mix(in srgb, var(--en-violet) 76%, var(--en-ink));
+}
+
+.studio-root .v2-release-title-row span,
+.studio-root .v2-plan-card span {
+  background: var(--en-surface-raised);
+  color: var(--en-muted);
+}
+
+.studio-root .v2-stage-nav {
+  border-color: var(--en-line);
+  background: var(--en-surface);
+}
+
+.studio-root .v2-stage-nav a {
+  border-right-color: var(--en-line);
+  color: var(--en-muted);
+}
+
+.studio-root .v2-stage-nav a:hover {
+  background: var(--en-surface-hover);
+  color: var(--en-ink);
+}
+
+.studio-root .v2-stage-nav a.active {
+  color: var(--en-ink);
+  background: var(--en-accent-soft);
+  box-shadow: inset 0 -2px 0 var(--en-accent);
+}
+
+.studio-root .v2-release-summary-card dl > div,
+.studio-root .v2-library-preview {
+  background: var(--en-surface-raised);
+}
+
+.studio-root .v2-plan-timeline a {
+  border-bottom-color: var(--en-line);
+}
+
+/* Growth OS --------------------------------------------------------------- */
+.studio-root .growth-os-page {
+  --growth-accent-soft: var(--en-accent-soft);
+  --growth-teal-soft: var(--en-mint-soft);
+}
+
+.studio-root .growth-north-star {
+  background: linear-gradient(
+    120deg,
+    color-mix(in srgb, var(--en-accent) 38%, transparent),
+    color-mix(in srgb, var(--en-mint) 18%, transparent),
+    var(--en-line)
+  );
+}
+
+.studio-root .growth-north-star-main,
+.studio-root .growth-north-star-stats article {
+  background: var(--en-surface);
+}
+
+.studio-root .growth-north-star-stats {
+  background: var(--en-line);
+}
+
+.studio-root .growth-big-number,
+.studio-root .growth-candidate-score strong {
+  font-family: var(--font-body), sans-serif;
+  font-weight: 720;
+  letter-spacing: -0.055em;
+  color: var(--en-accent);
+}
+
+.studio-root .growth-chip-row span,
+.studio-root .growth-active-label,
+.studio-root .growth-action-note span,
+.studio-root .growth-queue-date,
+.studio-root .growth-vault-form label > span,
+.studio-root .growth-settings-form label > span {
+  color: var(--en-muted);
+}
+
+.studio-root .growth-chip-row span,
+.studio-root .growth-active-label,
+.studio-root .growth-rate-compare > div,
+.studio-root .growth-queue-item,
+.studio-root .growth-opportunity,
+.studio-root .growth-funnel article,
+.studio-root .growth-vault-track,
+.studio-root .growth-settings-form .growth-toggle {
+  border-color: var(--en-line);
+  background: color-mix(in srgb, var(--en-surface-raised) 72%, transparent);
+}
+
+.studio-root .growth-queue-item.locked {
+  border-color: color-mix(in srgb, var(--en-accent) 28%, var(--en-line));
+  background: linear-gradient(90deg, var(--en-accent-soft), var(--en-surface));
+}
+
+.studio-root .growth-opportunity.accepted {
+  border-color: color-mix(in srgb, var(--en-mint) 34%, var(--en-line));
+  background: var(--en-mint-soft);
+}
+
+.studio-root .growth-action-note {
+  border-left-color: var(--en-accent);
+  border-radius: 0 var(--en-radius-sm) var(--en-radius-sm) 0;
+  background: var(--en-accent-soft);
+}
+
+.studio-root .growth-vault-form input,
+.studio-root .growth-vault-form select,
+.studio-root .growth-vault-form textarea,
+.studio-root .growth-settings-form input {
+  border-color: var(--en-line);
+  border-radius: var(--en-radius-sm);
+  color: var(--en-ink);
+  background: var(--en-bg-elevated);
+}
+
+.studio-root .growth-vault-form input:focus,
+.studio-root .growth-vault-form select:focus,
+.studio-root .growth-vault-form textarea:focus,
+.studio-root .growth-settings-form input:focus {
+  outline: none;
+  border-color: var(--en-accent);
+  box-shadow: 0 0 0 3px rgba(183, 243, 106, 0.1);
+}
+
+.studio-root .growth-add-track {
+  border-color: var(--en-line-strong);
+  background: color-mix(in srgb, var(--en-surface) 72%, transparent);
+}
+
+.studio-root .growth-score-pill {
+  color: var(--en-bg);
+  background: var(--en-accent);
+}
+
+.studio-root .release-growth-status,
+.studio-root .today-growth-diagnosis {
+  border-color: color-mix(in srgb, var(--en-accent) 24%, var(--en-line));
+}
+
+.studio-root .release-growth-status {
+  background: linear-gradient(90deg, var(--en-accent-soft), var(--en-surface));
+}
+
+/* Video Director ---------------------------------------------------------- */
+.studio-root .video-project-card,
+.studio-root .video-budget-meter,
+.studio-root .video-context-grid article,
+.studio-root .video-service-grid article,
+.studio-root .video-section-timeline article,
+.studio-root .video-concept-card,
+.studio-root .video-action-empty,
+.studio-root .video-processing-card,
+.studio-root .video-loading-block {
+  border-color: var(--en-line);
+  border-radius: var(--en-radius);
+  background: var(--en-surface);
+}
+
+.studio-root .video-project-card {
+  background:
+    linear-gradient(145deg, var(--en-accent-soft), transparent 38%),
+    var(--en-surface);
+}
+
+.studio-root .video-project-card:hover,
+.studio-root .video-project-card:focus-visible {
+  border-color: color-mix(in srgb, var(--en-accent) 56%, var(--en-line));
+  background:
+    linear-gradient(145deg, rgba(183, 243, 106, 0.12), transparent 42%),
+    var(--en-surface-raised);
+}
+
+.studio-root .video-project-card h3,
+.studio-root .video-project-heading h1,
+.studio-root .video-next-action h2,
+.studio-root .video-recovery-panel h2,
+.studio-root .video-error-state h1 {
+  font-family: var(--font-body), sans-serif;
+  font-weight: 690;
+  letter-spacing: -0.045em;
+  text-transform: none;
+}
+
+.studio-root .video-project-card-meta span,
+.studio-root .video-stage-index,
+.studio-root .video-inline-note,
+.studio-root .video-recovery-panel > small,
+.studio-root .video-error-state > small {
+  color: var(--en-muted);
+}
+
+.studio-root .video-project-card-meta span,
+.studio-root .video-stage-index,
+.studio-root .video-service-grid article > span {
+  border-color: var(--en-line);
+  border-radius: 999px;
+}
+
+.studio-root .video-stage-rail {
+  border-color: var(--en-line);
+  background: var(--en-line);
+  border-radius: var(--en-radius);
+}
+
+.studio-root .video-stage {
+  background: var(--en-surface);
+}
+
+.studio-root .video-stage.active {
+  background: var(--en-accent-soft);
+  box-shadow: inset 0 -2px var(--en-accent);
+}
+
+.studio-root .video-stage.complete {
+  background: var(--en-mint-soft);
+}
+
+.studio-root .video-next-action {
+  border-color: color-mix(in srgb, var(--en-accent) 42%, var(--en-line));
+  border-radius: var(--en-radius-lg);
+  background:
+    radial-gradient(circle at 12% 0, rgba(183, 243, 106, 0.14), transparent 34%),
+    linear-gradient(135deg, var(--en-mint-soft), transparent 55%),
+    var(--en-surface);
+}
+
+.studio-root .video-concept-card.selected {
+  border-color: color-mix(in srgb, var(--en-accent) 52%, var(--en-line));
+  background: linear-gradient(160deg, var(--en-accent-soft), transparent 42%), var(--en-surface-raised);
+}
+
+.studio-root .video-processing-card {
+  border-color: color-mix(in srgb, var(--en-mint) 34%, var(--en-line));
+  background: var(--en-mint-soft);
+}
+
+.studio-root .video-recovery-panel,
+.studio-root .video-error-state {
+  border-color: color-mix(in srgb, var(--en-danger) 44%, var(--en-line));
+  border-radius: var(--en-radius-lg);
+  background: linear-gradient(145deg, var(--en-danger-soft), transparent 45%), var(--en-surface);
+}
+
+.studio-root .video-loading-block::after {
+  background: linear-gradient(90deg, transparent, rgba(246, 248, 244, 0.065), transparent);
+}
+
+/* Distribution ------------------------------------------------------------ */
+.studio-root .distribution-release-workspace {
+  --distribution-panel: color-mix(in srgb, var(--en-surface) 84%, transparent);
+  --distribution-panel-strong: color-mix(in srgb, var(--en-surface-raised) 86%, transparent);
+  --distribution-line: var(--en-line);
+}
+
+.studio-root .distribution-section,
+.studio-root .distribution-readiness-card,
+.studio-root .distribution-stat-grid article,
+.studio-root .distribution-check,
+.studio-root .distribution-feedback,
+.studio-root .distribution-form-block,
+.studio-root .distribution-profile-card,
+.studio-root .distribution-delivery-grid article,
+.studio-root .distribution-release-row,
+.studio-root .distribution-track-card,
+.studio-root .distribution-credit-columns > div {
+  border-color: var(--en-line);
+  background: color-mix(in srgb, var(--en-surface) 92%, transparent);
+  box-shadow: none;
+}
+
+.studio-root .distribution-meter,
+.studio-root .distribution-check > span,
+.studio-root .distribution-state,
+.studio-root .distribution-issue-list > * > span:first-child,
+.studio-root .distribution-release-artwork {
+  background: var(--en-surface-raised);
+}
+
+.studio-root .distribution-meter > span {
+  background: linear-gradient(90deg, var(--en-violet), var(--en-mint));
+}
+
+.studio-root .distribution-check.pass > span,
+.studio-root .state-live,
+.studio-root .state-delivered,
+.studio-root .state-ready,
+.studio-root .distribution-feedback.success {
+  border-color: color-mix(in srgb, var(--en-mint) 32%, var(--en-line));
+  background: var(--en-mint-soft);
+}
+
+.studio-root .distribution-check.warning > span,
+.studio-root .state-needs_attention,
+.studio-root .state-under_review,
+.studio-root .state-submitted,
+.studio-root .state-delivering,
+.studio-root .state-partially_live,
+.studio-root .state-approved,
+.studio-root .state-update_pending,
+.studio-root .state-takedown_pending,
+.studio-root .distribution-issue-list .issue-warning,
+.studio-root .distribution-ops-warning {
+  border-color: color-mix(in srgb, var(--en-violet) 32%, var(--en-line));
+  background: var(--en-violet-soft);
+}
+
+.studio-root .distribution-check.block > span,
+.studio-root .state-error,
+.studio-root .state-rejected,
+.studio-root .distribution-feedback.error,
+.studio-root .distribution-issue-list .issue-error {
+  border-color: color-mix(in srgb, var(--en-danger) 34%, var(--en-line));
+  background: var(--en-danger-soft);
+}
+
+.studio-root .distribution-issue-list > article,
+.studio-root .distribution-issue-list > a,
+.studio-root .distribution-store-picker,
+.studio-root .distribution-account-summary dl div,
+.studio-root .distribution-credit-list > div,
+.studio-root .distribution-track-metadata-form {
+  border-color: var(--en-line);
+  background: var(--en-bg-elevated);
+}
+
+.studio-root .distribution-release-row:hover,
+.studio-root .distribution-ops-table > a:hover,
+.studio-root .distribution-ops-queue > a:hover,
+.studio-root .distribution-issue-list > a:hover {
+  border-color: var(--en-line-strong);
+  background: var(--en-surface-hover);
+}
+
+.studio-root .distribution-field-grid input,
+.studio-root .distribution-field-grid select,
+.studio-root .distribution-profile-card input,
+.studio-root .distribution-ops-bridge input,
+.studio-root .distribution-ops-bridge select,
+.studio-root .distribution-onboarding-form input,
+.studio-root .distribution-credit-form input,
+.studio-root .distribution-credit-form select,
+.studio-root .distribution-track-metadata-form input,
+.studio-root .distribution-track-metadata-form select {
+  border-color: var(--en-line);
+  border-radius: var(--en-radius-sm);
+  color: var(--en-ink);
+  background: var(--en-bg-elevated);
+}
+
+.studio-root .distribution-field-grid input:focus,
+.studio-root .distribution-field-grid select:focus,
+.studio-root .distribution-profile-card input:focus,
+.studio-root .distribution-ops-bridge input:focus,
+.studio-root .distribution-ops-bridge select:focus,
+.studio-root .distribution-onboarding-form input:focus,
+.studio-root .distribution-credit-form input:focus,
+.studio-root .distribution-credit-form select:focus,
+.studio-root .distribution-track-metadata-form input:focus,
+.studio-root .distribution-track-metadata-form select:focus {
+  outline: none;
+  border-color: var(--en-accent);
+  box-shadow: 0 0 0 3px rgba(183, 243, 106, 0.1);
+}
+
+.studio-root .distribution-package-card,
+.studio-root .distribution-correction-guide,
+.studio-root .distribution-correction-start {
+  border-color: color-mix(in srgb, var(--en-violet) 30%, var(--en-line));
+  background: linear-gradient(135deg, var(--en-violet-soft), var(--en-mint-soft));
+}
+
+.studio-root .distribution-release-workspace .distribution-submit-card {
+  border-color: color-mix(in srgb, var(--en-mint) 30%, var(--en-line));
+  background: linear-gradient(135deg, var(--en-mint-soft), var(--en-surface));
+}
+
+/* AI control -------------------------------------------------------------- */
+.studio-root .ai-budget-track {
+  border-color: var(--en-line);
+  background: var(--en-surface-raised);
+}
+
+.studio-root .ai-budget-track > span {
+  background: linear-gradient(90deg, var(--en-mint), var(--en-accent));
+}
+
+.studio-root .studio-checkbox {
+  color: var(--en-ink);
+}
+
+.studio-root .studio-checkbox input {
+  accent-color: var(--en-accent);
+}
+
+@media (max-width: 900px) {
+  .studio-root .studio-sidebar nav a.is-active::after,
+  .studio-root .studio-sidebar-foot a.is-active::after {
+    right: 0.48rem;
+  }
+}
