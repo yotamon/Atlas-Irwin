@@ -31,15 +31,16 @@ jobs:
 
       - name: Audit production dependencies
         # Audit the installed production tree, but keep registry stalls bounded. Real high/critical
-        # advisories still exit non-zero; transient registry failures get a small finite retry budget.
-        timeout-minutes: 5
+        # advisories and repeated audit failures remain blocking.
+        timeout-minutes: 3
         run: |
-          for attempt in 1 2 3; do
-            if npm audit --omit=dev --audit-level=high --fetch-retries=1 --fetch-timeout=60000 --fetch-retry-mintimeout=1000 --fetch-retry-maxtimeout=5000; then
+          for attempt in 1 2; do
+            if timeout 60s npm audit --omit=dev --audit-level=high --fetch-retries=1 --fetch-timeout=45000 --fetch-retry-mintimeout=1000 --fetch-retry-maxtimeout=5000; then
               exit 0
+            else
+              status=$?
             fi
-            status=$?
-            if [ "$attempt" -eq 3 ]; then
+            if [ "$attempt" -eq 2 ]; then
               exit "$status"
             fi
             sleep 5
