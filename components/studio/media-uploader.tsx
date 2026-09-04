@@ -11,6 +11,7 @@ import {
 import { attachContentMediaV2 } from "@/app/studio/content-actions-v2";
 import { attachReleaseMasterFromMedia, createVaultTrackFromMedia } from "@/app/studio/growth-media-actions-safe";
 import { createClient } from "@/lib/supabase/client";
+import { uploadResumableMedia } from "@/lib/supabase/resumable-upload";
 import {
   compatibleMediaTypes,
   defaultMediaType,
@@ -19,15 +20,20 @@ import {
   type MediaType,
 } from "@/lib/studio/media";
 
+type UploadTarget = Awaited<ReturnType<typeof createMediaUploadTarget>>;
+
 type UploadItem = {
   file: File;
   role: MediaType;
   state: "ready" | "uploading" | "done" | "error";
   message?: string;
+  progress?: number;
+  target?: UploadTarget;
 };
 
 const PUBLIC_LIMIT = 100 * 1024 * 1024;
 const HASH_LIMIT = 128 * 1024 * 1024;
+const RESUMABLE_THRESHOLD = 6 * 1024 * 1024;
 
 function humanSize(size: number) {
   return size >= 1024 * 1024
@@ -131,6 +137,7 @@ export function MediaUploader({
     setBusy(true);
     const supabase = createClient();
     const limit = PUBLIC_LIMIT;
+    let resumableAccessToken: string | null = null;
     for (let index = 0; index < items.length; index += 1) {
       const item = items[index];
       if (item.state === "done") continue;
@@ -138,23 +145,63 @@ export function MediaUploader({
         setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, state: "error", message: `This file exceeds the ${humanSize(limit)} upload limit.` } : entry));
         continue;
       }
-      setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, state: "uploading", message: releaseMasterMode ? "Uploading master and preparing Music Intelligence…" : vaultMode ? "Uploading master…" : "Uploading securely…" } : entry));
-      let uploadTarget: Awaited<ReturnType<typeof createMediaUploadTarget>> | null = null;
+      const resumable = item.file.size > RESUMABLE_THRESHOLD;
+      setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? {
+        ...entry,
+        state: "uploading",
+        progress: resumable ? entry.progress ?? 0 : undefined,
+        message: resumable
+          ? "Preparing resumable upload…"
+          : releaseMasterMode
+            ? "Uploading master and preparing Music Intelligence…"
+            : vaultMode
+              ? "Uploading master…"
+              : "Uploading securely…",
+      } : entry));
+      let uploadTarget: UploadTarget | null = item.target ?? null;
       let registered = false;
       let releaseMasterResult: Awaited<ReturnType<typeof attachReleaseMasterFromMedia>> | null = null;
       try {
         const [contentHash, dimensions] = await Promise.all([sha256(item.file), mediaDimensions(item.file).catch(() => ({ width: "", height: "", duration_ms: "" }))]);
-        const targetForm = new FormData();
-        targetForm.set("asset_type", item.role);
-        targetForm.set("mime_type", item.file.type);
-        targetForm.set("file_size", String(item.file.size));
-        targetForm.set("original_name", item.file.name);
-        uploadTarget = await createMediaUploadTarget(targetForm);
-        const { error } = await supabase.storage.from(uploadTarget.bucketName).uploadToSignedUrl(uploadTarget.storagePath, uploadTarget.token, item.file, {
-          cacheControl: "31536000",
-          contentType: item.file.type,
-        });
-        if (error) throw error;
+        if (!uploadTarget) {
+          const targetForm = new FormData();
+          targetForm.set("asset_type", item.role);
+          targetForm.set("mime_type", item.file.type);
+          targetForm.set("file_size", String(item.file.size));
+          targetForm.set("original_name", item.file.name);
+          uploadTarget = await createMediaUploadTarget(targetForm);
+          const preparedTarget = uploadTarget;
+          setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, target: preparedTarget } : entry));
+        }
+
+        if (resumable) {
+          if (!resumableAccessToken) {
+            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+            if (sessionError) throw sessionError;
+            resumableAccessToken = sessionData.session?.access_token ?? null;
+            if (!resumableAccessToken) throw new Error("Your Studio session expired. Sign in again before resuming this upload.");
+          }
+          await uploadResumableMedia({
+            file: item.file,
+            target: uploadTarget,
+            accessToken: resumableAccessToken,
+            onProgress(progress) {
+              const percent = Math.round(progress * 100);
+              setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? {
+                ...entry,
+                progress,
+                message: `Resumable upload · ${percent}%`,
+              } : entry));
+            },
+          });
+        } else {
+          const { error } = await supabase.storage.from(uploadTarget.bucketName).uploadToSignedUrl(uploadTarget.storagePath, uploadTarget.token, item.file, {
+            cacheControl: "31536000",
+            contentType: item.file.type,
+          });
+          if (error) throw error;
+        }
+
         const form = new FormData();
         const scopedTags = [tags, artistId ? `artist:${artistId}` : ""].filter(Boolean).join(",");
         Object.entries({
@@ -197,6 +244,8 @@ export function MediaUploader({
         setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? {
           ...entry,
           state: "done",
+          progress: 1,
+          target: undefined,
           message: releaseMasterMode
             ? releaseMasterResult?.analysisReused
               ? "Master attached. Existing Music Intelligence was reused instantly."
@@ -212,7 +261,7 @@ export function MediaUploader({
                   : "Added to the library.",
         } : entry));
       } catch (error) {
-        if (uploadTarget && !registered) {
+        if (uploadTarget && !registered && !resumable) {
           const discardForm = new FormData();
           discardForm.set("bucket_name", uploadTarget.bucketName);
           discardForm.set("storage_path", uploadTarget.storagePath);
@@ -221,7 +270,10 @@ export function MediaUploader({
         setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? {
           ...entry,
           state: "error",
-          message: error instanceof Error ? error.message : "Upload failed. Try again.",
+          target: resumable ? uploadTarget ?? entry.target : undefined,
+          message: resumable
+            ? "Upload interrupted after automatic retries. Retry to resume from the last confirmed chunk."
+            : error instanceof Error ? error.message : "Upload failed. Try again.",
         } : entry));
       }
     }
@@ -245,6 +297,7 @@ export function MediaUploader({
         <FiUploadCloud aria-hidden />
         <strong>{releaseMasterMode ? "Drop the release master here" : vaultMode ? "Drop unreleased masters here" : "Drop media here"}</strong>
         <span>{releaseMasterMode ? "WAV, MP3 or another audio master. Ensemblis will attach it to this release and analyze its structure and strongest hooks." : vaultMode ? "Audio masters only. Each file becomes an independent Vault track." : "Images, video, audio, masters, stems, or ZIP files"}</span>
+        <small>Files over 6 MB upload in resumable chunks and retry automatically if the network drops.</small>
         <button type="button" className="button" onClick={() => inputRef.current?.click()}>{releaseMasterMode ? "Choose master" : vaultMode ? "Choose masters" : "Choose files"}</button>
         <input ref={inputRef} hidden multiple={!releaseMasterMode} type="file" accept={vaultMode || releaseMasterMode ? "audio/*" : "image/*,video/*,audio/*,.zip"} onChange={(event) => event.target.files && addFiles(event.target.files)} />
       </div>
@@ -254,8 +307,12 @@ export function MediaUploader({
           {items.map((item, index) => (
             <div className={`upload-item ${item.state}`} key={`${item.file.name}-${item.file.lastModified}`}>
               <span className="upload-file-icon">{item.state === "done" ? <FiCheck /> : <FiFile />}</span>
-              <span><strong>{item.file.name}</strong><small>{humanSize(item.file.size)} · {item.file.type || "Unknown format"}{item.message ? ` · ${item.message}` : ""}</small></span>
-              <select aria-label={`Use for ${item.file.name}`} value={item.role} disabled={vaultMode || releaseMasterMode || busy || item.state === "done"} onChange={(event) => setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, role: event.target.value as MediaType, state: entry.state === "error" ? "ready" : entry.state, message: undefined } : entry))}>{compatibleMediaTypes(item.file.type).map((type) => <option value={type} key={type}>{MEDIA_TYPE_LABELS[type]}</option>)}</select>
+              <span className="upload-item-copy">
+                <strong>{item.file.name}</strong>
+                <small>{humanSize(item.file.size)} · {item.file.type || "Unknown format"}{item.message ? ` · ${item.message}` : ""}</small>
+                {item.state === "uploading" && typeof item.progress === "number" ? <progress className="upload-progress" max={100} value={Math.round(item.progress * 100)} aria-label={`Upload progress for ${item.file.name}`} /> : null}
+              </span>
+              <select aria-label={`Use for ${item.file.name}`} value={item.role} disabled={vaultMode || releaseMasterMode || busy || item.state === "done"} onChange={(event) => setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, role: event.target.value as MediaType, state: entry.state === "error" ? "ready" : entry.state, message: undefined, target: undefined, progress: undefined } : entry))}>{compatibleMediaTypes(item.file.type).map((type) => <option value={type} key={type}>{MEDIA_TYPE_LABELS[type]}</option>)}</select>
               {!busy && item.state !== "done" ? <button type="button" aria-label={`Remove ${item.file.name}`} onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}><FiX /></button> : null}
             </div>
           ))}
@@ -270,7 +327,7 @@ export function MediaUploader({
       </div> : null}
       <div className="media-upload-actions">
         <button className="button primary" type="button" disabled={!items.length || busy || !hasPending} onClick={upload}>
-          {busy ? `Uploading ${completed + 1} of ${items.length}…` : completed === items.length && items.length ? "Upload complete" : releaseMasterMode ? "Upload & analyze master" : vaultMode ? `Import ${items.length || ""} to Vault` : contextualAttach ? "Upload and attach" : `Add ${items.length || ""} to library`}
+          {busy ? `Uploading ${Math.min(items.length, completed + 1)} of ${items.length}…` : completed === items.length && items.length ? "Upload complete" : releaseMasterMode ? "Upload & analyze master" : vaultMode ? `Import ${items.length || ""} to Vault` : contextualAttach ? "Upload and attach" : `Add ${items.length || ""} to library`}
         </button>
         {completed ? <span>{completed} of {items.length} ready</span> : <span>{releaseMasterMode ? "The previous master stays in Media Library history when you replace it." : vaultMode ? "Upload is reusable in Media Library; audio analysis does not spend an AI call." : contentItemId ? "Media will be attached to this content item." : "Media is published to the public asset library."}</span>}
       </div>
