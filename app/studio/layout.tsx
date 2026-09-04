@@ -20,6 +20,7 @@ import "./ensemblis-root-isolation.css";
 import "./ensemblis-states.css";
 import "./ux-polish.css";
 import "./music-polish.css";
+import "./release-polish.css";
 
 export const metadata: Metadata = {
   title: {
