@@ -29,12 +29,9 @@ export const ENSEMBLIS_SETTINGS_NAV = {
   icon: "brand",
 } as const;
 
-// Keep a flat export while feature code migrates to the grouped information architecture.
-export const ENSEMBLIS_PRIMARY_NAV = [
-  ...ENSEMBLIS_WORK_NAV,
-  ...ENSEMBLIS_MANAGE_NAV,
-  ENSEMBLIS_SETTINGS_NAV,
-] as const;
+// Compatibility alias for callers that still mean the daily work navigation.
+// Manage and Settings are deliberately separate information-architecture groups.
+export const ENSEMBLIS_PRIMARY_NAV = ENSEMBLIS_WORK_NAV;
 
 export function ensemblisArtistHref(href: string, artistId: string) {
   const separator = href.includes("?") ? "&" : "?";
