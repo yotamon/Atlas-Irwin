@@ -1,8 +1,10 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import type { DistributionDatabase } from "@/types/distribution-database";
 import * as actions from "./distribution-actions";
 
 function releaseDestination(form: FormData) {
@@ -23,8 +25,9 @@ async function validateReleaseArtistScope(form: FormData) {
   const artist = requestedArtistId
     ? await resolveArtistContext(supabase, user, requestedArtistId)
     : await resolveDefaultArtistContext(supabase, user);
+  const db = supabase as unknown as SupabaseClient<DistributionDatabase>;
 
-  const { data: release, error } = await supabase
+  const { data: release, error } = await db
     .from("releases")
     .select("id,artist_id")
     .eq("id", releaseId)
