@@ -61,8 +61,8 @@ function domainVerificationState(value: unknown) {
 }
 
 export default async function SitesPage() {
-  const { supabase } = await requireStudioAdmin();
-  const artist = await resolveActiveArtistContext(supabase, (await supabase.auth.getUser()).data.user!);
+  const { supabase, user } = await requireStudioAdmin();
+  const artist = await resolveActiveArtistContext(supabase, user);
   const sites = asSitesClient(supabase);
   const siteResult = await sites
     .from("artist_sites")
