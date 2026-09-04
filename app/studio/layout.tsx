@@ -25,6 +25,7 @@ import "./create-polish.css";
 import "./growth-polish.css";
 import "./audience-polish.css";
 import "./library-polish.css";
+import "./inbox-polish.css";
 import "./shared-interactions.css";
 import "./loading-polish.css";
 import "./object-workspace-polish.css";
