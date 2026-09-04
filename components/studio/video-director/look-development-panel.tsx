@@ -58,6 +58,7 @@ export function LookDevelopmentPanel({ data }: { data: VideoWorkspaceData }) {
   const rejectedComplete = complete.filter((generation) => rejected(generation.result_asset_id ? assets.get(generation.result_asset_id) : null));
   const reserve = planned.reduce((sum, item) => sum + Number(item.estimated_credits), 0);
   const canSpend = data.services.higgsfield.hasCredentials && planned.length > 0 && planned.every((item) => data.services.higgsfield.configuredModels.includes(item.model));
+  const rememberedReferences = data.creativeMemory.recommendations.slice(0, 4);
 
   return (
     <section className="workspace-section" id="look-development">
@@ -65,6 +66,30 @@ export function LookDevelopmentPanel({ data }: { data: VideoWorkspaceData }) {
         <div><span className="section-label">Look development</span><h2>Approve the world before motion</h2></div>
         {rows.length ? <Status>{activeComplete.length} usable · {rejectedComplete.length} rejected</Status> : null}
       </div>
+
+      {rememberedReferences.length ? (
+        <div className="video-reference-picker">
+          <div>
+            <span className="section-label">Creative Memory</span>
+            <h3>References Ensemblis would reuse first</h3>
+            <p>{data.creativeMemory.summary} These are context references, not new paid generations, and they remain secondary to this release&apos;s approved artwork and visual brief.</p>
+          </div>
+          <div className="video-look-grid">
+            {rememberedReferences.map((reference) => (
+              <article key={reference.assetId}>
+                {reference.kind === "image"
+                  ? <img src={reference.url} alt={reference.title} />
+                  : <video src={reference.url} muted playsInline preload="metadata" />}
+                <div>
+                  <strong>{reference.title}</strong>
+                  <small>{reference.reasons[0] ?? "Artist-scoped Creative Memory recommendation."}</small>
+                </div>
+                <div className="video-selected-banner">Memory score {Math.round(reference.score)}</div>
+              </article>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {complete.length ? (
         <div className="video-look-grid">
