@@ -17,13 +17,13 @@ function normalizedDuration(value: number | string | null) {
   return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
 }
 
-function publicAsset(value: string | null) {
+function publicAsset(value: string | null | undefined) {
   const normalized = value?.trim();
   if (!normalized) return null;
   return /^(?:\/|https?:\/\/)/i.test(normalized) ? normalized : null;
 }
 
-function publicHttpUrl(value: string | null) {
+function publicHttpUrl(value: string | null | undefined) {
   const normalized = value?.trim();
   if (!normalized) return null;
   try {
