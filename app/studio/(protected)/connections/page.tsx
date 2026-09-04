@@ -1,17 +1,18 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import {
   SOCIAL_PLATFORM_DEFINITIONS,
   SOCIAL_PLATFORM_KEYS,
 } from "@/lib/marketing/social-platforms";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asSocialClient } from "@/lib/studio/social-db";
 import { hasSocialPlatformEnv } from "@/lib/studio/social-connections";
 
 export default async function ConnectionsPage() {
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const social = asSocialClient(supabase);
 
   const [spotifyResult, soundCloudResult, socialResult] = await Promise.all([
@@ -34,7 +35,7 @@ export default async function ConnectionsPage() {
 
   const dataConnections = [
     {
-      href: "/studio/spotify",
+      href: ensemblisArtistHref("/studio/spotify", artist.artistId),
       title: "Spotify",
       connected: Boolean(spotifyResult.data),
       detail: spotifyResult.data?.last_synced_at
@@ -42,7 +43,7 @@ export default async function ConnectionsPage() {
         : "Connect listening and catalog data",
     },
     {
-      href: "/studio/soundcloud",
+      href: ensemblisArtistHref("/studio/soundcloud", artist.artistId),
       title: "SoundCloud",
       connected: Boolean(soundCloudResult.data),
       detail: soundCloudResult.data?.last_synced_at
@@ -62,7 +63,7 @@ export default async function ConnectionsPage() {
     const configured = hasSocialPlatformEnv(platform);
 
     return {
-      href: `/studio/settings/social/${platform}`,
+      href: ensemblisArtistHref(`/studio/settings/social/${platform}`, artist.artistId),
       title: definition.label,
       connected,
       publishing: Boolean(account?.can_publish),
@@ -143,7 +144,7 @@ export default async function ConnectionsPage() {
           Configure and inspect distribution separately from social publishing. Ensemblis never treats delivery as live availability automatically.
         </p>
         <div className="actions">
-          <Link className="button" href="/studio/distribution">Open Distribution</Link>
+          <Link className="button" href={ensemblisArtistHref("/studio/distribution", artist.artistId)}>Open Distribution</Link>
         </div>
       </section>
     </div>
