@@ -9,6 +9,7 @@ import type { ArtistSite, ArtistSiteVersion } from "@/types/ensemblis-sites";
 export type PublishedSiteRuntime = {
   site: ArtistSite;
   version: ArtistSiteVersion;
+  primaryHostname: string | null;
   config: ReturnType<typeof parseSiteConfig>;
   viewModel: ReturnType<typeof parseSiteViewModel>;
 };
@@ -25,22 +26,34 @@ async function loadPublishedSiteByIdUncached(siteId: string): Promise<PublishedS
   if (siteError) throw new Error(siteError.message);
   if (!site?.published_version_id) return null;
 
-  const { data: version, error: versionError } = await db
-    .from("artist_site_versions")
-    .select("*")
-    .eq("id", site.published_version_id)
-    .eq("site_id", site.id)
-    .eq("status", "published")
-    .maybeSingle();
+  const [versionResult, domainResult] = await Promise.all([
+    db
+      .from("artist_site_versions")
+      .select("*")
+      .eq("id", site.published_version_id)
+      .eq("site_id", site.id)
+      .eq("status", "published")
+      .maybeSingle(),
+    db
+      .from("artist_site_domains")
+      .select("hostname")
+      .eq("site_id", site.id)
+      .eq("is_primary", true)
+      .eq("verification_status", "verified")
+      .eq("ssl_status", "active")
+      .maybeSingle(),
+  ]);
 
-  if (versionError) throw new Error(versionError.message);
-  if (!version) return null;
+  if (versionResult.error) throw new Error(versionResult.error.message);
+  if (domainResult.error) throw new Error(domainResult.error.message);
+  if (!versionResult.data) return null;
 
   return {
     site,
-    version,
-    config: parseSiteConfig(version.config),
-    viewModel: parseSiteViewModel(version.content_snapshot),
+    version: versionResult.data,
+    primaryHostname: domainResult.data?.hostname ?? null,
+    config: parseSiteConfig(versionResult.data.config),
+    viewModel: parseSiteViewModel(versionResult.data.content_snapshot),
   };
 }
 
