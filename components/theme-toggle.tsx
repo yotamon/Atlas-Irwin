@@ -8,7 +8,7 @@ type ThemeMode = "light" | "dark";
 function applyTheme(theme: ThemeMode) {
   document.documentElement.dataset.theme = theme;
   document.documentElement.style.colorScheme = theme;
-  localStorage.setItem("atlas-theme", theme);
+  localStorage.setItem("site-theme", theme);
 }
 
 export function ThemeToggle() {

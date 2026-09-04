@@ -1,0 +1,9 @@
+@font-face {
+  font-family: "Montage Display";
+  src: url("/fonts/montage_2/Montage-Demo.ttf") format("truetype");
+  font-display: swap;
+}
+
+:root {
+  --font-heading: "Montage Display";
+}

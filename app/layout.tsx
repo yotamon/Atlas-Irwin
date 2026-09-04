@@ -1,16 +1,10 @@
 import type { Metadata } from "next";
-import localFont from "next/font/local";
 import { Manrope } from "next/font/google";
 import { getSiteUrl } from "@/lib/site-url";
 import { ThemeInitScript } from "@/components/theme-init-script";
 import "./globals.css";
+import "./font-system.css";
 import "./stem-intelligence.css";
-
-const headingFont = localFont({
-  src: "../public/fonts/montage_2/Montage-Demo.ttf",
-  variable: "--font-heading",
-  display: "swap",
-});
 
 const bodyFont = Manrope({
   variable: "--font-body",
@@ -30,8 +24,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      data-theme="light"
-      className={`${headingFont.variable} ${bodyFont.variable}`}
+      className={bodyFont.variable}
     >
       <body className="flex min-h-screen flex-col">
         <ThemeInitScript />
