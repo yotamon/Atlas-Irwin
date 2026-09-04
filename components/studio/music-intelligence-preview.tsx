@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import WaveSurfer from "wavesurfer.js";
 import { parseMusicMap } from "@/lib/video-director/creative-director";
 import type { Json } from "@/types/database";
 import styles from "./music-intelligence-preview.module.css";
@@ -30,14 +31,57 @@ export function MusicIntelligencePreview({
 }) {
   const map = parseMusicMap(musicMap);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const waveformRef = useRef<HTMLDivElement | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [endMs, setEndMs] = useState<number | null>(null);
   const [currentMs, setCurrentMs] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [waveformReady, setWaveformReady] = useState(false);
+  const [waveformError, setWaveformError] = useState(false);
   const hooks = useMemo(
     () => [...(map?.hook_candidates ?? [])].sort((a, b) => b.score - a.score).slice(0, 5),
     [map],
   );
+
+  useEffect(() => {
+    const container = waveformRef.current;
+    const media = audioRef.current;
+    if (!container || !media || !audioUrl) return;
+
+    const computed = getComputedStyle(container);
+    const waveSurfer = WaveSurfer.create({
+      container,
+      media,
+      url: audioUrl,
+      backend: "MediaElement",
+      height: 64,
+      normalize: true,
+      interact: true,
+      dragToSeek: true,
+      waveColor: computed.getPropertyValue("--en-line-strong").trim() || "#35443b",
+      progressColor: computed.getPropertyValue("--en-accent").trim() || "#b7f36a",
+      cursorColor: computed.getPropertyValue("--en-accent-strong").trim() || "#d3ff99",
+      cursorWidth: 1,
+      barWidth: 2,
+      barGap: 1,
+      barRadius: 2,
+    });
+
+    const ready = waveSurfer.on("ready", () => {
+      setWaveformReady(true);
+      setWaveformError(false);
+    });
+    const error = waveSurfer.on("error", () => {
+      setWaveformError(true);
+      setWaveformReady(false);
+    });
+
+    return () => {
+      ready();
+      error();
+      waveSurfer.destroy();
+    };
+  }, [audioUrl]);
 
   if (!map || !Object.keys(map).length) return null;
 
@@ -104,6 +148,16 @@ export function MusicIntelligencePreview({
           {map.analysis?.embeddings_used ? " · semantic recurrence" : ""}
           {qc ? ` · ${qc.technical_ready ? "master QC clear" : "master QC review"}` : ""}
         </p>
+      ) : null}
+
+      {audioUrl ? (
+        <div className={styles.waveformBlock}>
+          <div className={styles.timelineHeading}>
+            <span>Waveform</span>
+            <small>{waveformError ? "Waveform unavailable · playback still works" : waveformReady ? "Drag to seek" : "Reading audio…"}</small>
+          </div>
+          <div className={`${styles.waveform}${waveformReady ? ` ${styles.waveformReady}` : ""}`} ref={waveformRef} aria-label="Interactive audio waveform" />
+        </div>
       ) : null}
 
       <div className={styles.timelineBlock}>
