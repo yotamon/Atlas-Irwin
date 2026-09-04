@@ -72,7 +72,7 @@ const REVIEW_SCHEMA = {
   },
 } satisfies Record<string, unknown>;
 
-const REVIEW_INSTRUCTIONS = `You are the senior finishing and temporal quality-control reviewer for Atlas Irwin social video.
+const REVIEW_INSTRUCTIONS = `You are the senior finishing and temporal quality-control reviewer for the active independent music artist.
 The FIRST images are chronological sample frames from one finished social video. Any final images after those may be release/brand references. Judge the actual finished video evidence, not the prompt.
 
 Be strict about temporal evidence visible across sampled frames:
@@ -118,7 +118,7 @@ async function assertBudget(ownerId: string) {
   if (!settings.hard_stop) return settings;
   const budget = await getAiBudgetSnapshot(ownerId, settings);
   if (budget.monthlyRemainingUsd <= 0 || budget.textRemainingUsd <= 0) {
-    throw new Error("Atlas AI text/reasoning budget is exhausted, so temporal video QC cannot run.");
+    throw new Error("Ensemblis AI text/reasoning budget is exhausted, so temporal video QC cannot run.");
   }
   return settings;
 }
@@ -135,13 +135,21 @@ export async function reviewGeneratedCreativeVideo(input: {
   context: CreativeReferenceContext;
 }): Promise<CreativeVideoQualityReview> {
   if (input.frames.length < 3) throw new Error("Temporal video QC requires at least three chronological finished-video frames.");
+  const artistId = input.context.artistId;
+  if (!artistId) throw new Error("Temporal video QC requires explicit artist lineage.");
   const settings = await assertBudget(input.ownerId);
   const client = createMarketingServiceClient();
-  const model = process.env.ATLAS_CREATIVE_REVIEW_MODEL?.trim() || "openai/gpt-5.6-terra";
-  const fallbacks = parseGatewayModelList(process.env.ATLAS_CREATIVE_REVIEW_FALLBACK_MODELS);
+  const model = process.env.ENSEMBLIS_CREATIVE_REVIEW_MODEL?.trim()
+    || process.env.ATLAS_CREATIVE_REVIEW_MODEL?.trim()
+    || "openai/gpt-5.6-terra";
+  const fallbacks = parseGatewayModelList(
+    process.env.ENSEMBLIS_CREATIVE_REVIEW_FALLBACK_MODELS
+      || process.env.ATLAS_CREATIVE_REVIEW_FALLBACK_MODELS,
+  );
   const started = new Date();
   const { data: run, error: createError } = await client.from("generation_runs").insert({
     owner_id: input.ownerId,
+    artist_id: artistId,
     campaign_id: input.campaignId,
     release_id: input.releaseId,
     parent_run_id: input.parentGenerationRunId,
@@ -152,6 +160,7 @@ export async function reviewGeneratedCreativeVideo(input: {
     requested_model: model,
     prompt_version: "creative-video-quality-v1",
     input_context: json({
+      artistId,
       contentItemId: input.contentItemId,
       finishedAssetUrl: input.finishedAssetUrl,
       frames: input.frames,
@@ -162,7 +171,7 @@ export async function reviewGeneratedCreativeVideo(input: {
     status: "running",
     attempt_index: 0,
     started_at: started.toISOString(),
-    metadata: json({ providerSort: settings.provider_sort, parentCreativeRunId: input.parentGenerationRunId }),
+    metadata: json({ artistId, providerSort: settings.provider_sort, parentCreativeRunId: input.parentGenerationRunId }),
   }).select("id").single();
   if (createError || !run) throw new Error(createError?.message || "Temporal video quality review run could not be created.");
 
@@ -174,7 +183,8 @@ export async function reviewGeneratedCreativeVideo(input: {
       schema: REVIEW_SCHEMA,
       instructions: REVIEW_INSTRUCTIONS,
       prompt: JSON.stringify({
-        task: "Review chronological finished-video sample frames against the Creative Treatment and Atlas visual world.",
+        artistId,
+        task: "Review chronological finished-video sample frames against the Creative Treatment and the active artist visual world.",
         frameOrder: chronological.map((frame, index) => ({ imageIndex: index + 1, timestampMs: frame.timestampMs })),
         referenceImageStartIndex: chronological.length + 1,
         treatment: {
@@ -231,7 +241,7 @@ export async function reviewGeneratedCreativeVideo(input: {
       quality_gate_passed: review.passed,
       quality_score: review.score / 100,
       quality_failures: json(review.issues.filter((issue) => issue.severity === "blocking").map((issue) => issue.detail)),
-    }).eq("id", run.id);
+    }).eq("id", run.id).eq("owner_id", input.ownerId).eq("artist_id", artistId);
     if (updateError) throw new Error(updateError.message);
     return review;
   } catch (error) {
@@ -241,7 +251,7 @@ export async function reviewGeneratedCreativeVideo(input: {
       completed_at: completed.toISOString(),
       latency_ms: completed.getTime() - started.getTime(),
       error: error instanceof Error ? error.message : "Temporal video quality review failed.",
-    }).eq("id", run.id);
+    }).eq("id", run.id).eq("owner_id", input.ownerId).eq("artist_id", artistId);
     throw error;
   }
 }
