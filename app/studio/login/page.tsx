@@ -1,5 +1,4 @@
 import { EnsemblisMark } from "@/components/ensemblis-logo";
-import { adminEmails } from "@/lib/auth/studio";
 import { ENSEMBLIS_PRODUCT } from "@/lib/ensemblis-product";
 import { signInStudio } from "../login-actions";
 
@@ -9,8 +8,6 @@ export default async function LoginPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const params = await searchParams;
-  const admins = adminEmails();
-  const defaultEmail = admins.length === 1 ? admins[0] : undefined;
 
   return (
     <main className="studio-auth">
@@ -31,7 +28,6 @@ export default async function LoginPage({
               name="email"
               type="email"
               autoComplete="username"
-              defaultValue={defaultEmail}
               placeholder="Ensemblis account email"
               required
             />
