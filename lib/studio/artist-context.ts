@@ -223,15 +223,11 @@ export async function listAccessibleArtists(
 }
 
 /**
- * Transitional resolver for the Ensemblis migration.
- *
- * During the compatibility window the existing production owner has a deterministic
- * legacy_owner_id mapping to its default artist. Future users without that mapping
- * resolve automatically only when their active membership/artist choice is
- * unambiguous. Once a workspace contains multiple selectable artists, callers must
- * move to an explicit validated artist selection rather than guessing.
+ * Last-resort transitional fallback for accounts that have not persisted an active
+ * artist yet. This function must remain internal so product callers cannot bypass
+ * the active-artist preference by asking for the legacy/default artist directly.
  */
-export async function resolveDefaultArtistContext(
+async function resolveLegacyFallbackArtistContext(
   client: SupabaseClient<Database>,
   identity: StudioIdentity,
 ): Promise<ArtistContext> {
@@ -334,7 +330,18 @@ export async function resolveActiveArtistContext(
     }
   }
 
-  return resolveDefaultArtistContext(client, identity);
+  return resolveLegacyFallbackArtistContext(client, identity);
+}
+
+/**
+ * @deprecated Existing callers receive the active artist for safety. New product code
+ * should use resolveActiveArtistContext or requireArtistContext explicitly.
+ */
+export async function resolveDefaultArtistContext(
+  client: SupabaseClient<Database>,
+  identity: StudioIdentity,
+): Promise<ArtistContext> {
+  return resolveActiveArtistContext(client, identity);
 }
 
 export async function requireArtistContext(artistId?: string): Promise<ArtistContext> {
