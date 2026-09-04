@@ -1,44 +1,154 @@
 .preview {
   display: grid;
-  gap: 10px;
-  margin: 4px 0 18px;
-  padding: 14px;
-  border: 1px solid var(--studio-border, rgba(255,255,255,.12));
-  border-radius: 15px;
-  background: rgba(255,255,255,.025);
+  gap: 0.85rem;
+  margin: 0.3rem 0 1.1rem;
+  padding: clamp(0.9rem, 2vw, 1.15rem);
+  border: 1px solid var(--en-line, rgba(255,255,255,.12));
+  border-radius: var(--en-radius, 0.86rem);
+  background: color-mix(in srgb, var(--en-surface-raised, #151e19) 54%, transparent);
 }
 
-.head {
+.head,
+.timelineHeading,
+.hookHeading {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 0.8rem;
 }
 .head small,
 .head strong { display: block; }
-.head small { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; opacity: .55; }
-.head strong { margin-top: 2px; }
+.head small,
+.timelineHeading span,
+.hookHeading span {
+  color: var(--en-subtle, rgba(255,255,255,.55));
+  font-size: 0.59rem;
+  font-weight: 720;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.head strong { margin-top: 0.12rem; font-size: 0.85rem; }
 .head > span {
-  padding: 4px 8px;
-  border: 1px solid rgba(255,255,255,.1);
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--en-line, rgba(255,255,255,.1));
   border-radius: 999px;
-  font-size: 10px;
-  opacity: .72;
+  color: var(--en-muted, rgba(255,255,255,.7));
+  font-size: 0.59rem;
+}
+
+.note {
+  margin: 0;
+  color: var(--en-muted, rgba(255,255,255,.58));
+  font-size: 0.62rem;
+  line-height: 1.45;
+}
+
+.timelineBlock {
+  display: grid;
+  gap: 0.45rem;
+  padding-top: 0.2rem;
+}
+.timelineHeading small,
+.hookHeading small {
+  color: var(--en-subtle, rgba(255,255,255,.55));
+  font-size: 0.58rem;
+  font-variant-numeric: tabular-nums;
+}
+.timeline {
+  position: relative;
+  min-height: 7.2rem;
+  overflow: hidden;
+  border: 1px solid var(--en-line, rgba(255,255,255,.09));
+  border-radius: 0.72rem;
+  background:
+    linear-gradient(to bottom, rgba(255,255,255,.025), transparent 65%),
+    color-mix(in srgb, var(--en-bg, #080b09) 78%, transparent);
+}
+.timeline svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: calc(100% - 1.55rem);
+}
+.timelineBaseline {
+  stroke: color-mix(in srgb, var(--en-line, #25302a) 70%, transparent);
+  stroke-width: 1;
+}
+.energyLine {
+  stroke: var(--en-mint, #5ce1c6);
+  stroke-width: 1.7;
+  opacity: 0.88;
+}
+.editLine {
+  stroke: color-mix(in srgb, var(--en-ink, #f6f8f4) 18%, transparent);
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+}
+.sectionOverlay,
+.hookOverlay {
+  position: absolute;
+  inset-inline: 0;
+  pointer-events: none;
+}
+.sectionOverlay {
+  bottom: 0;
+  height: 1.55rem;
+  border-top: 1px solid var(--en-line, rgba(255,255,255,.08));
+}
+.sectionOverlay > span {
+  position: absolute;
+  inset-block: 0;
+  display: grid;
+  align-items: center;
+  min-width: 1px;
+  padding-inline: 0.3rem;
+  overflow: hidden;
+  border-right: 1px solid color-mix(in srgb, var(--en-line, #25302a) 74%, transparent);
+  background: color-mix(in srgb, var(--en-surface, #101713) 78%, transparent);
+}
+.sectionOverlay b {
+  overflow: hidden;
+  color: var(--en-muted, rgba(255,255,255,.65));
+  font-size: 0.52rem;
+  font-weight: 660;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hookOverlay {
+  top: 0.45rem;
+  height: 0.32rem;
+}
+.hookOverlay > span {
+  position: absolute;
+  height: 100%;
+  min-width: 2px;
+  border-radius: 999px;
+  background: var(--en-accent, #b7f36a);
+  opacity: 0.82;
+}
+.playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--en-accent-strong, #d3ff99);
+  box-shadow: 0 0 0 1px rgba(211,255,153,.08);
+  pointer-events: none;
 }
 
 .sections {
   display: flex;
   min-width: 0;
   overflow-x: auto;
-  border: 1px solid rgba(255,255,255,.09);
-  border-radius: 11px;
+  border: 1px solid var(--en-line, rgba(255,255,255,.09));
+  border-radius: 0.72rem;
 }
 .sections button {
-  min-width: 88px;
-  min-height: 54px;
-  padding: 8px;
+  min-width: 5.5rem;
+  min-height: 3.3rem;
+  padding: 0.52rem;
   border: 0;
-  border-right: 1px solid rgba(255,255,255,.07);
+  border-right: 1px solid color-mix(in srgb, var(--en-line, #25302a) 72%, transparent);
   background: transparent;
   color: inherit;
   text-align: left;
@@ -46,43 +156,56 @@
 }
 .sections button:last-child { border-right: 0; }
 .sections button:hover:not(:disabled),
-.sections .active { background: rgba(255,255,255,.07); }
+.sections .active { background: var(--en-surface-hover, rgba(255,255,255,.07)); }
+.sections button:focus-visible { outline: 1px solid var(--en-accent, #b7f36a); outline-offset: -2px; }
 .sections button:disabled { cursor: default; opacity: .52; }
 .sections strong,
 .sections small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sections strong { font-size: 10px; }
-.sections small { margin-top: 4px; font-size: 9px; opacity: .48; }
+.sections strong { font-size: 0.59rem; }
+.sections small { margin-top: 0.25rem; color: var(--en-subtle, rgba(255,255,255,.48)); font-size: 0.54rem; }
 
-.hooks { display: grid; gap: 6px; }
+.hooks { display: grid; gap: 0.38rem; }
+.hookHeading { padding-top: 0.15rem; }
 .hooks button {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
+  grid-template-columns: 1.6rem minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
-  padding: 8px 9px;
-  border: 1px solid rgba(255,255,255,.08);
-  border-radius: 10px;
+  gap: 0.55rem;
+  padding: 0.55rem 0.62rem;
+  border: 1px solid color-mix(in srgb, var(--en-line, #25302a) 76%, transparent);
+  border-radius: 0.62rem;
   background: transparent;
   color: inherit;
   text-align: left;
   cursor: pointer;
 }
 .hooks button:hover:not(:disabled),
-.hooks .activeHook { background: rgba(255,255,255,.06); }
+.hooks .activeHook { background: var(--en-surface-hover, rgba(255,255,255,.06)); }
+.hooks button:focus-visible { outline: 1px solid var(--en-accent, #b7f36a); outline-offset: 1px; }
 .hooks button:disabled { cursor: default; opacity: .52; }
 .hooks > button > span {
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
-  border: 1px solid rgba(255,255,255,.12);
+  width: 1.55rem;
+  height: 1.55rem;
+  border: 1px solid var(--en-line-strong, rgba(255,255,255,.12));
   border-radius: 50%;
-  font-size: 8px;
+  font-size: 0.5rem;
 }
 .hooks strong,
 .hooks small { display: block; }
-.hooks strong { font-size: 11px; }
-.hooks small { margin-top: 2px; font-size: 9px; opacity: .5; text-transform: capitalize; }
-.hooks b { font-size: 14px; }
+.hooks strong { font-size: 0.67rem; }
+.hooks small { margin-top: 0.12rem; color: var(--en-subtle, rgba(255,255,255,.5)); font-size: 0.55rem; text-transform: capitalize; }
+.hooks b { color: var(--en-accent, #b7f36a); font-size: 0.78rem; }
 
-.note { margin: 0; font-size: 10px; opacity: .58; }
+@media (max-width: 620px) {
+  .preview { padding: 0.75rem; }
+  .timeline { min-height: 6.1rem; }
+  .sections button { min-width: 4.9rem; }
+  .hooks button { grid-template-columns: 1.5rem minmax(0, 1fr) auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sections button,
+  .hooks button { scroll-behavior: auto; }
+}
