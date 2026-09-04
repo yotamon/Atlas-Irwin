@@ -25,7 +25,9 @@ jobs:
           python-version: "3.13"
           cache: pip
 
-      - run: npm ci
+      - name: Install Node dependencies
+        timeout-minutes: 8
+        run: npm ci --no-audit --fetch-retries=2 --fetch-timeout=60000 --fetch-retry-mintimeout=1000 --fetch-retry-maxtimeout=5000
 
       - name: Audit production dependencies
         # Audit the installed production tree, but keep registry stalls bounded. Real high/critical
