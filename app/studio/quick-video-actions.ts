@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { createServiceClient } from "@/lib/supabase/service";
 import { loadVideoProjectContext } from "@/lib/video-director/context";
 import { parseVideoCreativeBrief } from "@/lib/video-director/domain";
@@ -25,14 +26,13 @@ function refresh(projectId: string, releaseId: string) {
 
 export async function developQuickVideoDirection(form: FormData) {
   const projectId = z.uuid().parse(value(form, "project_id"));
-  const { user } = await requireStudioAdmin();
+  const { supabase, user } = await requireStudioAdmin();
+  const artist = await resolveActiveArtistContext(supabase, user);
   const db = createServiceClient();
-  let context = await loadVideoProjectContext(db, projectId, user.id);
+  let context = await loadVideoProjectContext(db, projectId, user.id, artist.artistId);
   const brief = parseVideoCreativeBrief(context.project.creative_brief);
 
-  if (brief.workflow_mode !== "quick_video") {
-    throw new Error("This action is only available for Quick Video projects.");
-  }
+  if (brief.workflow_mode !== "quick_video") throw new Error("This action is only available for Quick Video projects.");
   if (!context.musicMap) throw new Error("Analyze the track before developing the selected direction.");
   if (!openAIDirectorReadiness().configured) throw new Error("Creative Director is not configured.");
   if (!["concept_review", "treatment_review", "production_plan_review"].includes(context.project.status)) {
@@ -40,30 +40,18 @@ export async function developQuickVideoDirection(form: FormData) {
   }
 
   const director = new OpenAIMusicVideoDirector();
-
   if (context.project.status === "concept_review") {
     const concept = await director.createQuickVideoConcept(context);
-    const rows = await persistConceptRound({
-      db,
-      ownerId: user.id,
-      project: context.project,
-      concepts: [concept],
-    });
+    const rows = await persistConceptRound({ db, ownerId: user.id, project: context.project, concepts: [concept] });
     const selected = rows[0];
     if (!selected) throw new Error("Quick Video could not persist the developed direction.");
 
     const { error: conceptError } = await db.from("music_video_concepts")
-      .update({ status: "selected" })
-      .eq("id", selected.id)
-      .eq("owner_id", user.id);
+      .update({ status: "selected" }).eq("id", selected.id).eq("owner_id", user.id);
     if (conceptError) throw new Error(conceptError.message);
 
-    await db.from("music_video_approvals")
-      .update({ status: "revoked", revoked_at: new Date().toISOString() })
-      .eq("project_id", projectId)
-      .eq("owner_id", user.id)
-      .eq("approval_type", "concept")
-      .eq("status", "active");
+    await db.from("music_video_approvals").update({ status: "revoked", revoked_at: new Date().toISOString() })
+      .eq("project_id", projectId).eq("owner_id", user.id).eq("approval_type", "concept").eq("status", "active");
 
     const { error: approvalError } = await db.from("music_video_approvals").insert({
       owner_id: user.id,
@@ -74,6 +62,7 @@ export async function developQuickVideoDirection(form: FormData) {
         round_number: selected.round_number,
         workflow_mode: "quick_video",
         quick_video_direction_id: brief.concept_id,
+        anchor_moment_id: brief.anchor_moment_id,
       }),
       max_credits: 0,
       consumed_credits: 0,
@@ -90,13 +79,12 @@ export async function developQuickVideoDirection(form: FormData) {
     }).eq("id", projectId).eq("owner_id", user.id);
     if (projectError) throw new Error(projectError.message);
 
-    context = await loadVideoProjectContext(db, projectId, user.id);
+    context = await loadVideoProjectContext(db, projectId, user.id, artist.artistId);
   }
 
   if (context.project.status === "treatment_review") {
     if (!context.project.selected_concept_id) throw new Error("Quick Video has no developed concept to plan.");
-    const { data: conceptRow, error: conceptError } = await db.from("music_video_concepts")
-      .select("*")
+    const { data: conceptRow, error: conceptError } = await db.from("music_video_concepts").select("*")
       .eq("id", context.project.selected_concept_id)
       .eq("project_id", projectId)
       .eq("owner_id", user.id)
