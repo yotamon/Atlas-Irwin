@@ -93,8 +93,8 @@ test("Ensemblis persists and validates active artist context across primary navi
   assert.equal(context.includes("return resolveDefaultArtistContext(client, identity);"), false);
   assert.ok(switcher.includes('params.set("artist", artistId)'));
   assert.ok(sidebar.includes("ensemblisArtistHref(href, artistId)"));
-  assert.ok(proxy.includes("requestedArtistId"));
-  assert.ok(proxy.includes("This value is still untrusted"));
+  assert.ok(proxy.includes("selectedArtistFromRequest(request)"));
+  assert.ok(proxy.includes("request.cookies.set(ENSEMBLIS_ACTIVE_ARTIST_COOKIE, requestedArtistId)"));
   assert.ok(layout.includes("resolveActiveArtistContext"));
   assert.ok(layout.includes("listAccessibleArtists"));
 });
