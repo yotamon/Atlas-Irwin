@@ -116,6 +116,7 @@ export async function prepareDistributionCatalog(form: FormData) {
   for (const result of [releaseResult, tracksResult, configResult, accountResult, profilesResult, metadataResult, writersResult, contributorsResult]) {
     if (result.error) throw new Error(result.error.message);
   }
+  if (!releaseResult.data) throw new Error("Release not found or unauthorized.");
   const release = releaseResult.data;
   const tracks = tracksResult.data ?? [];
   const config = configResult.data;
