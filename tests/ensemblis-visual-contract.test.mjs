@@ -115,3 +115,40 @@ test("Ensemblis navigation exposes persistent route orientation", async () => {
   assert.ok(screens.includes(".studio-root .studio-sidebar nav a.is-active"));
   assert.ok(screens.includes("box-shadow: inset 2px 0 var(--en-accent)"));
 });
+
+test("shared Next root does not serialize public artist chrome into Ensemblis", async () => {
+  const rootLayout = await readFile("app/layout.tsx", "utf8");
+  const themeInit = await readFile("components/theme-init-script.tsx", "utf8");
+  const themeToggle = await readFile("components/theme-toggle.tsx", "utf8");
+  const rootLoading = await readFile("app/loading.tsx", "utf8");
+  const fontSystem = await readFile("app/font-system.css", "utf8");
+  const studioLayout = await readFile("app/studio/layout.tsx", "utf8");
+  const rootIsolation = await readFile("app/studio/ensemblis-root-isolation.css", "utf8");
+
+  assert.equal(rootLayout.includes("next/font/local"), false, "public display font is still preloaded from the shared root");
+  assert.equal(rootLayout.includes("Montage-Demo"), false, "public display font leaked into the shared root layout");
+  assert.equal(rootLayout.includes('data-theme="light"'), false, "Studio still starts from a hardcoded public light theme");
+  assert.ok(rootLayout.includes('import "./font-system.css"'));
+  assert.ok(fontSystem.includes('@font-face'));
+  assert.ok(fontSystem.includes('/fonts/montage_2/Montage-Demo.ttf'));
+
+  assert.ok(themeInit.includes('window.location.pathname === "/studio"'));
+  assert.ok(themeInit.includes('window.location.pathname.startsWith("/studio/")'));
+  assert.ok(themeInit.includes('document.documentElement.dataset.theme = "dark"'));
+  assert.ok(themeInit.includes('localStorage.getItem("site-theme")'));
+  assert.ok(themeInit.includes('id="site-theme-init"'));
+  assert.equal(themeInit.includes("atlas-theme"), false, "Atlas theme storage leaked into the shared bootstrap");
+  assert.equal(themeToggle.includes("atlas-theme"), false, "Atlas theme storage leaked into the shared toggle");
+  assert.ok(themeToggle.includes('localStorage.setItem("site-theme", theme)'));
+
+  for (const publicLoadingArtifact of ["hero-scene", "paper-card", "bg-paper", "Loading homepage"]) {
+    assert.equal(rootLoading.includes(publicLoadingArtifact), false, `${publicLoadingArtifact} leaked into the shared loading boundary`);
+  }
+  assert.ok(rootLoading.includes('aria-label="Loading application"'));
+
+  assert.equal(studioLayout.includes("alternates:"), false, "Studio still inherits an Atlas-domain canonical URL");
+  assert.ok(studioLayout.includes('import "./ensemblis-root-isolation.css"'));
+  assert.ok(rootIsolation.includes("body:has(.studio-root)::before"));
+  assert.ok(rootIsolation.includes("body:has(.studio-root)::after"));
+  assert.ok(rootIsolation.includes("content: none"));
+});
