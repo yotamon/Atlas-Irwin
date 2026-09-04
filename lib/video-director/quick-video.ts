@@ -23,6 +23,8 @@ export type QuickVideoConcept = {
   title: string;
   description: string;
   rationale: string;
+  anchorMomentId: string | null;
+  anchorMomentLabel: string | null;
   storyMode: VideoStoryMode;
   peopleMode: VideoPeopleMode;
   projectKind: VideoProjectKind;
@@ -39,7 +41,7 @@ type QuickVideoTrack = Pick<Track, "id" | "title" | "notes">;
 
 type QuickVideoMoment = Pick<
   Moment,
-  "track_id" | "label" | "moment_type" | "start_ms" | "end_ms" | "hook_score" | "energy_score" | "confidence"
+  "id" | "track_id" | "label" | "moment_type" | "start_ms" | "end_ms" | "hook_score" | "energy_score" | "confidence"
 >;
 
 function clean(value: string | null | undefined) {
@@ -74,7 +76,9 @@ export function buildQuickVideoConcepts({
   moments?: QuickVideoMoment[];
 }): QuickVideoConcept[] {
   const moment = strongestMoment(track, moments);
-  const hook = clean(release.primary_hook) ?? momentLabel(moment) ?? `the strongest musical payoff in ${track.title}`;
+  const anchorMomentId = moment?.id ?? null;
+  const anchorMomentLabel = momentLabel(moment);
+  const hook = clean(release.primary_hook) ?? anchorMomentLabel ?? `the strongest musical payoff in ${track.title}`;
   const emotion = clean(release.core_emotion) ?? "the track's emotional center";
   const visualDirection = clean(release.visual_direction) ?? "a coherent visual world derived from the release identity";
   const story = clean(release.story) ?? clean(track.notes) ?? `the world around ${release.title}`;
@@ -88,6 +92,8 @@ export function buildQuickVideoConcepts({
       rationale: moment
         ? `Uses the approved Moment “${moment.label}” as the strongest concrete music cue instead of inventing a generic video concept.`
         : `Uses the release hook and visual direction as the creative spine while keeping music timing authoritative.`,
+      anchorMomentId,
+      anchorMomentLabel,
       storyMode: "hybrid",
       peopleMode: "director_choice",
       projectKind: "full_music_video",
@@ -102,6 +108,8 @@ export function buildQuickVideoConcepts({
       rationale: moment
         ? `Lets the approved Moment “${moment.label}” drive pacing, transitions and the strongest social cutdown.`
         : `Prioritizes musical energy and repeatable visual motifs so the result can produce strong short-form derivatives.`,
+      anchorMomentId,
+      anchorMomentLabel,
       storyMode: "abstract",
       peopleMode: "prefer_people",
       projectKind: "full_music_video",
@@ -114,6 +122,8 @@ export function buildQuickVideoConcepts({
       title: "Narrative reveal",
       description: `Build a simple visual arc from ${story}, revealing the strongest image or transformation when the music reaches its payoff.`,
       rationale: `Keeps the narrative bounded to the release context and synchronizes its reveal to the track instead of creating a disconnected short film.`,
+      anchorMomentId,
+      anchorMomentLabel,
       storyMode: "narrative",
       peopleMode: "director_choice",
       projectKind: "full_music_video",
