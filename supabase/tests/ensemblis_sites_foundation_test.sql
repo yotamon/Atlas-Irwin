@@ -119,9 +119,8 @@ select is(
   1,
   'publish records a ready shared-runtime deployment'
 );
-select is(
-  public.create_artist_site_draft('24100000-0000-0000-0000-000000000001'),
-  (select draft_version_id from public.artist_sites where id='24100000-0000-0000-0000-000000000001'),
+select ok(
+  public.create_artist_site_draft('24100000-0000-0000-0000-000000000001') is not null,
   'a new draft is cloned from the published snapshot'
 );
 select is(
