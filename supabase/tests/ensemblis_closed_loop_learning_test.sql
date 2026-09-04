@@ -1,6 +1,6 @@
 begin;
 
-select plan(21);
+select plan(22);
 
 insert into auth.users (id,email,aud,role,created_at,updated_at)
 values ('17000000-0000-0000-0000-000000000001','closed-loop@example.com','authenticated','authenticated',now(),now());
@@ -26,9 +26,6 @@ insert into public.track_music_intelligence(
   'https://example.com/learning.wav','learning-sha','{}'::jsonb
 );
 
--- Two approved candidates deliberately start with the high-vocal Moment ahead on
--- the base score. Their pure-audio fingerprints are derived from the canonical
--- Track Intelligence source exactly as production Moments require.
 insert into public.moments(
   id,owner_id,artist_id,release_id,track_id,start_ms,end_ms,source_start_ms,source_end_ms,
   moment_type,label,source_mode,source_candidate_id,track_analysis_version,source_fingerprint,purpose_tags,
@@ -52,28 +49,12 @@ insert into public.moments(
 insert into public.campaigns(id,owner_id,artist_id,release_id,name)
 values ('77000000-0000-0000-0000-000000000001','17000000-0000-0000-0000-000000000001','37000000-0000-0000-0000-000000000001','47000000-0000-0000-0000-000000000001','Learning Campaign');
 
-insert into public.content_items(
-  id,owner_id,artist_id,release_id,campaign_id,title,platform,format,goal,source
-) values (
-  '87000000-0000-0000-0000-000000000001','17000000-0000-0000-0000-000000000001','37000000-0000-0000-0000-000000000001',
-  '47000000-0000-0000-0000-000000000001','77000000-0000-0000-0000-000000000001','Automatic Moment choice','Instagram','Reel','Saves','planner'
-);
+insert into public.content_items(id,owner_id,artist_id,release_id,campaign_id,title,platform,format,goal,source)
+values ('87000000-0000-0000-0000-000000000001','17000000-0000-0000-0000-000000000001','37000000-0000-0000-0000-000000000001','47000000-0000-0000-0000-000000000001','77000000-0000-0000-0000-000000000001','Automatic Moment choice','Instagram','Reel','Saves','planner');
 
-select is(
-  (select moment_id from public.content_items where id='87000000-0000-0000-0000-000000000001'),
-  '67000000-0000-0000-0000-000000000001'::uuid,
-  'generated content deterministically starts from the strongest approved Moment'
-);
-select is(
-  (select concat(audio_timestamp_start,':',audio_timestamp_end,':',audio_timestamp_source) from public.content_items where id='87000000-0000-0000-0000-000000000001'),
-  '10:18:moment',
-  'automatic Moment selection snapshots the exact approved window before generic audio selection'
-);
-select is(
-  (select count(*)::integer from public.campaign_moments where campaign_id='77000000-0000-0000-0000-000000000001' and moment_id='67000000-0000-0000-0000-000000000001' and is_active),
-  1,
-  'generated Moment execution is automatically retained on the campaign lineage'
-);
+select is((select moment_id from public.content_items where id='87000000-0000-0000-0000-000000000001'),'67000000-0000-0000-0000-000000000001'::uuid,'generated content deterministically starts from the strongest approved Moment');
+select is((select concat(audio_timestamp_start,':',audio_timestamp_end,':',audio_timestamp_source) from public.content_items where id='87000000-0000-0000-0000-000000000001'),'10:18:moment','automatic Moment selection snapshots the exact approved window before generic audio selection');
+select is((select count(*)::integer from public.campaign_moments where campaign_id='77000000-0000-0000-0000-000000000001' and moment_id='67000000-0000-0000-0000-000000000001' and is_active),1,'generated Moment execution is automatically retained on the campaign lineage');
 
 insert into public.content_items(id,owner_id,artist_id,release_id,campaign_id,title,platform,format,goal,source,moment_id)
 values
@@ -82,15 +63,28 @@ values
  ('87000000-0000-0000-0000-000000000013','17000000-0000-0000-0000-000000000001','37000000-0000-0000-0000-000000000001','47000000-0000-0000-0000-000000000001','77000000-0000-0000-0000-000000000001','Low A','Instagram','Reel','Saves','planner','67000000-0000-0000-0000-000000000002'),
  ('87000000-0000-0000-0000-000000000014','17000000-0000-0000-0000-000000000001','37000000-0000-0000-0000-000000000001','47000000-0000-0000-0000-000000000001','77000000-0000-0000-0000-000000000001','Low B','Instagram','Reel','Saves','planner','67000000-0000-0000-0000-000000000002');
 
+-- Provider evidence must reconcile to a durable publication object. These rows
+-- are the canonical external-object proof used by the trusted evidence view.
+insert into public.publication_jobs(
+  id,owner_id,artist_id,campaign_id,content_item_id,platform,adapter,status,approval_status,published_at,external_post_id,request_payload
+) values
+ ('8b000000-0000-0000-0000-000000000011','17000000-0000-0000-0000-000000000001','37000000-0000-0000-0000-000000000001','77000000-0000-0000-0000-000000000001','87000000-0000-0000-0000-000000000011','Instagram','test:instagram','published','approved',now(),'ig-high-a','{}'),
+ ('8b000000-0000-0000-0000-000000000012','17000000-0000-0000-0000-000000000001','37000000-0000-0000-0000-000000000001','77000000-0000-0000-0000-000000000001','87000000-0000-0000-0000-000000000012','Instagram','test:instagram','published','approved',now(),'ig-high-b','{}'),
+ ('8b000000-0000-0000-0000-000000000013','17000000-0000-0000-0000-000000000001','37000000-0000-0000-0000-000000000001','77000000-0000-0000-0000-000000000001','87000000-0000-0000-0000-000000000013','Instagram','test:instagram','published','approved',now(),'ig-low-a','{}'),
+ ('8b000000-0000-0000-0000-000000000014','17000000-0000-0000-0000-000000000001','37000000-0000-0000-0000-000000000001','77000000-0000-0000-0000-000000000001','87000000-0000-0000-0000-000000000014','Instagram','test:instagram','published','approved',now(),'ig-low-b','{}');
+
 insert into public.metric_snapshots(owner_id,artist_id,date,platform,release_id,content_item_id,views,saves,source,external_object_id,captured_at)
 values ('17000000-0000-0000-0000-000000000001','37000000-0000-0000-0000-000000000001',current_date,'Instagram','47000000-0000-0000-0000-000000000001','87000000-0000-0000-0000-000000000011',5000,4999,'manual','manual-ignored',now());
-
 select is((select count(*)::integer from public.verified_moment_learning_evidence where metric_source='manual'),0,'manual metrics are visible to analytics but never enter automatic learning evidence');
 select is((select count(*)::integer from public.marketing_learnings where source='performance'),0,'manual-only evidence cannot manufacture a learning proposal');
 
 insert into public.metric_snapshots(owner_id,artist_id,date,platform,release_id,content_item_id,views,saves,source,captured_at)
 values ('17000000-0000-0000-0000-000000000001','37000000-0000-0000-0000-000000000001',current_date,'Instagram','47000000-0000-0000-0000-000000000001','87000000-0000-0000-0000-000000000012',5000,4999,'instagram_api',now());
 select is((select count(*)::integer from public.verified_moment_learning_evidence where content_item_id='87000000-0000-0000-0000-000000000012'),0,'provider-labelled metrics without a provider object id are still untrusted');
+
+insert into public.metric_snapshots(owner_id,artist_id,date,platform,release_id,content_item_id,views,saves,source,external_object_id,captured_at)
+values ('17000000-0000-0000-0000-000000000001','37000000-0000-0000-0000-000000000001',current_date,'Instagram','47000000-0000-0000-0000-000000000001','87000000-0000-0000-0000-000000000012',5000,4999,'instagram_api','forged-object',now());
+select is((select count(*)::integer from public.verified_moment_learning_evidence where external_object_id='forged-object'),0,'a provider-looking external id that cannot reconcile to the published object is rejected');
 
 insert into public.metric_snapshots(owner_id,artist_id,date,platform,release_id,content_item_id,views,saves,likes,comments,shares,source,external_object_id,captured_at)
 values
@@ -99,17 +93,12 @@ values
  ('17000000-0000-0000-0000-000000000001','37000000-0000-0000-0000-000000000001',current_date,'Instagram','47000000-0000-0000-0000-000000000001','87000000-0000-0000-0000-000000000013',1000,20,20,5,5,'instagram_api','ig-low-a',now()),
  ('17000000-0000-0000-0000-000000000001','37000000-0000-0000-0000-000000000001',current_date,'Instagram','47000000-0000-0000-0000-000000000001','87000000-0000-0000-0000-000000000014',1000,20,20,5,5,'instagram_api','ig-low-b',now());
 
-select is((select count(*)::integer from public.verified_moment_learning_evidence where artist_id='37000000-0000-0000-0000-000000000001'),4,'only explicit Moment to content to provider metric lineage reaches the trusted evidence view');
+select is((select count(*)::integer from public.verified_moment_learning_evidence where artist_id='37000000-0000-0000-0000-000000000001'),4,'only explicit Moment to content to published object to provider metric lineage reaches trusted evidence');
 select is((select status from public.marketing_learnings where learning_key='moment-trait:v1:instagram:vocal_score:save_rate:higher'),'proposed','verified cohort performance creates a reviewable proposal instead of silently changing behavior');
 select ok((select evidence_sample_size=4000 and confidence>0.55 and expires_at>now() from public.marketing_learnings where learning_key='moment-trait:v1:instagram:vocal_score:save_rate:higher'),'the proposal carries sample size, confidence and evidence expiry');
 select ok((select private.is_valid_marketing_learning_effect(effect) from public.marketing_learnings where learning_key='moment-trait:v1:instagram:vocal_score:save_rate:higher'),'automatic proposals contain only a whitelisted structured decision effect');
 select is(private.refresh_moment_performance_learnings('17000000-0000-0000-0000-000000000001','37000000-0000-0000-0000-000000000002'),0,'learning refresh is artist-scoped and cannot borrow another artist evidence');
-
-select ok(
-  private.moment_execution_score('67000000-0000-0000-0000-000000000001','Instagram','Reel','Saves') >
-  private.moment_execution_score('67000000-0000-0000-0000-000000000002','Instagram','Reel','Saves'),
-  'a merely proposed learning has no effect on future Moment ranking'
-);
+select ok(private.moment_execution_score('67000000-0000-0000-0000-000000000001','Instagram','Reel','Saves') > private.moment_execution_score('67000000-0000-0000-0000-000000000002','Instagram','Reel','Saves'),'a merely proposed learning has no effect on future Moment ranking');
 select is(private.is_valid_marketing_learning_effect('{"kind":"prompt_injection","weight":1}'::jsonb),false,'unknown learning effects are not executable');
 
 insert into public.marketing_learnings(
@@ -122,12 +111,7 @@ insert into public.marketing_learnings(
   '{"kind":"moment_trait_preference","trait":"vocal_score","direction":"lower","weight":0.30,"platform":"Instagram","metric":"save_rate"}',1000,now(),now()+interval '90 days'
 );
 update public.marketing_learnings set status='approved' where id='97000000-0000-0000-0000-000000000001';
-
-select ok(
-  private.moment_execution_score('67000000-0000-0000-0000-000000000002','Instagram','Reel','Saves') >
-  private.moment_execution_score('67000000-0000-0000-0000-000000000001','Instagram','Reel','Saves'),
-  'human approval activates the structured effect and can change future Moment ranking'
-);
+select ok(private.moment_execution_score('67000000-0000-0000-0000-000000000002','Instagram','Reel','Saves') > private.moment_execution_score('67000000-0000-0000-0000-000000000001','Instagram','Reel','Saves'),'human approval activates the structured effect and can change future Moment ranking');
 
 insert into public.content_items(id,owner_id,artist_id,release_id,campaign_id,title,platform,format,goal,source)
 values ('87000000-0000-0000-0000-000000000002','17000000-0000-0000-0000-000000000001','37000000-0000-0000-0000-000000000001','47000000-0000-0000-0000-000000000001','77000000-0000-0000-0000-000000000001','Learned Moment choice','Instagram','Reel','Saves','planner');
@@ -136,25 +120,17 @@ select is((select moment_id from public.content_items where id='87000000-0000-00
 update public.marketing_learnings set status='approved' where learning_key='moment-trait:v1:instagram:vocal_score:save_rate:higher';
 select is((select status from public.marketing_learnings where id='97000000-0000-0000-0000-000000000001'),'superseded','approving an opposite conclusion supersedes the older approved rule in the same family');
 select is((select supersedes_learning_id from public.marketing_learnings where learning_key='moment-trait:v1:instagram:vocal_score:save_rate:higher'),'97000000-0000-0000-0000-000000000001'::uuid,'the replacement learning retains explicit supersession lineage');
-select ok(
-  private.moment_execution_score('67000000-0000-0000-0000-000000000001','Instagram','Reel','Saves') >
-  private.moment_execution_score('67000000-0000-0000-0000-000000000002','Instagram','Reel','Saves'),
-  'the newly approved evidence-backed direction replaces the prior ranking influence'
-);
+select ok(private.moment_execution_score('67000000-0000-0000-0000-000000000001','Instagram','Reel','Saves') > private.moment_execution_score('67000000-0000-0000-0000-000000000002','Instagram','Reel','Saves'),'the newly approved evidence-backed direction replaces the prior ranking influence');
 
 create temporary table approved_learning_snapshot as
 select effect,evidence,confidence,evidence_sample_size,evidence_window_start,evidence_window_end,last_evidence_at,expires_at
-from public.marketing_learnings
-where learning_key='moment-trait:v1:instagram:vocal_score:save_rate:higher';
+from public.marketing_learnings where learning_key='moment-trait:v1:instagram:vocal_score:save_rate:higher';
 insert into public.metric_snapshots(owner_id,artist_id,date,platform,release_id,content_item_id,views,saves,source,external_object_id,captured_at)
-values ('17000000-0000-0000-0000-000000000001','37000000-0000-0000-0000-000000000001',current_date,'Instagram','47000000-0000-0000-0000-000000000001','87000000-0000-0000-0000-000000000011',1500,120,'instagram_api','ig-high-a-refresh',now()+interval '1 second');
+values ('17000000-0000-0000-0000-000000000001','37000000-0000-0000-0000-000000000001',current_date,'Instagram','47000000-0000-0000-0000-000000000001','87000000-0000-0000-0000-000000000011',1500,120,'instagram_api','ig-high-a',now()+interval '1 second');
 select ok(
-  (select ml.effect=s.effect and ml.evidence=s.evidence and ml.confidence=s.confidence
-          and ml.evidence_sample_size=s.evidence_sample_size
-          and ml.evidence_window_start is not distinct from s.evidence_window_start
-          and ml.evidence_window_end is not distinct from s.evidence_window_end
-          and ml.last_evidence_at is not distinct from s.last_evidence_at
-          and ml.expires_at is not distinct from s.expires_at
+  (select ml.effect=s.effect and ml.evidence=s.evidence and ml.confidence=s.confidence and ml.evidence_sample_size=s.evidence_sample_size
+          and ml.evidence_window_start is not distinct from s.evidence_window_start and ml.evidence_window_end is not distinct from s.evidence_window_end
+          and ml.last_evidence_at is not distinct from s.last_evidence_at and ml.expires_at is not distinct from s.expires_at
    from public.marketing_learnings ml cross join approved_learning_snapshot s
    where ml.learning_key='moment-trait:v1:instagram:vocal_score:save_rate:higher'),
   'provider refreshes cannot silently mutate a human-approved evidence/effect snapshot'
