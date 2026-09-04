@@ -1,5 +1,7 @@
 import { loadPublishedSiteBySlug } from "@/lib/sites/runtime";
 
+export const dynamic = "force-dynamic";
+
 type RouteContext = { params: Promise<{ slug: string }> };
 
 function escapeXml(value: string) {
