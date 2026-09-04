@@ -109,8 +109,8 @@ test("metadata canonicalizes to the verified primary hostname", async () => {
   ]);
 });
 
-test("private preview is authenticated, artist-scoped and noindex", async () => {
-  await requireSnippets("app/studio/site-preview/[siteId]/page.tsx", [
+test("private preview is authenticated, artist-scoped, noindex and outside Studio chrome", async () => {
+  await requireSnippets("app/site-preview/[siteId]/page.tsx", [
     "requireStudioAdmin",
     "resolveActiveArtistContext",
     '.eq("artist_id", artist.artistId)',
@@ -118,8 +118,12 @@ test("private preview is authenticated, artist-scoped and noindex", async () => 
     "getSiteTemplate(version.template_key, version.template_version)",
     "preview",
   ]);
-  await requireSnippets("app/studio/site-preview/[siteId]/layout.tsx", [
-    "robots: { index: false, follow: false }",
+  await requireSnippets("app/site-preview/[siteId]/layout.tsx", [
+    'import "../../sites/sites.css"',
+    "robots: { index: false, follow: false, nocache: true }",
+  ]);
+  await requireSnippets("app/studio/(protected)/sites/page.tsx", [
+    'href={`/site-preview/${site.id}`}',
   ]);
 });
 
