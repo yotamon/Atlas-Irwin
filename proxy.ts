@@ -115,6 +115,11 @@ function isTrustedNonTenantHost(host: string) {
   return legacyPublicHosts().has(normalized);
 }
 
+function publishedSiteRewritePath(siteSlug: string, pathname: string) {
+  const base = `/sites/${encodeURIComponent(siteSlug)}`;
+  return pathname === "/" ? base : `${base}${pathname}`;
+}
+
 async function routeArtistHostname(request: NextRequest, host: string) {
   const pathname = request.nextUrl.pathname;
   if (pathname === "/__sites" || pathname.startsWith("/__sites/")) {
@@ -138,16 +143,16 @@ async function routeArtistHostname(request: NextRequest, host: string) {
       : new NextResponse(null, { status: 404 });
   }
 
-  const requestHeaders = sanitizedRequestHeaders(request);
-  requestHeaders.set(INTERNAL_SITE_ID_HEADER, resolved.siteId);
-  requestHeaders.set(INTERNAL_SITE_HOST_HEADER, normalizeRequestHostname(host));
-
+  // Reuse the already-public, published Sites runtime as the rewrite destination.
+  // `/sites/**` is a global system path, so a rewritten request cannot re-enter
+  // hostname routing and trip the direct `/__sites/**` protection. The hostname
+  // was resolved to one published Site before this point and site slugs are
+  // globally unique, so the destination remains deterministic and artist-safe.
   const rewriteUrl = request.nextUrl.clone();
-  const suffix = pathname === "/" ? "" : pathname;
-  rewriteUrl.pathname = `/__sites/${resolved.siteId}${suffix}`;
+  rewriteUrl.pathname = publishedSiteRewritePath(resolved.siteSlug, pathname);
 
   return NextResponse.rewrite(rewriteUrl, {
-    request: { headers: requestHeaders },
+    request: { headers: sanitizedRequestHeaders(request) },
   });
 }
 
