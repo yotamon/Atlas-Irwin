@@ -1,0 +1,44 @@
+/*
+ * The public artist site and Ensemblis intentionally share one Next.js root.
+ * This route-only layer prevents public-site document chrome from affecting
+ * Studio rendering without duplicating the application root.
+ */
+
+html:has(.studio-root),
+body:has(.studio-root) {
+  background: #080b09;
+  color: #f6f8f4;
+  color-scheme: dark;
+}
+
+body:has(.studio-root) {
+  transition: none;
+}
+
+body:has(.studio-root)::before,
+body:has(.studio-root)::after {
+  content: none;
+  display: none;
+}
+
+html:has(.studio-root) {
+  scrollbar-width: thin;
+  scrollbar-color: #35443b transparent;
+}
+
+body:has(.studio-root)::-webkit-scrollbar {
+  display: block;
+  width: 8px;
+  height: 8px;
+}
+
+body:has(.studio-root)::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+body:has(.studio-root)::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: #35443b;
+  background-clip: padding-box;
+}
