@@ -11,7 +11,7 @@ import {
 import { attachContentMediaV2 } from "@/app/studio/content-actions-v2";
 import { attachReleaseMasterFromMedia, createVaultTrackFromMedia } from "@/app/studio/growth-media-actions-safe";
 import { createClient } from "@/lib/supabase/client";
-import { uploadResumableMedia } from "@/lib/supabase/resumable-upload";
+import { ResumableUploadAuthorizationError, uploadResumableMedia } from "@/lib/supabase/resumable-upload";
 import {
   compatibleMediaTypes,
   defaultMediaType,
@@ -137,7 +137,6 @@ export function MediaUploader({
     setBusy(true);
     const supabase = createClient();
     const limit = PUBLIC_LIMIT;
-    let resumableAccessToken: string | null = null;
     for (let index = 0; index < items.length; index += 1) {
       const item = items[index];
       if (item.state === "done") continue;
@@ -175,16 +174,9 @@ export function MediaUploader({
         }
 
         if (resumable) {
-          if (!resumableAccessToken) {
-            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-            if (sessionError) throw sessionError;
-            resumableAccessToken = sessionData.session?.access_token ?? null;
-            if (!resumableAccessToken) throw new Error("Your Studio session expired. Sign in again before resuming this upload.");
-          }
           await uploadResumableMedia({
             file: item.file,
             target: uploadTarget,
-            accessToken: resumableAccessToken,
             onProgress(progress) {
               const percent = Math.round(progress * 100);
               setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? {
@@ -261,7 +253,8 @@ export function MediaUploader({
                   : "Added to the library.",
         } : entry));
       } catch (error) {
-        if (uploadTarget && !registered && !resumable) {
+        const authorizationExpired = error instanceof ResumableUploadAuthorizationError;
+        if (uploadTarget && !registered && (!resumable || authorizationExpired)) {
           const discardForm = new FormData();
           discardForm.set("bucket_name", uploadTarget.bucketName);
           discardForm.set("storage_path", uploadTarget.storagePath);
@@ -270,10 +263,13 @@ export function MediaUploader({
         setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? {
           ...entry,
           state: "error",
-          target: resumable ? uploadTarget ?? entry.target : undefined,
-          message: resumable
-            ? "Upload interrupted after automatic retries. Retry to resume from the last confirmed chunk."
-            : error instanceof Error ? error.message : "Upload failed. Try again.",
+          progress: authorizationExpired ? undefined : entry.progress,
+          target: resumable && !authorizationExpired ? uploadTarget ?? entry.target : undefined,
+          message: authorizationExpired
+            ? "Upload authorization expired. Retry to prepare a fresh resumable upload."
+            : resumable
+              ? "Upload interrupted after automatic retries. Retry to resume from the last confirmed chunk."
+              : error instanceof Error ? error.message : "Upload failed. Try again.",
         } : entry));
       }
     }
