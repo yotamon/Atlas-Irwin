@@ -1,6 +1,6 @@
 begin;
 
-select plan(13);
+select plan(15);
 
 insert into auth.users (id,email,aud,role,created_at,updated_at)
 values ('16000000-0000-0000-0000-000000000001','moment-execution@example.com','authenticated','authenticated',now(),now());
@@ -37,59 +37,99 @@ insert into public.track_lyric_moments(
 );
 
 select is(
-  (select count(*)::integer from public.moments where track_id='56000000-0000-0000-0000-000000000001' and source_mode='fused' and state='proposed'),
-  1,
-  'overlapping independent audio and lyric evidence automatically materializes a fused Moment'
+  (select count(*)::integer from public.moments where track_id='56000000-0000-0000-0000-000000000001' and source_mode in ('audio','lyrics') and state='proposed'),
+  2,
+  'independent audio and lyric evidence remain durable raw Moment candidates'
 );
 select is(
-  (select concat(source_start_ms,':',source_end_ms) from public.moments where track_id='56000000-0000-0000-0000-000000000001' and source_mode='fused'),
+  (select count(*)::integer from public.moments where track_id='56000000-0000-0000-0000-000000000001' and source_mode='fused' and state='proposed'),
+  0,
+  'cross-source agreement no longer multiplies artist-facing fused proposals'
+);
+select is(
+  (select concat(source_start_ms,':',source_end_ms) from public.moments where track_id='56000000-0000-0000-0000-000000000001' and source_mode='audio'),
+  '10000:20000',
+  'audio raw evidence keeps canonical Track Intelligence timing'
+);
+select is(
+  (select concat(source_start_ms,':',source_end_ms) from public.moments where track_id='56000000-0000-0000-0000-000000000001' and source_mode='lyrics'),
   '12000:18000',
-  'fused source timing is the shared evidence intersection'
-);
-select ok(
-  (select source_candidate_id is not null and lyric_moment_id is not null from public.moments where track_id='56000000-0000-0000-0000-000000000001' and source_mode='fused'),
-  'fused Moment keeps both canonical source references'
-);
-select ok(
-  (select confidence > 0.84 from public.moments where track_id='56000000-0000-0000-0000-000000000001' and source_mode='fused'),
-  'agreement produces a confidence lift over the average individual evidence'
+  'lyric raw evidence keeps canonical lyric timing'
 );
 
+-- Legacy/provisional fused rows may exist from older recipes. Refresh retires machine proposals rather
+-- than deleting them, while approved historical lineage is intentionally preserved.
+insert into public.moments(
+  owner_id,artist_id,release_id,track_id,start_ms,end_ms,source_start_ms,source_end_ms,
+  moment_type,label,source_mode,source_fingerprint,confidence,
+  track_analysis_version,track_analysis_audio_sha256,source_candidate_id,lyric_moment_id,lyrics_version,evidence
+) values (
+  '16000000-0000-0000-0000-000000000001','36000000-0000-0000-0000-000000000001','46000000-0000-0000-0000-000000000001','56000000-0000-0000-0000-000000000001',
+  12000,18000,12000,18000,'legacy_fused','Legacy fused proposal','fused','legacy-fused-proposed',0.9,
+  3,'execution-sha','hook-exec','67000000-0000-0000-0000-000000000001',1,'{"source_modes":["audio","lyrics"]}'::jsonb
+);
+select private.refresh_fused_track_moments('56000000-0000-0000-0000-000000000001');
+select is(
+  (select state::text from public.moments where source_fingerprint='legacy-fused-proposed'),
+  'superseded',
+  'refresh retires legacy machine-proposed fused rows without deleting history'
+);
+
+insert into public.moments(
+  owner_id,artist_id,release_id,track_id,start_ms,end_ms,source_start_ms,source_end_ms,
+  moment_type,label,source_mode,source_fingerprint,confidence,
+  track_analysis_version,track_analysis_audio_sha256,source_candidate_id,lyric_moment_id,lyrics_version,evidence,
+  state,reviewed_by,reviewed_at
+) values (
+  '16000000-0000-0000-0000-000000000001','36000000-0000-0000-0000-000000000001','46000000-0000-0000-0000-000000000001','56000000-0000-0000-0000-000000000001',
+  12000,18000,12000,18000,'legacy_fused','Approved legacy fused history','fused','legacy-fused-approved',0.9,
+  3,'execution-sha','hook-exec','67000000-0000-0000-0000-000000000001',1,'{"source_modes":["audio","lyrics"]}'::jsonb,
+  'approved','16000000-0000-0000-0000-000000000001',now()
+);
+select private.refresh_fused_track_moments('56000000-0000-0000-0000-000000000001');
+select is(
+  (select state::text from public.moments where source_fingerprint='legacy-fused-approved'),
+  'approved',
+  'refresh preserves artist-approved historical fused lineage'
+);
+
+-- The application curator chooses a representative raw Moment, adjusts only its effective window when
+-- needed, and approval makes that exact canonical window the durable source for downstream execution.
 update public.moments
 set state='approved', reviewed_by='16000000-0000-0000-0000-000000000001', reviewed_at=now()
-where track_id='56000000-0000-0000-0000-000000000001' and source_mode='fused';
+where track_id='56000000-0000-0000-0000-000000000001' and source_mode='audio';
 
-insert into public.campaigns(id,owner_id,release_id,name)
-values ('76000000-0000-0000-0000-000000000001','16000000-0000-0000-0000-000000000001','46000000-0000-0000-0000-000000000001','Execution Campaign');
+insert into public.campaigns(id,owner_id,artist_id,release_id,name)
+values ('76000000-0000-0000-0000-000000000001','16000000-0000-0000-0000-000000000001','36000000-0000-0000-0000-000000000001','46000000-0000-0000-0000-000000000001','Execution Campaign');
 
-insert into public.content_items(id,owner_id,release_id,title,platform,format,moment_id)
-select '86000000-0000-0000-0000-000000000001','16000000-0000-0000-0000-000000000001','46000000-0000-0000-0000-000000000001','Moment Creative','Instagram','Reel',id
-from public.moments where track_id='56000000-0000-0000-0000-000000000001' and source_mode='fused';
+insert into public.content_items(id,owner_id,artist_id,release_id,title,platform,format,moment_id)
+select '86000000-0000-0000-0000-000000000001','16000000-0000-0000-0000-000000000001','36000000-0000-0000-0000-000000000001','46000000-0000-0000-0000-000000000001','Moment Creative','Instagram','Reel',id
+from public.moments where track_id='56000000-0000-0000-0000-000000000001' and source_mode='audio' and state='approved';
 select is(
   (select concat(audio_timestamp_start,':',audio_timestamp_end) from public.content_items where id='86000000-0000-0000-0000-000000000001'),
-  '12:18',
-  'attaching an approved Moment captures its exact approved window on new content'
+  '10:20',
+  'attaching an approved canonical Moment captures its exact approved window on new content'
 );
 
 select throws_ok(
-  $$insert into public.content_items(owner_id,release_id,title,platform,format,moment_id)
-    select '16000000-0000-0000-0000-000000000001','46000000-0000-0000-0000-000000000002','Wrong Release','Instagram','Reel',id
-    from public.moments where track_id='56000000-0000-0000-0000-000000000001' and source_mode='fused'$$,
+  $$insert into public.content_items(owner_id,artist_id,release_id,title,platform,format,moment_id)
+    select '16000000-0000-0000-0000-000000000001','36000000-0000-0000-0000-000000000001','46000000-0000-0000-0000-000000000002','Wrong Release','Instagram','Reel',id
+    from public.moments where track_id='56000000-0000-0000-0000-000000000001' and source_mode='audio' and state='approved'$$,
   'P0001','Content release must match Moment release',
   'content cannot attach an approved Moment from another Release'
 );
 
-insert into public.campaign_moments(owner_id,campaign_id,moment_id,role)
-select '16000000-0000-0000-0000-000000000001','76000000-0000-0000-0000-000000000001',id,'primary'
-from public.moments where track_id='56000000-0000-0000-0000-000000000001' and source_mode='fused';
+insert into public.campaign_moments(owner_id,artist_id,campaign_id,moment_id,role)
+select '16000000-0000-0000-0000-000000000001','36000000-0000-0000-0000-000000000001','76000000-0000-0000-0000-000000000001',id,'primary'
+from public.moments where track_id='56000000-0000-0000-0000-000000000001' and source_mode='audio' and state='approved';
 select is(
   (select count(*)::integer from public.campaign_moments where campaign_id='76000000-0000-0000-0000-000000000001' and is_active),
   1,
-  'campaign explicitly references the approved Moment'
+  'campaign explicitly references the approved canonical Moment'
 );
 
-insert into public.metric_snapshots(owner_id,date,platform,release_id,content_item_id,views,saves,follows,link_clicks)
-values ('16000000-0000-0000-0000-000000000001',current_date,'Instagram','46000000-0000-0000-0000-000000000001','86000000-0000-0000-0000-000000000001',1000,40,12,31);
+insert into public.metric_snapshots(owner_id,artist_id,date,platform,release_id,content_item_id,views,saves,follows,link_clicks)
+values ('16000000-0000-0000-0000-000000000001','36000000-0000-0000-0000-000000000001',current_date,'Instagram','46000000-0000-0000-0000-000000000001','86000000-0000-0000-0000-000000000001',1000,40,12,31);
 select is(
   (select concat(content_items,':',views,':',saves,':',follows,':',link_clicks) from public.moment_performance_rollups where release_id='46000000-0000-0000-0000-000000000001' and moment_id=(select moment_id from public.content_items where id='86000000-0000-0000-0000-000000000001')),
   '1:1000:40:12:31',
@@ -97,17 +137,17 @@ select is(
 );
 
 update public.moments set state='superseded'
-where track_id='56000000-0000-0000-0000-000000000001' and source_mode='fused';
+where track_id='56000000-0000-0000-0000-000000000001' and source_mode='audio';
 select is(
   (select is_active from public.campaign_moments where campaign_id='76000000-0000-0000-0000-000000000001'),
   false,
-  'superseding a Moment immediately deactivates live campaign usage'
+  'superseding a canonical Moment immediately deactivates live campaign usage'
 );
 
 select throws_ok(
-  $$insert into public.content_items(owner_id,release_id,title,platform,format,moment_id)
-    select '16000000-0000-0000-0000-000000000001','46000000-0000-0000-0000-000000000001','Stale Creative','Instagram','Reel',id
-    from public.moments where track_id='56000000-0000-0000-0000-000000000001' and source_mode='fused'$$,
+  $$insert into public.content_items(owner_id,artist_id,release_id,title,platform,format,moment_id)
+    select '16000000-0000-0000-0000-000000000001','36000000-0000-0000-0000-000000000001','46000000-0000-0000-0000-000000000001','Stale Creative','Instagram','Reel',id
+    from public.moments where track_id='56000000-0000-0000-0000-000000000001' and source_mode='audio'$$,
   'P0001','Content may only originate from an approved Moment',
   'superseded Moments cannot start new content execution'
 );
@@ -127,9 +167,9 @@ select throws_ok(
 );
 
 select is(
-  (select count(*)::integer from public.moments where track_id='56000000-0000-0000-0000-000000000001' and source_mode='fused'),
-  1,
-  'superseded fused Moment history is retained rather than deleted'
+  (select count(*)::integer from public.moments where track_id='56000000-0000-0000-0000-000000000001' and state='superseded'),
+  2,
+  'superseded raw and legacy fused Moment history is retained rather than deleted'
 );
 
 select * from finish();
