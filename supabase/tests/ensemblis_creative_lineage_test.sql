@@ -16,13 +16,21 @@ insert into public.releases(id,owner_id,artist_id,title,slug)
 values ('48000000-0000-0000-0000-000000000001','18000000-0000-0000-0000-000000000001','38000000-0000-0000-0000-000000000001','Creative Release','creative-release');
 insert into public.tracks(id,release_id,owner_id,title,duration,audio_url)
 values ('58000000-0000-0000-0000-000000000001','48000000-0000-0000-0000-000000000001','18000000-0000-0000-0000-000000000001','Creative Track',120,'https://example.com/creative.wav');
+insert into public.track_music_intelligence(
+  track_id,owner_id,analysis_version,engine,quality,semantic_structure,source_audio_url,audio_sha256,analysis
+) values (
+  '58000000-0000-0000-0000-000000000001','18000000-0000-0000-0000-000000000001',1,'test','full',true,
+  'https://example.com/creative.wav','creative-sha','{}'::jsonb
+);
 insert into public.moments(
   id,owner_id,artist_id,release_id,track_id,start_ms,end_ms,source_start_ms,source_end_ms,
-  moment_type,label,source_mode,source_fingerprint,purpose_tags,hook_score,vocal_score,confidence,state
+  moment_type,label,source_mode,source_candidate_id,track_analysis_version,source_fingerprint,purpose_tags,hook_score,vocal_score,confidence,state
 ) values (
   '68000000-0000-0000-0000-000000000001','18000000-0000-0000-0000-000000000001','38000000-0000-0000-0000-000000000001',
   '48000000-0000-0000-0000-000000000001','58000000-0000-0000-0000-000000000001',12000,20000,12000,20000,
-  'hook','Creative Moment','audio','creative-moment',array['short_form_hook'],0.9,0.8,0.9,'approved'
+  'hook','Creative Moment','audio','creative-moment',1,
+  encode(digest(concat_ws('|','audio','58000000-0000-0000-0000-000000000001','1','creative-sha','creative-moment','12000','20000'),'sha256'),'hex'),
+  array['short_form_hook'],0.9,0.8,0.9,'approved'
 );
 insert into public.campaigns(id,owner_id,artist_id,release_id,name)
 values ('78000000-0000-0000-0000-000000000001','18000000-0000-0000-0000-000000000001','38000000-0000-0000-0000-000000000001','48000000-0000-0000-0000-000000000001','Creative Campaign');
@@ -49,9 +57,7 @@ select is(
 
 create temporary table original_recipe as
 select creative_recipe_id as id from public.content_items where id='88000000-0000-0000-0000-000000000001';
-update public.content_items
-set caption='Edited caption'
-where id='88000000-0000-0000-0000-000000000001';
+update public.content_items set caption='Edited caption' where id='88000000-0000-0000-0000-000000000001';
 select isnt(
   (select creative_recipe_id from public.content_items where id='88000000-0000-0000-0000-000000000001'),
   (select id from original_recipe),
@@ -69,10 +75,7 @@ insert into public.content_variants(
   '89000000-0000-0000-0000-000000000001','18000000-0000-0000-0000-000000000001','38000000-0000-0000-0000-000000000001',
   '88000000-0000-0000-0000-000000000001','B','A vocal cold-open improves save intent','Voice first','Variant caption','Save this','portrait crop','0.5s vocal open',false
 );
-select ok(
-  (select creative_recipe_id is not null from public.content_variants where id='89000000-0000-0000-0000-000000000001'),
-  'each creative variant gets its own causal recipe snapshot'
-);
+select ok((select creative_recipe_id is not null from public.content_variants where id='89000000-0000-0000-0000-000000000001'),'each creative variant gets its own causal recipe snapshot');
 
 insert into public.publication_jobs(
   id,owner_id,artist_id,campaign_id,content_item_id,content_variant_id,platform,adapter,status,approval_status,request_payload
