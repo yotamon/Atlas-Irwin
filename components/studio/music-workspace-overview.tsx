@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
 import { MusicIntelligencePreview } from "@/components/studio/music-intelligence-preview";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
@@ -76,8 +77,9 @@ export function MusicWorkspaceOverview({
   for (const track of tracks) {
     trackCountByRelease.set(track.release_id, (trackCountByRelease.get(track.release_id) ?? 0) + 1);
   }
-  const growVaultHref = `${ensemblisArtistHref("/studio/growth", artistId)}#vault`;
+  const portfolioHref = `${ensemblisArtistHref("/studio/growth?view=portfolio", artistId)}#vault`;
   const createHref = ensemblisArtistHref("/studio/music?view=generate", artistId);
+  const trackHref = (trackId: string) => ensemblisArtistHref(`/studio/music/${trackId}`, artistId);
 
   return (
     <div className="music-workspace-overview">
@@ -123,12 +125,12 @@ export function MusicWorkspaceOverview({
               ) : (
                 <div className="v2-calm-state compact">
                   <strong>{topCandidate.track.audio_url ? "Master ready for intelligence." : "No master attached yet."}</strong>
-                  <p>{topCandidate.track.audio_url ? "Open the Vault to run Track Intelligence before making the next release decision." : "Attach the canonical master in the Vault so Ensemblis can map structure, hooks and creative moments."}</p>
+                  <p>{topCandidate.track.audio_url ? "Open the track to inspect source context and manage its release decision." : "Attach the canonical master in Portfolio so Ensemblis can map structure, hooks and creative moments."}</p>
                 </div>
               )}
               <div className="actions">
-                <Link className="button primary" href={growVaultHref}>Open track decision</Link>
-                <Link className="button" href={createHref}>Create another track</Link>
+                <Link className="button primary" href={trackHref(topCandidate.track.id)}>Open track</Link>
+                <Link className="button" href={portfolioHref}>Edit portfolio signals</Link>
               </div>
             </>
           ) : (
@@ -172,7 +174,7 @@ export function MusicWorkspaceOverview({
             <span className="section-label">Unreleased music</span>
             <h2>{remaining.length ? `${remaining.length} more track${remaining.length === 1 ? "" : "s"}` : topCandidate ? "Portfolio is focused" : "Your unreleased vault"}</h2>
           </div>
-          <Link href={growVaultHref}>Manage Vault</Link>
+          <Link href={portfolioHref}>Manage Portfolio</Link>
         </div>
         {remaining.length ? (
           <div className="music-track-list">
@@ -185,7 +187,7 @@ export function MusicWorkspaceOverview({
                 </span>
                 {item.track.audio_url ? <audio controls preload="metadata" src={item.track.audio_url} /> : <span className="music-track-missing">No master</span>}
                 <span className={`music-score small${item.eligible ? "" : " is-blocked"}`}>{item.eligible ? Math.round(item.score) : "Hold"}</span>
-                <Link className="music-row-link" href={growVaultHref}>Open →</Link>
+                <Link className="music-row-link" href={trackHref(item.track.id)}>Open →</Link>
               </div>
             ))}
           </div>
