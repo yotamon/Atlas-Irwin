@@ -90,9 +90,6 @@ function addHostAndWwwVariant(hosts: Set<string>, input: string) {
 function legacyPublicHosts() {
   const hosts = new Set<string>();
 
-  // getSiteUrl() is the canonical transition-era public root. It has a safe repo
-  // default, so deploying routing code before domain cutover cannot turn the live
-  // legacy artist site into an unknown-host 404 merely because an env var is absent.
   try {
     addHostAndWwwVariant(hosts, new URL(getSiteUrl()).hostname);
   } catch {
@@ -129,7 +126,6 @@ async function routeArtistHostname(request: NextRequest, host: string) {
   try {
     resolved = await resolveSiteHostForProxy(host);
   } catch {
-    // A routing backend failure must never fall through to another artist's root.
     if (!isTrustedNonTenantHost(host)) {
       return new NextResponse("Site temporarily unavailable.", { status: 503 });
     }
@@ -184,7 +180,6 @@ export async function proxy(request: NextRequest) {
   const requestedArtistId = isStudio ? selectedArtistFromRequest(request) : null;
 
   if (requestedArtistId) {
-    // This value is still untrusted. ArtistContext validates membership before use.
     request.cookies.set(ENSEMBLIS_ACTIVE_ARTIST_COOKIE, requestedArtistId);
   }
 
@@ -268,5 +263,11 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.[^/]+$).*)"],
+  matcher: [
+    "/robots.txt",
+    "/sitemap.xml",
+    "/manifest.webmanifest",
+    "/favicon.ico",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.[^/]+$).*)",
+  ],
 };
