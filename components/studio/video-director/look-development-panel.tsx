@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
+import { approveCreativeMemoryLookReferences } from "@/app/studio/creative-memory-video-actions";
 import {
   approveAndGenerateLookDevelopment,
-  approveLookReferences,
   refreshPendingVideoGenerations,
 } from "@/app/studio/video-pipeline-actions";
 import {
@@ -162,7 +162,7 @@ export function LookDevelopmentPanel({ data }: { data: VideoWorkspaceData }) {
 
       {data.project.status === "look_review" ? (
         activeComplete.length ? (
-          <form action={approveLookReferences} className="video-reference-picker">
+          <form action={approveCreativeMemoryLookReferences} className="video-reference-picker">
             <div>
               <h3>Which frames define the film?</h3>
               <p>Rejected frames are excluded automatically. Select the smallest set that clearly establishes materials, palette, lighting and recurring objects.</p>
