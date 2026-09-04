@@ -9,7 +9,7 @@ async function source(path) {
 test("UX polish styles load after the Ensemblis compatibility layers", async () => {
   const layout = await source("app/studio/layout.tsx");
   const shell = layout.indexOf('import "./ensemblis-shell.css"');
-  const polishFiles = ["ux-polish.css", "music-polish.css", "release-polish.css", "create-polish.css", "growth-polish.css", "audience-polish.css", "library-polish.css", "inbox-polish.css", "shared-interactions.css", "loading-polish.css", "object-workspace-polish.css"];
+  const polishFiles = ["ux-polish.css", "music-polish.css", "release-polish.css", "create-polish.css", "growth-polish.css", "audience-polish.css", "library-polish.css", "inbox-polish.css", "shared-interactions.css", "loading-polish.css", "object-workspace-polish.css", "production-polish.css", "responsive-polish.css"];
   assert.ok(shell >= 0);
   for (const file of polishFiles) {
     const index = layout.indexOf(`import "./${file}"`);
@@ -43,6 +43,19 @@ test("global command search is keyboard accessible, artist aware and object awar
   assert.ok(search.includes("resolveArtistContext"));
   assert.ok(search.includes('.eq("artist_id", artist.artistId)'));
   for (const sourceName of ['from("releases")', 'from("track_vault")', 'from("campaigns")', 'from("content_items")']) assert.ok(search.includes(sourceName));
+});
+
+test("compact Studio navigation keeps accessible names and coarse-pointer targets", async () => {
+  const navigation = await source("components/studio/sidebar-navigation.tsx");
+  const sidebar = await source("components/studio/sidebar.tsx");
+  const responsive = await source("app/studio/responsive-polish.css");
+  assert.ok(navigation.includes("aria-label={label}"));
+  assert.ok(navigation.includes("title={label}"));
+  assert.ok(sidebar.includes('aria-label="Add unreleased tracks"'));
+  assert.ok(sidebar.includes('aria-label="Sign out"'));
+  assert.ok(responsive.includes("@media (pointer: coarse)"));
+  assert.ok(responsive.includes("min-height: 2.75rem"));
+  assert.ok(responsive.includes(".studio-root .studio-nav-text"));
 });
 
 test("protected Studio routes have product-specific transition feedback", async () => {
@@ -95,6 +108,15 @@ test("campaign workspace uses Ensemblis chrome without Atlas-era editorial styli
   assert.ok(css.includes("var(--en-accent-soft)"));
   for (const legacyColor of ["#0c100e", "#d7ccb3", "#ddd2ba", "#d9cfb8", "#d8cdb5"]) assert.equal(css.includes(legacyColor), false, `${legacyColor} leaked into Campaign chrome`);
   assert.equal(css.includes("heroCard::after"), false, "decorative orbit styling should not define Campaign hierarchy");
+});
+
+test("Production keeps the selected creative dominant and technical controls secondary", async () => {
+  const css = await source("app/studio/production-polish.css");
+  assert.ok(css.includes(".v2-production-layout"));
+  assert.ok(css.includes(".v2-production-editor"));
+  assert.ok(css.includes(".v2-production-list > a.active"));
+  assert.ok(css.includes(".studio-advanced-details"));
+  assert.ok(css.includes("@media (max-width: 960px)"));
 });
 
 test("core workspaces follow the outcome-first UX information architecture", async () => {
