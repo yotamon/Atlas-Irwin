@@ -1,12 +1,14 @@
 .shell {
   display: grid;
-  gap: 1.5rem;
+  gap: clamp(1.4rem, 3vw, 2.3rem);
+  width: min(100%, 90rem);
+  margin: 0 auto;
 }
 
 .heroGrid {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(18rem, 0.55fr);
-  gap: 1rem;
+  grid-template-columns: minmax(0, 1.4fr) minmax(18rem, 0.6fr);
+  gap: clamp(1rem, 2vw, 1.4rem);
 }
 
 .heroCard,
@@ -21,44 +23,33 @@
 .timelineItem,
 .metricForm {
   border: 1px solid var(--s-line);
-  background: #0c100e;
+  background: color-mix(in srgb, var(--en-surface) 94%, transparent);
 }
 
 .heroCard {
-  position: relative;
-  overflow: hidden;
   min-height: 15rem;
-  padding: clamp(1.2rem, 3vw, 2.2rem);
-}
-
-.heroCard::after {
-  content: "";
-  position: absolute;
-  width: 16rem;
-  height: 16rem;
-  right: -5rem;
-  bottom: -8rem;
-  border: 1px solid color-mix(in srgb, var(--s-accent) 45%, transparent);
-  border-radius: 50%;
-  opacity: 0.45;
+  padding: clamp(1.25rem, 3vw, 2.2rem);
+  border-radius: var(--en-radius-lg);
+  background: color-mix(in srgb, var(--en-surface-raised) 62%, transparent);
 }
 
 .eyebrow,
 .miniLabel {
-  color: var(--s-accent);
-  font-size: 0.62rem;
-  font-weight: 800;
-  letter-spacing: 0.11em;
+  color: var(--en-muted);
+  font-size: 0.61rem;
+  font-weight: 760;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .heroCard h1,
 .heroCard h2 {
-  max-width: 18ch;
+  max-width: 20ch;
   margin: 0.55rem 0 0.8rem;
-  font: 400 clamp(2.1rem, 5vw, 5.4rem) / 0.86 var(--font-heading);
-  letter-spacing: 0.025em;
-  text-transform: uppercase;
+  color: var(--en-ink);
+  font: 700 clamp(2.1rem, 5vw, 4.5rem) / 0.98 var(--font-body);
+  letter-spacing: -0.055em;
+  text-transform: none;
 }
 
 .heroCard p {
@@ -84,13 +75,15 @@
   min-height: 1.8rem;
   padding: 0.35rem 0.55rem;
   border: 1px solid var(--s-line);
-  color: #d7ccb3;
+  border-radius: 999px;
+  color: var(--en-muted);
   font-size: 0.62rem;
-  letter-spacing: 0.035em;
+  letter-spacing: 0.015em;
 }
 
 .statusChip {
   border-color: color-mix(in srgb, var(--s-accent) 42%, var(--s-line));
+  background: var(--en-accent-soft);
   color: var(--s-accent);
 }
 
@@ -99,6 +92,8 @@
   align-content: start;
   gap: 1rem;
   padding: 1rem;
+  border-radius: var(--en-radius-lg);
+  background: color-mix(in srgb, var(--en-surface-raised) 48%, transparent);
 }
 
 .controlGroup {
@@ -127,15 +122,17 @@
 .statGrid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  border-top: 1px solid var(--s-line);
-  border-left: 1px solid var(--s-line);
+  border-block: 1px solid var(--s-line);
 }
 
 .stat {
   min-height: 6.5rem;
-  padding: 0.9rem;
+  padding: 0.9rem 1rem;
   border-right: 1px solid var(--s-line);
-  border-bottom: 1px solid var(--s-line);
+}
+
+.stat:last-child {
+  border-right: 0;
 }
 
 .stat span {
@@ -149,7 +146,8 @@
   display: block;
   margin-top: 0.35rem;
   color: var(--s-ink);
-  font: 400 clamp(1.8rem, 3vw, 3rem) var(--font-heading);
+  font: 700 clamp(1.8rem, 3vw, 2.7rem) var(--font-body);
+  letter-spacing: -0.045em;
 }
 
 .stat small {
@@ -170,8 +168,10 @@
 
 .sectionHead h2 {
   margin: 0.22rem 0 0;
-  font: 400 clamp(1.75rem, 3vw, 3.15rem) / 0.9 var(--font-heading);
-  text-transform: uppercase;
+  color: var(--en-ink);
+  font: 690 clamp(1.55rem, 3vw, 2.45rem) / 1 var(--font-body);
+  letter-spacing: -0.045em;
+  text-transform: none;
 }
 
 .sectionHead p {
@@ -184,31 +184,37 @@
 
 .panel {
   padding: 1rem;
+  border-radius: var(--en-radius);
 }
 
 .phaseRail {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  border-top: 1px solid var(--s-line);
-  border-left: 1px solid var(--s-line);
+  border-block: 1px solid var(--s-line);
 }
 
 .phase {
   position: relative;
   min-height: 8.5rem;
   padding: 0.8rem;
-  border-top: 0;
-  border-left: 0;
+  border: 0;
+  border-right: 1px solid var(--s-line);
+  background: transparent;
+}
+
+.phase:last-child {
+  border-right: 0;
 }
 
 .phaseActive {
-  background: color-mix(in srgb, var(--s-accent) 7%, #0c100e);
+  background: var(--en-accent-soft);
   box-shadow: inset 0 2px var(--s-accent);
 }
 
 .phase strong {
   display: block;
   margin: 0.35rem 0;
+  color: var(--en-ink);
   font-size: 0.75rem;
 }
 
@@ -229,12 +235,12 @@
 .strategyCopy {
   padding: 1rem;
   border-left: 2px solid var(--s-accent);
-  background: #090c0a;
+  background: color-mix(in srgb, var(--en-bg-elevated) 82%, transparent);
 }
 
 .strategyCopy p {
   margin: 0;
-  color: #ddd2ba;
+  color: var(--en-ink);
   font-size: 0.78rem;
   line-height: 1.7;
 }
@@ -256,6 +262,7 @@
 
 .experiment {
   padding: 1rem;
+  border-radius: var(--en-radius);
 }
 
 .experimentHead {
@@ -271,6 +278,7 @@
 .queueItem h4,
 .timelineItem h4 {
   margin: 0.25rem 0 0;
+  color: var(--en-ink);
   font-size: 0.88rem;
 }
 
@@ -289,8 +297,8 @@
   margin-top: 0.75rem;
   padding: 0.65rem;
   border-left: 2px solid var(--s-accent);
-  background: #090c0a;
-  color: #d9cfb8;
+  background: color-mix(in srgb, var(--en-bg-elevated) 82%, transparent);
+  color: var(--en-ink);
   font-size: 0.65rem;
 }
 
@@ -305,6 +313,7 @@
   display: grid;
   gap: 0.6rem;
   padding: 0.75rem;
+  border-radius: var(--en-radius-sm);
 }
 
 .variantWinner {
@@ -313,7 +322,7 @@
 }
 
 .variantHook {
-  color: #f0e5cd !important;
+  color: var(--en-ink) !important;
   font-size: 0.73rem !important;
   font-weight: 700;
 }
@@ -347,7 +356,7 @@
 
 .signal {
   padding: 0.45rem;
-  background: #090c0a;
+  background: color-mix(in srgb, var(--en-bg-elevated) 82%, transparent);
 }
 
 .signal span {
@@ -369,10 +378,11 @@
   gap: 0.8rem;
   align-items: start;
   padding: 0.8rem;
+  border-radius: var(--en-radius-sm);
 }
 
 .timelineDate {
-  color: #d8cdb5;
+  color: var(--en-muted);
   font-size: 0.63rem;
 }
 
@@ -386,12 +396,14 @@
 
 .learningConfidence {
   color: var(--s-accent);
-  font: 400 1.5rem var(--font-heading);
+  font: 700 1.35rem var(--font-body);
+  letter-spacing: -0.04em;
 }
 
 .metricForm {
   margin-top: 0.7rem;
   padding: 0.7rem;
+  border-radius: var(--en-radius-sm);
 }
 
 .metricGrid {
@@ -426,14 +438,17 @@
   grid-template-columns: 6rem minmax(0, 1fr);
   gap: 0.85rem;
   padding: 0.85rem;
+  border-radius: var(--en-radius);
   color: inherit;
   text-decoration: none;
-  transition: transform 140ms ease, border-color 140ms ease;
+  transition: border-color 140ms ease, background-color 140ms ease;
 }
 
-.campaignCard:hover {
-  transform: translateY(-2px);
+.campaignCard:hover,
+.campaignCard:focus-visible {
   border-color: color-mix(in srgb, var(--s-accent) 48%, var(--s-line));
+  background: var(--en-surface-hover);
+  outline: none;
 }
 
 .campaignArt,
@@ -441,7 +456,8 @@
   width: 6rem;
   aspect-ratio: 1;
   object-fit: cover;
-  background: #111612;
+  border-radius: var(--en-radius-sm);
+  background: var(--en-surface-raised);
 }
 
 .campaignMeta {
@@ -464,13 +480,16 @@
   min-height: 16rem;
   padding: 2rem;
   border: 1px dashed var(--s-line);
+  border-radius: var(--en-radius);
   text-align: center;
 }
 
 .emptyBrain h2 {
   margin: 0.45rem 0;
-  font: 400 clamp(2rem, 4vw, 4rem) var(--font-heading);
-  text-transform: uppercase;
+  color: var(--en-ink);
+  font: 690 clamp(1.8rem, 4vw, 3rem) var(--font-body);
+  letter-spacing: -0.045em;
+  text-transform: none;
 }
 
 .emptyBrain p {
@@ -495,6 +514,8 @@
   .campaignGrid { grid-template-columns: 1fr 1fr; }
   .phaseRail,
   .variantGrid { grid-template-columns: 1fr; }
+  .phase { border-right: 0; border-bottom: 1px solid var(--s-line); }
+  .phase:last-child { border-bottom: 0; }
   .controlCard { grid-template-columns: 1fr; }
   .timelineItem { grid-template-columns: 1fr; }
   .queueItem,
@@ -509,6 +530,8 @@
   .campaignGrid,
   .metricGrid,
   .createGrid { grid-template-columns: 1fr; }
+  .stat { border-right: 0; border-bottom: 1px solid var(--s-line); }
+  .stat:last-child { border-bottom: 0; }
   .campaignCard { grid-template-columns: 4.75rem minmax(0, 1fr); }
   .campaignArt,
   .campaignArtEmpty { width: 4.75rem; }
