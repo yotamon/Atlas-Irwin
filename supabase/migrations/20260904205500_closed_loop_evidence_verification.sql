@@ -83,7 +83,7 @@ where ms.content_item_id is not null
       and pj.platform = ms.platform::text
       and pj.external_post_id = ms.external_object_id
       and pj.content_item_id = ms.content_item_id
-      and (ms.content_variant_id is null or pj.content_variant_id = ms.content_variant_id)
+      and pj.content_variant_id is not distinct from ms.content_variant_id
   );
 
 grant select on public.verified_moment_learning_evidence to authenticated;
@@ -99,6 +99,6 @@ where e.creative_recipe_id is not null
 grant select on public.verified_creative_learning_evidence to authenticated;
 
 comment on view public.verified_moment_learning_evidence is
-  'Strict automatic-learning evidence: explicit approved Moment lineage plus provider metrics reconciled to the same published Ensemblis external object. Manual, first-party attribution, arbitrary provider labels and inferred campaign context are insufficient.';
+  'Strict automatic-learning evidence: explicit approved Moment lineage plus provider metrics reconciled to the exact published Ensemblis content/variant object. Manual, first-party attribution, arbitrary provider labels and inferred campaign context are insufficient.';
 comment on view public.verified_creative_learning_evidence is
-  'Verified provider outcome evidence whose published object resolves to both immutable musical Moment and creative-recipe causes.';
+  'Verified provider outcome evidence whose exact published content/variant resolves to both immutable musical Moment and creative-recipe causes.';
