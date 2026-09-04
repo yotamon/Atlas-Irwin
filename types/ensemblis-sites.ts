@@ -74,7 +74,43 @@ export type SiteTheme = {
   surface: string;
 };
 
-export type SiteSectionKey = "hero" | "releases" | "about" | "links" | "contact";
+export type SiteSectionKey =
+  | "hero"
+  | "releases"
+  | "platforms"
+  | "about"
+  | "links"
+  | "contact"
+  | "newsletter";
+
+export type SiteSocialLink = { label: string; href: string; provider: string };
+
+export type SiteRetrofutureContent = {
+  logoUrl?: string;
+  heroTaglines?: string[];
+  primaryCtaLabel?: string;
+  primaryCtaHref?: string;
+  secondaryCtaLabel?: string;
+  secondaryCtaHref?: string;
+  listenHeading?: string;
+  platformLinks?: SiteSocialLink[];
+  aboutHeading?: string;
+  aboutParagraphs?: string[];
+  aboutImageUrl?: string;
+  aboutImageAlt?: string;
+  capabilities?: string[];
+  values?: string[];
+  contactHeading?: string;
+  contactCopy?: string;
+  contactEmail?: string;
+  contactFormEnabled?: boolean;
+  contactFormEndpoint?: string;
+  newsletterEnabled?: boolean;
+  newsletterEndpoint?: string;
+  newsletterKicker?: string;
+  newsletterHeading?: string;
+  newsletterCopy?: string;
+};
 
 export type ArtistSiteConfig = {
   theme: SiteTheme;
@@ -83,6 +119,7 @@ export type ArtistSiteConfig = {
   highlightedReleaseIds: string[];
   heroEyebrow?: string;
   heroCopy?: string;
+  retrofuture?: SiteRetrofutureContent;
 };
 
 export type SiteArtistProfile = {
@@ -96,6 +133,18 @@ export type SiteArtistProfile = {
 
 export type SiteReleaseLink = { label: string; href: string; provider: string };
 
+export type SiteTrackCard = {
+  id: string;
+  title: string;
+  trackNumber: number | null;
+  displayOrder: number;
+  durationSeconds: number | null;
+  audioUrl: string | null;
+  soundcloudUrl: string | null;
+  spotifyUrl: string | null;
+  isPrimary: boolean;
+};
+
 export type SiteReleaseCard = {
   id: string;
   slug: string;
@@ -106,9 +155,8 @@ export type SiteReleaseCard = {
   artworkUrl: string | null;
   genre: string | null;
   links: SiteReleaseLink[];
+  tracks?: SiteTrackCard[];
 };
-
-export type SiteSocialLink = { label: string; href: string; provider: string };
 
 export type SiteViewModel = {
   schemaVersion: 1;
