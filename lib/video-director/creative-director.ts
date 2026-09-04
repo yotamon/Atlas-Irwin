@@ -294,7 +294,7 @@ export interface MusicVideoCreativeDirector {
   }): Promise<StoryboardShot>;
 }
 
-export function parseMusicMap(value: Json): MusicMap | null {
+export function parseMusicMap(value: Json | null | undefined): MusicMap | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const candidate = value as unknown as Partial<MusicMap>;
   if (!Array.isArray(candidate.sections) || typeof candidate.duration_ms !== "number") return null;
