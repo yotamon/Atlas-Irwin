@@ -25,8 +25,11 @@ test("Distribution data carries durable artist lineage while provider accounts s
   }
   assert.doesNotMatch(migration, /alter table public\.distribution_accounts add column if not exists artist_id/);
   assert.match(migration, /private\.assert_operational_artist_owner/);
-  assert.match(migration, /release_distribution_configs_validate_artist_scope/);
-  assert.match(migration, /distribution_provider_operations_validate_artist_scope/);
+  assert.match(migration, /create or replace function private\.validate_distribution_artist_scope\(\)/);
+  assert.match(
+    migration,
+    /create trigger %1\$I_validate_artist_scope before insert or update on public\.%1\$I for each row execute function private\.validate_distribution_artist_scope\(\)/,
+  );
   assert.match(accountEvents, /alter table public\.distribution_events alter column artist_id drop not null/);
   assert.match(accountEvents, /account-only event is intentionally workspace-level/);
 });
