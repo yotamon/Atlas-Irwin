@@ -24,11 +24,16 @@ test("Studio V2 keeps every daily outcome route present", async () => {
   await Promise.all(requiredRoutes.map((path) => access(path)));
 });
 
-test("Ensemblis primary navigation matches the product roadmap and keeps specialist tools advanced", async () => {
+test("Ensemblis navigation matches the grouped product roadmap and keeps specialist tools contextual", async () => {
   const product = await readFile("lib/ensemblis-product.ts", "utf8");
   const sidebar = await readFile("components/studio/sidebar.tsx", "utf8");
 
-  const primaryRoutes = [
+  assert.ok(product.includes("ENSEMBLIS_WORK_NAV"));
+  assert.ok(product.includes("ENSEMBLIS_MANAGE_NAV"));
+  assert.ok(product.includes("ENSEMBLIS_SETTINGS_NAV"));
+  assert.ok(product.includes("ENSEMBLIS_PRIMARY_NAV = ENSEMBLIS_WORK_NAV"));
+
+  for (const route of [
     "/studio",
     "/studio/music",
     "/studio/releases",
@@ -36,16 +41,20 @@ test("Ensemblis primary navigation matches the product roadmap and keeps special
     "/studio/growth",
     "/studio/audience",
     "/studio/library",
-    "/studio/connections",
-    "/studio/settings",
-  ];
-
-  for (const route of primaryRoutes) {
+  ]) {
     assert.match(product, new RegExp(route.replaceAll("/", "\\/")));
   }
 
-  for (const advancedRoute of [
+  for (const route of [
+    "/studio/sites",
     "/studio/distribution",
+    "/studio/connections",
+    "/studio/settings",
+  ]) {
+    assert.match(product, new RegExp(route.replaceAll("/", "\\/")));
+  }
+
+  for (const contextualRoute of [
     "/studio/campaigns",
     "/studio/content",
     "/studio/outreach",
@@ -53,13 +62,15 @@ test("Ensemblis primary navigation matches the product roadmap and keeps special
     "/studio/data-health",
   ]) {
     assert.equal(
-      product.includes(`\"${advancedRoute}\"`),
+      product.includes(`\"${contextualRoute}\"`),
       false,
-      `${advancedRoute} leaked into Ensemblis primary navigation`,
+      `${contextualRoute} leaked into durable Ensemblis navigation`,
     );
   }
 
-  assert.ok(sidebar.includes("ENSEMBLIS_PRIMARY_NAV"));
+  assert.ok(sidebar.includes("ENSEMBLIS_WORK_NAV"));
+  assert.ok(sidebar.includes("ENSEMBLIS_MANAGE_NAV"));
+  assert.ok(sidebar.includes("ENSEMBLIS_SETTINGS_NAV"));
   assert.ok(sidebar.includes("ArtistSwitcher"));
   assert.ok(sidebar.includes("ensemblisArtistHref"));
   assert.equal(sidebar.includes("ATLAS"), false, "Atlas product branding leaked back into the Ensemblis shell");
