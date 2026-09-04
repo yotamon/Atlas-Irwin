@@ -18,8 +18,20 @@ function normalizedDuration(value: number | string | null) {
 }
 
 function publicAsset(value: string | null) {
-  if (!value) return null;
-  return /^(?:\/|https?:\/\/)/i.test(value) ? value : null;
+  const normalized = value?.trim();
+  if (!normalized) return null;
+  return /^(?:\/|https?:\/\/)/i.test(normalized) ? normalized : null;
+}
+
+function publicHttpUrl(value: string | null) {
+  const normalized = value?.trim();
+  if (!normalized) return null;
+  try {
+    const url = new URL(normalized);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function buildArtistSiteSnapshot(
@@ -62,11 +74,13 @@ export async function buildArtistSiteSnapshot(
 
   const externalByRelease = new Map<string, SiteReleaseLink[]>();
   for (const external of linksResult.data ?? []) {
+    const href = publicHttpUrl(external.external_url);
+    if (!href) continue;
     const current = externalByRelease.get(external.release_id) ?? [];
     current.push({
-      label: external.label || external.provider,
-      href: external.external_url,
-      provider: external.provider,
+      label: external.label?.trim() || String(external.provider),
+      href,
+      provider: String(external.provider),
     });
     externalByRelease.set(external.release_id, current);
   }
@@ -81,8 +95,8 @@ export async function buildArtistSiteSnapshot(
       displayOrder: track.display_order,
       durationSeconds: normalizedDuration(track.duration),
       audioUrl: publicAsset(track.audio_url),
-      soundcloudUrl: track.soundcloud_url,
-      spotifyUrl: track.spotify_url,
+      soundcloudUrl: publicHttpUrl(track.soundcloud_url),
+      spotifyUrl: publicHttpUrl(track.spotify_url),
       isPrimary: track.is_primary,
     });
     tracksByRelease.set(track.release_id, current);
@@ -90,7 +104,8 @@ export async function buildArtistSiteSnapshot(
 
   const releases = (releasesResult.data ?? []).map((release) => {
     const links: SiteReleaseLink[] = [...(externalByRelease.get(release.id) ?? [])];
-    const push = (provider: string, href: string | null, label = provider) => {
+    const push = (provider: string, candidate: string | null, label = provider) => {
+      const href = publicHttpUrl(candidate);
       if (!href || links.some((link) => link.href === href)) return;
       links.push({ provider, href, label });
     };
@@ -106,7 +121,7 @@ export async function buildArtistSiteSnapshot(
       releaseType: release.release_type,
       releaseDate: release.release_date,
       story: release.story,
-      artworkUrl: release.artwork_url,
+      artworkUrl: publicAsset(release.artwork_url),
       genre: release.genre,
       links,
       tracks: tracksByRelease.get(release.id) ?? [],
@@ -125,7 +140,7 @@ export async function buildArtistSiteSnapshot(
       name: artist.name,
       slug: artist.slug,
       bio: null,
-      avatarUrl: artist.avatar_url,
+      avatarUrl: publicAsset(artist.avatar_url),
       accentColor: artist.accent_color,
     },
     releases,
@@ -134,7 +149,7 @@ export async function buildArtistSiteSnapshot(
     seo: {
       title: artist.name,
       description: description.slice(0, 220),
-      imageUrl: latestRelease?.artworkUrl || artist.avatar_url,
+      imageUrl: publicHttpUrl(latestRelease?.artworkUrl || artist.avatar_url),
     },
   };
 }
