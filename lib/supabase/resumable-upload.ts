@@ -144,6 +144,7 @@ export async function uploadResumableMedia({
 }: {
   file: File;
   target: ResumableUploadTarget;
+  accessToken?: string;
   onProgress?: (progress: number) => void;
 }) {
   const key = resumeKey(file, target);
