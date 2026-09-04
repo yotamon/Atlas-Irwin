@@ -77,12 +77,39 @@ test("Ensemblis persists and validates active artist context across primary navi
   assert.ok(context.includes("listAccessibleArtists"));
   assert.ok(context.includes("resolveActiveArtistContext"));
   assert.ok(context.includes("resolveArtistContext(client, identity, preferredArtistId)"));
+  assert.ok(context.includes("resolveLegacyFallbackArtistContext"));
+  assert.ok(context.includes("return resolveActiveArtistContext(client, identity);"));
+  assert.equal(context.includes("return resolveDefaultArtistContext(client, identity);"), false);
   assert.ok(switcher.includes('params.set("artist", artistId)'));
   assert.ok(sidebar.includes("ensemblisArtistHref(href, artistId)"));
   assert.ok(proxy.includes("requestedArtistId"));
   assert.ok(proxy.includes("This value is still untrusted"));
   assert.ok(layout.includes("resolveActiveArtistContext"));
   assert.ok(layout.includes("listAccessibleArtists"));
+});
+
+test("primary creation, music and library surfaces use active artist identity rather than Atlas defaults", async () => {
+  const create = await readFile("app/studio/(protected)/create/page.tsx", "utf8");
+  const music = await readFile("app/studio/(protected)/music/page.tsx", "utf8");
+  const library = await readFile("app/studio/(protected)/library/page.tsx", "utf8");
+
+  assert.ok(create.includes("requireArtistContext"));
+  assert.ok(create.includes("artist.artistName"));
+  assert.ok(create.includes("ensemblisArtistHref"));
+
+  assert.ok(music.includes("resolveActiveArtistContext"));
+  assert.ok(music.includes('from("brand_settings")'));
+  assert.ok(music.includes('.eq("artist_id", artist.artistId)'));
+  assert.ok(music.includes("artist.artistName"));
+
+  assert.ok(library.includes("resolveActiveArtistContext"));
+  assert.ok(library.includes('.eq("artist_id", artist.artistId)'));
+  assert.ok(library.includes("artistTag"));
+  assert.ok(library.includes("<MediaUploader artistId={artist.artistId}"));
+
+  for (const [path, source] of [["Create", create], ["Music", music], ["Library", library]]) {
+    assert.equal(/\bAtlas Irwin\b/.test(source), false, `${path} contains a hardcoded Atlas artist assumption`);
+  }
 });
 
 test("Ensemblis auth and shell keep artist identity separate from product identity", async () => {
@@ -121,6 +148,9 @@ test("generic product surfaces contain no hardcoded Atlas user-facing language",
     "app/studio/access-denied/page.tsx",
     "app/studio/error.tsx",
     "app/studio/layout.tsx",
+    "app/studio/(protected)/create/page.tsx",
+    "app/studio/(protected)/music/page.tsx",
+    "app/studio/(protected)/library/page.tsx",
     "app/studio/(protected)/settings/page.tsx",
     "app/studio/(protected)/settings/ai/page.tsx",
     "app/studio/(protected)/connections/page.tsx",
