@@ -12,12 +12,7 @@ export type ArtistSiteVersionStatus = "draft" | "published" | "superseded";
 export type ArtistSiteDomainType = "managed" | "custom";
 export type ArtistSiteVerificationStatus = "pending" | "verified" | "failed";
 export type ArtistSiteSslStatus = "pending" | "active" | "failed";
-export type ArtistSiteDeploymentStatus =
-  | "requested"
-  | "building"
-  | "ready"
-  | "failed"
-  | "rolled_back";
+export type ArtistSiteDeploymentStatus = "requested" | "building" | "ready" | "failed" | "rolled_back";
 
 export type ArtistSite = {
   id: string;
@@ -97,11 +92,7 @@ export type SiteArtistProfile = {
   accentColor: string | null;
 };
 
-export type SiteReleaseLink = {
-  label: string;
-  href: string;
-  provider: string;
-};
+export type SiteReleaseLink = { label: string; href: string; provider: string };
 
 export type SiteReleaseCard = {
   id: string;
@@ -115,26 +106,18 @@ export type SiteReleaseCard = {
   links: SiteReleaseLink[];
 };
 
-export type SiteSocialLink = {
-  label: string;
-  href: string;
-  provider: string;
-};
+export type SiteSocialLink = { label: string; href: string; provider: string };
 
 export type SiteViewModel = {
   schemaVersion: 1;
   artist: SiteArtistProfile;
   releases: SiteReleaseCard[];
   socialLinks: SiteSocialLink[];
-  contact: {
-    email: string | null;
-  };
-  seo: {
-    title: string;
-    description: string;
-    imageUrl: string | null;
-  };
+  contact: { email: string | null };
+  seo: { title: string; description: string; imageUrl: string | null };
 };
+
+type Rpc<Args, Returns> = { Args: Args; Returns: Returns };
 
 export type EnsemblisSitesDatabase = {
   public: {
@@ -145,7 +128,11 @@ export type EnsemblisSitesDatabase = {
       artist_site_deployments: Table<ArtistSiteDeployment>;
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      publish_artist_site: Rpc<{ target_site_id: string; target_version_id: string }, string>;
+      create_artist_site_draft: Rpc<{ target_site_id: string }, string>;
+      rollback_artist_site: Rpc<{ target_site_id: string; source_version_id: string }, string>;
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };
