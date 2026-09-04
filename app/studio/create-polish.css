@@ -1,0 +1,156 @@
+/* Outcome-first Create workspace. */
+
+.studio-root .create-polish-page {
+  width: min(100%, 86rem);
+  margin: 0 auto;
+}
+
+.studio-root .create-intent-list {
+  display: grid;
+  border-top: 1px solid var(--en-line);
+}
+
+.studio-root .create-intent-row {
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  min-width: 0;
+  padding: clamp(1.05rem, 2.2vw, 1.5rem) 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--en-line) 76%, transparent);
+  transition: background-color 150ms ease, padding-inline 150ms ease, margin-inline 150ms ease;
+}
+
+.studio-root .create-intent-row:hover,
+.studio-root .create-intent-row:focus-visible {
+  margin-inline: -0.8rem;
+  padding-inline: 0.8rem;
+  border-radius: var(--en-radius-sm);
+  background: color-mix(in srgb, var(--en-surface-hover) 68%, transparent);
+  outline: none;
+}
+
+.studio-root .create-intent-index {
+  color: var(--en-subtle);
+  font-size: 0.66rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+}
+
+.studio-root .create-intent-copy {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.studio-root .create-intent-copy small {
+  color: var(--en-accent);
+  font-size: 0.62rem;
+  font-weight: 720;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.studio-root .create-intent-copy strong {
+  color: var(--en-ink);
+  font-size: clamp(1.15rem, 2.4vw, 1.65rem);
+  font-weight: 690;
+  letter-spacing: -0.04em;
+}
+
+.studio-root .create-intent-copy > span {
+  max-width: 52rem;
+  color: var(--en-muted);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.studio-root .create-intent-row > b {
+  color: var(--en-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.studio-root .create-intent-row:hover > b,
+.studio-root .create-intent-row:focus-visible > b {
+  color: var(--en-accent);
+}
+
+.studio-root .create-next-action-callout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.4rem;
+  margin-top: clamp(1.8rem, 3vw, 2.7rem);
+  padding: 1.1rem 1.2rem;
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius);
+  background: color-mix(in srgb, var(--en-surface-raised) 62%, transparent);
+}
+
+.studio-root .create-next-action-callout > div {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.studio-root .create-next-action-callout strong {
+  color: var(--en-ink);
+  font-size: 0.85rem;
+}
+
+.studio-root .create-next-action-callout p {
+  color: var(--en-muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.studio-root .create-specialist-tools {
+  margin-top: 1.4rem;
+}
+
+.studio-root .create-specialist-links {
+  display: grid;
+  border-top: 1px solid var(--en-line);
+}
+
+.studio-root .create-specialist-links > a {
+  display: grid;
+  grid-template-columns: minmax(10rem, 0.4fr) minmax(0, 1fr);
+  gap: 1rem;
+  padding: 0.8rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--en-line) 72%, transparent);
+  color: var(--en-ink);
+  font-size: 0.75rem;
+  font-weight: 680;
+}
+
+.studio-root .create-specialist-links span {
+  color: var(--en-muted);
+  font-size: 0.69rem;
+  font-weight: 500;
+}
+
+@media (max-width: 720px) {
+  .studio-root .create-intent-row {
+    grid-template-columns: 2rem minmax(0, 1fr);
+  }
+
+  .studio-root .create-intent-row > b {
+    grid-column: 2;
+  }
+
+  .studio-root .create-next-action-callout {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .studio-root .create-next-action-callout .button {
+    width: 100%;
+  }
+
+  .studio-root .create-specialist-links > a {
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+  }
+}
