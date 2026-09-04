@@ -48,6 +48,10 @@ export type ArtistSiteDomain = {
   verification_status: ArtistSiteVerificationStatus;
   ssl_status: ArtistSiteSslStatus;
   is_primary: boolean;
+  provider: string | null;
+  provider_ref: string | null;
+  verification_state: Json;
+  last_checked_at: string | null;
   last_verified_at: string | null;
   created_at: string;
   updated_at: string;
@@ -182,6 +186,8 @@ export type EnsemblisSitesDatabase = {
       publish_artist_site: Rpc<{ target_site_id: string; target_version_id: string }, string>;
       create_artist_site_draft: Rpc<{ target_site_id: string }, string>;
       rollback_artist_site: Rpc<{ target_site_id: string; source_version_id: string }, string>;
+      set_artist_site_primary_domain: Rpc<{ target_site_id: string; target_domain_id: string }, string>;
+      resolve_artist_site_hostname: Rpc<{ target_hostname: string }, Array<{ site_id: string; site_slug: string }>>;
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;

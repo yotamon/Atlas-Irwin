@@ -5,6 +5,14 @@ import {
   isLocalStudioBypassHost,
 } from "@/lib/auth/local-studio";
 import { ENSEMBLIS_ACTIVE_ARTIST_COOKIE } from "@/lib/ensemblis-product";
+import { getSiteUrl } from "@/lib/site-url";
+import {
+  normalizeRequestHostname,
+  resolveSiteHostForProxy,
+} from "@/lib/sites/proxy-host-resolver";
+
+const INTERNAL_SITE_ID_HEADER = "x-ensemblis-site-id";
+const INTERNAL_SITE_HOST_HEADER = "x-ensemblis-site-host";
 
 function isStudioAdmin(email?: string | null) {
   return Boolean(
@@ -26,11 +34,8 @@ function getRequestHost(request: NextRequest) {
     request.headers.get("host") ||
     request.nextUrl.host;
 
-  if (isLocalHost(host)) {
-    return host;
-  }
-
-  return host.replace(/:\d+$/, "");
+  if (isLocalHost(host)) return host;
+  return normalizeRequestHostname(host);
 }
 
 function selectedArtistFromRequest(request: NextRequest) {
@@ -53,6 +58,99 @@ function persistArtistPreference(response: NextResponse, artistId: string | null
   return response;
 }
 
+function sanitizedRequestHeaders(request: NextRequest) {
+  const headers = new Headers(request.headers);
+  headers.delete(INTERNAL_SITE_ID_HEADER);
+  headers.delete(INTERNAL_SITE_HOST_HEADER);
+  return headers;
+}
+
+function nextResponse(request: NextRequest) {
+  return NextResponse.next({ request: { headers: sanitizedRequestHeaders(request) } });
+}
+
+function isGlobalSystemPath(pathname: string) {
+  return [
+    "/studio",
+    "/api",
+    "/site-preview",
+    "/sites",
+    "/go",
+    "/_next",
+  ].some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
+function addHostAndWwwVariant(hosts: Set<string>, input: string) {
+  const hostname = normalizeRequestHostname(input);
+  if (!hostname) return;
+  hosts.add(hostname);
+  hosts.add(hostname.startsWith("www.") ? hostname.slice(4) : `www.${hostname}`);
+}
+
+function legacyPublicHosts() {
+  const hosts = new Set<string>();
+
+  try {
+    addHostAndWwwVariant(hosts, new URL(getSiteUrl()).hostname);
+  } catch {
+    // getSiteUrl is already defensive; keep this boundary fail-closed regardless.
+  }
+
+  const configured = process.env.ENSEMBLIS_SITES_LEGACY_HOSTS
+    ?.split(",")
+    .map((item) => normalizeRequestHostname(item))
+    .filter(Boolean) ?? [];
+  configured.forEach((host) => hosts.add(host));
+
+  for (const candidate of [process.env.VERCEL_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL]) {
+    if (candidate) hosts.add(normalizeRequestHostname(candidate));
+  }
+  return hosts;
+}
+
+function isTrustedNonTenantHost(host: string) {
+  if (isLocalHost(host)) return true;
+  const normalized = normalizeRequestHostname(host);
+  if (normalized.endsWith(".vercel.app")) return true;
+  return legacyPublicHosts().has(normalized);
+}
+
+async function routeArtistHostname(request: NextRequest, host: string) {
+  const pathname = request.nextUrl.pathname;
+  if (pathname === "/__sites" || pathname.startsWith("/__sites/")) {
+    return new NextResponse(null, { status: 404 });
+  }
+  if (isGlobalSystemPath(pathname)) return null;
+
+  let resolved: Awaited<ReturnType<typeof resolveSiteHostForProxy>> = null;
+  try {
+    resolved = await resolveSiteHostForProxy(host);
+  } catch {
+    if (!isTrustedNonTenantHost(host)) {
+      return new NextResponse("Site temporarily unavailable.", { status: 503 });
+    }
+    return null;
+  }
+
+  if (!resolved) {
+    return isTrustedNonTenantHost(host)
+      ? null
+      : new NextResponse(null, { status: 404 });
+  }
+
+  const requestHeaders = sanitizedRequestHeaders(request);
+  requestHeaders.set(INTERNAL_SITE_ID_HEADER, resolved.siteId);
+  requestHeaders.set(INTERNAL_SITE_HOST_HEADER, normalizeRequestHostname(host));
+
+  const rewriteUrl = request.nextUrl.clone();
+  const suffix = pathname === "/" ? "" : pathname;
+  rewriteUrl.pathname = `/__sites/${resolved.siteId}${suffix}`;
+
+  return NextResponse.rewrite(rewriteUrl, {
+    request: { headers: requestHeaders },
+  });
+}
+
 export async function proxy(request: NextRequest) {
   const host = getRequestHost(request);
   const forwardedProto = getForwardedValue(request, "x-forwarded-proto");
@@ -67,9 +165,11 @@ export async function proxy(request: NextRequest) {
     secureUrl.protocol = "https:";
     secureUrl.host = host;
     secureUrl.port = "";
-
     return NextResponse.redirect(secureUrl, 308);
   }
+
+  const hostRoute = await routeArtistHostname(request, host);
+  if (hostRoute) return hostRoute;
 
   const isStudio = request.nextUrl.pathname.startsWith("/studio");
   const isOpenStudioRoute = [
@@ -80,11 +180,10 @@ export async function proxy(request: NextRequest) {
   const requestedArtistId = isStudio ? selectedArtistFromRequest(request) : null;
 
   if (requestedArtistId) {
-    // This value is still untrusted. ArtistContext validates membership before use.
     request.cookies.set(ENSEMBLIS_ACTIVE_ARTIST_COOKIE, requestedArtistId);
   }
 
-  let response = NextResponse.next({ request });
+  let response = nextResponse(request);
 
   if (isStudio && isLocalStudioBypassHost(host)) {
     if (request.nextUrl.pathname === "/studio/login") {
@@ -93,7 +192,6 @@ export async function proxy(request: NextRequest) {
         requestedArtistId,
       );
     }
-
     if (!isOpenStudioRoute) {
       return persistArtistPreference(response, requestedArtistId);
     }
@@ -124,10 +222,8 @@ export async function proxy(request: NextRequest) {
       cookies: {
         getAll: () => request.cookies.getAll(),
         setAll: (cookiesToSet, headersToSet) => {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value),
-          );
-          response = NextResponse.next({ request });
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          response = nextResponse(request);
           cookiesToSet.forEach(({ name, value, options }) =>
             response.cookies.set(name, value, options),
           );
@@ -166,4 +262,13 @@ export async function proxy(request: NextRequest) {
   return persistArtistPreference(response, requestedArtistId);
 }
 
-export const config = { matcher: ["/studio/:path*"] };
+export const config = {
+  matcher: [
+    "/__sites/:path*",
+    "/robots.txt",
+    "/sitemap.xml",
+    "/manifest.webmanifest",
+    "/favicon.ico",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.[^/]+$).*)",
+  ],
+};

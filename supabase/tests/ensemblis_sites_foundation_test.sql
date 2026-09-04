@@ -1,6 +1,6 @@
 begin;
 
-select plan(19);
+select plan(23);
 
 select has_table('public', 'artist_sites', 'artist_sites table exists');
 select has_table('public', 'artist_site_versions', 'artist_site_versions table exists');
@@ -73,6 +73,32 @@ where id='24100000-0000-0000-0000-000000000001';
 update public.artist_sites set draft_version_id='24200000-0000-0000-0000-000000000002'
 where id='24100000-0000-0000-0000-000000000002';
 
+insert into public.artist_site_domains (
+  id, site_id, hostname, domain_type, verification_status, ssl_status, is_primary, provider, verification_state
+) values
+  (
+    '24300000-0000-0000-0000-000000000001',
+    '24100000-0000-0000-0000-000000000001',
+    'artist-a.example',
+    'custom',
+    'verified',
+    'active',
+    false,
+    'vercel',
+    '{}'
+  ),
+  (
+    '24300000-0000-0000-0000-000000000002',
+    '24100000-0000-0000-0000-000000000001',
+    'pending-a.example',
+    'custom',
+    'pending',
+    'pending',
+    false,
+    'vercel',
+    '{}'
+  );
+
 select set_config('request.jwt.claim.sub', '24000000-0000-0000-0000-000000000001', true);
 select ok(
   private.can_access_artist_site('24100000-0000-0000-0000-000000000001'),
@@ -119,6 +145,18 @@ select is(
   1,
   'publish records a ready shared-runtime deployment'
 );
+select is(
+  public.set_artist_site_primary_domain(
+    '24100000-0000-0000-0000-000000000001',
+    '24300000-0000-0000-0000-000000000001'
+  ),
+  '24300000-0000-0000-0000-000000000001'::uuid,
+  'verified active domain can become primary after publication'
+);
+select ok(
+  (select is_primary from public.artist_site_domains where id='24300000-0000-0000-0000-000000000001'),
+  'primary selection persists atomically'
+);
 select ok(
   public.create_artist_site_draft('24100000-0000-0000-0000-000000000001') is not null,
   'a new draft is cloned from the published snapshot'
@@ -132,6 +170,19 @@ select is(
   (select template_version from public.artist_site_versions where id=(select draft_version_id from public.artist_sites where id='24100000-0000-0000-0000-000000000001')),
   1,
   'draft cloning preserves the pinned template version'
+);
+reset role;
+
+set local role anon;
+select is(
+  (select site_id from public.resolve_artist_site_hostname('ARTIST-A.EXAMPLE.') limit 1),
+  '24100000-0000-0000-0000-000000000001'::uuid,
+  'anonymous hostname resolver returns only the active published site'
+);
+select is(
+  (select count(*)::integer from public.resolve_artist_site_hostname('pending-a.example')),
+  0,
+  'pending domain is never exposed through public hostname resolution'
 );
 reset role;
 
