@@ -51,14 +51,14 @@ type View<Row> = {
 
 type LearningEvidenceDatabase = {
   public: {
-    Tables: Record<string, never>;
+    Tables: {};
     Views: {
       verified_moment_learning_evidence: View<VerifiedMomentLearningEvidence>;
       verified_creative_learning_evidence: View<VerifiedMomentLearningEvidence>;
     };
-    Functions: Record<string, never>;
-    Enums: Record<string, never>;
-    CompositeTypes: Record<string, never>;
+    Functions: {};
+    Enums: {};
+    CompositeTypes: {};
   };
 };
 
