@@ -1,18 +1,17 @@
 import "server-only";
 
-import type { Json } from "@/types/database";
-import type { LyricsDatabase } from "@/types/lyrics-database";
-import type { AudioScene, StemDatabase } from "@/types/stem-database";
-import type { ExtendedMusicVideoProject, VideoDatabase } from "@/types/video-database";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { loadArtistCreativeMemory } from "@/lib/creative-memory/server";
 import { loadTrackLyricsContext } from "@/lib/lyrics-intelligence/context";
 import { conciseCreativeGraphContext, type TrackCreativeIntelligenceGraph } from "@/lib/music-intelligence/creative-graph";
 import { loadTrackCreativeIntelligenceGraph } from "@/lib/music-intelligence/creative-graph-loader";
+import type { ArtistScopedMusicDatabase } from "@/types/artist-scoped-music-database";
+import type { ArtistScopedCoreOperationalDatabase } from "@/types/artist-scoped-operational-database";
+import type { Database, Json } from "@/types/database";
+import type { LyricsDatabase } from "@/types/lyrics-database";
+import type { AudioScene, StemDatabase } from "@/types/stem-database";
+import type { ExtendedMusicVideoProject, VideoDatabase } from "@/types/video-database";
 import { parseMusicMap, type DirectorPreferences, type MusicMap, type VideoProjectContext } from "./creative-director";
-
-function stringArray(value: Json): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-}
 
 function stemAwareMusicMap(value: Json, scenes: AudioScene[], graph: TrackCreativeIntelligenceGraph | null) {
   const map = parseMusicMap(value);
@@ -44,6 +43,7 @@ export async function loadVideoProjectContext(
   db: SupabaseClient<VideoDatabase>,
   projectId: string,
   ownerId: string,
+  expectedArtistId?: string | null,
 ): Promise<VideoProjectContext & { project: ExtendedMusicVideoProject }> {
   const { data: project, error: projectError } = await db
     .from("music_video_projects")
@@ -53,31 +53,56 @@ export async function loadVideoProjectContext(
     .single();
   if (projectError || !project) throw new Error(projectError?.message || "Music video project not found.");
 
+  const musicDb = db as unknown as SupabaseClient<ArtistScopedMusicDatabase>;
+  const operationalDb = db as unknown as SupabaseClient<ArtistScopedCoreOperationalDatabase>;
   const stemDb = db as unknown as SupabaseClient<StemDatabase>;
   const lyricsDb = db as unknown as SupabaseClient<LyricsDatabase>;
-  const [releaseResult, trackResult, brandResult, linkResult, preferenceResult, sceneResult, lyrics] = await Promise.all([
-    db.from("releases").select("*").eq("id", project.release_id).eq("owner_id", ownerId).single(),
-    db.from("tracks").select("*").eq("id", project.track_id).eq("owner_id", ownerId).single(),
-    db.from("brand_settings").select("content").eq("owner_id", ownerId).order("section"),
-    db.from("media_links").select("media_asset_id,release_id,track_id,role")
+  let releaseQuery = musicDb.from("releases").select("*")
+    .eq("id", project.release_id)
+    .eq("owner_id", ownerId);
+  if (expectedArtistId) releaseQuery = releaseQuery.eq("artist_id", expectedArtistId);
+  const releaseResult = await releaseQuery.single();
+  if (releaseResult.error || !releaseResult.data) throw new Error(releaseResult.error?.message || "Release not found for this artist.");
+  const artistId = releaseResult.data.artist_id;
+  if (expectedArtistId && artistId !== expectedArtistId) throw new Error("Video project does not belong to the active artist.");
+
+  const [trackResult, brandResult, linkResult, sceneResult, lyrics, creativeMemory] = await Promise.all([
+    musicDb.from("tracks").select("*")
+      .eq("id", project.track_id)
       .eq("owner_id", ownerId)
+      .eq("artist_id", artistId)
+      .single(),
+    operationalDb.from("brand_settings").select("content")
+      .eq("owner_id", ownerId)
+      .eq("artist_id", artistId)
+      .order("section"),
+    musicDb.from("media_links").select("media_asset_id,release_id,track_id,role,artist_id")
+      .eq("owner_id", ownerId)
+      .eq("artist_id", artistId)
       .or(`release_id.eq.${project.release_id},track_id.eq.${project.track_id}`),
-    db.from("music_video_director_preferences").select("*").eq("owner_id", ownerId).maybeSingle(),
     stemDb.from("audio_scenes")
       .select("*")
       .eq("owner_id", ownerId)
+      .eq("artist_id", artistId)
       .eq("track_id", project.track_id)
       .eq("status", "ready")
       .order("is_pinned", { ascending: false })
       .order("score", { ascending: false, nullsFirst: false }),
     loadTrackLyricsContext(lyricsDb, project.track_id, ownerId),
+    loadArtistCreativeMemory({
+      db: db as unknown as SupabaseClient<Database>,
+      ownerId,
+      artistId,
+      releaseId: project.release_id,
+      trackId: project.track_id,
+      recommendationLimit: 8,
+    }),
   ]);
 
-  if (releaseResult.error || !releaseResult.data) throw new Error(releaseResult.error?.message || "Release not found.");
-  if (trackResult.error || !trackResult.data) throw new Error(trackResult.error?.message || "Track not found.");
+  if (trackResult.error || !trackResult.data) throw new Error(trackResult.error?.message || "Track not found for this artist.");
+  if (trackResult.data.release_id !== releaseResult.data.id) throw new Error("Video track does not belong to the project release.");
   if (brandResult.error) throw new Error(brandResult.error.message);
   if (linkResult.error) throw new Error(linkResult.error.message);
-  if (preferenceResult.error) throw new Error(preferenceResult.error.message);
   if (sceneResult.error) throw new Error(sceneResult.error.message);
 
   const graph = await loadTrackCreativeIntelligenceGraph(
@@ -87,7 +112,10 @@ export async function loadVideoProjectContext(
     lyrics,
   );
 
-  const assetIds = [...new Set((linkResult.data ?? []).map((link) => link.media_asset_id))];
+  const assetIds = [...new Set([
+    ...(linkResult.data ?? []).map((link) => link.media_asset_id),
+    ...creativeMemory.recommendations.map((recommendation) => recommendation.assetId),
+  ])];
   const { data: media, error: mediaError } = assetIds.length
     ? await db.from("media_assets")
         .select("id,asset_type,mime_type,metadata,public_url")
@@ -96,13 +124,13 @@ export async function loadVideoProjectContext(
     : { data: [], error: null };
   if (mediaError) throw new Error(mediaError.message);
 
-  const preference = preferenceResult.data;
   const preferences: DirectorPreferences = {
-    positive: preference ? stringArray(preference.positive_signals) : [],
-    negative: preference ? stringArray(preference.negative_signals) : [],
+    positive: creativeMemory.preferences.positive,
+    negative: creativeMemory.preferences.negative,
   };
 
   return {
+    artistId,
     project,
     release: releaseResult.data,
     track: trackResult.data,
@@ -111,6 +139,11 @@ export async function loadVideoProjectContext(
     brandSettings: (brandResult.data ?? []).map((item) => item.content),
     media: media ?? [],
     preferences,
+    creativeMemory: {
+      summary: creativeMemory.preferences.summary,
+      evidenceCount: creativeMemory.eventCount,
+      recommendations: creativeMemory.recommendations,
+    },
   };
 }
 
@@ -118,21 +151,25 @@ export async function resolveProjectAudioUrl(
   db: SupabaseClient<VideoDatabase>,
   project: ExtendedMusicVideoProject,
   ownerId: string,
+  artistId?: string | null,
 ) {
-  const { data: track, error } = await db.from("tracks")
+  const musicDb = db as unknown as SupabaseClient<ArtistScopedMusicDatabase>;
+  let trackQuery = musicDb.from("tracks")
     .select("audio_url")
     .eq("id", project.track_id)
-    .eq("owner_id", ownerId)
-    .single();
+    .eq("owner_id", ownerId);
+  if (artistId) trackQuery = trackQuery.eq("artist_id", artistId);
+  const { data: track, error } = await trackQuery.single();
   if (error) throw new Error(error.message);
   if (track?.audio_url) return track.audio_url;
 
-  const { data: links, error: linkError } = await db.from("media_links")
+  let linkQuery = musicDb.from("media_links")
     .select("media_asset_id,role,is_primary")
     .eq("owner_id", ownerId)
     .or(`release_id.eq.${project.release_id},track_id.eq.${project.track_id}`)
-    .in("role", ["master_audio", "audio_preview"])
-    .order("is_primary", { ascending: false });
+    .in("role", ["master_audio", "audio_preview"]);
+  if (artistId) linkQuery = linkQuery.eq("artist_id", artistId);
+  const { data: links, error: linkError } = await linkQuery.order("is_primary", { ascending: false });
   if (linkError) throw new Error(linkError.message);
   const ids = (links ?? []).map((link) => link.media_asset_id);
   if (!ids.length) return null;
