@@ -148,6 +148,6 @@ export default async function ReleaseDetail({
   return <>
     <div className="v2-advanced-banner"><div><strong>Advanced workspace</strong><span>Legacy controls for exceptional cases, migrations and debugging.</span></div><Link className="button" href={`/studio/releases/${release.id}`}>Back to simple view</Link></div>
     {tab === "campaign" ? <ReleaseCampaignBridge campaign={campaignResult.data} /> : null}
-    <ReleaseCockpit release={release} tracks={tracks ?? []} placement={placement} mediaLinks={mediaLinks ?? []} mediaAssets={mediaAssets ?? []} mediaPreviewUrls={mediaPreviewUrls} externalLinks={externalLinks ?? []} externalTrackIds={externalTrackIds ?? []} contentCount={contentCount ?? 0} contactCount={contactCount ?? 0} contentItems={contentItems ?? []} metrics={metrics ?? []} unmatchedSoundCloud={relevantSoundCloud} unmatchedSpotify={relevantSpotify} publicReleases={publicReleases} videoProjects={videoProjects} tab={tab} />
+    <ReleaseCockpit release={release} tracks={tracks ?? []} placement={placement} mediaLinks={mediaLinks ?? []} mediaAssets={mediaAssets ?? []} mediaPreviewUrls={mediaPreviewUrls} externalLinks={externalLinks ?? []} externalTrackIds={externalTrackIds ?? []} contentCount={contentCount ?? 0} contactCount={contactCount ?? 0} contentItems={contentItems ?? []} metrics={metrics ?? []} unmatchedSoundCloud={relevantSoundCloud} unmatchedSpotify={relevantSpotify} publicReleases={publicReleases} videoProjects={videoProjects} moments={momentCuration.curated} tab={tab} />
   </>;
 }

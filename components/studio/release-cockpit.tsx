@@ -47,6 +47,7 @@ import type {
   Track,
   TrackExternalId,
 } from "@/types/database";
+import type { Moment } from "@/types/moments-database";
 import type { Release as PublicRelease } from "@/lib/releases/types";
 import { compatibleMediaTypes, mediaMetadata, mediaTypeLabel } from "@/lib/studio/media";
 
@@ -106,6 +107,7 @@ export function ReleaseCockpit({
   unmatchedSpotify,
   publicReleases,
   videoProjects,
+  moments,
   tab,
 }: {
   release: Release;
@@ -124,6 +126,7 @@ export function ReleaseCockpit({
   unmatchedSpotify: SpotifyTrack[];
   publicReleases: PublicRelease[];
   videoProjects: MusicVideoProject[];
+  moments: Moment[];
   tab: string;
 }) {
   const currentTab = tab === "tracks" || tab === "distribution" ? "music" : tab === "analytics" ? "performance" : TABS.some(([key]) => key === tab) ? tab : "overview";
@@ -235,7 +238,7 @@ export function ReleaseCockpit({
         </div>
       ) : null}
 
-      {currentTab === "video" ? <ReleaseVideoPanel release={release} tracks={tracks} projects={videoProjects} /> : null}
+      {currentTab === "video" ? <ReleaseVideoPanel release={release} tracks={tracks} projects={videoProjects} moments={moments} /> : null}
 
       {currentTab === "website" ? (
         <div className="website-workspace">
@@ -250,21 +253,18 @@ export function ReleaseCockpit({
 
       {currentTab === "campaign" ? (
         <div className="workspace-stack">
-          <section className="campaign-brief"><div><span className="section-label">Campaign goal</span><h2>{release.primary_hook || "Define the reason this release should travel"}</h2><p>{release.audience || "Add target audience notes in the Overview so content decisions have a clear listener."}</p></div><dl><div><dt>Window</dt><dd>{release.release_date ? `Around ${dateLabel(release.release_date)}` : "Release date needed"}</dd></div><div><dt>Featured track</dt><dd>{primaryTrack?.title || "Select a primary track"}</dd></div><div><dt>Status</dt><dd>{release.active_release ? "Active" : release.status}</dd></div><div><dt>Asset coverage</dt><dd>{mediaAssets.filter((asset) => ["canvas_video", "visualizer", "social_image", "content_video", "lyric_video"].includes(asset.asset_type)).length} campaign assets</dd></div></dl></section>
-          <section className="workspace-section" id="content-plan"><div className="section-head"><div><span className="section-label">Campaign sequence</span><h2>From anticipation to evergreen</h2></div><Link className="button primary" href={`/studio/content?release=${release.id}#new`}>Create content</Link></div><div className="campaign-phases">{[["Pre-release", contentItems.filter((item) => item.scheduled_at && release.release_date && item.scheduled_at.slice(0, 10) < release.release_date)], ["Release day", contentItems.filter((item) => item.scheduled_at?.slice(0, 10) === release.release_date)], ["Post-release momentum", contentItems.filter((item) => item.scheduled_at && release.release_date && item.scheduled_at.slice(0, 10) > release.release_date)], ["Evergreen / catalog revival", contentItems.filter((item) => !item.scheduled_at)]].map(([label, rawItems]) => { const items = rawItems as ContentItem[]; return <div key={label as string}><h3>{label as string}<span>{items.length}</span></h3>{items.length ? items.map((item) => <Link href={`/studio/content?edit=${item.id}`} key={item.id}><time>{item.scheduled_at ? dateLabel(item.scheduled_at.slice(0, 10)) : "Unscheduled"}</time><span><strong>{item.title}</strong><small>{item.platform} · {item.format} · {item.goal}</small></span><Status>{item.status}</Status></Link>) : <p>No actions planned in this phase.</p>}</div>; })}</div></section>
-          <section className="campaign-coverage"><div><span className="section-label">Planned content</span><strong>{contentCount}</strong><small>{contentItems.filter((item) => item.status === "Scheduled").length} scheduled</small></div><div><span className="section-label">Outreach actions</span><strong>{contactCount}</strong><small>explicitly user-controlled</small></div><div><span className="section-label">Campaign assets</span><strong>{mediaAssets.filter((asset) => ["canvas_video", "visualizer", "social_image", "content_video", "lyric_video"].includes(asset.asset_type)).length}</strong><small>motion and social coverage</small></div><form action={generateContentPack}><input type="hidden" name="id" value={release.id} /><button className="button">Prepare editable content pack</button><small>Creates drafts only. Nothing is published or sent.</small></form></section>
+          <section className="workspace-section"><div className="section-head"><div><span className="section-label">Campaign plan</span><h2>Release-linked content</h2></div><Link href="/studio/marketing">Open campaign workspace</Link></div>{contentItems.length ? <div className="content-list">{contentItems.map((item) => <article key={item.id}><div><Status>{item.status}</Status><h3>{item.title}</h3><p>{item.platform} · {item.format}</p></div><div className="content-timeline"><span>{item.scheduled_at ? dateLabel(item.scheduled_at.slice(0, 10)) : "Unscheduled"}</span><small>{item.goal || "No goal set"}</small></div></article>)}</div> : <EmptyState title="No campaign content" body="Generate a content pack from this release or manage the full campaign in the campaign workspace." />}<form action={generateContentPack}><input type="hidden" name="release_id" value={release.id} /><Submit>Generate content pack</Submit></form></section>
         </div>
       ) : null}
 
       {currentTab === "performance" ? (
-        <div className="workspace-stack">
-          <section className="performance-overview"><div><span>Plays</span><strong>{totals.plays.toLocaleString()}</strong></div><div><span>Save rate</span><strong>{ratio(totals.saves, totals.plays)}</strong><small>{totals.saves.toLocaleString()} saves</small></div><div><span>Follow conversion</span><strong>{ratio(totals.follows, totals.profileVisits)}</strong><small>{totals.follows.toLocaleString()} follows / {totals.profileVisits.toLocaleString()} visits</small></div><div><span>Click-through</span><strong>{ratio(totals.clicks, totals.views)}</strong><small>{totals.clicks.toLocaleString()} clicks / {totals.views.toLocaleString()} views</small></div><div><span>Watch quality</span><strong>{totals.views ? `${Math.round(totals.watchTime / totals.views)}s` : "—"}</strong><small>average recorded watch time</small></div></section>
-          <section className="workspace-section"><div className="section-head"><div><span className="section-label">Content performance</span><h2>Totals, rates, and weighted response</h2></div><Link href="/studio/analytics">All analytics</Link></div>{scoredContent.length ? <div className="performance-table"><div className="performance-row head"><span>Content</span><span>Views</span><span>Profile visits</span><span>Save rate</span><span>Weighted score</span></div>{scoredContent.map(({ item, aggregate, score }) => <div className="performance-row" key={item.id}><span><strong>{item.title}</strong><small>{item.platform} · {item.format}</small></span><span>{aggregate.views.toLocaleString()}</span><span>{aggregate.profile_visits.toLocaleString()}</span><span>{ratio(aggregate.saves, aggregate.views)}</span><span>{score}<small>visits, follows and saves carry the most weight</small></span></div>)}</div> : <EmptyState title="No content-level performance yet" body="Add snapshots linked to campaign content. The Studio will not invent a performance story." href="/studio/analytics#new" label="Add a snapshot" />}</section>
-          <section className="what-worked"><span className="section-label">What worked</span>{insight ? <p>{insight}</p> : <><h2>Not enough evidence yet</h2><p>At least two content items with linked metrics are needed before the Studio makes a comparison.</p></>}</section>
+        <div className="workspace-grid">
+          <section className="workspace-main"><div className="section-head"><div><span className="section-label">Performance</span><h2>Release impact</h2></div></div><div className="metric-grid"><article><span>Streams</span><strong>{totals.plays.toLocaleString()}</strong></article><article><span>Views</span><strong>{totals.views.toLocaleString()}</strong></article><article><span>Saves</span><strong>{totals.saves.toLocaleString()}</strong></article><article><span>Shares</span><strong>{totals.shares.toLocaleString()}</strong></article><article><span>Profile visits</span><strong>{totals.profileVisits.toLocaleString()}</strong></article><article><span>Follows</span><strong>{totals.follows.toLocaleString()}</strong></article></div></section>
+          <aside className="workspace-section"><div className="section-head"><div><span className="section-label">Insight</span><h2>What moved people</h2></div></div>{insight ? <p>{insight}</p> : <EmptyState title="Not enough signal yet" body="Once at least two published content pieces have meaningful performance, this panel will compare them." />}</aside>
         </div>
       ) : null}
 
-      <details className="danger-zone"><summary>Release administration</summary><p>Deleting a release also removes its canonical tracks and linked campaign records. This cannot be undone.</p><form action={deleteRelease}><input type="hidden" name="id" value={release.id} /><button className="text-button">Delete release permanently</button></form></details>
+      <details className="danger-zone"><summary>Danger zone</summary><form action={deleteRelease}><input type="hidden" name="id" value={release.id} /><ConfirmButton message={`Delete ${release.title}? This cannot be undone.`}>Delete release</ConfirmButton></form></details>
     </>
   );
 }
