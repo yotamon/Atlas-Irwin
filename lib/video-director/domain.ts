@@ -95,12 +95,22 @@ export type VideoCreativeBrief = {
   story_mode: VideoStoryMode;
   people_mode: VideoPeopleMode;
   target: VideoProjectKind;
+  workflow_mode: "quick_video" | "director_pro";
+  concept_id: string | null;
+  concept_snapshot: {
+    title: string;
+    description: string;
+    rationale: string;
+  } | null;
 };
 
 export function parseVideoCreativeBrief(value: unknown): VideoCreativeBrief {
   const record = value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
+  const snapshot = record.concept_snapshot && typeof record.concept_snapshot === "object" && !Array.isArray(record.concept_snapshot)
+    ? record.concept_snapshot as Record<string, unknown>
+    : null;
   return {
     note: typeof record.note === "string" ? record.note : "",
     story_mode: VIDEO_STORY_MODES.includes(record.story_mode as VideoStoryMode)
@@ -112,6 +122,18 @@ export function parseVideoCreativeBrief(value: unknown): VideoCreativeBrief {
     target: VIDEO_PROJECT_KINDS.includes(record.target as VideoProjectKind)
       ? record.target as VideoProjectKind
       : "full_music_video",
+    workflow_mode: record.workflow_mode === "quick_video" ? "quick_video" : "director_pro",
+    concept_id: typeof record.concept_id === "string" && record.concept_id.trim() ? record.concept_id : null,
+    concept_snapshot: snapshot
+      && typeof snapshot.title === "string"
+      && typeof snapshot.description === "string"
+      && typeof snapshot.rationale === "string"
+      ? {
+          title: snapshot.title,
+          description: snapshot.description,
+          rationale: snapshot.rationale,
+        }
+      : null,
   };
 }
 

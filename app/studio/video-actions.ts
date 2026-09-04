@@ -6,7 +6,8 @@ import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
-import { QUICK_VIDEO_CONCEPT_IDS } from "@/lib/video-director/quick-video";
+import { asMomentsClient } from "@/lib/studio/moments-db";
+import { buildQuickVideoConcepts, QUICK_VIDEO_CONCEPT_IDS } from "@/lib/video-director/quick-video";
 import {
   VIDEO_ASPECT_RATIOS,
   VIDEO_PEOPLE_MODES,
@@ -41,6 +42,7 @@ export async function createMusicVideoProject(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveActiveArtistContext(supabase, user);
   const music = asArtistScopedMusicClient(supabase);
+  const momentsDb = asMomentsClient(supabase);
   const parsed = z.object({
     release_id: z.uuid(),
     track_id: z.uuid(),
@@ -67,31 +69,56 @@ export async function createMusicVideoProject(form: FormData) {
     people_mode: value(form, "people_mode"),
   });
 
-  const [{ data: release, error: releaseError }, { data: track, error: trackError }] = await Promise.all([
+  const [releaseResult, trackResult, momentsResult] = await Promise.all([
     music
       .from("releases")
-      .select("id,owner_id,artist_id,title")
+      .select("id,owner_id,artist_id,title,story,core_emotion,primary_hook,visual_direction")
       .eq("id", parsed.release_id)
       .eq("owner_id", user.id)
       .eq("artist_id", artist.artistId)
       .single(),
     music
       .from("tracks")
-      .select("id,owner_id,artist_id,release_id,title")
+      .select("id,owner_id,artist_id,release_id,title,notes")
       .eq("id", parsed.track_id)
       .eq("owner_id", user.id)
       .eq("artist_id", artist.artistId)
       .single(),
+    momentsDb
+      .from("moments")
+      .select("track_id,label,moment_type,start_ms,end_ms,hook_score,energy_score,confidence")
+      .eq("owner_id", user.id)
+      .eq("artist_id", artist.artistId)
+      .eq("release_id", parsed.release_id)
+      .eq("track_id", parsed.track_id)
+      .eq("state", "approved")
+      .order("confidence", { ascending: false })
+      .limit(5),
   ]);
+  const { data: release, error: releaseError } = releaseResult;
+  const { data: track, error: trackError } = trackResult;
   if (releaseError || !release) throw new Error(releaseError?.message ?? "Release not found for the active artist.");
   if (trackError || !track) throw new Error(trackError?.message ?? "Track not found for the active artist.");
+  if (momentsResult.error) throw new Error(momentsResult.error.message);
   if (track.release_id !== release.id) {
     throw new Error("The selected track must belong to this release.");
   }
 
+  const selectedDirection = buildQuickVideoConcepts({
+    release,
+    track,
+    moments: momentsResult.data ?? [],
+  }).find((concept) => concept.id === parsed.quick_video_concept);
+  if (!selectedDirection) throw new Error("Quick Video direction could not be resolved.");
+
   const creative_brief = {
     workflow_mode: "quick_video",
     concept_id: parsed.quick_video_concept,
+    concept_snapshot: {
+      title: selectedDirection.title,
+      description: selectedDirection.description,
+      rationale: selectedDirection.rationale,
+    },
     note: parsed.creative_note,
     story_mode: parsed.story_mode,
     people_mode: parsed.people_mode,

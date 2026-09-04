@@ -144,7 +144,7 @@ async function structuredResponse<T>({
     purpose,
     releaseId: context.release.id,
     videoProjectId: context.project.id,
-    promptVersion: "video-director-v2",
+    promptVersion: "video-director-v3-quick-video",
     schema,
     instructions,
     input: prompt,
@@ -155,31 +155,42 @@ async function structuredResponse<T>({
   return result.value;
 }
 
-function conceptQualityGate(context: VideoProjectContext): AtlasQualityGate<{ concepts: VideoConcept[] }> {
+function conceptIsRich(concept: VideoConcept) {
+  return concept.premise.trim().length >= 30
+    && concept.story.trim().length >= 60
+    && concept.visual_language.trim().length >= 25
+    && concept.camera_language.trim().length >= 15
+    && concept.recurring_motif.trim().length >= 8
+    && concept.anti_cliches.length >= 2
+    && concept.signature_moments.length >= 2;
+}
+
+function conceptTimingsValid(concept: VideoConcept, context: VideoProjectContext) {
   const durationMs = context.musicMap?.duration_ms || Math.round((context.track.duration ?? 0) * 1000);
+  return concept.signature_moments.every((moment) =>
+    moment.time_ms >= 0 && (durationMs <= 0 || moment.time_ms <= durationMs),
+  );
+}
+
+function conceptQualityGate(context: VideoProjectContext): AtlasQualityGate<{ concepts: VideoConcept[] }> {
   return ({ concepts }) => {
     const titles = concepts.map((concept) => concept.title.trim().toLowerCase());
     const premises = concepts.map((concept) => concept.premise.trim().toLowerCase());
-    const richConcepts = concepts.every((concept) =>
-      concept.premise.trim().length >= 30 &&
-      concept.story.trim().length >= 60 &&
-      concept.visual_language.trim().length >= 25 &&
-      concept.camera_language.trim().length >= 15 &&
-      concept.recurring_motif.trim().length >= 8 &&
-      concept.anti_cliches.length >= 2 &&
-      concept.signature_moments.length >= 2,
-    );
-    const timingsValid = concepts.every((concept) => concept.signature_moments.every((moment) =>
-      moment.time_ms >= 0 && (durationMs <= 0 || moment.time_ms <= durationMs),
-    ));
     return strictQualityResult([
       { passed: concepts.length === 3, failure: "Creative Director must return exactly three concepts." },
       { passed: new Set(titles).size === concepts.length, failure: "Video concepts are not distinct enough by title." },
       { passed: new Set(premises).size === concepts.length, failure: "Video concepts repeat the same premise." },
-      { passed: richConcepts, failure: "One or more concepts are too thin to review as a real creative treatment." },
-      { passed: timingsValid, failure: "A signature moment falls outside the track timeline." },
+      { passed: concepts.every(conceptIsRich), failure: "One or more concepts are too thin to review as a real creative treatment." },
+      { passed: concepts.every((concept) => conceptTimingsValid(concept, context)), failure: "A signature moment falls outside the track timeline." },
     ]);
   };
+}
+
+function quickConceptQualityGate(context: VideoProjectContext): AtlasQualityGate<VideoConcept> {
+  return (concept) => strictQualityResult([
+    { passed: conceptIsRich(concept), failure: "The approved Quick Video direction was not developed into a rich enough treatment." },
+    { passed: conceptTimingsValid(concept, context), failure: "A Quick Video signature moment falls outside the track timeline." },
+  ]);
 }
 
 function planQualityGate(context: VideoProjectContext): AtlasQualityGate<ProductionPlan> {
@@ -225,6 +236,21 @@ export class OpenAIMusicVideoDirector implements MusicVideoCreativeDirector {
       qualityGate: conceptQualityGate(context),
     });
     return result.concepts;
+  }
+
+  async createQuickVideoConcept(context: VideoProjectContext): Promise<VideoConcept> {
+    const brief = parseVideoCreativeBrief(context.project.creative_brief);
+    if (brief.workflow_mode !== "quick_video") throw new Error("Quick Video direction is not available for this project.");
+    if (!brief.concept_snapshot && !brief.concept_id) throw new Error("Quick Video direction is missing from the creative brief.");
+    return structuredResponse<VideoConcept>({
+      context,
+      task: "video.concepts",
+      purpose: "quick_video_direction_development",
+      instructions: `${DIRECTOR_INSTRUCTIONS}\nThe artist has already chosen the creative direction. Do not propose alternatives and do not reinterpret this as a new concept-selection step. Expand the chosen direction into one production-worthy treatment that remains recognizably faithful to the supplied Quick Video direction.`,
+      prompt: `Develop this already-approved Quick Video direction into one complete music-video concept.\n\nApproved direction:\n${JSON.stringify({ id: brief.concept_id, ...brief.concept_snapshot })}\n\nProject context:\n${JSON.stringify(compactContext(context))}`,
+      schema: CONCEPT_SCHEMA,
+      qualityGate: quickConceptQualityGate(context),
+    });
   }
 
   async createProductionPlan(context: VideoProjectContext, concept: VideoConcept): Promise<ProductionPlan> {

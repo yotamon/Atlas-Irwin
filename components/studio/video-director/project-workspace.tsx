@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { parseVideoCreativeBrief } from "@/lib/video-director/domain";
 import { ProjectHeader } from "./project-header";
 import { StageRail } from "./stage-rail";
 import { BriefPanel } from "./brief-panel";
@@ -6,6 +8,7 @@ import { DeliveryPanel } from "./delivery-panel";
 import { LookDevelopmentPanel } from "./look-development-panel";
 import { ConceptRefinementPanel } from "./concept-refinement-panel";
 import { TrackIntelligenceInspector } from "./track-intelligence-inspector";
+import { QuickVideoProjectWorkspace } from "./quick-video-project-workspace";
 import {
   ConceptsPanel,
   GenerationPanel,
@@ -17,11 +20,31 @@ import {
 } from "./production-panels";
 import type { VideoWorkspaceData } from "./workspace-types";
 
-export function VideoProjectWorkspace({ data }: { data: VideoWorkspaceData }) {
+export function VideoProjectWorkspace({
+  data,
+  mode = "default",
+}: {
+  data: VideoWorkspaceData;
+  mode?: "default" | "pro";
+}) {
+  const brief = parseVideoCreativeBrief(data.project.creative_brief);
+  if (brief.workflow_mode === "quick_video" && mode !== "pro") {
+    return <QuickVideoProjectWorkspace data={data} />;
+  }
+
   const { project, release, track, contextSignals } = data;
   return (
     <div className="video-project-workspace">
       <ProjectHeader project={project} release={release} track={track} />
+      {brief.workflow_mode === "quick_video" ? (
+        <section className="workspace-section">
+          <div className="section-head">
+            <div><span className="section-label">Director Pro</span><h2>Full production controls</h2></div>
+            <Link className="button" href={`/studio/video/${project.id}`}>Back to Quick Video</Link>
+          </div>
+          <p className="section-copy">This is the same durable Quick Video production, exposed as the detailed concept, storyboard, provider, generation, review and render workflow.</p>
+        </section>
+      ) : null}
       <StageRail status={project.status} />
       <RecoveryPanel data={data} />
       <NextActionCard data={data} />

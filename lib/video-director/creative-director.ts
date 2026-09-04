@@ -276,6 +276,7 @@ export type VideoProjectContext = {
 
 export interface MusicVideoCreativeDirector {
   createConcepts(context: VideoProjectContext): Promise<VideoConcept[]>;
+  createQuickVideoConcept(context: VideoProjectContext): Promise<VideoConcept>;
   createProductionPlan(context: VideoProjectContext, concept: VideoConcept): Promise<ProductionPlan>;
   reviseShot(input: {
     context: VideoProjectContext;
