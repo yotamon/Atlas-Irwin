@@ -3,28 +3,31 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { studioIcons } from "./icons";
-import {
-  ENSEMBLIS_PRIMARY_NAV,
-  ensemblisArtistHref,
-} from "@/lib/ensemblis-product";
 
-function routeIsActive(pathname: string, href: string) {
-  if (href === "/studio") return pathname === href;
-  return pathname === href || pathname.startsWith(`${href}/`);
+type NavigationItem = {
+  href: string;
+  route: string;
+  label: string;
+  icon: keyof typeof studioIcons;
+};
+
+function routeIsActive(pathname: string, route: string) {
+  if (route === "/studio") return pathname === route;
+  return pathname === route || pathname.startsWith(`${route}/`);
 }
 
-export function StudioPrimaryNavigation({ artistId }: { artistId: string }) {
+export function StudioPrimaryNavigation({ items }: { items: NavigationItem[] }) {
   const pathname = usePathname();
 
   return (
     <nav aria-label="Ensemblis primary navigation">
-      {ENSEMBLIS_PRIMARY_NAV.map(({ href, label, icon }) => {
+      {items.map(({ href, route, label, icon }) => {
         const Icon = studioIcons[icon];
-        const active = routeIsActive(pathname, href);
+        const active = routeIsActive(pathname, route);
         return (
           <Link
-            href={ensemblisArtistHref(href, artistId)}
-            key={href}
+            href={href}
+            key={route}
             className={active ? "is-active" : undefined}
             aria-current={active ? "page" : undefined}
           >
@@ -37,20 +40,19 @@ export function StudioPrimaryNavigation({ artistId }: { artistId: string }) {
   );
 }
 
-export function StudioAdvancedNavigation({ artistId }: { artistId: string }) {
+export function StudioAdvancedNavigation({ item }: { item: NavigationItem }) {
   const pathname = usePathname();
-  const href = "/studio/distribution";
-  const active = routeIsActive(pathname, href);
-  const Distribution = studioIcons.distribution;
+  const active = routeIsActive(pathname, item.route);
+  const Icon = studioIcons[item.icon];
 
   return (
     <Link
-      href={ensemblisArtistHref(href, artistId)}
+      href={item.href}
       className={active ? "is-active" : undefined}
       aria-current={active ? "page" : undefined}
     >
-      <Distribution aria-hidden />
-      <span className="studio-nav-text">Distribution</span>
+      <Icon aria-hidden />
+      <span className="studio-nav-text">{item.label}</span>
     </Link>
   );
 }
