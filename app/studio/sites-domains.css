@@ -1,0 +1,118 @@
+.studio-root .ensemblis-domain-connect-form {
+  display: flex;
+  align-items: end;
+  gap: 0.8rem;
+  margin-top: 1.2rem;
+  flex-wrap: wrap;
+}
+
+.studio-root .ensemblis-domain-connect-form label {
+  display: grid;
+  gap: 0.45rem;
+  min-width: min(100%, 24rem);
+  flex: 1 1 24rem;
+  color: var(--en-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.studio-root .ensemblis-domain-connect-form input {
+  min-height: 2.8rem;
+  width: 100%;
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-sm);
+  padding: 0 0.9rem;
+  background: var(--en-bg-elevated);
+  color: var(--en-ink);
+  font: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.studio-root .ensemblis-domain-connect-form input:focus {
+  outline: none;
+  border-color: var(--en-accent);
+  box-shadow: 0 0 0 3px rgba(183, 243, 106, 0.1);
+}
+
+.studio-root .ensemblis-domain-list {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 1.25rem;
+}
+
+.studio-root .ensemblis-domain-card {
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius);
+  padding: 1rem;
+  background: color-mix(in srgb, var(--en-surface) 94%, transparent);
+}
+
+.studio-root .ensemblis-domain-card-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.studio-root .ensemblis-domain-card-head strong {
+  color: var(--en-ink);
+  font-size: 1.05rem;
+}
+
+.studio-root .ensemblis-domain-card-head p {
+  margin: 0.25rem 0 0;
+  color: var(--en-muted);
+}
+
+.studio-root .ensemblis-domain-card-head > span {
+  border: 1px solid var(--en-line);
+  border-radius: 999px;
+  padding: 0.28rem 0.55rem;
+  background: var(--en-surface-raised);
+  color: var(--en-accent);
+  font-size: 0.72rem;
+  font-weight: 760;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.studio-root .ensemblis-domain-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+  margin-top: 0.8rem;
+  color: var(--en-muted);
+}
+
+.studio-root .ensemblis-domain-dns {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.9rem;
+  border-top: 1px solid var(--en-line);
+  padding-top: 0.9rem;
+}
+
+.studio-root .ensemblis-domain-dns > div {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(8rem, 0.8fr) minmax(12rem, 1.6fr) auto;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.studio-root .ensemblis-domain-dns code {
+  overflow-wrap: anywhere;
+  border-radius: 0.35rem;
+  padding: 0.36rem 0.48rem;
+  background: var(--en-bg-elevated);
+  color: var(--en-ink);
+  font-size: 0.76rem;
+}
+
+@media (max-width: 760px) {
+  .studio-root .ensemblis-domain-dns > div {
+    grid-template-columns: 1fr;
+  }
+}
