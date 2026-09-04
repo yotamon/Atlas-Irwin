@@ -9,6 +9,7 @@ permissions:
 
 jobs:
   resolve:
+    # Temporary one-shot resolver for draft UX PR #94. Removed after artifact capture.
     if: github.event.pull_request.draft == true && github.event.pull_request.number == 94
     runs-on: ubuntu-latest
     timeout-minutes: 5
