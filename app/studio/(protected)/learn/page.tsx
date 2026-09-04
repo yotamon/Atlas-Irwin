@@ -4,6 +4,7 @@ import { EmptyState, PageHeader } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { aggregateMetrics, formatRate, metricSignals, objectivePerformanceScore, primarySignalValue } from "@/lib/marketing/domain";
+import { describeLearningEffect } from "@/lib/marketing/learning-contract";
 import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 
 type LearningRow = {
@@ -22,41 +23,6 @@ type LearningRow = {
   expires_at?: string | null;
   supersedes_learning_id?: string | null;
 };
-
-type MomentTraitEffect = {
-  kind: "moment_trait_preference";
-  trait: string;
-  direction: "higher" | "lower";
-  weight: number;
-  platform?: string;
-  format?: string;
-  goal?: string;
-  metric: string;
-};
-
-function momentTraitEffect(value: unknown): MomentTraitEffect | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const effect = value as Record<string, unknown>;
-  if (effect.kind !== "moment_trait_preference") return null;
-  if (effect.direction !== "higher" && effect.direction !== "lower") return null;
-  if (typeof effect.trait !== "string" || typeof effect.metric !== "string" || typeof effect.weight !== "number") return null;
-  return effect as unknown as MomentTraitEffect;
-}
-
-function humanSignal(value: string) {
-  return value.replace(/_score$/, "").replace(/_/g, " ");
-}
-
-function humanMetric(value: string) {
-  return value.replace(/_/g, " ");
-}
-
-function effectSummary(value: unknown) {
-  const effect = momentTraitEffect(value);
-  if (!effect) return "Evidence memory only. No executable ranking rule is attached.";
-  const scope = [effect.platform, effect.format, effect.goal].filter(Boolean).join(" · ");
-  return `If approved, Ensemblis may give a bounded ${Math.round(effect.weight * 100)}% ranking weight toward ${effect.direction} ${humanSignal(effect.trait)} Moments${scope ? ` for ${scope}` : ""}. Signal: ${humanMetric(effect.metric)}.`;
-}
 
 function compactDate(value: string | null | undefined) {
   if (!value) return null;
@@ -139,7 +105,7 @@ export default async function LearnPage() {
               <div>
                 <span>{learning.scope} · {Math.round(Number(learning.confidence) * 100)}% confidence{sample ? ` · ${sample.toLocaleString()} qualified observations` : ""}</span>
                 <strong>{learning.finding}</strong>
-                <small>{effectSummary(learning.effect)}</small>
+                <small>{describeLearningEffect(learning.effect)}</small>
                 <small>
                   Source: {learning.source}
                   {windowStart || windowEnd ? ` · Evidence ${windowStart ?? "?"} to ${windowEnd ?? "?"}` : ""}
@@ -163,7 +129,7 @@ export default async function LearnPage() {
         </section>
         <section className="v2-section v2-compact-section">
           <div className="v2-section-heading"><div><span className="section-label">Memory</span><h2>What Ensemblis may reuse now</h2></div></div>
-          {approved.length ? <div className="v2-learning-list">{approved.slice(0, 6).map((learning) => <div key={learning.id}><strong>{Math.round(Number(learning.confidence) * 100)}%</strong><p>{learning.finding}</p><small>{effectSummary(learning.effect)}</small></div>)}</div> : <div className="v2-calm-state compact"><strong>No active approved memory yet.</strong><p>Only approved, unexpired structured effects can influence future ranking.</p></div>}
+          {approved.length ? <div className="v2-learning-list">{approved.slice(0, 6).map((learning) => <div key={learning.id}><strong>{Math.round(Number(learning.confidence) * 100)}%</strong><p>{learning.finding}</p><small>{describeLearningEffect(learning.effect)}</small></div>)}</div> : <div className="v2-calm-state compact"><strong>No active approved memory yet.</strong><p>Only approved, unexpired structured effects can influence future ranking.</p></div>}
           {expiredMemory.length ? <p className="v2-muted-copy">{expiredMemory.length} approved learning{expiredMemory.length === 1 ? " is" : "s are"} retained as history but no longer influence decisions because the evidence expired.</p> : null}
         </section>
       </div>
