@@ -1,4 +1,4 @@
-/* Shared interaction polish: global command search and keyboard-first navigation. */
+/* Shared interaction polish: global command search, keyboard navigation and durable upload feedback. */
 
 .studio-root .ensemblis-command-trigger {
   display: inline-flex;
@@ -161,6 +161,53 @@
   text-align: center;
 }
 
+.studio-root .media-dropzone > small {
+  max-width: 34rem;
+  color: var(--en-subtle);
+  font-size: 0.61rem;
+  line-height: 1.45;
+}
+
+.studio-root .upload-item-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.28rem;
+}
+
+.studio-root .upload-progress {
+  display: block;
+  width: min(100%, 28rem);
+  height: 0.28rem;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: var(--en-line);
+  accent-color: var(--en-accent);
+}
+
+.studio-root .upload-progress::-webkit-progress-bar {
+  border-radius: 999px;
+  background: var(--en-line);
+}
+
+.studio-root .upload-progress::-webkit-progress-value {
+  border-radius: 999px;
+  background: var(--en-accent);
+}
+
+.studio-root .upload-progress::-moz-progress-bar {
+  border-radius: 999px;
+  background: var(--en-accent);
+}
+
+.studio-root .upload-item.uploading .upload-file-icon {
+  color: var(--en-accent);
+}
+
+.studio-root .upload-item.error {
+  background: color-mix(in srgb, var(--en-danger, #ff7668) 5%, transparent);
+}
+
 @media (max-width: 680px) {
   .studio-root .ensemblis-command-trigger span,
   .studio-root .ensemblis-command-trigger kbd {
@@ -189,6 +236,10 @@
 
   .studio-root .ensemblis-command-group small {
     display: none;
+  }
+
+  .studio-root .upload-progress {
+    width: 100%;
   }
 }
 
