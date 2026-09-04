@@ -1,0 +1,157 @@
+/* Audience as a decision queue, not a social inbox clone. */
+
+.studio-root .audience-polish-page {
+  width: min(100%, 82rem);
+  margin: 0 auto;
+}
+
+.studio-root .audience-polish-summary {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: clamp(1.7rem, 3vw, 2.5rem);
+  padding-block: 0.9rem;
+  border-block: 1px solid var(--en-line);
+}
+
+.studio-root .audience-polish-summary > div {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 7rem;
+  padding-right: 1rem;
+  border-right: 1px solid color-mix(in srgb, var(--en-line) 76%, transparent);
+}
+
+.studio-root .audience-polish-summary strong {
+  color: var(--en-ink);
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+
+.studio-root .audience-polish-summary span,
+.studio-root .audience-polish-summary p {
+  color: var(--en-muted);
+  font-size: 0.66rem;
+  line-height: 1.45;
+}
+
+.studio-root .audience-polish-heading {
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--en-line);
+}
+
+.studio-root .audience-polish-heading h2 {
+  margin-top: 0.18rem;
+  color: var(--en-ink);
+  font-size: 1.4rem;
+  font-weight: 690;
+  letter-spacing: -0.04em;
+}
+
+.studio-root .audience-thread-list {
+  display: grid;
+}
+
+.studio-root .audience-thread {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1.15rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--en-line) 76%, transparent);
+}
+
+.studio-root .audience-thread > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.studio-root .audience-thread > header > div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.studio-root .audience-thread > header small,
+.studio-root .audience-thread > header > span {
+  color: var(--en-subtle);
+  font-size: 0.62rem;
+}
+
+.studio-root .audience-thread > header strong {
+  color: var(--en-ink);
+  font-size: 0.86rem;
+  font-weight: 670;
+}
+
+.studio-root .audience-thread > header > span {
+  padding: 0.25rem 0.48rem;
+  border: 1px solid var(--en-line);
+  border-radius: 999px;
+}
+
+.studio-root .audience-message {
+  max-width: 58rem;
+  color: var(--en-ink);
+  font-size: 0.9rem;
+  line-height: 1.62;
+}
+
+.studio-root .audience-draft {
+  display: grid;
+  gap: 0.7rem;
+  max-width: 60rem;
+  padding: 0.9rem 1rem;
+  border-left: 2px solid color-mix(in srgb, var(--en-violet) 52%, var(--en-line));
+  background: color-mix(in srgb, var(--en-violet-soft) 38%, transparent);
+}
+
+.studio-root .audience-draft label {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.studio-root .audience-draft label > span {
+  color: var(--en-subtle);
+  font-size: 0.61rem;
+  font-weight: 720;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.studio-root .audience-draft textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-sm);
+  background: var(--en-surface-raised);
+  color: var(--en-ink);
+  padding: 0.75rem 0.8rem;
+  font: inherit;
+  line-height: 1.5;
+}
+
+.studio-root .audience-no-draft {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--en-muted);
+  font-size: 0.7rem;
+}
+
+@media (max-width: 720px) {
+  .studio-root .audience-polish-summary {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .studio-root .audience-polish-summary p {
+    grid-column: 1 / -1;
+  }
+
+  .studio-root .audience-no-draft {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
