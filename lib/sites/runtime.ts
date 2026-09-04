@@ -13,7 +13,7 @@ export type PublishedSiteRuntime = {
   viewModel: ReturnType<typeof parseSiteViewModel>;
 };
 
-async function loadPublishedSiteById(siteId: string): Promise<PublishedSiteRuntime | null> {
+async function loadPublishedSiteByIdUncached(siteId: string): Promise<PublishedSiteRuntime | null> {
   const db = asSitesClient(createCatalogClient());
   const { data: site, error: siteError } = await db
     .from("artist_sites")
@@ -44,40 +44,48 @@ async function loadPublishedSiteById(siteId: string): Promise<PublishedSiteRunti
   };
 }
 
-async function loadPublishedSiteBySlugUncached(slug: string) {
-  const db = asSitesClient(createCatalogClient());
-  const { data, error } = await db
-    .from("artist_sites")
-    .select("id")
-    .eq("slug", slug)
-    .eq("state", "published")
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  return data ? loadPublishedSiteById(data.id) : null;
+export function loadPublishedSiteById(siteId: string) {
+  return unstable_cache(
+    () => loadPublishedSiteByIdUncached(siteId),
+    ["ensemblis-site-id", siteId],
+    { revalidate: 60, tags: [`site:${siteId}`] },
+  )();
 }
 
-async function loadPublishedSiteByHostnameUncached(hostname: string) {
+export function loadPublishedSiteBySlug(slug: string) {
+  return unstable_cache(
+    async () => {
+      const db = asSitesClient(createCatalogClient());
+      const { data, error } = await db
+        .from("artist_sites")
+        .select("id")
+        .eq("slug", slug)
+        .eq("state", "published")
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return data ? loadPublishedSiteByIdUncached(data.id) : null;
+    },
+    ["ensemblis-site-slug", slug],
+    { revalidate: 60, tags: [`site-slug:${slug}`] },
+  )();
+}
+
+export function loadPublishedSiteByHostname(hostname: string) {
   const normalized = hostname.trim().toLowerCase().replace(/:\d+$/, "");
-  const db = asSitesClient(createCatalogClient());
-  const { data: domain, error } = await db
-    .from("artist_site_domains")
-    .select("site_id")
-    .eq("hostname", normalized)
-    .eq("verification_status", "verified")
-    .eq("ssl_status", "active")
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  return domain ? loadPublishedSiteById(domain.site_id) : null;
+  return unstable_cache(
+    async () => {
+      const db = asSitesClient(createCatalogClient());
+      const { data: domain, error } = await db
+        .from("artist_site_domains")
+        .select("site_id")
+        .eq("hostname", normalized)
+        .eq("verification_status", "verified")
+        .eq("ssl_status", "active")
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return domain ? loadPublishedSiteByIdUncached(domain.site_id) : null;
+    },
+    ["ensemblis-site-host", normalized],
+    { revalidate: 60, tags: [`site-host:${normalized}`] },
+  )();
 }
-
-export const loadPublishedSiteBySlug = unstable_cache(
-  loadPublishedSiteBySlugUncached,
-  ["ensemblis-site-by-slug"],
-  { revalidate: 60, tags: ["ensemblis-sites"] },
-);
-
-export const loadPublishedSiteByHostname = unstable_cache(
-  loadPublishedSiteByHostnameUncached,
-  ["ensemblis-site-by-hostname"],
-  { revalidate: 60, tags: ["ensemblis-sites"] },
-);
