@@ -1,7 +1,7 @@
 import { MusicGenerator } from "@/components/studio/music-generator";
 import { PageHeader } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { miniMaxGenerationCost } from "@/lib/music/atlas-generator";
+import { miniMaxGenerationCost } from "@/lib/music/generator";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 
@@ -43,9 +43,14 @@ export default async function MusicLabPage() {
     <>
       <PageHeader
         title="Music Lab"
-        description={`Generate drafts for ${artist.artistName} inside Ensemblis. The prompt architecture keeps this artist's own music and brand context, pushes one signature idea per track, and makes provider cost visible before you spend.`}
+        description={`Generate drafts for ${artist.artistName} inside Ensemblis. The prompt architecture uses only this artist's own music and brand context, pushes one signature idea per track, and makes provider cost visible before you spend.`}
       />
-      <MusicGenerator providers={providers} brandContext={brandContext} />
+      <MusicGenerator
+        providers={providers}
+        brandContext={brandContext}
+        artistId={artist.artistId}
+        artistName={artist.artistName}
+      />
     </>
   );
 }

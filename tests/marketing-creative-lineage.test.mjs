@@ -55,3 +55,42 @@ test("generated assets retain reference provenance and require review", async ()
   assert.match(assets, /approval_status: "pending"/);
   assert.match(generation, /content\.ai_asset_ready_for_review/);
 });
+
+test("Music Lab is artist-neutral and keeps saved draft lineage", async () => {
+  const component = await source("components/studio/music-generator.tsx");
+  const generator = await source("lib/music/generator.ts");
+  const page = await source("app/studio/(protected)/music/page.tsx");
+
+  assert.doesNotMatch(component, /Atlas/);
+  assert.doesNotMatch(generator, /Atlas/);
+  assert.match(component, /Preserve \{artistName\} DNA/);
+  assert.match(component, /artist:\$\{artistId\}/);
+  assert.match(component, /ensemblis-music-lab/);
+  assert.match(page, /resolveActiveArtistContext/);
+  assert.match(page, /\.eq\("artist_id", artist\.artistId\)/);
+});
+
+test("creative QC is Ensemblis-configured and preserves active artist lineage", async () => {
+  const imageQc = await source("lib/marketing/creative-visual-quality.ts");
+  const videoQc = await source("lib/marketing/creative-video-quality.ts");
+
+  for (const qc of [imageQc, videoQc]) {
+    assert.match(qc, /ENSEMBLIS_CREATIVE_REVIEW_MODEL/);
+    assert.match(qc, /ENSEMBLIS_CREATIVE_REVIEW_FALLBACK_MODELS/);
+    assert.match(qc, /ATLAS_CREATIVE_REVIEW_MODEL/);
+  }
+  assert.doesNotMatch(videoQc, /Atlas Irwin social video|Atlas visual world/);
+  assert.match(videoQc, /artist_id: artistId/);
+  assert.match(videoQc, /\.eq\("artist_id", artistId\)/);
+  assert.match(videoQc, /active artist visual world/);
+});
+
+test("environment documentation is Ensemblis-first while preserving explicit legacy compatibility", async () => {
+  const env = await source(".env.example");
+  assert.match(env, /ENSEMBLIS_AI_GATEWAY_PROVIDER_SORT=cost/);
+  assert.match(env, /ENSEMBLIS_MARKETING_MODEL=/);
+  assert.match(env, /ENSEMBLIS_CREATIVE_REVIEW_MODEL=/);
+  assert.match(env, /legacy fallbacks/);
+  assert.doesNotMatch(env, /^ATLAS_SOCIAL_REQUEST_PUBLISH_SCOPES=/m);
+  assert.doesNotMatch(env, /^# Atlas /m);
+});

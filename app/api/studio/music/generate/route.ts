@@ -1,11 +1,11 @@
 import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import {
-  ATLAS_VIBE_IDS,
   MUSIC_PROVIDER_IDS,
-  buildAtlasMusicPrompt,
-  type AtlasMusicInput,
-} from "@/lib/music/atlas-generator";
+  MUSIC_VIBE_IDS,
+  buildMusicPrompt,
+  type MusicGenerationInput,
+} from "@/lib/music/generator";
 import {
   generateEleven,
   generateMiniMax,
@@ -20,14 +20,16 @@ const inputSchema = z.object({
   provider: z.enum(MUSIC_PROVIDER_IDS),
   title: z.string().trim().min(1).max(120),
   idea: z.string().trim().min(3).max(1200),
-  vibe: z.enum(ATLAS_VIBE_IDS),
+  vibe: z.enum(MUSIC_VIBE_IDS),
   bpm: z.coerce.number().int().min(80).max(150),
   durationSeconds: z.coerce.number().int().min(60).max(300),
   instrumental: z.boolean(),
   lyrics: z.string().max(3500).optional().default(""),
   signatureIdea: z.string().max(500).optional().default(""),
   brandContext: z.string().max(2000).optional().default(""),
-  useAtlasDna: z.boolean().default(true),
+  preserveArtistDna: z.boolean().optional(),
+  // Transitional compatibility for clients deployed before the Ensemblis decoupling.
+  useAtlasDna: z.boolean().optional(),
 }).superRefine((value, ctx) => {
   if (!value.instrumental && !value.lyrics.trim()) {
     ctx.addIssue({
@@ -42,11 +44,25 @@ export async function POST(request: Request) {
   await requireStudioAdmin();
 
   try {
-    const input = inputSchema.parse(await request.json()) as AtlasMusicInput;
-    const prompt = buildAtlasMusicPrompt(input);
+    const parsed = inputSchema.parse(await request.json());
+    const input: MusicGenerationInput = {
+      provider: parsed.provider,
+      title: parsed.title,
+      idea: parsed.idea,
+      vibe: parsed.vibe,
+      bpm: parsed.bpm,
+      durationSeconds: parsed.durationSeconds,
+      instrumental: parsed.instrumental,
+      lyrics: parsed.lyrics,
+      signatureIdea: parsed.signatureIdea,
+      brandContext: parsed.brandContext,
+      preserveArtistDna: parsed.preserveArtistDna ?? parsed.useAtlasDna ?? true,
+    };
+    const prompt = buildMusicPrompt(input);
     const result = input.provider === "minimax"
       ? await generateMiniMax(input, prompt)
       : await generateEleven(input, prompt);
+    const cost = result.estimatedCostUsd.toFixed(4);
 
     return new Response(result.body, {
       status: 200,
@@ -54,9 +70,14 @@ export async function POST(request: Request) {
         "Content-Type": result.contentType,
         ...(result.contentLength ? { "Content-Length": result.contentLength } : {}),
         "Cache-Control": "no-store",
+        "X-Ensemblis-Music-Provider": result.provider,
+        "X-Ensemblis-Music-Model": result.model,
+        "X-Ensemblis-Music-Estimated-Cost": cost,
+        ...(result.providerRequestId ? { "X-Ensemblis-Music-Request-Id": result.providerRequestId } : {}),
+        // Keep one release of response-header compatibility for an already-open Studio tab.
         "X-Atlas-Provider": result.provider,
         "X-Atlas-Model": result.model,
-        "X-Atlas-Estimated-Cost": result.estimatedCostUsd.toFixed(4),
+        "X-Atlas-Estimated-Cost": cost,
         ...(result.providerRequestId ? { "X-Atlas-Request-Id": result.providerRequestId } : {}),
       },
     });

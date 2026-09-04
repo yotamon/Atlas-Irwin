@@ -67,7 +67,7 @@ export function assessCreativeProductionPreflight(input: {
     "blocking",
     context.cohesionScore >= 50
       ? `Creative context cohesion is ${context.cohesionScore}/100.`
-      : `Creative context cohesion is only ${context.cohesionScore}/100. Add release artwork or approved Atlas references before paid generation.`,
+      : `Creative context cohesion is only ${context.cohesionScore}/100. Add release artwork or approved artist references before paid generation.`,
   ));
 
   checks.push(check(

@@ -9,14 +9,14 @@ import {
   registerMediaUpload,
 } from "@/app/studio/catalog-actions";
 import {
-  ATLAS_VIBES,
-  buildAtlasMusicPrompt,
+  MUSIC_VIBES,
+  buildMusicPrompt,
   estimateMusicCost,
   safeTrackFilename,
-  type AtlasMusicInput,
-  type AtlasVibeId,
+  type MusicGenerationInput,
   type MusicProviderId,
-} from "@/lib/music/atlas-generator";
+  type MusicVibeId,
+} from "@/lib/music/generator";
 import { createClient } from "@/lib/supabase/client";
 import styles from "./music-generator.module.css";
 
@@ -37,12 +37,19 @@ type Generation = {
   model: string;
   cost: number;
   prompt: string;
-  vibe: AtlasVibeId;
+  vibe: MusicVibeId;
   blob: Blob;
   url: string;
   saved: boolean;
   saving: boolean;
   saveError?: string;
+};
+
+type MusicGeneratorProps = {
+  providers: ProviderOption[];
+  brandContext: string;
+  artistId: string;
+  artistName: string;
 };
 
 function bytesLabel(bytes: number) {
@@ -76,19 +83,25 @@ function responseMessage(value: unknown) {
   return "Music generation failed.";
 }
 
-export function MusicGenerator({ providers, brandContext }: { providers: ProviderOption[]; brandContext: string }) {
+export function MusicGenerator({
+  providers,
+  brandContext,
+  artistId,
+  artistName,
+}: MusicGeneratorProps) {
   const router = useRouter();
   const firstEnabled = providers.find((provider) => provider.enabled)?.id ?? "minimax";
+  const hasArtistDna = Boolean(brandContext.trim());
   const [provider, setProvider] = useState<MusicProviderId>(firstEnabled);
-  const [title, setTitle] = useState("Untitled Atlas Draft");
-  const [idea, setIdea] = useState("A hypnotic late-night disco groove with a strong bass-led hook, patient development and a satisfying return after the breakdown");
-  const [vibe, setVibe] = useState<AtlasVibeId>("late-night");
+  const [title, setTitle] = useState("Untitled Draft");
+  const [idea, setIdea] = useState("A focused new track built around one immediately memorable musical signature.");
+  const [vibe, setVibe] = useState<MusicVibeId>("focused");
   const [bpm, setBpm] = useState(118);
   const [durationSeconds, setDurationSeconds] = useState(240);
   const [signatureIdea, setSignatureIdea] = useState("");
   const [instrumental, setInstrumental] = useState(true);
   const [lyrics, setLyrics] = useState("");
-  const [useAtlasDna, setUseAtlasDna] = useState(true);
+  const [preserveArtistDna, setPreserveArtistDna] = useState(hasArtistDna);
   const [variants, setVariants] = useState(1);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -96,7 +109,7 @@ export function MusicGenerator({ providers, brandContext }: { providers: Provide
   const urls = useRef<string[]>([]);
 
   const selectedProvider = providers.find((entry) => entry.id === provider);
-  const input = useMemo<AtlasMusicInput>(() => ({
+  const input = useMemo<MusicGenerationInput>(() => ({
     provider,
     title,
     idea,
@@ -107,9 +120,9 @@ export function MusicGenerator({ providers, brandContext }: { providers: Provide
     lyrics,
     signatureIdea,
     brandContext,
-    useAtlasDna,
-  }), [provider, title, idea, vibe, bpm, durationSeconds, instrumental, lyrics, signatureIdea, brandContext, useAtlasDna]);
-  const prompt = useMemo(() => buildAtlasMusicPrompt(input), [input]);
+    preserveArtistDna: hasArtistDna && preserveArtistDna,
+  }), [provider, title, idea, vibe, bpm, durationSeconds, instrumental, lyrics, signatureIdea, brandContext, hasArtistDna, preserveArtistDna]);
+  const prompt = useMemo(() => buildMusicPrompt(input), [input]);
   const estimatedCost = estimateMusicCost(provider, durationSeconds, variants, selectedProvider?.model);
 
   useEffect(() => () => {
@@ -129,7 +142,7 @@ export function MusicGenerator({ providers, brandContext }: { providers: Provide
 
     setBusy(true);
     setError("");
-    const requestInput = { ...input, title: title.trim() || "Untitled Atlas Draft" };
+    const requestInput = { ...input, title: title.trim() || "Untitled Draft" };
     const jobs = Array.from({ length: variants }, async (_, variantIndex) => {
       const response = await fetch("/api/studio/music/generate", {
         method: "POST",
@@ -148,8 +161,8 @@ export function MusicGenerator({ providers, brandContext }: { providers: Provide
         index: variantIndex + 1,
         title: requestInput.title,
         provider,
-        model: response.headers.get("X-Atlas-Model") || selectedProvider.model,
-        cost: Number(response.headers.get("X-Atlas-Estimated-Cost") || 0),
+        model: response.headers.get("X-Ensemblis-Music-Model") || selectedProvider.model,
+        cost: Number(response.headers.get("X-Ensemblis-Music-Estimated-Cost") || 0),
         prompt,
         vibe,
         blob,
@@ -193,7 +206,7 @@ export function MusicGenerator({ providers, brandContext }: { providers: Provide
 
       const registration = new FormData();
       const description = [
-        `Generated in Atlas Music Lab with ${generation.provider} / ${generation.model}.`,
+        `Generated in Ensemblis Music Lab for ${artistName} with ${generation.provider} / ${generation.model}.`,
         `Estimated generation cost: $${generation.cost.toFixed(2)}.`,
         `Prompt: ${generation.prompt.slice(0, 1500)}`,
       ].join("\n\n");
@@ -208,7 +221,7 @@ export function MusicGenerator({ providers, brandContext }: { providers: Provide
         original_name: file.name,
         title: `${generation.title} - AI draft`,
         description,
-        tags: `ai-generated, atlas-music-lab, ${generation.provider}, ${generation.model}, ${generation.vibe}`,
+        tags: `ai-generated, ensemblis-music-lab, artist:${artistId}, ${generation.provider}, ${generation.model}, ${generation.vibe}`,
         duration_ms: String(durationMs || ""),
         width: "",
         height: "",
@@ -239,7 +252,7 @@ export function MusicGenerator({ providers, brandContext }: { providers: Provide
         <div className={styles.sectionIntro}>
           <span className="section-label">01 / Engine</span>
           <h2>Choose the spend</h2>
-          <p>MiniMax is the cheap ideation engine. Eleven is the control engine. Both use the same Atlas-specific prompt architecture.</p>
+          <p>MiniMax is the cheap ideation engine. Eleven is the control engine. Both use the same artist-aware Ensemblis prompt architecture.</p>
         </div>
 
         <div className={styles.providers}>
@@ -265,9 +278,9 @@ export function MusicGenerator({ providers, brandContext }: { providers: Provide
               <input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={120} />
             </label>
             <label className="field">
-              <span>Vibe</span>
-              <select value={vibe} onChange={(event) => setVibe(event.target.value as AtlasVibeId)}>
-                {ATLAS_VIBES.map((entry) => <option value={entry.id} key={entry.id}>{entry.label}</option>)}
+              <span>Energy & feel</span>
+              <select value={vibe} onChange={(event) => setVibe(event.target.value as MusicVibeId)}>
+                {MUSIC_VIBES.map((entry) => <option value={entry.id} key={entry.id}>{entry.label}</option>)}
               </select>
             </label>
             <label className="field wide">
@@ -276,7 +289,7 @@ export function MusicGenerator({ providers, brandContext }: { providers: Provide
             </label>
             <label className="field wide">
               <span>One signature idea</span>
-              <input value={signatureIdea} onChange={(event) => setSignatureIdea(event.target.value)} maxLength={400} placeholder="Example: a syncopated glassy synth phrase that answers the bass every 8 bars" />
+              <input value={signatureIdea} onChange={(event) => setSignatureIdea(event.target.value)} maxLength={400} placeholder="Example: one rhythmic, melodic or textural idea that can evolve across the track" />
             </label>
             <label className="field">
               <span>BPM</span>
@@ -295,7 +308,15 @@ export function MusicGenerator({ providers, brandContext }: { providers: Provide
           </div>
 
           <div className={styles.switches}>
-            <label className="checkbox-field"><input type="checkbox" checked={useAtlasDna} onChange={(event) => setUseAtlasDna(event.target.checked)} /> Lock Atlas DNA</label>
+            <label className="checkbox-field">
+              <input
+                type="checkbox"
+                checked={hasArtistDna && preserveArtistDna}
+                disabled={!hasArtistDna}
+                onChange={(event) => setPreserveArtistDna(event.target.checked)}
+              />
+              Preserve {artistName} DNA
+            </label>
             <label className="checkbox-field"><input type="checkbox" checked={instrumental} onChange={(event) => setInstrumental(event.target.checked)} /> Instrumental</label>
             <label className="field">
               <span>Variants</span>
@@ -305,6 +326,8 @@ export function MusicGenerator({ providers, brandContext }: { providers: Provide
               </select>
             </label>
           </div>
+
+          {!hasArtistDna ? <small>Add Brand essence or Music world guidance in this artist&apos;s Brand profile to enable DNA preservation.</small> : null}
 
           {!instrumental ? (
             <label className="field">
@@ -337,7 +360,7 @@ export function MusicGenerator({ providers, brandContext }: { providers: Provide
         <div className={styles.sectionIntro}>
           <span className="section-label">02 / Candidates</span>
           <h2>Keep only what works</h2>
-          <p>Listen, download, then deliberately save the good drafts. Media Library storage is public, so unfinished ideas stay local unless you choose to publish them there.</p>
+          <p>Listen, download, then deliberately save the good drafts for {artistName}. Unfinished ideas stay local unless you choose to add them to the reusable library.</p>
         </div>
 
         {busy && !generations.length ? (

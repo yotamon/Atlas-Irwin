@@ -1,4 +1,4 @@
-import { miniMaxGenerationCost, type AtlasMusicInput } from "./atlas-generator";
+import { miniMaxGenerationCost, type MusicGenerationInput } from "./generator";
 
 export type GeneratedMusic = {
   body: ReadableStream<Uint8Array>;
@@ -63,7 +63,7 @@ async function downloadAudioStream(url: string) {
   };
 }
 
-async function generateMiniMaxWithModel(input: AtlasMusicInput, prompt: string, model: string): Promise<GeneratedMusic> {
+async function generateMiniMaxWithModel(input: MusicGenerationInput, prompt: string, model: string): Promise<GeneratedMusic> {
   const apiKey = process.env.MINIMAX_API_KEY?.trim();
   if (!apiKey) throw new ProviderRequestError("MiniMax is not configured. Add MINIMAX_API_KEY.", 503);
 
@@ -129,7 +129,7 @@ async function generateMiniMaxWithModel(input: AtlasMusicInput, prompt: string, 
   };
 }
 
-export async function generateMiniMax(input: AtlasMusicInput, prompt: string) {
+export async function generateMiniMax(input: MusicGenerationInput, prompt: string) {
   const preferredModel = process.env.MINIMAX_MUSIC_MODEL?.trim() || "music-2.6";
   const fallbackModel = process.env.MINIMAX_MUSIC_FALLBACK_MODEL?.trim();
   try {
@@ -157,7 +157,7 @@ async function elevenRequest(path: string, body: Record<string, unknown>) {
   });
 }
 
-export async function generateEleven(input: AtlasMusicInput, prompt: string): Promise<GeneratedMusic> {
+export async function generateEleven(input: MusicGenerationInput, prompt: string): Promise<GeneratedMusic> {
   const model = process.env.ELEVENLABS_MUSIC_MODEL?.trim() || "music_v2";
   const durationMs = Math.round(input.durationSeconds * 1000);
   let generationBody: Record<string, unknown>;
