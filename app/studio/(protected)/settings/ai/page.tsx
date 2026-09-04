@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { applyZeroCostPreset, saveAiControlSettings } from "@/app/studio/ai-control-actions";
 import { Field, PageHeader, Panel, Status, Submit } from "@/components/studio/ui";
-import { requireStudioAdmin } from "@/lib/auth/studio";
 import { isZeroCostPolicy } from "@/lib/ai/control-plane";
-import { atlasAiGatewayConfigured } from "@/lib/ai/gateway";
 import { getAiControlSummary } from "@/lib/ai/analytics";
+import { ensemblisAiGatewayConfigured } from "@/lib/ai/gateway";
+import { requireStudioAdmin } from "@/lib/auth/studio";
 
 function money(value: number) {
   if (value > 0 && value < 0.01) return `$${value.toFixed(4)}`;
@@ -35,13 +35,13 @@ export default async function AiControlCenterPage() {
     <>
       <PageHeader
         title="AI & Generation"
-        description="Atlas chooses models by task, measures quality and cost, escalates only when necessary, and learns from the choices you make in Studio."
+        description="Ensemblis routes models by task, measures quality and cost, escalates only when necessary, and learns from the choices you make in the product."
         action={<Link className="button" href="/studio/settings">Back to settings</Link>}
       />
 
       <div className="studio-grid">
         <Panel title="Spend mode">{zeroCost ? "Zero Cost" : "Custom budget"}</Panel>
-        <Panel title="Control Plane">{atlasAiGatewayConfigured() ? "Healthy" : "Not configured"}</Panel>
+        <Panel title="Control Plane">{ensemblisAiGatewayConfigured() ? "Healthy" : "Not configured"}</Panel>
         <Panel title="Month spend">{money(budget.totalSpentUsd)}</Panel>
         <Panel title="AI requests">{stats.requests.toLocaleString()}</Panel>
         <Panel title="Cache reuses">{stats.cacheReuses.toLocaleString()}</Panel>
@@ -94,7 +94,7 @@ export default async function AiControlCenterPage() {
           <Panel title="Published">{stats.feedbackCounts.published.toLocaleString()}</Panel>
           <Panel title="Performance samples">{stats.feedbackCounts.performance.toLocaleString()}</Panel>
         </div>
-        <p><small>These signals are captured from Studio data changes, not from self-grading by the model. Atlas can therefore compare model cost against actual acceptance, editing, regeneration and downstream performance.</small></p>
+        <p><small>These signals come from product data changes, not from self-grading by the model. Ensemblis can therefore compare model cost against actual acceptance, editing, regeneration and downstream performance.</small></p>
       </section>
 
       <section className="studio-panel feature">
@@ -118,7 +118,7 @@ export default async function AiControlCenterPage() {
       </section>
 
       <section className="studio-panel feature">
-        <div className="panel-head"><div><span className="section-label">Model economics</span><h2>What Atlas actually used</h2></div></div>
+        <div className="panel-head"><div><span className="section-label">Model economics</span><h2>What Ensemblis actually used</h2></div></div>
         {summary.models.length ? (
           <table className="studio-table">
             <thead><tr><th>Resolved model</th><th>Requests</th><th>Cost</th><th>Failures</th></tr></thead>
@@ -144,7 +144,7 @@ export default async function AiControlCenterPage() {
 
       <section className="studio-panel feature">
         <div className="panel-head"><div><span className="section-label">Adaptive learning</span><h2>Evidence-gated effective routes</h2></div><Status>{stats.adaptiveRoutes} active</Status></div>
-        <p><small>Atlas may reorder only models already approved for that task. It requires enough completed runs, deterministic quality and human feedback first. Forced Economy, Balanced or Premium modes always disable learned reordering.</small></p>
+        <p><small>Ensemblis may reorder only models already approved for that task. It requires enough completed runs, deterministic quality and human feedback first. Forced Economy, Balanced or Premium modes always disable learned reordering.</small></p>
         <table className="studio-table">
           <thead><tr><th>Task</th><th>State</th><th>Effective route</th><th>Evidence decision</th></tr></thead>
           <tbody>{summary.learning.map((decision) => <tr key={decision.task}>
