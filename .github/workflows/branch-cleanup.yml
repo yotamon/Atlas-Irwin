@@ -1,0 +1,103 @@
+name: Branch cleanup
+
+on:
+  pull_request:
+    types: [closed]
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/branch-cleanup.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  delete-merged-pr-branch:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete merged head branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          if [ "$HEAD_BRANCH" = "main" ]; then
+            echo "Refusing to delete main"
+            exit 1
+          fi
+          gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${HEAD_BRANCH}"
+          echo "Deleted merged PR branch: ${HEAD_BRANCH}"
+
+  one-time-existing-branch-cleanup:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete audited historical branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          delete_branch() {
+            local branch="$1"
+            if [ "$branch" = "main" ]; then
+              echo "Refusing to delete main"
+              exit 1
+            fi
+            if gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${branch}" >/dev/null 2>&1; then
+              gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${branch}" >/dev/null
+              echo "Deleted ${branch}"
+            else
+              echo "Already absent: ${branch}"
+            fi
+          }
+
+          while IFS= read -r branch; do
+            [ -n "$branch" ] && delete_branch "$branch"
+          done <<'BRANCHES'
+          chore/align-lyrics-migration-versions
+          chore/media-worker-health-v2
+          chore/media-worker-production-deploy
+          chore/recover-stem-intelligence-fk-indexes
+          codex/track-intelligence-fusion-hardening
+          content-factory-timeout-hardening
+          ensemblis/artist-scoped-music-domain
+          ensemblis/moments-foundation
+          ensemblis/product-roadmap
+          feat/ai-control-plane
+          feat/ai-provider-presets-and-pricing
+          feat/artist-growth-os
+          feat/autonomous-marketing-os
+          feat/cohesive-ai-creative-lineage
+          feat/ensemblis-distribution
+          feat/ensemblis-distribution-artist-scope
+          feat/ensemblis-operational-artist-scope
+          feat/free-tier-safe-autopilot
+          feat/live-audio-scenes
+          feat/lyrics-intelligence
+          feat/production-grade-social-os
+          feat/stem-intelligence
+          feat/stem-intelligence-ready
+          feat/vercel-ai-gateway
+          feat/vercel-sandbox-media-worker
+          feat/zero-cost-ai-control
+          feature/music-intelligence-v2
+          feature/social-channel-aware-campaigns
+          fix/audio-scene-reference-fallback
+          fix/lyrics-gateway-runtime-auth
+          fix/media-worker-runner-cwd-20260831
+          fix/media-worker-sandbox-20260831
+          fix/public-catalog-artist-scope-build
+          fix/social-os-db-hardening
+          fix/stem-worker-pythonpath
+          fix/vercel-sandbox-python-bootstrap-20260831
+          media-worker-secure-kick
+          studio-product-hardening
+          track-intelligence-v3-sentinel-cleanup
+          track-intelligence-v3
+          chore/automatic-branch-cleanup
+          BRANCHES
