@@ -83,16 +83,22 @@ test("Atlas parity upgrade mutates only the unpublished shadow draft", async () 
   );
 });
 
-test("public runtime resolves only published versions and isolates cache keys", async () => {
-  await requireSnippets("lib/sites/runtime.ts", [
+test("public runtime caches published content while domain identity remains fresh", async () => {
+  const runtime = await requireSnippets("lib/sites/runtime.ts", [
     '.eq("state", "published")',
     "site.published_version_id",
     '.eq("status", "published")',
-    "parseSiteViewModel(versionResult.data.content_snapshot)",
+    "parseSiteViewModel(version.content_snapshot)",
     '`site:${siteId}`',
     '`site-slug:${slug}`',
-    '`site-host:${normalized}`',
+    "loadPrimaryHostnameUncached",
+    "attachCurrentPrimaryHostname",
   ]);
+  assert.doesNotMatch(
+    runtime,
+    /\["ensemblis-site-host",\s*normalized\]/,
+    "verified hostname ownership must not be cached with published content",
+  );
   await requireSnippets("app/sites/[slug]/page.tsx", [
     "loadPublishedSiteBySlug",
     "buildArtistSiteMetadata(runtime)",
