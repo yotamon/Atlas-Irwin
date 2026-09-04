@@ -2,10 +2,10 @@
 
 import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
-import { DEFAULT_SITE_CONFIG, normalizeSiteSlug } from "@/lib/sites/domain";
+import { normalizeSiteSlug } from "@/lib/sites/domain";
 import { asSitesClient } from "@/lib/sites/db";
 import { buildArtistSiteSnapshot } from "@/lib/sites/snapshot";
-import { getLatestSiteTemplate } from "@/lib/sites/templates/registry";
+import { getLatestSiteTemplate, getSiteTemplate } from "@/lib/sites/templates/registry";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import type { Json } from "@/types/database";
@@ -89,7 +89,7 @@ export async function createArtistSiteAction() {
     return;
   }
 
-  const template = getLatestSiteTemplate("artist-editorial");
+  const template = getLatestSiteTemplate("editorial-retrofuture");
   const snapshot = await buildArtistSiteSnapshot(supabase, artist);
   const preferredSlug = normalizeSiteSlug(artist.artistSlug || artist.artistName);
   const site = await createSiteRow(sites, artist.artistId, preferredSlug, template.key);
@@ -189,9 +189,24 @@ export async function resetDraftThemeAction(formData: FormData) {
   const siteId = uuid.parse(formData.get("siteId"));
   const { sites, site, hostnames } = await requireCurrentSite(siteId);
   if (!site.draft_version_id) throw new Error("No draft exists for this site.");
+
+  const draftResult = await sites
+    .from("artist_site_versions")
+    .select("template_key,template_version")
+    .eq("id", site.draft_version_id)
+    .eq("site_id", site.id)
+    .eq("status", "draft")
+    .maybeSingle();
+  if (draftResult.error) throw new Error(draftResult.error.message);
+  if (!draftResult.data) throw new Error("Draft version not found.");
+
+  const template = getSiteTemplate(
+    draftResult.data.template_key,
+    draftResult.data.template_version,
+  );
   const result = await sites
     .from("artist_site_versions")
-    .update({ config: DEFAULT_SITE_CONFIG as unknown as Json })
+    .update({ config: template.defaults as unknown as Json })
     .eq("id", site.draft_version_id)
     .eq("site_id", site.id)
     .eq("status", "draft");
