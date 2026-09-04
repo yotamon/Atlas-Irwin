@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { after, NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   MEDIA_WORKER_CALLBACK_HASH_KEY,
   scheduleMediaWorkerSandboxCleanup,
@@ -10,7 +11,9 @@ import {
   registerWorkerRenderAsset,
   registerWorkerThumbnailAsset,
 } from "@/lib/video-director/assets";
+import { queueQuickVideoSocialPack } from "@/lib/video-director/social-delivery";
 import type { Json } from "@/types/database";
+import type { VideoDatabase } from "@/types/video-database";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,6 +48,19 @@ function json(value: unknown): Json {
 
 function scheduleCleanup() {
   after(scheduleMediaWorkerSandboxCleanup());
+}
+
+function scheduleQuickVideoSocialDelivery(
+  db: ReturnType<typeof createServiceClient>,
+  ownerId: string,
+  projectId: string,
+) {
+  const videoDb = db as unknown as SupabaseClient<VideoDatabase>;
+  after(queueQuickVideoSocialPack({
+    db: videoDb,
+    ownerId,
+    projectId,
+  }).catch(() => undefined));
 }
 
 async function markWorkerTerminal(
@@ -279,6 +295,9 @@ export async function POST(request: Request) {
     }
 
     await markWorkerTerminal(db, job.id, "completed", result, null);
+    if (render.render_type === "master_16_9") {
+      scheduleQuickVideoSocialDelivery(db, job.owner_id, job.project_id);
+    }
     scheduleCleanup();
     return NextResponse.json({ ok: true });
   } catch (error) {
