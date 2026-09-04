@@ -64,9 +64,9 @@ begin
           coalesce((
             select jsonb_agg(
               jsonb_build_object(
-                'label', coalesce(link.label, link.provider),
+                'label', coalesce(link.label, link.provider::text),
                 'href', link.external_url,
-                'provider', link.provider
+                'provider', link.provider::text
               )
               order by link.created_at
             )

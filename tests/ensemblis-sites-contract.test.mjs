@@ -70,6 +70,8 @@ test("Atlas parity upgrade mutates only the unpublished shadow draft", async () 
     "template_version = 1",
     "'sectionOrder'",
     "jsonb_build_array('hero','releases','platforms','about','contact','newsletter')",
+    "coalesce(link.label, link.provider::text)",
+    "'provider', link.provider::text",
     "'contactFormEnabled', true",
     "'newsletterEnabled', true",
     "update public.artist_sites",
