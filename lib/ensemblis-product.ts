@@ -5,6 +5,8 @@ export const ENSEMBLIS_PRODUCT = {
   promise: "Everything behind your music, working together.",
 } as const;
 
+export const ENSEMBLIS_ACTIVE_ARTIST_COOKIE = "ensemblis_active_artist";
+
 export const ENSEMBLIS_PRIMARY_NAV = [
   { href: "/studio", label: "Today", icon: "dashboard" },
   { href: "/studio/music", label: "Music", icon: "musicLab" },
@@ -16,3 +18,8 @@ export const ENSEMBLIS_PRIMARY_NAV = [
   { href: "/studio/connections", label: "Connections", icon: "distribution" },
   { href: "/studio/settings", label: "Settings", icon: "brand" },
 ] as const;
+
+export function ensemblisArtistHref(href: string, artistId: string) {
+  const separator = href.includes("?") ? "&" : "?";
+  return `${href}${separator}artist=${encodeURIComponent(artistId)}`;
+}
