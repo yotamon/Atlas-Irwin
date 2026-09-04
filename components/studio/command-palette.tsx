@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 
 type Command = {
@@ -38,16 +38,22 @@ export function CommandPalette({ artistId }: { artistId: string }) {
     ? commands.filter((command) => `${command.label} ${command.group} ${command.keywords}`.toLowerCase().includes(normalized))
     : commands;
 
-  function close() {
+  const close = useCallback(() => {
     setOpen(false);
     requestAnimationFrame(() => triggerRef.current?.focus());
-  }
+  }, []);
+
+  const openPalette = useCallback(() => {
+    setQuery("");
+    setOpen(true);
+  }, []);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        setOpen((current) => !current);
+        if (open) close();
+        else openPalette();
       } else if (event.key === "Escape" && open) {
         event.preventDefault();
         close();
@@ -55,13 +61,10 @@ export function CommandPalette({ artistId }: { artistId: string }) {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open]);
+  }, [close, open, openPalette]);
 
   useEffect(() => {
-    if (!open) {
-      setQuery("");
-      return;
-    }
+    if (!open) return;
     const frame = requestAnimationFrame(() => inputRef.current?.focus());
     return () => cancelAnimationFrame(frame);
   }, [open]);
@@ -75,7 +78,7 @@ export function CommandPalette({ artistId }: { artistId: string }) {
         aria-label="Search Ensemblis. Command or Control K"
         aria-haspopup="dialog"
         aria-expanded={open}
-        onClick={() => setOpen(true)}
+        onClick={openPalette}
       >
         <span>Search</span>
         <kbd>⌘K</kbd>
@@ -103,7 +106,7 @@ export function CommandPalette({ artistId }: { artistId: string }) {
                   <div className="ensemblis-command-group" key={group}>
                     <span>{group}</span>
                     {groupCommands.map((command) => (
-                      <Link href={command.href} key={`${group}-${command.label}`} onClick={() => setOpen(false)}>
+                      <Link href={command.href} key={`${group}-${command.label}`} onClick={close}>
                         <strong>{command.label}</strong>
                         <small>{command.keywords.split(" ").slice(0, 3).join(" · ")}</small>
                         <b aria-hidden>↵</b>

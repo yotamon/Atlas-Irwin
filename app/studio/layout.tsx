@@ -27,6 +27,7 @@ import "./audience-polish.css";
 import "./library-polish.css";
 import "./shared-interactions.css";
 import "./loading-polish.css";
+import "./object-workspace-polish.css";
 
 export const metadata: Metadata = {
   title: {
