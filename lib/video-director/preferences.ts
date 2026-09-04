@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { recordCreativeMemoryEvent } from "@/lib/creative-memory/server";
+import { recordCreativeMemoryEvent, upsertCreativeAssetProfile } from "@/lib/creative-memory/server";
 import type { ArtistScopedMusicDatabase } from "@/types/artist-scoped-music-database";
 import type { Database, Json } from "@/types/database";
 import type { VideoDatabase } from "@/types/video-database";
@@ -83,6 +83,21 @@ export async function recordDirectorPreference(input: {
   });
 
   if (assetId && input.generationId) {
+    await upsertCreativeAssetProfile({
+      db,
+      ownerId: input.ownerId,
+      artistId,
+      assetId,
+      semanticDescriptors: [clean],
+      brandRelevance: input.positive ? 0.65 : 0.35,
+      evidence: {
+        source: "video_director_review",
+        project_id: input.projectId,
+        shot_id: input.shotId ?? null,
+        generation_id: input.generationId,
+      },
+      reviewed: true,
+    });
     await recordCreativeMemoryEvent({
       db,
       ownerId: input.ownerId,
