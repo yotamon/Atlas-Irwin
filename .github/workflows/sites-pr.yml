@@ -4,13 +4,17 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
+      - "proxy.ts"
+      - "app/__sites/**"
       - "app/sites/**"
+      - "app/site-preview/**"
       - "app/studio/(protected)/sites/**"
-      - "app/studio/site-preview/**"
       - "app/studio/sites-actions.ts"
+      - "app/studio/sites-domains.css"
       - "components/sites/**"
       - "lib/sites/**"
       - "types/ensemblis-sites.ts"
+      - "tests/ensemblis-sites*.test.mjs"
       - ".github/workflows/sites-pr.yml"
 
 concurrency:
