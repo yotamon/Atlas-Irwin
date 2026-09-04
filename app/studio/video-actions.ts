@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { recordCreativeMemoryEvent } from "@/lib/creative-memory/server";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { asMomentsClient } from "@/lib/studio/moments-db";
@@ -36,6 +37,26 @@ const budgetSchema = z.coerce.number().finite().min(0).max(100000);
 
 function projectPath(projectId: string) {
   return `/studio/video/${projectId}`;
+}
+
+async function requireProjectForActiveArtist(id: string) {
+  const { supabase, user } = await requireStudioAdmin();
+  const artist = await resolveActiveArtistContext(supabase, user);
+  const music = asArtistScopedMusicClient(supabase);
+  const { data: project, error } = await supabase.from("music_video_projects")
+    .select("*")
+    .eq("id", id)
+    .eq("owner_id", user.id)
+    .maybeSingle();
+  if (error || !project) throw new Error(error?.message ?? "Video project not found.");
+  const { data: release, error: releaseError } = await music.from("releases")
+    .select("id")
+    .eq("id", project.release_id)
+    .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId)
+    .maybeSingle();
+  if (releaseError || !release) throw new Error(releaseError?.message ?? "Video project does not belong to the active artist.");
+  return { supabase, user, artist, project };
 }
 
 export async function createMusicVideoProject(form: FormData) {
@@ -86,7 +107,7 @@ export async function createMusicVideoProject(form: FormData) {
       .single(),
     momentsDb
       .from("moments")
-      .select("track_id,label,moment_type,start_ms,end_ms,hook_score,energy_score,confidence")
+      .select("id,track_id,label,moment_type,start_ms,end_ms,hook_score,energy_score,confidence")
       .eq("owner_id", user.id)
       .eq("artist_id", artist.artistId)
       .eq("release_id", parsed.release_id)
@@ -100,9 +121,7 @@ export async function createMusicVideoProject(form: FormData) {
   if (releaseError || !release) throw new Error(releaseError?.message ?? "Release not found for the active artist.");
   if (trackError || !track) throw new Error(trackError?.message ?? "Track not found for the active artist.");
   if (momentsResult.error) throw new Error(momentsResult.error.message);
-  if (track.release_id !== release.id) {
-    throw new Error("The selected track must belong to this release.");
-  }
+  if (track.release_id !== release.id) throw new Error("The selected track must belong to this release.");
 
   const selectedDirection = buildQuickVideoConcepts({
     release,
@@ -114,6 +133,7 @@ export async function createMusicVideoProject(form: FormData) {
   const creative_brief = {
     workflow_mode: "quick_video",
     concept_id: parsed.quick_video_concept,
+    anchor_moment_id: selectedDirection.anchorMomentId,
     concept_snapshot: {
       title: selectedDirection.title,
       description: selectedDirection.description,
@@ -141,14 +161,35 @@ export async function createMusicVideoProject(form: FormData) {
     })
     .select("id")
     .single();
-  if (error) throw new Error(error.message);
+  if (error || !data) throw new Error(error?.message ?? "Could not create Quick Video project.");
+
+  await recordCreativeMemoryEvent({
+    db: supabase,
+    ownerId: user.id,
+    artistId: artist.artistId,
+    eventType: "direction_selected",
+    sentiment: 1,
+    weight: 4,
+    signal: `Selected Quick Video direction: ${selectedDirection.title}`,
+    source: "quick_video",
+    releaseId: release.id,
+    trackId: track.id,
+    momentId: selectedDirection.anchorMomentId,
+    videoProjectId: data.id,
+    idempotencyKey: `quick-video-direction:${data.id}:${selectedDirection.id}`,
+    context: {
+      direction_id: selectedDirection.id,
+      title: selectedDirection.title,
+      rationale: selectedDirection.rationale,
+      anchor_moment_label: selectedDirection.anchorMomentLabel,
+    },
+  });
 
   revalidatePath(`/studio/releases/${release.id}`);
   redirect(projectPath(data.id));
 }
 
 export async function updateMusicVideoProjectBrief(form: FormData) {
-  const { supabase } = await requireStudioAdmin();
   const id = z.uuid().parse(value(form, "id"));
   const parsed = z.object({
     title: titleSchema,
@@ -167,15 +208,8 @@ export async function updateMusicVideoProjectBrief(form: FormData) {
     story_mode: value(form, "story_mode"),
     people_mode: value(form, "people_mode"),
   });
-
-  const { data: project, error: projectError } = await supabase
-    .from("music_video_projects")
-    .select("*")
-    .eq("id", id)
-    .single();
-  if (projectError || !project) throw new Error(projectError?.message ?? "Video project not found.");
+  const { supabase, project } = await requireProjectForActiveArtist(id);
   if (project.status === "archived") throw new Error("Archived video projects cannot be edited.");
-
   if (project.spent_credits > 0 && parsed.hard_budget_credits !== project.hard_budget_credits) {
     throw new Error("The hard budget cannot be changed after credits have been spent.");
   }
@@ -193,9 +227,7 @@ export async function updateMusicVideoProjectBrief(form: FormData) {
     people_mode: parsed.people_mode,
     target: project.project_kind,
   };
-
-  const { error } = await supabase
-    .from("music_video_projects")
+  const { error } = await supabase.from("music_video_projects")
     .update({
       title: parsed.title,
       primary_aspect_ratio: parsed.primary_aspect_ratio,
@@ -203,32 +235,23 @@ export async function updateMusicVideoProjectBrief(form: FormData) {
       hard_budget_credits: parsed.hard_budget_credits,
       creative_brief,
     })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("owner_id", project.owner_id);
   if (error) throw new Error(error.message);
-
   revalidatePath(projectPath(id));
   revalidatePath(`/studio/releases/${project.release_id}`);
 }
 
 export async function transitionMusicVideoProject(form: FormData) {
-  const { supabase } = await requireStudioAdmin();
   const id = z.uuid().parse(value(form, "id"));
   const target = projectStatusSchema.parse(value(form, "status"));
-
-  const { data: project, error: projectError } = await supabase
-    .from("music_video_projects")
-    .select("id,release_id,status")
-    .eq("id", id)
-    .single();
-  if (projectError || !project) throw new Error(projectError?.message ?? "Video project not found.");
-
+  const { supabase, project } = await requireProjectForActiveArtist(id);
   assertProjectTransition(project.status as VideoProjectStatus, target);
-  const { error } = await supabase
-    .from("music_video_projects")
+  const { error } = await supabase.from("music_video_projects")
     .update({ status: target })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("owner_id", project.owner_id);
   if (error) throw new Error(error.message);
-
   revalidatePath(projectPath(id));
   revalidatePath(`/studio/releases/${project.release_id}`);
 }
