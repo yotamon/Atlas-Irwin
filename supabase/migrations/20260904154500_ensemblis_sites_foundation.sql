@@ -194,3 +194,200 @@ grant select, insert, update, delete on public.artist_sites to authenticated;
 grant select, insert, update, delete on public.artist_site_versions to authenticated;
 grant select, insert, update, delete on public.artist_site_domains to authenticated;
 grant select, insert, update, delete on public.artist_site_deployments to authenticated;
+
+-- Publish is an atomic lifecycle transition: the previous version is superseded,
+-- the target snapshot is frozen as published, the site pointer moves, and a shared-
+-- runtime deployment record is written in the same transaction.
+create or replace function public.publish_artist_site(
+  target_site_id uuid,
+  target_version_id uuid
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  site_row public.artist_sites%rowtype;
+  version_row public.artist_site_versions%rowtype;
+begin
+  if (select auth.uid()) is null or not private.is_studio_admin() then
+    raise exception 'not authorized';
+  end if;
+
+  select * into site_row
+  from public.artist_sites
+  where id = target_site_id
+  for update;
+
+  if not found or not private.can_access_artist(site_row.artist_id) then
+    raise exception 'artist site not accessible';
+  end if;
+
+  select * into version_row
+  from public.artist_site_versions
+  where id = target_version_id
+    and site_id = target_site_id
+    and status = 'draft'
+  for update;
+
+  if not found then
+    raise exception 'draft version not found';
+  end if;
+
+  if site_row.published_version_id is not null then
+    update public.artist_site_versions
+    set status = 'superseded'
+    where id = site_row.published_version_id
+      and status = 'published';
+  end if;
+
+  update public.artist_site_versions
+  set status = 'published', published_at = now()
+  where id = version_row.id;
+
+  update public.artist_sites
+  set state = 'published',
+      published_version_id = version_row.id,
+      draft_version_id = null
+  where id = site_row.id;
+
+  insert into public.artist_site_deployments (
+    site_id, version_id, provider, status, completed_at
+  ) values (
+    site_row.id, version_row.id, 'shared-runtime', 'ready', now()
+  );
+
+  return version_row.id;
+end
+$$;
+
+create or replace function public.create_artist_site_draft(target_site_id uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  site_row public.artist_sites%rowtype;
+  source_row public.artist_site_versions%rowtype;
+  next_version integer;
+  new_version_id uuid;
+begin
+  if (select auth.uid()) is null or not private.is_studio_admin() then
+    raise exception 'not authorized';
+  end if;
+
+  select * into site_row
+  from public.artist_sites
+  where id = target_site_id
+  for update;
+
+  if not found or not private.can_access_artist(site_row.artist_id) then
+    raise exception 'artist site not accessible';
+  end if;
+  if site_row.draft_version_id is not null then
+    return site_row.draft_version_id;
+  end if;
+  if site_row.published_version_id is null then
+    raise exception 'published source version not found';
+  end if;
+
+  select * into source_row
+  from public.artist_site_versions
+  where id = site_row.published_version_id and site_id = site_row.id;
+
+  select coalesce(max(version_number), 0) + 1 into next_version
+  from public.artist_site_versions
+  where site_id = site_row.id;
+
+  insert into public.artist_site_versions (
+    site_id, version_number, status, config, content_snapshot, created_by
+  ) values (
+    site_row.id, next_version, 'draft', source_row.config, source_row.content_snapshot, (select auth.uid())
+  ) returning id into new_version_id;
+
+  update public.artist_sites
+  set draft_version_id = new_version_id
+  where id = site_row.id;
+
+  return new_version_id;
+end
+$$;
+
+create or replace function public.rollback_artist_site(
+  target_site_id uuid,
+  source_version_id uuid
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  site_row public.artist_sites%rowtype;
+  source_row public.artist_site_versions%rowtype;
+  next_version integer;
+  rollback_version_id uuid;
+begin
+  if (select auth.uid()) is null or not private.is_studio_admin() then
+    raise exception 'not authorized';
+  end if;
+
+  select * into site_row
+  from public.artist_sites
+  where id = target_site_id
+  for update;
+
+  if not found or not private.can_access_artist(site_row.artist_id) then
+    raise exception 'artist site not accessible';
+  end if;
+
+  select * into source_row
+  from public.artist_site_versions
+  where id = source_version_id
+    and site_id = site_row.id
+    and status in ('published','superseded');
+
+  if not found then
+    raise exception 'rollback source version not found';
+  end if;
+
+  select coalesce(max(version_number), 0) + 1 into next_version
+  from public.artist_site_versions
+  where site_id = site_row.id;
+
+  if site_row.published_version_id is not null then
+    update public.artist_site_versions
+    set status = 'superseded'
+    where id = site_row.published_version_id and status = 'published';
+  end if;
+
+  insert into public.artist_site_versions (
+    site_id, version_number, status, config, content_snapshot, created_by, published_at
+  ) values (
+    site_row.id, next_version, 'published', source_row.config, source_row.content_snapshot, (select auth.uid()), now()
+  ) returning id into rollback_version_id;
+
+  update public.artist_sites
+  set state = 'published',
+      published_version_id = rollback_version_id,
+      draft_version_id = null
+  where id = site_row.id;
+
+  insert into public.artist_site_deployments (
+    site_id, version_id, provider, provider_ref, status, completed_at
+  ) values (
+    site_row.id, rollback_version_id, 'shared-runtime', source_version_id::text, 'ready', now()
+  );
+
+  return rollback_version_id;
+end
+$$;
+
+revoke all on function public.publish_artist_site(uuid, uuid) from public, anon;
+revoke all on function public.create_artist_site_draft(uuid) from public, anon;
+revoke all on function public.rollback_artist_site(uuid, uuid) from public, anon;
+grant execute on function public.publish_artist_site(uuid, uuid) to authenticated;
+grant execute on function public.create_artist_site_draft(uuid) to authenticated;
+grant execute on function public.rollback_artist_site(uuid, uuid) to authenticated;
