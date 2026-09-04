@@ -16,6 +16,7 @@ import "./distribution.css";
 import "./distribution-release.css";
 import "./ensemblis-shell.css";
 import "./ensemblis-screens.css";
+import "./ensemblis-root-isolation.css";
 import "./ensemblis-states.css";
 
 export const metadata: Metadata = {
@@ -29,7 +30,6 @@ export const metadata: Metadata = {
   authors: [{ name: ENSEMBLIS_PRODUCT.name }],
   creator: ENSEMBLIS_PRODUCT.name,
   publisher: ENSEMBLIS_PRODUCT.name,
-  alternates: { canonical: "/studio" },
   manifest: "/studio/manifest.webmanifest",
   icons: {
     icon: [{ url: "/ensemblis-mark.svg", type: "image/svg+xml" }],
