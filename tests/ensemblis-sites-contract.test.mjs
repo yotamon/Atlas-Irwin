@@ -62,6 +62,25 @@ test("Atlas is backfilled only as an inactive shadow Sites tenant", async () => 
   );
 });
 
+test("Atlas parity upgrade mutates only the unpublished shadow draft", async () => {
+  const migration = await requireSnippets("supabase/migrations/20260904170000_ensemblis_sites_atlas_retrofuture_parity.sql", [
+    "atlas_site.published_version_id is not null",
+    "and status = 'draft'",
+    "template_key = 'editorial-retrofuture'",
+    "template_version = 1",
+    "'sectionOrder'",
+    "jsonb_build_array('hero','releases','platforms','about','contact','newsletter')",
+    "'contactFormEnabled', true",
+    "'newsletterEnabled', true",
+    "update public.artist_sites",
+  ]);
+  assert.doesNotMatch(
+    migration,
+    /verification_status\s*=\s*'verified'|ssl_status\s*=\s*'active'|is_primary\s*=\s*true/i,
+    "Atlas parity migration must not perform domain cutover",
+  );
+});
+
 test("public runtime resolves only published versions and isolates cache keys", async () => {
   await requireSnippets("lib/sites/runtime.ts", [
     '.eq("state", "published")',
@@ -104,12 +123,16 @@ test("private preview is authenticated, artist-scoped and noindex", async () => 
   ]);
 });
 
-test("site snapshots read the active artist instead of the legacy owner", async () => {
+test("site snapshots read rich playable data from the active artist only", async () => {
   const snapshot = await requireSnippets("lib/sites/snapshot.ts", [
     "context.artistId",
     '.eq("artist_id", context.artistId)',
     '.eq("is_public", true)',
     '.eq("publish_state", "live")',
+    '.from("tracks")',
+    "durationSeconds",
+    "soundcloudUrl",
+    "spotifyUrl",
     "schemaVersion: 1",
   ]);
   assert.doesNotMatch(
@@ -119,12 +142,50 @@ test("site snapshots read the active artist instead of the legacy owner", async 
   );
 });
 
-test("artist-facing templates never leak Atlas or Ensemblis product identity", async () => {
-  const template = await source("components/sites/templates/artist-editorial-v1.tsx");
-  assert.doesNotMatch(template, /Atlas Irwin/i);
-  assert.doesNotMatch(template, /EnsemblisMark|ENSEMBLIS_PRODUCT|Music-aware artist growth/);
-  assert.match(template, /viewModel\.artist\.name/);
-  assert.match(template, /viewModel\.releases/);
+test("artist-facing template implementations never leak product or Atlas identity", async () => {
+  for (const path of [
+    "components/sites/templates/artist-editorial-v1.tsx",
+    "components/sites/templates/editorial-retrofuture-v1.tsx",
+  ]) {
+    const template = await source(path);
+    assert.doesNotMatch(template, /Atlas Irwin/i, `${path} must derive artist identity from the snapshot/config`);
+    assert.doesNotMatch(template, /EnsemblisMark|ENSEMBLIS_PRODUCT|Music-aware artist growth/);
+    assert.match(template, /viewModel\.artist\.name/);
+  }
+});
+
+test("editorial-retrofuture reuses the production Atlas sections instead of forking the design", async () => {
+  await requireSnippets("components/sites/templates/editorial-retrofuture-v1.tsx", [
+    'from "@/components/hero"',
+    'from "@/components/navbar"',
+    'from "@/components/release-widget-client"',
+    'from "@/components/listen-platforms-section"',
+    'from "@/components/about-section"',
+    'from "@/components/contact-section"',
+    'from "@/components/newsletter-signup"',
+    'from "@/components/footer"',
+    "ReleaseWidgetClient",
+    "viewModel.releases",
+  ]);
+  await requireSnippets("lib/sites/templates/registry.tsx", [
+    'key: "editorial-retrofuture"',
+    "version: 1",
+    "render: EditorialRetrofutureTemplate",
+    '"audio-player"',
+  ]);
+});
+
+test("legacy Atlas root still composes the same shared production sections", async () => {
+  await requireSnippets("app/page.tsx", [
+    "<Navbar />",
+    "<Hero />",
+    "<ReleaseWidget />",
+    "<ListenPlatformsSection />",
+    "<AboutSection />",
+    "<ContactSection />",
+    "<NewsletterSignup />",
+    "<Footer />",
+  ]);
 });
 
 test("host resolution fails closed to verified, TLS-active, published sites", async () => {
@@ -154,7 +215,7 @@ test("custom-domain provider has explicit attach inspect verify and detach bound
   ]);
 });
 
-test("Studio exposes an explicit reversible Sites workflow", async () => {
+test("Studio creates retrofuture sites and resets the pinned template defaults", async () => {
   await requireSnippets("app/studio/(protected)/sites/page.tsx", [
     "Create private site draft",
     "Preview private draft",
@@ -166,6 +227,8 @@ test("Studio exposes an explicit reversible Sites workflow", async () => {
   await requireSnippets("app/studio/sites-actions.ts", [
     "resolveActiveArtistContext",
     '.eq("artist_id", artist.artistId)',
+    'getLatestSiteTemplate("editorial-retrofuture")',
+    "getSiteTemplate(",
     'updateTag(`site:${siteId}`)',
     'sites.rpc("publish_artist_site"',
     'sites.rpc("rollback_artist_site"',
