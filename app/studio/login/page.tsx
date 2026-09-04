@@ -1,3 +1,4 @@
+import { EnsemblisMark } from "@/components/ensemblis-logo";
 import { adminEmails } from "@/lib/auth/studio";
 import { ENSEMBLIS_PRODUCT } from "@/lib/ensemblis-product";
 import { signInStudio } from "../login-actions";
@@ -15,7 +16,7 @@ export default async function LoginPage({
     <main className="studio-auth">
       <section>
         <div className="ensemblis-auth-brand">
-          <span className="ensemblis-auth-symbol" aria-hidden>E</span>
+          <span className="ensemblis-auth-symbol" aria-hidden><EnsemblisMark /></span>
           <div>
             <strong>{ENSEMBLIS_PRODUCT.name}</strong>
             <small>{ENSEMBLIS_PRODUCT.descriptor}</small>
