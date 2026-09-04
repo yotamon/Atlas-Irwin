@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { MusicVideoProject, Release, Track } from "@/types/database";
+import type { Moment } from "@/types/moments-database";
 import {
   VIDEO_PROJECT_KIND_LABELS,
   VIDEO_PROJECT_STATUS_LABELS,
@@ -24,18 +25,20 @@ export function ReleaseVideoPanel({
   release,
   tracks,
   projects,
+  moments,
 }: {
   release: Release;
   tracks: Track[];
   projects: MusicVideoProject[];
+  moments: Moment[];
 }) {
   return (
     <div className="workspace-stack video-release-panel">
       <section className="workspace-section">
         <div className="section-head">
           <div>
-            <span className="section-label">Video Director</span>
-            <h2>Music video projects</h2>
+            <span className="section-label">Video</span>
+            <h2>Productions</h2>
           </div>
           <span>{projects.length} project{projects.length === 1 ? "" : "s"}</span>
         </div>
@@ -65,8 +68,8 @@ export function ReleaseVideoPanel({
           </div>
         ) : (
           <EmptyState
-            title="No music videos yet"
-            body="Turn one of this release's tracks into a directed production with creative planning, budget controls, generated shots, and final delivery."
+            title="No video production yet"
+            body="Start with Quick Video. Ensemblis turns the release identity and strongest approved music Moments into a few concrete creative directions before any generation spend."
           />
         )}
       </section>
@@ -74,16 +77,17 @@ export function ReleaseVideoPanel({
       <section className="workspace-section">
         <div className="section-head">
           <div>
-            <span className="section-label">New production</span>
-            <h2>Create a music video project</h2>
+            <span className="section-label">Quick Video</span>
+            <h2>Choose a direction, then let Ensemblis plan the production</h2>
           </div>
+          <span>Director Pro stays available inside the setup</span>
         </div>
         {tracks.length ? (
-          <CreateProjectForm releaseId={release.id} tracks={tracks} />
+          <CreateProjectForm release={release} tracks={tracks} moments={moments} />
         ) : (
           <EmptyState
             title="Add a track first"
-            body="Video Director starts from a canonical Atlas track so the production stays linked to the music and release context."
+            body="Quick Video starts from a canonical track so concepts, edit decisions, spend and final delivery stay attached to the music."
             href={`/studio/releases/${release.id}?tab=music`}
             label="Open Music"
           />
