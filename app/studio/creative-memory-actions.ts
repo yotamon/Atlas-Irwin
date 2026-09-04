@@ -2,11 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { setCreativeAssetExcluded, upsertCreativeAssetProfile } from "@/lib/creative-memory/server";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { mediaMetadata } from "@/lib/studio/media";
+import type { CreativeMemoryDatabase } from "@/types/creative-memory-database";
 
 function value(form: FormData, key: string) {
   return String(form.get(key) ?? "").trim();
@@ -16,19 +18,32 @@ async function creativeAssetContext(assetId: string) {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveActiveArtistContext(supabase, user);
   const music = asArtistScopedMusicClient(supabase);
-  const [{ data: asset, error: assetError }, linksResult] = await Promise.all([
+  const memory = supabase as unknown as SupabaseClient<CreativeMemoryDatabase>;
+  const [{ data: asset, error: assetError }, linksResult, profileResult, eventResult] = await Promise.all([
     supabase.from("media_assets").select("*").eq("id", assetId).eq("owner_id", user.id).maybeSingle(),
     music.from("media_links").select("id")
       .eq("owner_id", user.id)
       .eq("artist_id", artist.artistId)
       .eq("media_asset_id", assetId)
       .limit(1),
+    memory.from("creative_asset_profiles").select("asset_id")
+      .eq("owner_id", user.id)
+      .eq("artist_id", artist.artistId)
+      .eq("asset_id", assetId)
+      .maybeSingle(),
+    memory.from("creative_memory_events").select("id")
+      .eq("owner_id", user.id)
+      .eq("artist_id", artist.artistId)
+      .eq("asset_id", assetId)
+      .limit(1),
   ]);
   if (assetError || !asset) throw new Error(assetError?.message ?? "Creative asset not found.");
-  if (linksResult.error) throw new Error(linksResult.error.message);
+  const firstError = [linksResult.error, profileResult.error, eventResult.error].find(Boolean);
+  if (firstError) throw new Error(firstError.message);
   const artistTag = `artist:${artist.artistId}`.toLowerCase();
   const tagged = mediaMetadata(asset).tags.some((tag) => tag.toLowerCase() === artistTag);
-  if (!tagged && !(linksResult.data ?? []).length) {
+  const remembered = Boolean(profileResult.data || (eventResult.data ?? []).length);
+  if (!tagged && !(linksResult.data ?? []).length && !remembered) {
     throw new Error("This asset does not belong to the active artist's Creative Memory.");
   }
   return { supabase, user, artist, asset };
