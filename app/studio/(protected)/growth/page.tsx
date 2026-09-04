@@ -12,12 +12,15 @@ import {
 import { MusicIntelligencePreview } from "@/components/studio/music-intelligence-preview";
 import { PageHeader } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { asMarketingClient } from "@/lib/marketing/db";
+import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { asGrowthClient } from "@/lib/studio/growth-db";
 import {
   buildGrowthFunnel,
   diagnoseGrowthFunnel,
   rankVaultTracks,
 } from "@/lib/studio/growth";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import type { GrowthSettings } from "@/types/growth-database";
 
 const DEFAULT_SETTINGS: Pick<GrowthSettings, "north_star" | "planning_horizon_days" | "release_cadence_days" | "minimum_candidate_score" | "catalog_engine_enabled" | "autoplan_enabled"> = {
@@ -42,14 +45,17 @@ function titleCase(value: string) {
 
 export default async function GrowthPage() {
   const { supabase, user } = await requireStudioAdmin();
+  const artist = await resolveDefaultArtistContext(supabase, user);
   const growth = asGrowthClient(supabase);
+  const music = asArtistScopedMusicClient(supabase);
+  const marketing = asMarketingClient(supabase);
   const [settingsResult, vaultResult, planResult, opportunityResult, releasesResult, metricsResult] = await Promise.all([
-    growth.from("artist_growth_settings").select("*").eq("owner_id", user.id).maybeSingle(),
-    growth.from("track_vault").select("*").eq("owner_id", user.id).neq("status", "archived").order("updated_at", { ascending: false }),
-    growth.from("growth_plan_items").select("*").eq("owner_id", user.id).in("status", ["proposed","accepted","scheduled"]).order("target_date").order("sort_order"),
-    growth.from("growth_opportunities").select("*").eq("owner_id", user.id).in("status", ["new","accepted"]).order("priority", { ascending: false }).order("detected_at", { ascending: false }),
-    supabase.from("releases").select("id,title,status,release_date,artwork_url").eq("owner_id", user.id).order("release_date", { ascending: true }),
-    supabase.from("metric_snapshots").select("*").eq("owner_id", user.id),
+    growth.from("artist_growth_settings").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
+    growth.from("track_vault").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).neq("status", "archived").order("updated_at", { ascending: false }),
+    growth.from("growth_plan_items").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).in("status", ["proposed","accepted","scheduled"]).order("target_date").order("sort_order"),
+    growth.from("growth_opportunities").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).in("status", ["new","accepted"]).order("priority", { ascending: false }).order("detected_at", { ascending: false }),
+    music.from("releases").select("id,title,status,release_date,artwork_url").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("release_date", { ascending: true }),
+    marketing.from("metric_snapshots").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId),
   ]);
   const firstError = [settingsResult, vaultResult, planResult, opportunityResult, releasesResult, metricsResult].find((result) => result.error)?.error;
   if (firstError) throw new Error(firstError.message);
@@ -74,7 +80,7 @@ export default async function GrowthPage() {
     <div className="studio-v2-page growth-os-page">
       <PageHeader
         title="Artist Growth OS"
-        description="Manage the Atlas Irwin portfolio as one growth system: choose the right next track, keep a 90-day release queue, detect catalog opportunities, and fix the real audience bottleneck."
+        description={`Manage ${artist.artistName} as one growth system: choose the right next track, keep a 90-day release queue, detect catalog opportunities, and fix the real audience bottleneck.`}
         action={
           <div className="actions">
             <form action={refreshGrowthOpportunities}><button className="button" type="submit">Scan opportunities</button></form>
@@ -100,7 +106,7 @@ export default async function GrowthPage() {
 
       <section className="growth-command-grid">
         <article className="v2-section growth-recommendation">
-          <div className="v2-section-heading"><div><span className="section-label">Release intelligence</span><h2>What should Atlas Irwin release next?</h2></div></div>
+          <div className="v2-section-heading"><div><span className="section-label">Release intelligence</span><h2>What should {artist.artistName} release next?</h2></div></div>
           {topCandidate ? (
             <>
               <div className="growth-candidate-score"><strong>{Math.round(topCandidate.score)}</strong><span>/100 portfolio score</span></div>
@@ -118,7 +124,7 @@ export default async function GrowthPage() {
               </div>
             </>
           ) : (
-            <div className="v2-calm-state compact"><strong>No eligible unreleased candidate yet.</strong><p>Add mastered tracks to the Vault, then Atlas will rank them without spending an AI call.</p></div>
+            <div className="v2-calm-state compact"><strong>No eligible unreleased candidate yet.</strong><p>Add mastered tracks to the Vault, then Ensemblis will rank them without spending an AI call.</p></div>
           )}
         </article>
 
@@ -131,7 +137,7 @@ export default async function GrowthPage() {
               <div className="growth-action-note"><strong>Do next</strong><span>{diagnosis.action}</span></div>
             </>
           ) : (
-            <div className="v2-calm-state compact"><strong>No clear bottleneck yet.</strong><p>Connect more performance data. Atlas will diagnose the weakest conversion step instead of asking you to post more by default.</p></div>
+            <div className="v2-calm-state compact"><strong>No clear bottleneck yet.</strong><p>Connect more performance data. Ensemblis will diagnose the weakest conversion step instead of asking you to post more by default.</p></div>
           )}
         </article>
       </section>
@@ -142,7 +148,7 @@ export default async function GrowthPage() {
           {scheduledReleases.map((release) => (
             <Link href={`/studio/releases/${release.id}`} className="growth-queue-item locked" key={`release-${release.id}`}>
               <span className="growth-queue-date">{shortDate(release.release_date)}</span>
-              <div><small>Committed release</small><strong>{release.title}</strong><p>{release.status} · Atlas plans around this date.</p></div>
+              <div><small>Committed release</small><strong>{release.title}</strong><p>{release.status} · Ensemblis plans around this date.</p></div>
               <b>Locked</b>
             </Link>
           ))}
@@ -158,12 +164,12 @@ export default async function GrowthPage() {
               </div>
             );
           })}
-          {!scheduledReleases.length && !plan.length ? <div className="v2-calm-state compact"><strong>No portfolio plan yet.</strong><p>Rebuild the 90-day plan. Existing scheduled releases stay fixed; Atlas fills only safe gaps.</p></div> : null}
+          {!scheduledReleases.length && !plan.length ? <div className="v2-calm-state compact"><strong>No portfolio plan yet.</strong><p>Rebuild the 90-day plan. Existing scheduled releases stay fixed; Ensemblis fills only safe gaps.</p></div> : null}
         </div>
       </section>
 
       <section className="v2-section" id="opportunities">
-        <div className="v2-section-heading"><div><span className="section-label">Always-on growth</span><h2>Opportunities Atlas found</h2></div><form action={refreshGrowthOpportunities}><button className="text-button" type="submit">Scan now</button></form></div>
+        <div className="v2-section-heading"><div><span className="section-label">Always-on growth</span><h2>Opportunities Ensemblis found</h2></div><form action={refreshGrowthOpportunities}><button className="text-button" type="submit">Scan now</button></form></div>
         {opportunities.length ? <div className="growth-opportunity-grid">{opportunities.map((opportunity) => (
           <article className={`growth-opportunity ${opportunity.status === "accepted" ? "accepted" : ""}`} key={opportunity.id}>
             <div className="growth-opportunity-head"><span>{titleCase(opportunity.kind)}</span><strong>{opportunity.priority}</strong></div>
@@ -228,7 +234,7 @@ export default async function GrowthPage() {
               <form action={archiveVaultTrack}><input type="hidden" name="id" value={item.track.id} /><button className="text-button" type="submit">Archive from vault</button></form>
             </div>
           </details>
-        ))}</div> : <div className="v2-calm-state compact"><strong>The vault is empty.</strong><p>Add the backlog first. Atlas cannot manage a portfolio it cannot see.</p></div>}
+        ))}</div> : <div className="v2-calm-state compact"><strong>The vault is empty.</strong><p>Add the backlog first. Ensemblis cannot manage a portfolio it cannot see.</p></div>}
 
         <details className="growth-add-track">
           <summary>+ Add unreleased track</summary>
@@ -243,14 +249,14 @@ export default async function GrowthPage() {
             <label><span>Readiness</span><input type="number" min="0" max="100" name="release_readiness" defaultValue="70" /></label>
             <label><span>Visual</span><input type="number" min="0" max="100" name="visual_potential" defaultValue="50" /></label>
             <label className="wide"><span>Audio URL</span><input type="url" name="audio_url" /></label>
-            <label className="wide"><span>Notes</span><textarea name="notes" placeholder="What makes this track special? Anything Atlas should know before choosing a release slot?" /></label>
+            <label className="wide"><span>Notes</span><textarea name="notes" placeholder="What makes this track special? Anything Ensemblis should know before choosing a release slot?" /></label>
             <div className="wide"><button className="button primary" type="submit">Add to Vault</button></div>
           </form>
         </details>
       </section>
 
       <section className="v2-section growth-settings">
-        <div className="v2-section-heading"><div><span className="section-label">Decision rules</span><h2>Teach Atlas how aggressively to release</h2></div></div>
+        <div className="v2-section-heading"><div><span className="section-label">Decision rules</span><h2>Teach Ensemblis how aggressively to release</h2></div></div>
         <form action={saveGrowthSettings} className="growth-settings-form">
           <label><span>Planning horizon</span><input type="number" min="30" max="365" name="planning_horizon_days" defaultValue={settings.planning_horizon_days} /><small>days</small></label>
           <label><span>Release cadence</span><input type="number" min="7" max="120" name="release_cadence_days" defaultValue={settings.release_cadence_days} /><small>days</small></label>

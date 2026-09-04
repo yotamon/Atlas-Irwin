@@ -1,52 +1,87 @@
 import "server-only";
 
 import { createCatalogClient } from "@/lib/supabase/service";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
+import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 import { createMarketingServiceClient } from "./db";
+
+export type MarketingExecutionScope = {
+  ownerId: string;
+  artistId: string;
+};
 
 function renderTemplate(template: string, values: Record<string, string>) {
   return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key: string) => values[key] ?? "");
 }
 
-export async function processDueOutreachEnrollments(limit = 25) {
+export async function processDueOutreachEnrollments(limit = 25, scope?: MarketingExecutionScope) {
   const marketing = createMarketingServiceClient();
   const catalog = createCatalogClient();
+  const operational = asArtistScopedOperationalClient(catalog);
+  const music = asArtistScopedMusicClient(catalog);
   const now = new Date().toISOString();
-  const { data: enrollments, error } = await marketing
+  let enrollmentQuery = marketing
     .from("outreach_enrollments")
     .select("*")
     .eq("status", "active")
     .lte("next_run_at", now)
     .order("next_run_at", { ascending: true })
     .limit(Math.max(1, Math.min(limit, 100)));
+  if (scope) {
+    enrollmentQuery = enrollmentQuery
+      .eq("owner_id", scope.ownerId)
+      .eq("artist_id", scope.artistId);
+  }
+  const { data: enrollments, error } = await enrollmentQuery;
   if (error) throw new Error(error.message);
 
   let draftsCreated = 0;
   for (const enrollment of enrollments ?? []) {
+    if (!enrollment.artist_id) throw new Error("Outreach enrollment is missing artist scope.");
     const [sequenceResult, stepResult, contactResult, campaignResult] = await Promise.all([
-      marketing.from("outreach_sequences").select("*").eq("id", enrollment.sequence_id).single(),
-      marketing.from("outreach_sequence_steps").select("*").eq("sequence_id", enrollment.sequence_id).eq("step_order", enrollment.next_step_order).maybeSingle(),
-      catalog.from("outreach_contacts").select("*").eq("id", enrollment.contact_id).eq("owner_id", enrollment.owner_id).single(),
+      marketing.from("outreach_sequences").select("*")
+        .eq("id", enrollment.sequence_id)
+        .eq("owner_id", enrollment.owner_id)
+        .eq("artist_id", enrollment.artist_id)
+        .single(),
+      marketing.from("outreach_sequence_steps").select("*")
+        .eq("sequence_id", enrollment.sequence_id)
+        .eq("artist_id", enrollment.artist_id)
+        .eq("step_order", enrollment.next_step_order)
+        .maybeSingle(),
+      operational.from("outreach_contacts").select("*")
+        .eq("id", enrollment.contact_id)
+        .eq("owner_id", enrollment.owner_id)
+        .eq("artist_id", enrollment.artist_id)
+        .single(),
       enrollment.campaign_id
-        ? marketing.from("campaigns").select("release_id,name").eq("id", enrollment.campaign_id).maybeSingle()
+        ? marketing.from("campaigns").select("release_id,name")
+            .eq("id", enrollment.campaign_id)
+            .eq("owner_id", enrollment.owner_id)
+            .eq("artist_id", enrollment.artist_id)
+            .maybeSingle()
         : Promise.resolve({ data: null, error: null }),
     ]);
     if (sequenceResult.error) throw new Error(sequenceResult.error.message);
+    if (stepResult.error) throw new Error(stepResult.error.message);
     if (contactResult.error) throw new Error(contactResult.error.message);
     if (campaignResult.error) throw new Error(campaignResult.error.message);
     const sequence = sequenceResult.data;
     const step = stepResult.data;
     if (!step || sequence.status !== "active") {
-      await marketing.from("outreach_enrollments").update({
+      const { error: completeError } = await marketing.from("outreach_enrollments").update({
         status: "completed",
         next_run_at: null,
         stopped_reason: step ? "sequence_not_active" : "sequence_complete",
-      }).eq("id", enrollment.id);
+      }).eq("id", enrollment.id).eq("artist_id", enrollment.artist_id);
+      if (completeError) throw new Error(completeError.message);
       continue;
     }
 
     const { data: existingDraft, error: draftLookupError } = await marketing
       .from("outreach_messages")
       .select("id")
+      .eq("artist_id", enrollment.artist_id)
       .eq("sequence_enrollment_id", enrollment.id)
       .eq("sequence_step_id", step.id)
       .is("sent_at", null)
@@ -54,23 +89,25 @@ export async function processDueOutreachEnrollments(limit = 25) {
       .maybeSingle();
     if (draftLookupError) throw new Error(draftLookupError.message);
     if (existingDraft) {
-      await marketing.from("outreach_enrollments").update({
+      const { error: pauseError } = await marketing.from("outreach_enrollments").update({
         status: "paused",
         next_run_at: null,
         stopped_reason: `awaiting_send:${existingDraft.id}`,
-      }).eq("id", enrollment.id);
+      }).eq("id", enrollment.id).eq("artist_id", enrollment.artist_id);
+      if (pauseError) throw new Error(pauseError.message);
       continue;
     }
 
-    let releaseTitle = "the current Atlas Irwin release";
+    let releaseTitle = "the artist's current release";
     let smartLink = "";
     const releaseId = campaignResult.data?.release_id ?? null;
     if (releaseId) {
-      const { data: release, error: releaseError } = await catalog
+      const { data: release, error: releaseError } = await music
         .from("releases")
         .select("title,smart_link_url,spotify_url,soundcloud_url")
         .eq("id", releaseId)
         .eq("owner_id", enrollment.owner_id)
+        .eq("artist_id", enrollment.artist_id)
         .maybeSingle();
       if (releaseError) throw new Error(releaseError.message);
       if (release) {
@@ -91,6 +128,7 @@ export async function processDueOutreachEnrollments(limit = 25) {
       .from("outreach_messages")
       .insert({
         owner_id: enrollment.owner_id,
+        artist_id: enrollment.artist_id,
         contact_id: enrollment.contact_id,
         release_id: releaseId,
         campaign_id: enrollment.campaign_id,
@@ -110,7 +148,7 @@ export async function processDueOutreachEnrollments(limit = 25) {
       status: "paused",
       next_run_at: null,
       stopped_reason: `awaiting_send:${draft.id}`,
-    }).eq("id", enrollment.id);
+    }).eq("id", enrollment.id).eq("artist_id", enrollment.artist_id);
     if (pauseError) throw new Error(pauseError.message);
     draftsCreated += 1;
   }

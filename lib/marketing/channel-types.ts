@@ -11,6 +11,7 @@ export type ChannelCapability = {
 
 export type PublishRequest = {
   ownerId: string;
+  artistId: string;
   platform: string;
   caption: string | null;
   hookText: string | null;

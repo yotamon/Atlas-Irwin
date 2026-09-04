@@ -7,6 +7,7 @@ import {
   SOCIAL_PLATFORM_DEFINITIONS,
   isSocialPlatformKey,
 } from "@/lib/marketing/social-platforms";
+import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { asSocialClient } from "@/lib/studio/social-db";
 import { hasSocialPlatformEnv } from "@/lib/studio/social-connections";
 
@@ -15,17 +16,21 @@ export default async function SocialConnectionPage({
   searchParams,
 }: {
   params: Promise<{ platform: string }>;
-  searchParams: Promise<{ connected?: string; error?: string }>;
+  searchParams: Promise<{ connected?: string; error?: string; artist_id?: string }>;
 }) {
   const { platform } = await params;
   if (!isSocialPlatformKey(platform)) notFound();
   const query = await searchParams;
   const { supabase, user } = await requireStudioAdmin();
+  const artist = query.artist_id
+    ? await resolveArtistContext(supabase, user, query.artist_id)
+    : await resolveDefaultArtistContext(supabase, user);
   const social = asSocialClient(supabase);
   const { data: account, error } = await social
     .from("social_channel_accounts")
     .select("*")
     .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId)
     .eq("platform", platform)
     .maybeSingle();
   if (error) throw new Error(error.message);
@@ -33,16 +38,17 @@ export default async function SocialConnectionPage({
   const definition = SOCIAL_PLATFORM_DEFINITIONS[platform];
   const configured = hasSocialPlatformEnv(platform);
   const connected = account?.status === "connected";
+  const artistQuery = `artist_id=${encodeURIComponent(artist.artistId)}`;
 
   return (
     <div className="studio-v2-page">
       <PageHeader
         title={`${definition.label} connection`}
-        description={`Connect ${definition.label} to make it an eligible channel for Campaign Brain planning.`}
+        description={`Connect ${definition.label} for ${artist.artistName} so it can become an eligible Campaign Brain channel.`}
       />
 
       {query.connected === "1" ? (
-        <div className="notice success">Connected. New and regenerated campaigns can now plan for {definition.plannerPlatform}.</div>
+        <div className="notice success">Connected for {artist.artistName}. New and regenerated campaigns can now plan for {definition.plannerPlatform}.</div>
       ) : null}
       {query.error ? <div className="notice error">{query.error}</div> : null}
 
@@ -50,7 +56,7 @@ export default async function SocialConnectionPage({
         <div className="v2-section-heading">
           <div>
             <span className="section-label">Channel status</span>
-            <h2>{connected ? "Connected to Atlas" : "Not connected"}</h2>
+            <h2>{connected ? `Connected for ${artist.artistName}` : "Not connected"}</h2>
           </div>
         </div>
 
@@ -62,21 +68,21 @@ export default async function SocialConnectionPage({
               Campaign planning: enabled. Automatic publishing: {account.can_publish ? "permission granted" : "not enabled"}.
             </p>
             <p className="v2-muted-copy">
-              Disconnecting stops this channel from appearing in future campaign plans. Existing planned content is kept.
+              Disconnecting removes this channel only from {artist.artistName}. Existing planned content is kept.
             </p>
           </div>
         ) : (
           <div className="panel">
             <p>{definition.description}</p>
             <p className="v2-muted-copy">
-              Until this account is connected, Campaign Brain will not create any {definition.plannerPlatform} posting moments.
+              Until this account is connected, Campaign Brain will not create {definition.plannerPlatform} posting moments for {artist.artistName}.
             </p>
           </div>
         )}
 
         <div className="actions">
           {configured ? (
-            <a className="button primary" href={`/studio/settings/social/${platform}/connect`}>
+            <a className="button primary" href={`/studio/settings/social/${platform}/connect?${artistQuery}`}>
               {connected ? `Reconnect ${definition.label}` : `Connect ${definition.label}`}
             </a>
           ) : (
@@ -87,10 +93,11 @@ export default async function SocialConnectionPage({
           {connected ? (
             <form action={disconnectSocialConnection}>
               <input type="hidden" name="platform" value={platform} />
+              <input type="hidden" name="artist_id" value={artist.artistId} />
               <button className="button" type="submit">Disconnect</button>
             </form>
           ) : null}
-          <Link className="button" href="/studio/settings">Back to settings</Link>
+          <Link className="button" href={`/studio/settings?${artistQuery}`}>Back to settings</Link>
         </div>
       </section>
 
@@ -102,7 +109,7 @@ export default async function SocialConnectionPage({
           </div>
         </div>
         <p className="v2-muted-copy">
-          Atlas uses the minimum account-access scope by default so the channel can participate in campaign planning. Publishing scopes are requested only when ATLAS_SOCIAL_REQUEST_PUBLISH_SCOPES=true and the provider app is approved for them.
+          Ensemblis uses the minimum account-access scope by default so the channel can participate in campaign planning. Publishing scopes are requested only when explicitly enabled and approved for the provider app.
         </p>
       </section>
     </div>

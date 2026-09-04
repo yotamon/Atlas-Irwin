@@ -2,6 +2,7 @@ import type { Json } from "@/types/database";
 
 export type SocialChannelAccount = {
   owner_id: string;
+  artist_id: string;
   platform: "instagram" | "tiktok" | "youtube";
   external_account_id: string;
   display_name: string | null;
@@ -20,6 +21,7 @@ export type SocialChannelAccount = {
 
 export type SocialChannelToken = {
   owner_id: string;
+  artist_id: string;
   platform: "instagram" | "tiktok" | "youtube";
   access_token: string;
   refresh_token: string | null;
@@ -45,7 +47,7 @@ export type SocialDatabase = {
     Views: Record<string, never>;
     Functions: {
       get_social_channel_token: {
-        Args: { p_owner_id: string; p_platform: string };
+        Args: { p_owner_id: string; p_artist_id: string; p_platform: string };
         Returns: Array<{
           access_token: string;
           refresh_token: string | null;
@@ -57,6 +59,7 @@ export type SocialDatabase = {
       upsert_social_channel_token: {
         Args: {
           p_owner_id: string;
+          p_artist_id: string;
           p_platform: string;
           p_access_token: string;
           p_refresh_token: string | null;
@@ -67,7 +70,7 @@ export type SocialDatabase = {
         Returns: undefined;
       };
       delete_social_channel_token: {
-        Args: { p_owner_id: string; p_platform: string };
+        Args: { p_owner_id: string; p_artist_id: string; p_platform: string };
         Returns: undefined;
       };
     };

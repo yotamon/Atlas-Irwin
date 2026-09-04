@@ -9,6 +9,7 @@ import type { AtlasAiTaskType } from "@/lib/ai/tasks";
 import { conciseLyricsPromptContext, loadTrackLyricsContext } from "@/lib/lyrics-intelligence/context";
 import { conciseCreativeGraphContext } from "@/lib/music-intelligence/creative-graph";
 import { loadTrackCreativeIntelligenceGraph } from "@/lib/music-intelligence/creative-graph-loader";
+import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import type { LyricsDatabase } from "@/types/lyrics-database";
 
 export type MarketingTextProvider = "vercel-gateway" | "openai" | "google" | "zai";
@@ -72,10 +73,12 @@ async function enrichMarketingContextWithLyrics({
   context,
   supabase,
   ownerId,
+  artistId,
 }: {
   context: Record<string, unknown>;
   supabase: SupabaseClient;
   ownerId: string;
+  artistId: string;
 }) {
   if ("lyricsIntelligence" in context && "trackCreativeIntelligence" in context) return context;
   const releaseId = releaseIdFromContext(context);
@@ -86,6 +89,7 @@ async function enrichMarketingContextWithLyrics({
       .from("tracks")
       .select("id,is_primary")
       .eq("owner_id", ownerId)
+      .eq("artist_id", artistId)
       .eq("release_id", releaseId)
       .order("is_primary", { ascending: false });
     if (error) throw new Error(error.message);
@@ -177,11 +181,13 @@ export async function generateStructured<T>({
   schema,
   instructions,
   input,
+  artistId,
 }: {
   name: string;
   schema: Record<string, unknown>;
   instructions: string;
   input: string;
+  artistId?: string | null;
 }): Promise<StructuredGenerationResult<T>> {
   if (!marketingAiConfigured()) {
     throw new Error(
@@ -190,16 +196,21 @@ export async function generateStructured<T>({
   }
 
   const { supabase, user } = await requireStudioAdmin();
+  const artist = artistId
+    ? await resolveArtistContext(supabase, user, artistId)
+    : await resolveDefaultArtistContext(supabase, user);
   const parsedInputContext = parseInputContext(input);
   const inputContext = await enrichMarketingContextWithLyrics({
     context: parsedInputContext,
     supabase: supabase as unknown as SupabaseClient,
     ownerId: user.id,
+    artistId: artist.artistId,
   });
   const enrichedInput = JSON.stringify(inputContext, null, 2);
   const releaseId = releaseIdFromContext(inputContext);
   const result = await runAtlasAiTask<T>({
     ownerId: user.id,
+    artistId: artist.artistId,
     task: taskForName(name),
     purpose: name === "atlas_campaign_plan" ? "campaign_plan" : name,
     releaseId,

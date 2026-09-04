@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { EmptyState, PageHeader, Status } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { asMarketingClient } from "@/lib/marketing/db";
+import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 
 function startOfDay(date: Date) {
   const copy = new Date(date);
@@ -32,6 +34,8 @@ export default async function CalendarPage({
   const params = await searchParams;
   const view = params.view === "week" || params.view === "list" ? params.view : "month";
   const { supabase, user } = await requireStudioAdmin();
+  const artist = await resolveDefaultArtistContext(supabase, user);
+  const marketing = asMarketingClient(supabase);
   const anchor = params.month ? new Date(`${params.month}-01T12:00:00`) : new Date();
 
   let start: Date;
@@ -51,19 +55,21 @@ export default async function CalendarPage({
     days = Array.from({ length: count }, (_, index) => new Date(anchor.getFullYear(), anchor.getMonth(), index + 1));
   }
 
-  const { data } = await supabase
+  const { data, error } = await marketing
     .from("content_items")
     .select("*")
-    .eq("owner_id", user.id)
+    .eq("owner_id", artist.userId)
+    .eq("artist_id", artist.artistId)
     .gte("scheduled_at", start.toISOString())
     .lt("scheduled_at", end.toISOString())
     .order("scheduled_at");
+  if (error) throw new Error(error.message);
 
   return (
     <div className="studio-v2-page">
       <PageHeader
         title="Timeline"
-        description="Release-relative schedule. Atlas moves unlocked work when a release date changes; external publishing still follows approval rules."
+        description={`Release-relative schedule for ${artist.artistName}. Ensemblis moves unlocked work when a release date changes; external publishing still follows approval rules.`}
         action={<Link className="button primary" href="/studio/create">Create</Link>}
       />
 
@@ -80,7 +86,7 @@ export default async function CalendarPage({
               <span>{item.title}<br /><small>{item.platform}</small></span>
               <span><Status>{item.status}</Status>{" "}{new Date(item.scheduled_at!).toLocaleString()}</span>
             </Link>
-          )) : <EmptyState title="Nothing scheduled" body="Atlas will place release-relative content here as release plans are created." />}
+          )) : <EmptyState title="Nothing scheduled" body="Ensemblis will place release-relative content here as release plans are created." />}
         </div>
       ) : (
         <div className={`calendar-grid ${view === "week" ? "v2-week-grid" : ""}`}>

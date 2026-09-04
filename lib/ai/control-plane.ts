@@ -51,6 +51,7 @@ function stableValue(value: unknown): unknown {
 
 function taskCacheKey(input: RunTaskInput<unknown>) {
   const fingerprint = stableValue({
+    artistId: input.artistId ?? null,
     task: input.task,
     promptVersion: input.promptVersion,
     schema: input.schema,
@@ -235,6 +236,7 @@ export type AtlasAiTaskResult<T> = {
 
 type RunTaskInput<T> = {
   ownerId: string;
+  artistId?: string | null;
   task: AtlasAiTaskType;
   purpose?: string;
   campaignId?: string | null;
@@ -253,9 +255,11 @@ type RunTaskInput<T> = {
 
 async function cachedTaskResult<T>(input: RunTaskInput<T>, cacheKey: string): Promise<AtlasAiTaskResult<T> | null> {
   const client = createMarketingServiceClient();
-  const { data: source, error } = await client.from("generation_runs")
+  let sourceQuery = client.from("generation_runs")
     .select("id,output,model,requested_model,routed_provider,quality_score,quality_failures")
-    .eq("owner_id", input.ownerId)
+    .eq("owner_id", input.ownerId);
+  if (input.artistId) sourceQuery = sourceQuery.eq("artist_id", input.artistId);
+  const { data: source, error } = await sourceQuery
     .eq("provider", "vercel-gateway")
     .contains("metadata", { cacheKey, cacheEligible: true })
     .eq("status", "completed")
@@ -269,6 +273,7 @@ async function cachedTaskResult<T>(input: RunTaskInput<T>, cacheKey: string): Pr
   const now = new Date().toISOString();
   const { data: alias, error: aliasError } = await client.from("generation_runs").insert({
     owner_id: input.ownerId,
+    ...(input.artistId ? { artist_id: input.artistId } : {}),
     campaign_id: input.campaignId ?? null,
     release_id: input.releaseId ?? null,
     video_project_id: input.videoProjectId ?? null,
@@ -302,6 +307,7 @@ async function cachedTaskResult<T>(input: RunTaskInput<T>, cacheKey: string): Pr
       cacheSourceRunId: source.id,
       cacheKey,
       cacheEligible: false,
+      artistId: input.artistId ?? null,
     }),
   }).select("id").single();
   if (aliasError || !alias) throw new Error(aliasError?.message || "Could not persist AI cache provenance.");
@@ -372,6 +378,7 @@ export async function runAtlasAiTask<T>(input: RunTaskInput<T>): Promise<AtlasAi
       : {};
     const runMetadata = {
       ...extraMetadata,
+      artistId: input.artistId ?? null,
       policyTier: policy.tier,
       configuredRoute: policy.models,
       route: models,
@@ -389,6 +396,7 @@ export async function runAtlasAiTask<T>(input: RunTaskInput<T>): Promise<AtlasAi
     };
     const { data: run, error: createError } = await client.from("generation_runs").insert({
       owner_id: input.ownerId,
+      ...(input.artistId ? { artist_id: input.artistId } : {}),
       campaign_id: input.campaignId ?? null,
       release_id: input.releaseId ?? null,
       video_project_id: input.videoProjectId ?? null,
@@ -427,7 +435,7 @@ export async function runAtlasAiTask<T>(input: RunTaskInput<T>): Promise<AtlasAi
       };
       const completed = new Date();
       const fallbackUsed = gateway.model !== gateway.requestedModel;
-      const { error: updateError } = await client.from("generation_runs").update({
+      let updateQuery = client.from("generation_runs").update({
         model: gateway.model,
         requested_model: gateway.requestedModel,
         routed_provider: gateway.routedProvider,
@@ -447,16 +455,20 @@ export async function runAtlasAiTask<T>(input: RunTaskInput<T>): Promise<AtlasAi
         quality_score: quality.score,
         quality_failures: asJson(quality.failures),
       }).eq("id", run.id);
+      if (input.artistId) updateQuery = updateQuery.eq("artist_id", input.artistId);
+      const { error: updateError } = await updateQuery;
       if (updateError) throw new Error(updateError.message);
       return { gateway, quality, runId: run.id };
     } catch (error) {
       const completed = new Date();
-      await client.from("generation_runs").update({
+      let failQuery = client.from("generation_runs").update({
         status: "failed",
         completed_at: completed.toISOString(),
         latency_ms: completed.getTime() - started.getTime(),
         error: error instanceof Error ? error.message : "Unknown AI task failure",
       }).eq("id", run.id);
+      if (input.artistId) failQuery = failQuery.eq("artist_id", input.artistId);
+      await failQuery;
       throw error;
     }
   };
@@ -492,10 +504,12 @@ export async function runAtlasAiTask<T>(input: RunTaskInput<T>): Promise<AtlasAi
 
   let last = first;
   let reason = first.quality.failures.join("; ") || `quality score ${first.quality.score.toFixed(2)}`;
-  const { error: firstEscalationError } = await client.from("generation_runs").update({
+  let firstEscalationQuery = client.from("generation_runs").update({
     escalated: true,
     escalation_reason: reason,
   }).eq("id", first.runId);
+  if (input.artistId) firstEscalationQuery = firstEscalationQuery.eq("artist_id", input.artistId);
+  const { error: firstEscalationError } = await firstEscalationQuery;
   if (firstEscalationError) throw new Error(firstEscalationError.message);
 
   for (let index = 0; index < policy.escalationModels.length; index += 1) {
@@ -509,10 +523,12 @@ export async function runAtlasAiTask<T>(input: RunTaskInput<T>): Promise<AtlasAi
     if (attempt.quality.passed) return result(attempt, first.runId, true);
     last = attempt;
     reason = attempt.quality.failures.join("; ") || `quality score ${attempt.quality.score.toFixed(2)}`;
-    const { error: escalationUpdateError } = await client.from("generation_runs").update({
+    let escalationUpdateQuery = client.from("generation_runs").update({
       escalated: true,
       escalation_reason: reason,
     }).eq("id", attempt.runId);
+    if (input.artistId) escalationUpdateQuery = escalationUpdateQuery.eq("artist_id", input.artistId);
+    const { error: escalationUpdateError } = await escalationUpdateQuery;
     if (escalationUpdateError) throw new Error(escalationUpdateError.message);
   }
 

@@ -2,7 +2,7 @@ import "server-only";
 
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseEnv } from "@/lib/supabase/config";
-import type { SocialDatabase } from "@/types/social-database";
+import type { ArtistScopedSocialDatabase } from "@/types/artist-scoped-operational-database";
 import type { SocialPlatformKey } from "./social-platforms";
 
 const INSTAGRAM_GRAPH_URL = "https://graph.instagram.com";
@@ -12,6 +12,7 @@ const REFRESH_EARLY_MS = 5 * 60 * 1000;
 
 export type SocialAccess = {
   ownerId: string;
+  artistId: string;
   platform: SocialPlatformKey;
   accessToken: string;
   refreshToken: string | null;
@@ -20,6 +21,11 @@ export type SocialAccess = {
   expiresAt: string | null;
   externalAccountId: string;
   username: string | null;
+};
+
+export type SocialPublicationContext = {
+  ownerId: string;
+  artistId: string;
 };
 
 type TokenRow = {
@@ -34,7 +40,7 @@ function serviceSupabase() {
   const { url } = getSupabaseEnv();
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
   if (!key) throw new Error("SUPABASE_SERVICE_ROLE_KEY is required for social publishing.");
-  return createSupabaseClient<SocialDatabase>(url, key, {
+  return createSupabaseClient<ArtistScopedSocialDatabase>(url, key, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 }
@@ -64,18 +70,20 @@ async function providerError(response: Response, label: string) {
   return new Error(`${label} failed (${response.status})${detail ? `: ${detail}` : ""}.`);
 }
 
-async function readToken(ownerId: string, platform: SocialPlatformKey) {
-  const { data, error } = await serviceSupabase().rpc("get_social_channel_token", {
+async function readToken(ownerId: string, artistId: string, platform: SocialPlatformKey) {
+  const { data, error } = await serviceSupabase().rpc("get_social_channel_token_for_artist", {
     p_owner_id: ownerId,
+    p_artist_id: artistId,
     p_platform: platform,
   });
   if (error) throw new Error(error.message);
   return (data?.[0] ?? null) as TokenRow | null;
 }
 
-async function writeToken(ownerId: string, platform: SocialPlatformKey, token: TokenRow) {
-  const { error } = await serviceSupabase().rpc("upsert_social_channel_token", {
+async function writeToken(ownerId: string, artistId: string, platform: SocialPlatformKey, token: TokenRow) {
+  const { error } = await serviceSupabase().rpc("upsert_social_channel_token_for_artist", {
     p_owner_id: ownerId,
+    p_artist_id: artistId,
     p_platform: platform,
     p_access_token: token.access_token,
     p_refresh_token: token.refresh_token,
@@ -162,45 +170,49 @@ async function refreshYouTube(token: TokenRow): Promise<TokenRow> {
   };
 }
 
-async function refreshedToken(ownerId: string, platform: SocialPlatformKey, token: TokenRow) {
+async function refreshedToken(ownerId: string, artistId: string, platform: SocialPlatformKey, token: TokenRow) {
   if (!expiresSoon(token.expires_at)) return token;
   const next = platform === "instagram"
     ? await refreshInstagram(token)
     : platform === "tiktok"
       ? await refreshTikTok(token)
       : await refreshYouTube(token);
-  await writeToken(ownerId, platform, next);
+  await writeToken(ownerId, artistId, platform, next);
   return next;
 }
 
 export async function requireSocialAccess(
   ownerId: string,
+  artistId: string,
   platform: SocialPlatformKey,
   requiredScopes: string[] = [],
 ): Promise<SocialAccess> {
+  if (!ownerId || !artistId) throw new Error("Social access requires explicit owner and artist context.");
   const supabase = serviceSupabase();
   const { data: account, error: accountError } = await supabase
     .from("social_channel_accounts")
     .select("*")
     .eq("owner_id", ownerId)
+    .eq("artist_id", artistId)
     .eq("platform", platform)
     .maybeSingle();
   if (accountError) throw new Error(accountError.message);
   if (!account || account.status !== "connected") {
-    throw new Error(`${platform} is not connected. Reconnect it in Studio Settings.`);
+    throw new Error(`${platform} is not connected for this artist. Reconnect it in Studio Settings.`);
   }
 
-  const stored = await readToken(ownerId, platform);
-  if (!stored) throw new Error(`${platform} is connected without a usable token. Reconnect it in Studio Settings.`);
+  const stored = await readToken(ownerId, artistId, platform);
+  if (!stored) throw new Error(`${platform} is connected for this artist without a usable token. Reconnect it in Studio Settings.`);
 
   let token: TokenRow;
   try {
-    token = await refreshedToken(ownerId, platform, stored);
+    token = await refreshedToken(ownerId, artistId, platform, stored);
   } catch (error) {
     await supabase
       .from("social_channel_accounts")
       .update({ status: "needs_reauth" })
       .eq("owner_id", ownerId)
+      .eq("artist_id", artistId)
       .eq("platform", platform);
     throw error;
   }
@@ -216,6 +228,7 @@ export async function requireSocialAccess(
 
   return {
     ownerId,
+    artistId,
     platform,
     accessToken: token.access_token,
     refreshToken: token.refresh_token,
@@ -227,12 +240,12 @@ export async function requireSocialAccess(
   };
 }
 
-export async function socialOwnerForExternalPost(platform: string, externalPostId: string) {
+export async function socialContextForExternalPost(platform: string, externalPostId: string): Promise<SocialPublicationContext | null> {
   const { createMarketingServiceClient } = await import("./db");
   const client = createMarketingServiceClient();
   const { data, error } = await client
     .from("publication_jobs")
-    .select("owner_id")
+    .select("owner_id,artist_id")
     .eq("platform", platform)
     .eq("external_post_id", externalPostId)
     .eq("status", "published")
@@ -240,5 +253,10 @@ export async function socialOwnerForExternalPost(platform: string, externalPostI
     .limit(1)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  return data?.owner_id ?? null;
+  return data ? { ownerId: data.owner_id, artistId: data.artist_id } : null;
+}
+
+export async function socialOwnerForExternalPost(platform: string, externalPostId: string) {
+  const context = await socialContextForExternalPost(platform, externalPostId);
+  return context?.ownerId ?? null;
 }

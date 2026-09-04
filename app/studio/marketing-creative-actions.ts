@@ -17,6 +17,7 @@ import { directContentCreative } from "@/lib/marketing/creative-treatment";
 import { creativeProvider, isCreativeDefiniteRejection } from "@/lib/marketing/creative-providers";
 import { CREATIVE_PROVIDER_IDS, type CreativeGenerationRequest, type CreativeProviderId } from "@/lib/marketing/creative-provider-types";
 import { getSiteUrl } from "@/lib/site-url";
+import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { Json } from "@/types/database";
 
@@ -37,6 +38,15 @@ function record(input: Json | unknown): Record<string, unknown> {
   return input && typeof input === "object" && !Array.isArray(input)
     ? input as Record<string, unknown>
     : {};
+}
+
+async function actionContext(form: FormData) {
+  const { supabase, user } = await requireStudioAdmin();
+  const requestedArtistId = value(form, "artist_id");
+  const artist = requestedArtistId
+    ? await resolveArtistContext(supabase, user, uuid.parse(requestedArtistId))
+    : await resolveDefaultArtistContext(supabase, user);
+  return { supabase, artist, marketing: asMarketingClient(supabase) };
 }
 
 function outputKindFor(format: string, preference: (typeof CREATIVE_MEDIA_KINDS)[number]) {
@@ -66,17 +76,17 @@ function webhookUrl(provider: CreativeProviderId, runId: string) {
 }
 
 export async function prepareContentCreativeGeneration(form: FormData) {
-  const { supabase, user } = await requireStudioAdmin();
-  const marketing = asMarketingClient(supabase);
+  const { artist, marketing } = await actionContext(form);
   const contentItemId = uuid.parse(value(form, "content_item_id"));
   const quality = qualitySchema.parse(value(form, "quality") || "balanced");
   const mediaKind = mediaKindSchema.parse(value(form, "media_kind") || "auto");
   const { data: content, error: contentError } = await marketing.from("content_items")
     .select("*")
     .eq("id", contentItemId)
-    .eq("owner_id", user.id)
+    .eq("owner_id", artist.userId)
+    .eq("artist_id", artist.artistId)
     .single();
-  if (contentError || !content) throw new Error(contentError?.message || "Content item not found.");
+  if (contentError || !content) throw new Error(contentError?.message || "Content item not found for the active artist.");
   if (content.status === "Published" || content.status === "Archived") {
     throw new Error("Published or archived content cannot start a new creative generation.");
   }
@@ -84,13 +94,15 @@ export async function prepareContentCreativeGeneration(form: FormData) {
   const db = createServiceClient();
   const referenceContext = await loadCreativeReferenceContext({
     db,
-    ownerId: user.id,
+    ownerId: artist.userId,
+    artistId: artist.artistId,
     releaseId: content.release_id,
     contentItemId: content.id,
   });
   const outputKind = outputKindFor(content.format, mediaKind);
   const { treatment, generationRunId: treatmentGenerationRunId } = await directContentCreative({
-    ownerId: user.id,
+    ownerId: artist.userId,
+    artistId: artist.artistId,
     content,
     context: referenceContext,
     outputKind,
@@ -122,7 +134,8 @@ export async function prepareContentCreativeGeneration(form: FormData) {
   const quote = await provider.quote(route.request);
 
   const { data: generation, error: generationError } = await marketing.from("generation_runs").insert({
-    owner_id: user.id,
+    owner_id: artist.userId,
+    artist_id: artist.artistId,
     campaign_id: content.campaign_id,
     release_id: content.release_id,
     purpose: `content_asset:${content.id}`,
@@ -130,6 +143,7 @@ export async function prepareContentCreativeGeneration(form: FormData) {
     model: route.request.model,
     prompt_version: "creative-lineage-v3-creative-director",
     input_context: json({
+      artistId: artist.artistId,
       contentItemId: content.id,
       outputKind: route.outputKind,
       assetType: route.assetType,
@@ -165,7 +179,8 @@ export async function prepareContentCreativeGeneration(form: FormData) {
   if (generationError || !generation) throw new Error(generationError?.message || "Could not prepare the creative generation.");
 
   const { error: eventError } = await marketing.from("marketing_events").insert({
-    owner_id: user.id,
+    owner_id: artist.userId,
+    artist_id: artist.artistId,
     campaign_id: content.campaign_id,
     event_type: "content.ai_asset_prepared",
     entity_type: "content_item",
@@ -189,21 +204,22 @@ export async function prepareContentCreativeGeneration(form: FormData) {
 }
 
 export async function approvePreparedCreativeGeneration(form: FormData) {
-  const { supabase, user } = await requireStudioAdmin();
-  const marketing = asMarketingClient(supabase);
+  const { artist, marketing } = await actionContext(form);
   const runId = uuid.parse(value(form, "generation_run_id"));
   const { data: run, error: runError } = await marketing.from("generation_runs")
     .select("*")
     .eq("id", runId)
-    .eq("owner_id", user.id)
+    .eq("owner_id", artist.userId)
+    .eq("artist_id", artist.artistId)
     .single();
-  if (runError || !run) throw new Error(runError?.message || "Generation run not found.");
+  if (runError || !run) throw new Error(runError?.message || "Generation run not found for the active artist.");
   if (!run.purpose.startsWith("content_asset:")) throw new Error("This is not a content creative generation.");
   const output = record(run.output);
   if (run.status !== "queued" || output.stage !== "prepared") {
     throw new Error("This generation is no longer waiting for spend approval.");
   }
   const inputContext = record(run.input_context);
+  if (inputContext.artistId !== artist.artistId) throw new Error("Prepared creative lineage does not match the active artist.");
   const productionGate = record(inputContext.productionGate);
   if (productionGate.passed !== true) {
     throw new Error("This creative did not pass the production gate and cannot spend on provider generation.");
@@ -225,7 +241,7 @@ export async function approvePreparedCreativeGeneration(form: FormData) {
     throw new Error("Prepared generation is missing its media spend category.");
   }
   await assertSpecialistMediaSpendAllowed({
-    ownerId: user.id,
+    ownerId: artist.userId,
     kind: outputKind,
     estimatedUsd: typeof run.estimated_cost_usd === "number" ? run.estimated_cost_usd : null,
   });
@@ -233,11 +249,13 @@ export async function approvePreparedCreativeGeneration(form: FormData) {
   const provider = creativeProvider(providerId);
   try {
     const submission = await provider.submit(request, webhookUrl(providerId, run.id));
-    await applyMarketingCreativeProviderStatus({ runId: run.id, status: submission });
+    await applyMarketingCreativeProviderStatus({ runId: run.id, artistId: artist.artistId, status: submission });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Creative generation submission failed.";
     if (isCreativeDefiniteRejection(error)) {
-      await marketing.from("generation_runs").update({ status: "failed", error: message, output: json({ ...output, stage: "failed_before_submission" }) }).eq("id", run.id);
+      await marketing.from("generation_runs")
+        .update({ status: "failed", error: message, output: json({ ...output, stage: "failed_before_submission" }) })
+        .eq("id", run.id).eq("owner_id", artist.userId).eq("artist_id", artist.artistId);
     } else {
       await marketing.from("generation_runs").update({
         status: "running",
@@ -245,31 +263,34 @@ export async function approvePreparedCreativeGeneration(form: FormData) {
         output: json({
           ...output,
           stage: "submission_ambiguous",
-          warning: "Atlas did not receive a definitive provider response, so automatic retry is blocked to avoid duplicate paid generations.",
+          warning: "Ensemblis did not receive a definitive provider response, so automatic retry is blocked to avoid duplicate paid generations.",
         }),
-      }).eq("id", run.id);
+      }).eq("id", run.id).eq("owner_id", artist.userId).eq("artist_id", artist.artistId);
     }
     throw error;
   }
 
   const contentItemId = uuid.parse(run.purpose.slice("content_asset:".length));
-  const { data: content } = await marketing.from("content_items").select("id,release_id,campaign_id").eq("id", contentItemId).eq("owner_id", user.id).maybeSingle();
+  const { data: content } = await marketing.from("content_items")
+    .select("id,release_id,campaign_id")
+    .eq("id", contentItemId).eq("owner_id", artist.userId).eq("artist_id", artist.artistId).maybeSingle();
   if (content) revalidateCreativePaths(content);
 }
 
 export async function refreshCreativeGeneration(form: FormData) {
-  const { supabase, user } = await requireStudioAdmin();
-  const marketing = asMarketingClient(supabase);
+  const { artist, marketing } = await actionContext(form);
   const runId = uuid.parse(value(form, "generation_run_id"));
   const { data: run, error: runError } = await marketing.from("generation_runs")
     .select("*")
     .eq("id", runId)
-    .eq("owner_id", user.id)
+    .eq("owner_id", artist.userId)
+    .eq("artist_id", artist.artistId)
     .single();
-  if (runError || !run) throw new Error(runError?.message || "Generation run not found.");
+  if (runError || !run) throw new Error(runError?.message || "Generation run not found for the active artist.");
   if (run.status === "completed" || run.status === "failed") return;
-  if (!run.provider_request_id) throw new Error("This generation has no provider request id yet. Atlas will not retry an ambiguous paid submission automatically.");
+  if (!run.provider_request_id) throw new Error("This generation has no provider request id yet. Ensemblis will not retry an ambiguous paid submission automatically.");
   const inputContext = record(run.input_context);
+  if (inputContext.artistId !== artist.artistId) throw new Error("Stored creative lineage does not match the active artist.");
   const requestValue = inputContext.request;
   if (!requestValue || typeof requestValue !== "object" || Array.isArray(requestValue)) throw new Error("Stored provider request is missing.");
   const request = requestValue as unknown as CreativeGenerationRequest;
@@ -277,37 +298,46 @@ export async function refreshCreativeGeneration(form: FormData) {
   if (request.provider !== providerId) throw new Error("Stored provider request does not match the generation provider.");
   const provider = creativeProvider(providerId);
   const status = await provider.status(run.provider_request_id, request);
-  await applyMarketingCreativeProviderStatus({ runId: run.id, status });
+  await applyMarketingCreativeProviderStatus({ runId: run.id, artistId: artist.artistId, status });
   const contentItemId = uuid.parse(run.purpose.slice("content_asset:".length));
-  const { data: content } = await marketing.from("content_items").select("id,release_id,campaign_id").eq("id", contentItemId).eq("owner_id", user.id).maybeSingle();
+  const { data: content } = await marketing.from("content_items")
+    .select("id,release_id,campaign_id")
+    .eq("id", contentItemId).eq("owner_id", artist.userId).eq("artist_id", artist.artistId).maybeSingle();
   if (content) revalidateCreativePaths(content);
 }
 
 export async function discardPreparedCreativeGeneration(form: FormData) {
-  const { supabase, user } = await requireStudioAdmin();
-  const marketing = asMarketingClient(supabase);
+  const { artist, marketing } = await actionContext(form);
   const runId = uuid.parse(value(form, "generation_run_id"));
-  const { data: run, error: runError } = await marketing.from("generation_runs").select("id,status,output,purpose").eq("id", runId).eq("owner_id", user.id).single();
-  if (runError || !run) throw new Error(runError?.message || "Generation run not found.");
+  const { data: run, error: runError } = await marketing.from("generation_runs")
+    .select("id,status,output,purpose,input_context")
+    .eq("id", runId).eq("owner_id", artist.userId).eq("artist_id", artist.artistId).single();
+  if (runError || !run) throw new Error(runError?.message || "Generation run not found for the active artist.");
+  if (record(run.input_context).artistId !== artist.artistId) throw new Error("Stored creative lineage does not match the active artist.");
   if (run.status !== "queued" || record(run.output).stage !== "prepared") throw new Error("Only an unsubmitted prepared generation can be discarded.");
-  const { error } = await marketing.from("generation_runs").delete().eq("id", run.id).eq("owner_id", user.id);
+  const { error } = await marketing.from("generation_runs").delete()
+    .eq("id", run.id).eq("owner_id", artist.userId).eq("artist_id", artist.artistId);
   if (error) throw new Error(error.message);
   const contentItemId = uuid.parse(run.purpose.slice("content_asset:".length));
-  const { data: content } = await marketing.from("content_items").select("id,release_id,campaign_id").eq("id", contentItemId).eq("owner_id", user.id).maybeSingle();
+  const { data: content } = await marketing.from("content_items")
+    .select("id,release_id,campaign_id")
+    .eq("id", contentItemId).eq("owner_id", artist.userId).eq("artist_id", artist.artistId).maybeSingle();
   if (content) revalidateCreativePaths(content);
 }
 
 export async function approveGeneratedCreative(form: FormData) {
-  const { supabase, user } = await requireStudioAdmin();
-  const marketing = asMarketingClient(supabase);
+  const { artist, marketing } = await actionContext(form);
   const contentItemId = uuid.parse(value(form, "content_item_id"));
-  const { data: content, error: contentError } = await marketing.from("content_items").select("id,release_id,campaign_id,asset_url,source").eq("id", contentItemId).eq("owner_id", user.id).single();
-  if (contentError || !content) throw new Error(contentError?.message || "Content item not found.");
+  const { data: content, error: contentError } = await marketing.from("content_items")
+    .select("id,release_id,campaign_id,asset_url,source")
+    .eq("id", contentItemId).eq("owner_id", artist.userId).eq("artist_id", artist.artistId).single();
+  if (contentError || !content) throw new Error(contentError?.message || "Content item not found for the active artist.");
   if (!content.asset_url || content.source !== "ai") throw new Error("There is no AI-generated creative attached to approve.");
 
   const { data: generation, error: generationError } = await marketing.from("generation_runs")
     .select("id,input_context,output")
-    .eq("owner_id", user.id)
+    .eq("owner_id", artist.userId)
+    .eq("artist_id", artist.artistId)
     .eq("purpose", `content_asset:${content.id}`)
     .eq("status", "completed")
     .order("created_at", { ascending: false })
@@ -316,6 +346,7 @@ export async function approveGeneratedCreative(form: FormData) {
   if (generationError) throw new Error(generationError.message);
   if (!generation) throw new Error("The generated asset has no completed production lineage and cannot be approved.");
   const inputContext = record(generation.input_context);
+  if (inputContext.artistId !== artist.artistId) throw new Error("Generated creative lineage does not match the active artist.");
   const productionGate = record(inputContext.productionGate);
   const treatment = record(inputContext.treatment);
   if (productionGate.passed !== true || productionGate.humanVisualReviewRequired !== true || !treatment.version) {
@@ -333,13 +364,15 @@ export async function approveGeneratedCreative(form: FormData) {
         humanVisualApprovedAt: reviewedAt,
       },
     }),
-  }).eq("id", generation.id).eq("owner_id", user.id);
+  }).eq("id", generation.id).eq("owner_id", artist.userId).eq("artist_id", artist.artistId);
   if (generationUpdateError) throw new Error(generationUpdateError.message);
 
-  const { error } = await marketing.from("content_items").update({ approval_status: "approved" }).eq("id", content.id).eq("owner_id", user.id);
+  const { error } = await marketing.from("content_items").update({ approval_status: "approved" })
+    .eq("id", content.id).eq("owner_id", artist.userId).eq("artist_id", artist.artistId);
   if (error) throw new Error(error.message);
   const { error: eventError } = await marketing.from("marketing_events").insert({
-    owner_id: user.id,
+    owner_id: artist.userId,
+    artist_id: artist.artistId,
     campaign_id: content.campaign_id,
     event_type: "content.ai_asset_approved",
     entity_type: "content_item",
@@ -357,36 +390,43 @@ export async function approveGeneratedCreative(form: FormData) {
 }
 
 export async function rejectGeneratedCreative(form: FormData) {
-  const { supabase, user } = await requireStudioAdmin();
-  const marketing = asMarketingClient(supabase);
+  const { artist, marketing } = await actionContext(form);
   const contentItemId = uuid.parse(value(form, "content_item_id"));
-  const { data: content, error: contentError } = await marketing.from("content_items").select("id,release_id,campaign_id,asset_url,source").eq("id", contentItemId).eq("owner_id", user.id).single();
-  if (contentError || !content) throw new Error(contentError?.message || "Content item not found.");
+  const { data: content, error: contentError } = await marketing.from("content_items")
+    .select("id,release_id,campaign_id,asset_url,source")
+    .eq("id", contentItemId).eq("owner_id", artist.userId).eq("artist_id", artist.artistId).single();
+  if (contentError || !content) throw new Error(contentError?.message || "Content item not found for the active artist.");
   if (!content.asset_url || content.source !== "ai") throw new Error("There is no AI-generated creative attached to reject.");
 
   const { data: generation, error: generationError } = await marketing.from("generation_runs")
-    .select("id,output")
-    .eq("owner_id", user.id)
+    .select("id,input_context,output")
+    .eq("owner_id", artist.userId)
+    .eq("artist_id", artist.artistId)
     .eq("purpose", `content_asset:${content.id}`)
     .eq("status", "completed")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (generationError) throw new Error(generationError.message);
+  if (generation && record(generation.input_context).artistId !== artist.artistId) {
+    throw new Error("Generated creative lineage does not match the active artist.");
+  }
   const rejectedAt = new Date().toISOString();
   if (generation) {
     const runOutput = record(generation.output);
     const { error: generationUpdateError } = await marketing.from("generation_runs").update({
       user_outcome: "rejected",
       output: json({ ...runOutput, humanVisualRejectedAt: rejectedAt }),
-    }).eq("id", generation.id).eq("owner_id", user.id);
+    }).eq("id", generation.id).eq("owner_id", artist.userId).eq("artist_id", artist.artistId);
     if (generationUpdateError) throw new Error(generationUpdateError.message);
   }
 
-  const { error } = await marketing.from("content_items").update({ approval_status: "rejected" }).eq("id", content.id).eq("owner_id", user.id);
+  const { error } = await marketing.from("content_items").update({ approval_status: "rejected" })
+    .eq("id", content.id).eq("owner_id", artist.userId).eq("artist_id", artist.artistId);
   if (error) throw new Error(error.message);
   const { error: eventError } = await marketing.from("marketing_events").insert({
-    owner_id: user.id,
+    owner_id: artist.userId,
+    artist_id: artist.artistId,
     campaign_id: content.campaign_id,
     event_type: "content.ai_asset_rejected",
     entity_type: "content_item",

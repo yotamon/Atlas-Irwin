@@ -10,6 +10,7 @@ type Table<Row> = {
 export type CreativeDerivative = {
   id: string;
   owner_id: string;
+  artist_id: string;
   campaign_id: string | null;
   master_content_item_id: string;
   derivative_content_item_id: string | null;

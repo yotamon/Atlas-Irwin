@@ -35,6 +35,7 @@ function nonNegativeCost(value: unknown) {
 export async function applyMarketingCreativeProviderStatus(input: {
   runId?: string;
   providerRequestId?: string;
+  artistId?: string;
   status: CreativeProviderStatus;
 }) {
   const marketing = createMarketingServiceClient();
@@ -42,15 +43,41 @@ export async function applyMarketingCreativeProviderStatus(input: {
   if (input.runId) query = query.eq("id", input.runId);
   else if (input.providerRequestId) query = query.eq("provider_request_id", input.providerRequestId);
   else throw new Error("A generation run id or provider request id is required.");
+  if (input.artistId) query = query.eq("artist_id", input.artistId);
+
   const { data: run, error: runError } = await query.limit(1).maybeSingle();
   if (runError) throw new Error(runError.message);
   if (!run) return { ignored: true as const, reason: "unknown_generation" };
   if (!run.purpose.startsWith("content_asset:")) return { ignored: true as const, reason: "not_marketing_creative" };
+  if (!run.artist_id) throw new Error("Marketing generation is missing durable artist lineage.");
+  const artistId = run.artist_id;
+  if (input.artistId && input.artistId !== artistId) {
+    throw new Error("Creative provider status does not match the expected artist lineage.");
+  }
+
+  const inputContext = record(run.input_context);
+  const contentItemId = stringValue(inputContext.contentItemId) || run.purpose.slice("content_asset:".length);
+  if (!contentItemId) throw new Error("Marketing generation is missing its content lineage.");
+  const { data: content, error: contentError } = await marketing.from("content_items")
+    .select("id,artist_id,campaign_id,release_id")
+    .eq("id", contentItemId)
+    .eq("owner_id", run.owner_id)
+    .eq("artist_id", artistId)
+    .maybeSingle();
+  if (contentError) throw new Error(contentError.message);
+  if (!content) throw new Error("Marketing generation content does not belong to the generation artist.");
+  if ((run.campaign_id ?? null) !== (content.campaign_id ?? null) || (run.release_id ?? null) !== (content.release_id ?? null)) {
+    throw new Error("Marketing generation campaign/release lineage does not match its content item.");
+  }
+
   if (run.status === "completed") {
     const completedOutput = record(run.output);
-    const completedCost = nonNegativeCost(completedOutput.actualCostUsd) ?? nonNegativeCost(run.actual_cost_usd) ?? nonNegativeCost(run.estimated_cost_usd);
+    const completedCost = nonNegativeCost(completedOutput.actualCostUsd)
+      ?? nonNegativeCost(run.actual_cost_usd)
+      ?? nonNegativeCost(run.estimated_cost_usd);
     await settleCampaignSpendForGeneration({
       ownerId: run.owner_id,
+      artistId,
       generationRunId: run.id,
       actualUsd: completedCost,
       basis: nonNegativeCost(run.actual_cost_usd) !== null ? "provider_actual" : "estimated",
@@ -58,7 +85,6 @@ export async function applyMarketingCreativeProviderStatus(input: {
     return { completed: true as const, duplicate: true as const, output: run.output };
   }
 
-  const inputContext = record(run.input_context);
   const output = record(run.output);
   const providerRequestId = input.status.requestId || run.provider_request_id;
   if (input.status.status === "queued" || input.status.status === "in_progress") {
@@ -67,7 +93,7 @@ export async function applyMarketingCreativeProviderStatus(input: {
       provider_request_id: providerRequestId,
       output: json({ ...output, stage: "generating", providerStatus: input.status.status, providerRaw: input.status.raw }),
       error: null,
-    }).eq("id", run.id);
+    }).eq("id", run.id).eq("owner_id", run.owner_id).eq("artist_id", artistId);
     if (error) throw new Error(error.message);
     return { completed: false as const, status: input.status.status };
   }
@@ -80,12 +106,14 @@ export async function applyMarketingCreativeProviderStatus(input: {
     if (reportedCost === 0) {
       await releaseCampaignSpendForGeneration({
         ownerId: run.owner_id,
+        artistId,
         generationRunId: run.id,
         reason: `${input.status.status}:provider_reported_not_billed`,
       });
     } else {
       await settleCampaignSpendForGeneration({
         ownerId: run.owner_id,
+        artistId,
         generationRunId: run.id,
         actualUsd: reportedCost,
         basis: reportedCost !== null ? "provider_actual" : "conservative_reserve",
@@ -97,18 +125,19 @@ export async function applyMarketingCreativeProviderStatus(input: {
       actual_cost_usd: reportedCost,
       output: json({ ...output, stage: "failed", providerStatus: input.status.status, providerRaw: input.status.raw }),
       error: message,
-    }).eq("id", run.id);
+    }).eq("id", run.id).eq("owner_id", run.owner_id).eq("artist_id", artistId);
     if (error) throw new Error(error.message);
     return { completed: false as const, status: input.status.status };
   }
 
-  if (!input.status.resultUrl && !input.status.resultBase64) throw new Error(`${run.provider} reported completion without a media result.`);
-  const contentItemId = stringValue(inputContext.contentItemId);
+  if (!input.status.resultUrl && !input.status.resultBase64) {
+    throw new Error(`${run.provider} reported completion without a media result.`);
+  }
   const outputKind = stringValue(inputContext.outputKind);
   const assetType = stringValue(inputContext.assetType);
   const storedContext = inputContext.referenceContext;
   const storedTreatment = inputContext.treatment;
-  if (!contentItemId || !["image", "video"].includes(outputKind) || !["social_image", "content_video"].includes(assetType)) {
+  if (!["image", "video"].includes(outputKind) || !["social_image", "content_video"].includes(assetType)) {
     throw new Error("Stored marketing generation context is incomplete.");
   }
   if (!storedContext || typeof storedContext !== "object" || Array.isArray(storedContext)) {
@@ -117,11 +146,16 @@ export async function applyMarketingCreativeProviderStatus(input: {
   if (!storedTreatment || typeof storedTreatment !== "object" || Array.isArray(storedTreatment)) {
     throw new Error("Stored Creative Director treatment is missing.");
   }
+  const creativeContext = storedContext as unknown as CreativeReferenceContext;
+  if (creativeContext.artistId !== artistId) {
+    throw new Error("Stored creative reference context belongs to a different artist.");
+  }
 
   const providerActual = nonNegativeCost(input.status.actualCostUsd);
   const actualCostUsd = providerActual ?? nonNegativeCost(run.estimated_cost_usd);
   await settleCampaignSpendForGeneration({
     ownerId: run.owner_id,
+    artistId,
     generationRunId: run.id,
     actualUsd: actualCostUsd,
     basis: providerActual !== null ? "provider_actual" : "estimated",
@@ -131,6 +165,7 @@ export async function applyMarketingCreativeProviderStatus(input: {
   const stored = await storeRemoteMarketingAsset({
     db,
     ownerId: run.owner_id,
+    artistId,
     generationRunId: run.id,
     campaignId: run.campaign_id,
     releaseId: run.release_id,
@@ -144,12 +179,10 @@ export async function applyMarketingCreativeProviderStatus(input: {
     actualCostUsd,
     outputKind: outputKind as "image" | "video",
     assetType: assetType as "social_image" | "content_video",
-    context: storedContext as unknown as CreativeReferenceContext,
+    context: creativeContext,
   });
   const storedAssetUrl = stored.asset.public_url;
-  if (!storedAssetUrl) {
-    throw new Error("Generated marketing asset was stored without a public Media Library URL.");
-  }
+  if (!storedAssetUrl) throw new Error("Generated marketing asset was stored without a public Media Library URL.");
 
   let visualQuality: Record<string, unknown>;
   let stage: string;
@@ -158,13 +191,14 @@ export async function applyMarketingCreativeProviderStatus(input: {
     try {
       const review = await reviewGeneratedCreativeImage({
         ownerId: run.owner_id,
+        artistId,
         parentGenerationRunId: run.id,
         campaignId: run.campaign_id,
         releaseId: run.release_id,
         contentItemId,
         assetUrl: storedAssetUrl,
         treatment: storedTreatment as unknown as CreativeTreatment,
-        context: storedContext as unknown as CreativeReferenceContext,
+        context: creativeContext,
       });
       visualQuality = { status: "reviewed", ...review };
       if (review.passed) {
@@ -173,7 +207,12 @@ export async function applyMarketingCreativeProviderStatus(input: {
       } else {
         stage = "creative_qc_failed";
         eventType = "content.ai_asset_qc_failed";
-        await marketing.from("content_items").update({ approval_status: "rejected" }).eq("id", contentItemId).eq("owner_id", run.owner_id);
+        const { error: rejectError } = await marketing.from("content_items")
+          .update({ approval_status: "rejected" })
+          .eq("id", contentItemId)
+          .eq("owner_id", run.owner_id)
+          .eq("artist_id", artistId);
+        if (rejectError) throw new Error(rejectError.message);
       }
     } catch (error) {
       visualQuality = {
@@ -193,6 +232,7 @@ export async function applyMarketingCreativeProviderStatus(input: {
         : null;
       const finishingJob = await enqueueMarketingVideoFinishing({
         ownerId: run.owner_id,
+        artistId,
         campaignId: run.campaign_id,
         releaseId: run.release_id,
         contentItemId,
@@ -200,7 +240,7 @@ export async function applyMarketingCreativeProviderStatus(input: {
         rawAssetId: stored.asset.id,
         rawAssetUrl: storedAssetUrl,
         treatment: storedTreatment as unknown as CreativeTreatment,
-        context: storedContext as unknown as CreativeReferenceContext,
+        context: creativeContext,
         request,
       });
       visualQuality = {
@@ -246,25 +286,29 @@ export async function applyMarketingCreativeProviderStatus(input: {
     output: json(completedOutput),
     actual_cost_usd: actualCostUsd,
     error: null,
-  }).eq("id", run.id);
+  }).eq("id", run.id).eq("owner_id", run.owner_id).eq("artist_id", artistId);
   if (updateError) throw new Error(updateError.message);
+
   const { error: eventError } = await marketing.from("marketing_events").insert({
     owner_id: run.owner_id,
+    artist_id: artistId,
     campaign_id: run.campaign_id,
     event_type: eventType,
     entity_type: "content_item",
     entity_id: contentItemId,
     payload: json({
+      artistId,
       generationRunId: run.id,
       rawMediaAssetId: stored.asset.id,
       provider: run.provider,
       model: run.model,
       actualCostUsd,
-      cohesionScore: (storedContext as unknown as CreativeReferenceContext).cohesionScore,
+      cohesionScore: creativeContext.cohesionScore,
       visualQuality,
     }),
   });
   if (eventError) throw new Error(eventError.message);
+
   return {
     completed: true as const,
     mediaAssetId: outputKind === "image" ? stored.asset.id : null,

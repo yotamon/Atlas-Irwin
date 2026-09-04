@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import type { CreativeSpendDatabase } from "@/types/creative-spend-database";
 
 const uuid = z.uuid();
@@ -17,9 +18,21 @@ function checked(form: FormData, key: string) {
   return form.get(key) === "on" || form.get(key) === "true" || form.get(key) === "1";
 }
 
-export async function saveCampaignAiSpendEnvelope(form: FormData) {
+async function actionContext(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
-  const db = supabase as unknown as SupabaseClient<CreativeSpendDatabase>;
+  const requestedArtistId = value(form, "artist_id");
+  const artist = requestedArtistId
+    ? await resolveArtistContext(supabase, user, uuid.parse(requestedArtistId))
+    : await resolveDefaultArtistContext(supabase, user);
+  return {
+    user,
+    artist,
+    db: supabase as unknown as SupabaseClient<CreativeSpendDatabase>,
+  };
+}
+
+export async function saveCampaignAiSpendEnvelope(form: FormData) {
+  const { user, artist, db } = await actionContext(form);
   const campaignId = uuid.parse(value(form, "campaign_id"));
   const enabled = checked(form, "enabled");
   const hardLimitUsd = money.parse(value(form, "hard_limit_usd") || "0");
@@ -40,11 +53,12 @@ export async function saveCampaignAiSpendEnvelope(form: FormData) {
   }
 
   const { data: campaign, error: campaignError } = await db.from("campaigns")
-    .select("id,mode")
+    .select("id,mode,artist_id")
     .eq("id", campaignId)
     .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId)
     .single();
-  if (campaignError || !campaign) throw new Error(campaignError?.message || "Campaign not found.");
+  if (campaignError || !campaign) throw new Error(campaignError?.message || "Campaign not found for the active Artist.");
   if (enabled && campaign.mode !== "autopilot") {
     throw new Error("Switch the campaign to Autopilot before enabling autonomous AI creative spend.");
   }
@@ -52,6 +66,7 @@ export async function saveCampaignAiSpendEnvelope(form: FormData) {
   const { data: existing, error: existingError } = await db.from("campaign_ai_spend_envelopes")
     .select("*")
     .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId)
     .eq("campaign_id", campaignId)
     .maybeSingle();
   if (existingError) throw new Error(existingError.message);
@@ -61,6 +76,7 @@ export async function saveCampaignAiSpendEnvelope(form: FormData) {
 
   const row = {
     owner_id: user.id,
+    artist_id: artist.artistId,
     campaign_id: campaignId,
     enabled,
     hard_limit_usd: Number(hardLimitUsd.toFixed(4)),
@@ -72,7 +88,10 @@ export async function saveCampaignAiSpendEnvelope(form: FormData) {
       : Number(existing?.overrun_usd ?? 0),
   };
   const mutation = existing
-    ? db.from("campaign_ai_spend_envelopes").update(row).eq("id", existing.id).eq("owner_id", user.id)
+    ? db.from("campaign_ai_spend_envelopes").update(row)
+        .eq("id", existing.id)
+        .eq("owner_id", user.id)
+        .eq("artist_id", artist.artistId)
     : db.from("campaign_ai_spend_envelopes").insert(row);
   const { error } = await mutation;
   if (error) throw new Error(error.message);
@@ -80,12 +99,21 @@ export async function saveCampaignAiSpendEnvelope(form: FormData) {
 }
 
 export async function disableCampaignAiSpendEnvelope(form: FormData) {
-  const { supabase, user } = await requireStudioAdmin();
-  const db = supabase as unknown as SupabaseClient<CreativeSpendDatabase>;
+  const { user, artist, db } = await actionContext(form);
   const campaignId = uuid.parse(value(form, "campaign_id"));
+  const { data: campaign, error: campaignError } = await db.from("campaigns")
+    .select("id")
+    .eq("id", campaignId)
+    .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId)
+    .maybeSingle();
+  if (campaignError) throw new Error(campaignError.message);
+  if (!campaign) throw new Error("Campaign not found for the active Artist.");
+
   const { error } = await db.from("campaign_ai_spend_envelopes")
     .update({ enabled: false })
     .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId)
     .eq("campaign_id", campaignId);
   if (error) throw new Error(error.message);
   revalidatePath(`/studio/campaigns/${campaignId}`);

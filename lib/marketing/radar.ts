@@ -5,18 +5,20 @@ import { getSupabaseEnv } from "@/lib/supabase/config";
 import { createAutonomyServiceClient } from "./autonomy-db";
 import { createMarketingServiceClient } from "./db";
 import { requireSocialAccess } from "./social-auth";
-import type { SocialDatabase } from "@/types/social-database";
+import type { ArtistScopedSocialDatabase } from "@/types/artist-scoped-operational-database";
 import type { Json } from "@/types/database";
 
 const YOUTUBE_API_URL = "https://www.googleapis.com/youtube/v3";
 const RADAR_INTERVAL_MS = 20 * 60 * 60 * 1000;
 const DEFAULT_QUERIES = ["nu disco", "disco house", "electronic music visualizer"];
 
+type RadarArtist = { ownerId: string; artistId: string };
+
 function serviceSocial() {
   const { url } = getSupabaseEnv();
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
   if (!key) throw new Error("SUPABASE_SERVICE_ROLE_KEY is required for the marketing radar.");
-  return createClient<SocialDatabase>(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+  return createClient<ArtistScopedSocialDatabase>(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
 }
 
 function asJson(value: unknown) {
@@ -43,12 +45,13 @@ function opportunityScore(views: number, days: number) {
   return Math.max(0, Math.min(100, Math.round((velocityScore + freshness + 10) * 10) / 10));
 }
 
-async function radarDue(ownerId: string) {
+async function radarDue(ownerId: string, artistId: string) {
   const client = createMarketingServiceClient();
   const threshold = new Date(Date.now() - RADAR_INTERVAL_MS).toISOString();
   const { data, error } = await client.from("marketing_events")
     .select("occurred_at")
     .eq("owner_id", ownerId)
+    .eq("artist_id", artistId)
     .eq("event_type", "radar.scan.completed")
     .gte("occurred_at", threshold)
     .order("occurred_at", { ascending: false })
@@ -58,17 +61,21 @@ async function radarDue(ownerId: string) {
   return !data;
 }
 
-async function youtubeOwners() {
+async function youtubeArtists(): Promise<RadarArtist[]> {
   const { data, error } = await serviceSocial().from("social_channel_accounts")
-    .select("owner_id")
+    .select("owner_id,artist_id")
     .eq("platform", "youtube")
     .eq("status", "connected");
   if (error) throw new Error(error.message);
-  return Array.from(new Set((data ?? []).map((row) => row.owner_id)));
+  const unique = new Map<string, RadarArtist>();
+  for (const row of data ?? []) {
+    unique.set(`${row.owner_id}:${row.artist_id}`, { ownerId: row.owner_id, artistId: row.artist_id });
+  }
+  return [...unique.values()];
 }
 
-async function scanYouTube(ownerId: string) {
-  const access = await requireSocialAccess(ownerId, "youtube", ["https://www.googleapis.com/auth/youtube.readonly"]);
+async function scanYouTube(ownerId: string, artistId: string) {
+  const access = await requireSocialAccess(ownerId, artistId, "youtube", ["https://www.googleapis.com/auth/youtube.readonly"]);
   const found = new Map<string, { id: string; title: string; channelTitle: string; publishedAt: string; query: string }>();
   const publishedAfter = new Date(Date.now() - 10 * 86_400_000).toISOString();
 
@@ -136,6 +143,7 @@ async function scanYouTube(ownerId: string) {
     const urgency = Math.max(0, Math.min(100, Math.round((100 - days * 12) * 10) / 10));
     const { error } = await db.from("marketing_opportunities").upsert({
       owner_id: ownerId,
+      artist_id: artistId,
       kind: "trend",
       source: "youtube-radar",
       external_key: item.id,
@@ -146,20 +154,21 @@ async function scanYouTube(ownerId: string) {
       urgency,
       expires_at: new Date(Date.now() + 7 * 86_400_000).toISOString(),
       evidence: asJson({ videoId: item.id, views, likes, comments, ageDays: days, query: seed.query, channel: item.snippet?.channelTitle || seed.channelTitle }),
-      recommended_action: "Inspect the format, hook and visual grammar. Adapt the underlying idea only if it fits Atlas Irwin; never copy the creative literally.",
+      recommended_action: "Inspect the format, hook and visual grammar. Adapt the underlying idea only if it fits this artist; never copy the creative literally.",
       status: "new",
-    }, { onConflict: "owner_id,source,external_key" });
+    }, { onConflict: "artist_id,source,external_key" });
     if (!error) saved += 1;
   }
   return saved;
 }
 
-async function scanAtlasBreakouts(ownerId: string) {
+async function scanArtistBreakouts(ownerId: string, artistId: string) {
   const client = createMarketingServiceClient();
   const since = new Date(Date.now() - 14 * 86_400_000).toISOString();
   const { data, error } = await client.from("metric_snapshots")
     .select("content_item_id,content_variant_id,platform,views,reach,saves,shares,comments,captured_at")
     .eq("owner_id", ownerId)
+    .eq("artist_id", artistId)
     .gte("captured_at", since)
     .not("content_item_id", "is", null)
     .order("captured_at", { ascending: false })
@@ -179,8 +188,9 @@ async function scanAtlasBreakouts(ownerId: string) {
     const lift = signal / Math.max(1, median);
     const { error: saveError } = await db.from("marketing_opportunities").upsert({
       owner_id: ownerId,
+      artist_id: artistId,
       kind: "breakout",
-      source: "atlas-performance",
+      source: "artist-performance",
       external_key: `${row.content_item_id}:${row.platform}`,
       title: `${row.platform} content is outperforming the recent baseline`,
       summary: `Current weighted fan signal is ${lift.toFixed(1)}× the 14-day median.`,
@@ -190,32 +200,35 @@ async function scanAtlasBreakouts(ownerId: string) {
       evidence: asJson({ contentItemId: row.content_item_id, contentVariantId: row.content_variant_id, platform: row.platform, signal, median, lift, capturedAt: row.captured_at }),
       recommended_action: "Create one or two derivatives while the framing is still working, using existing approved media before spending on new generation.",
       status: "new",
-    }, { onConflict: "owner_id,source,external_key" });
+    }, { onConflict: "artist_id,source,external_key" });
     if (!saveError) saved += 1;
   }
   return saved;
 }
 
-export async function refreshMarketingRadarIfDue() {
-  const owners = await youtubeOwners();
+export async function refreshMarketingRadarIfDue(scope?: RadarArtist) {
+  const artists = scope ? [scope] : await youtubeArtists();
   const client = createMarketingServiceClient();
   let scanned = 0;
   let opportunities = 0;
-  for (const ownerId of owners) {
-    if (!await radarDue(ownerId)) continue;
+  for (const { ownerId, artistId } of artists) {
+    if (!await radarDue(ownerId, artistId)) continue;
     const [external, internal] = await Promise.allSettled([
-      scanYouTube(ownerId),
-      scanAtlasBreakouts(ownerId),
+      scanYouTube(ownerId, artistId),
+      scanArtistBreakouts(ownerId, artistId),
     ]);
-    if (external.status === "fulfilled") opportunities += external.value;
-    if (internal.status === "fulfilled") opportunities += internal.value;
+    let artistOpportunities = 0;
+    if (external.status === "fulfilled") artistOpportunities += external.value;
+    if (internal.status === "fulfilled") artistOpportunities += internal.value;
+    opportunities += artistOpportunities;
     await client.from("marketing_events").insert({
       owner_id: ownerId,
+      artist_id: artistId,
       campaign_id: null,
       event_type: "radar.scan.completed",
       entity_type: "radar",
       entity_id: null,
-      payload: { opportunities },
+      payload: { opportunities: artistOpportunities },
     });
     scanned += 1;
   }

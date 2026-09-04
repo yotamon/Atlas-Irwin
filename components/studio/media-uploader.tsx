@@ -78,12 +78,14 @@ async function mediaDimensions(file: File) {
 export function MediaUploader({
   releaseId,
   contentItemId,
+  artistId,
   defaultRole = "cover",
   vaultMode = false,
   releaseMasterMode = false,
 }: {
   releaseId?: string;
   contentItemId?: string;
+  artistId?: string;
   defaultRole?: MediaType;
   vaultMode?: boolean;
   releaseMasterMode?: boolean;
@@ -154,6 +156,7 @@ export function MediaUploader({
         });
         if (error) throw error;
         const form = new FormData();
+        const scopedTags = [tags, artistId ? `artist:${artistId}` : ""].filter(Boolean).join(",");
         Object.entries({
           storage_path: uploadTarget.storagePath,
           bucket_name: uploadTarget.bucketName,
@@ -165,7 +168,7 @@ export function MediaUploader({
           original_name: item.file.name,
           title: items.length === 1 ? title : "",
           description,
-          tags: releaseMasterMode ? [tags, "release-master"].filter(Boolean).join(",") : vaultMode ? [tags, "unreleased", "vault"].filter(Boolean).join(",") : tags,
+          tags: releaseMasterMode ? [scopedTags, "release-master"].filter(Boolean).join(",") : vaultMode ? [scopedTags, "unreleased", "vault"].filter(Boolean).join(",") : scopedTags,
           release_id: contentItemId || vaultMode ? "" : releaseId ?? "",
           is_primary: primary ? "on" : "",
           ...dimensions,

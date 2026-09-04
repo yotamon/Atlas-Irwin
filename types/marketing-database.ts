@@ -18,6 +18,7 @@ export type AiFeedbackEventType = "accepted" | "edited" | "rejected" | "regenera
 export type Campaign = {
   id: string;
   owner_id: string;
+  artist_id: string;
   release_id: string | null;
   name: string;
   status: CampaignStatus;
@@ -76,6 +77,7 @@ export type CampaignExperiment = {
 export type GenerationRun = {
   id: string;
   owner_id: string;
+  artist_id: string;
   campaign_id: string | null;
   release_id: string | null;
   video_project_id: string | null;
@@ -145,6 +147,7 @@ export type AiFeedbackEvent = {
 };
 
 export type MarketingContentItem = ContentItem & {
+  artist_id: string;
   campaign_id: string | null;
   phase_id: string | null;
   experiment_id: string | null;
@@ -244,6 +247,7 @@ export type AttributionEvent = {
 export type MarketingEvent = {
   id: string;
   owner_id: string;
+  artist_id: string;
   campaign_id: string | null;
   event_type: string;
   entity_type: string | null;
@@ -296,6 +300,7 @@ export type MarketingLearning = {
 };
 
 export type MarketingMetricSnapshot = MetricSnapshot & {
+  artist_id: string;
   campaign_id: string | null;
   experiment_id: string | null;
   content_variant_id: string | null;

@@ -30,11 +30,12 @@ function outputKind(value: unknown): SocialOutputKind | null {
   return value === "image" || value === "video" ? value : null;
 }
 
-async function connectedAccounts(ownerId: string) {
+async function connectedAccounts(ownerId: string, artistId: string) {
   const social = createServiceClient() as unknown as SupabaseClient<SocialDatabase>;
   const { data, error } = await social.from("social_channel_accounts")
     .select("*")
     .eq("owner_id", ownerId)
+    .eq("artist_id", artistId)
     .eq("status", "connected");
   if (error) throw new Error(error.message);
   return (data ?? []) as SocialChannelAccount[];
@@ -93,6 +94,7 @@ function platformCopy(input: {
 
 async function claimDerivative(input: {
   ownerId: string;
+  artistId: string;
   campaignId: string | null;
   masterContentItemId: string;
   masterGenerationRunId: string;
@@ -102,6 +104,7 @@ async function claimDerivative(input: {
   const client = db();
   const { data, error } = await client.from("creative_derivatives").insert({
     owner_id: input.ownerId,
+    artist_id: input.artistId,
     campaign_id: input.campaignId,
     master_content_item_id: input.masterContentItemId,
     derivative_content_item_id: null,
@@ -120,6 +123,7 @@ async function claimDerivative(input: {
   const existing = await client.from("creative_derivatives")
     .select("*")
     .eq("owner_id", input.ownerId)
+    .eq("artist_id", input.artistId)
     .eq("master_content_item_id", input.masterContentItemId)
     .eq("target_package_id", input.target.id)
     .single();
@@ -161,6 +165,7 @@ async function attachExistingAsset(input: {
 
 async function createOneDerivative(input: {
   ownerId: string;
+  artistId: string;
   sourceContent: CreativeDerivativeDatabase["public"]["Tables"]["content_items"]["Row"];
   masterRun: CreativeDerivativeDatabase["public"]["Tables"]["generation_runs"]["Row"];
   target: SocialPlatformPackage;
@@ -168,12 +173,16 @@ async function createOneDerivative(input: {
   treatment: CreativeTreatment;
   referenceContext: CreativeReferenceContext;
 }) {
+  if (input.sourceContent.artist_id !== input.artistId || input.masterRun.artist_id !== input.artistId || input.referenceContext.artistId !== input.artistId) {
+    throw new Error("Creative derivative lineage does not match the active artist.");
+  }
   const client = db();
   const strategy: CreativeDerivative["strategy"] = input.kind === "video"
     ? "deterministic_video_repackage"
     : "reuse_approved_image";
   const claim = await claimDerivative({
     ownerId: input.ownerId,
+    artistId: input.artistId,
     campaignId: input.sourceContent.campaign_id,
     masterContentItemId: input.sourceContent.id,
     masterGenerationRunId: input.masterRun.id,
@@ -193,6 +202,7 @@ async function createOneDerivative(input: {
     });
     const { data: child, error: childError } = await client.from("content_items").insert({
       owner_id: input.ownerId,
+      artist_id: input.artistId,
       release_id: input.sourceContent.release_id,
       campaign_id: input.sourceContent.campaign_id,
       phase_id: input.sourceContent.phase_id,
@@ -239,6 +249,7 @@ async function createOneDerivative(input: {
     const now = new Date().toISOString();
     const { data: derivativeRun, error: runError } = await client.from("generation_runs").insert({
       owner_id: input.ownerId,
+      artist_id: input.artistId,
       campaign_id: input.sourceContent.campaign_id,
       release_id: input.sourceContent.release_id,
       parent_run_id: input.masterRun.id,
@@ -249,6 +260,7 @@ async function createOneDerivative(input: {
       requested_model: null,
       prompt_version: "creative-derivative-v1",
       input_context: json({
+        artistId: input.artistId,
         contentItemId: child.id,
         outputKind: input.kind,
         assetType: input.kind === "video" ? "content_video" : "social_image",
@@ -297,6 +309,7 @@ async function createOneDerivative(input: {
       quality_score: input.kind === "image" ? Number(input.masterRun.quality_score ?? 1) : null,
       quality_failures: json([]),
       metadata: json({
+        artistId: input.artistId,
         derivativeClaimId: claim.derivative.id,
         zeroGenerationSpend: true,
         sourceGenerationRunId: input.masterRun.id,
@@ -310,11 +323,11 @@ async function createOneDerivative(input: {
       derivative_generation_run_id: derivativeRun.id,
       status: "processing",
       error: null,
-    }).eq("id", claim.derivative.id).eq("status", "planned");
+    }).eq("id", claim.derivative.id).eq("owner_id", input.ownerId).eq("artist_id", input.artistId).eq("status", "planned");
     if (claimUpdateError) throw new Error(claimUpdateError.message);
 
     const { error: childLineageError } = await client.from("content_items").update({ generated_from_run_id: derivativeRun.id })
-      .eq("id", child.id).eq("owner_id", input.ownerId);
+      .eq("id", child.id).eq("owner_id", input.ownerId).eq("artist_id", input.artistId);
     if (childLineageError) throw new Error(childLineageError.message);
 
     if (input.kind === "image") {
@@ -331,17 +344,19 @@ async function createOneDerivative(input: {
         mediaAssetId,
       });
       const { error: approveError } = await client.from("content_items").update({ approval_status: "approved" })
-        .eq("id", child.id).eq("owner_id", input.ownerId);
+        .eq("id", child.id).eq("owner_id", input.ownerId).eq("artist_id", input.artistId);
       if (approveError) throw new Error(approveError.message);
       await client.from("creative_derivatives").update({ status: "ready", error: null })
-        .eq("id", claim.derivative.id);
+        .eq("id", claim.derivative.id).eq("owner_id", input.ownerId).eq("artist_id", input.artistId);
       await client.from("marketing_events").insert({
         owner_id: input.ownerId,
+        artist_id: input.artistId,
         campaign_id: input.sourceContent.campaign_id,
         event_type: "content.derivative_ready",
         entity_type: "content_item",
         entity_id: child.id,
         payload: json({
+          artistId: input.artistId,
           derivativeClaimId: claim.derivative.id,
           masterContentItemId: input.sourceContent.id,
           masterGenerationRunId: input.masterRun.id,
@@ -360,6 +375,7 @@ async function createOneDerivative(input: {
         : null;
       await enqueueMarketingVideoFinishing({
         ownerId: input.ownerId,
+        artistId: input.artistId,
         campaignId: input.sourceContent.campaign_id,
         releaseId: input.sourceContent.release_id,
         contentItemId: child.id,
@@ -382,10 +398,10 @@ async function createOneDerivative(input: {
       status: "failed",
       error: message,
       derivative_content_item_id: childId,
-    }).eq("id", claim.derivative.id);
+    }).eq("id", claim.derivative.id).eq("owner_id", input.ownerId).eq("artist_id", input.artistId);
     if (childId) {
       await client.from("content_items").update({ approval_status: "rejected", production_notes: `Derivative creation failed: ${message}` })
-        .eq("id", childId).eq("owner_id", input.ownerId);
+        .eq("id", childId).eq("owner_id", input.ownerId).eq("artist_id", input.artistId);
     }
     return { created: false as const, derivativeId: claim.derivative.id, error: message };
   }
@@ -393,6 +409,7 @@ async function createOneDerivative(input: {
 
 export async function createApprovedMasterDerivatives(input: {
   ownerId: string;
+  artistId: string;
   contentItemId: string;
   generationRunId?: string | null;
 }) {
@@ -401,18 +418,24 @@ export async function createApprovedMasterDerivatives(input: {
     .select("*")
     .eq("id", input.contentItemId)
     .eq("owner_id", input.ownerId)
+    .eq("artist_id", input.artistId)
     .single();
-  if (contentError || !sourceContent) throw new Error(contentError?.message || "Approved master content not found.");
+  if (contentError || !sourceContent) throw new Error(contentError?.message || "Approved master content not found for the expected artist.");
   if (sourceContent.approval_status !== "approved" || sourceContent.source !== "ai") {
     return { created: 0, skipped: true as const, reason: "master_not_approved_ai" };
   }
 
-  let runQuery = client.from("generation_runs").select("*").eq("owner_id", input.ownerId);
+  let runQuery = client.from("generation_runs").select("*")
+    .eq("owner_id", input.ownerId)
+    .eq("artist_id", input.artistId);
   runQuery = input.generationRunId
     ? runQuery.eq("id", input.generationRunId)
     : runQuery.eq("purpose", `content_asset:${sourceContent.id}`).order("created_at", { ascending: false }).limit(1);
   const { data: masterRun, error: runError } = await runQuery.maybeSingle();
-  if (runError || !masterRun) throw new Error(runError?.message || "Approved master generation lineage not found.");
+  if (runError || !masterRun) throw new Error(runError?.message || "Approved master generation lineage not found for the expected artist.");
+  if (masterRun.artist_id !== sourceContent.artist_id || masterRun.artist_id !== input.artistId) {
+    throw new Error("Approved master derivative lineage crosses artists.");
+  }
   const sourceOutput = record(masterRun.output);
   const sourceInput = record(masterRun.input_context);
   const visualQuality = record(sourceOutput.visualQuality);
@@ -427,12 +450,14 @@ export async function createApprovedMasterDerivatives(input: {
   if (!contextValue || typeof contextValue !== "object" || Array.isArray(contextValue)) throw new Error("Approved master is missing its creative reference context.");
   const treatment = treatmentValue as unknown as CreativeTreatment;
   const referenceContext = contextValue as unknown as CreativeReferenceContext;
-  const accounts = await connectedAccounts(input.ownerId);
+  if (referenceContext.artistId !== input.artistId) throw new Error("Approved master creative context belongs to a different artist.");
+  const accounts = await connectedAccounts(input.ownerId, input.artistId);
   const targets = targetPackages(accounts, kind, treatment.platformPackage.id);
   const results = [];
   for (const target of targets) {
     results.push(await createOneDerivative({
       ownerId: input.ownerId,
+      artistId: input.artistId,
       sourceContent,
       masterRun,
       target,

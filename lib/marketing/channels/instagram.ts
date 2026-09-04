@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { Json } from "@/types/database";
-import { requireSocialAccess, socialOwnerForExternalPost } from "../social-auth";
+import { requireSocialAccess, socialContextForExternalPost } from "../social-auth";
 import type { ChannelCapability, ChannelMetrics, MarketingChannelAdapter, PublishRequest, PublishResult } from "../channel-types";
 import { captionFor, isVideoRequest, jsonOrThrow, record } from "../channel-utils";
 
@@ -126,7 +126,7 @@ export class InstagramChannelAdapter implements MarketingChannelAdapter {
 
   async publish(request: PublishRequest): Promise<PublishResult> {
     if (!request.assetUrl && !assetUrls(request).length) throw new Error("Instagram publishing requires attached media.");
-    const access = await requireSocialAccess(request.ownerId, "instagram", ["instagram_business_content_publish"]);
+    const access = await requireSocialAccess(request.ownerId, request.artistId, "instagram", ["instagram_business_content_publish"]);
     const nativeFormat = format(request);
     if (nativeFormat.includes("carousel") || assetUrls(request).length > 1) return publishCarousel(request, access);
 
@@ -160,9 +160,9 @@ export class InstagramChannelAdapter implements MarketingChannelAdapter {
   }
 
   async fetchMetrics(externalPostId: string): Promise<ChannelMetrics | null> {
-    const ownerId = await socialOwnerForExternalPost("Instagram", externalPostId);
-    if (!ownerId) return null;
-    const access = await requireSocialAccess(ownerId, "instagram", ["instagram_business_manage_insights"]);
+    const context = await socialContextForExternalPost("Instagram", externalPostId);
+    if (!context) return null;
+    const access = await requireSocialAccess(context.ownerId, context.artistId, "instagram", ["instagram_business_manage_insights"]);
 
     const mediaUrl = new URL(instagramUrl(`/${externalPostId}`));
     mediaUrl.searchParams.set("fields", "media_type,like_count,comments_count");

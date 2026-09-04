@@ -137,6 +137,7 @@ export type TrackMusicIntelligence = {
 };
 
 export type StemAwareContentItem = ContentItem & {
+  artist_id: string;
   audio_scene_id: string | null;
   audio_scene_source: "manual" | "stem_intelligence" | null;
   audio_scene_reason: string | null;

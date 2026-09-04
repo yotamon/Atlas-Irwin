@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { Json } from "@/types/database";
-import { requireSocialAccess, socialOwnerForExternalPost } from "../social-auth";
+import { requireSocialAccess, socialContextForExternalPost } from "../social-auth";
 import type { ChannelCapability, ChannelMetrics, MarketingChannelAdapter, ProviderPublicationStatus, PublishRequest, PublishResult } from "../channel-types";
 import { captionFor, isVideoRequest, jsonOrThrow, readAsset } from "../channel-utils";
 
@@ -37,7 +37,7 @@ export class YouTubeChannelAdapter implements MarketingChannelAdapter {
 
   async publish(request: PublishRequest): Promise<PublishResult> {
     if (!request.assetUrl || !isVideoRequest(request)) throw new Error("YouTube Shorts publishing requires an attached video asset.");
-    const access = await requireSocialAccess(request.ownerId, "youtube", [YOUTUBE_UPLOAD_SCOPE]);
+    const access = await requireSocialAccess(request.ownerId, request.artistId, "youtube", [YOUTUBE_UPLOAD_SCOPE]);
     const asset = await readAsset(request.assetUrl);
     const boundary = `atlas_${crypto.randomUUID().replaceAll("-", "")}`;
     const scheduledAt = providerScheduledAt(request);
@@ -87,7 +87,11 @@ export class YouTubeChannelAdapter implements MarketingChannelAdapter {
   }
 
   async fetchPublicationStatus(ownerId: string, externalPostId: string): Promise<ProviderPublicationStatus> {
-    const access = await requireSocialAccess(ownerId, "youtube", [YOUTUBE_READ_SCOPE]);
+    const context = await socialContextForExternalPost("YouTube Shorts", externalPostId);
+    if (!context || context.ownerId !== ownerId) {
+      throw new Error("YouTube publication context is missing or does not match the expected owner.");
+    }
+    const access = await requireSocialAccess(context.ownerId, context.artistId, "youtube", [YOUTUBE_READ_SCOPE]);
     const url = new URL(`${YOUTUBE_API_URL}/videos`);
     url.searchParams.set("part", "status,processingDetails");
     url.searchParams.set("id", externalPostId);
@@ -138,9 +142,9 @@ export class YouTubeChannelAdapter implements MarketingChannelAdapter {
   }
 
   async fetchMetrics(externalPostId: string): Promise<ChannelMetrics | null> {
-    const ownerId = await socialOwnerForExternalPost("YouTube Shorts", externalPostId);
-    if (!ownerId) return null;
-    const access = await requireSocialAccess(ownerId, "youtube", [YOUTUBE_READ_SCOPE]);
+    const context = await socialContextForExternalPost("YouTube Shorts", externalPostId);
+    if (!context) return null;
+    const access = await requireSocialAccess(context.ownerId, context.artistId, "youtube", [YOUTUBE_READ_SCOPE]);
     const url = new URL(`${YOUTUBE_API_URL}/videos`);
     url.searchParams.set("part", "statistics");
     url.searchParams.set("id", externalPostId);

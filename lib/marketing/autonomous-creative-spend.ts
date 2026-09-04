@@ -66,7 +66,7 @@ function quoteFromOutput(output: Record<string, unknown>) {
 async function eligibleCampaignIds(ownerId?: string) {
   const client = spendClient();
   let query = client.from("campaign_ai_spend_envelopes")
-    .select("campaign_id,owner_id")
+    .select("campaign_id,owner_id,artist_id")
     .eq("enabled", true)
     .gt("hard_limit_usd", 0)
     .gt("max_single_generation_usd", 0);
@@ -97,10 +97,25 @@ export async function processAutonomousCreativeSpend(limit = 4, ownerId?: string
   let blocked = 0;
   let ambiguous = 0;
   for (const run of runs ?? []) {
+    if (!run.artist_id) {
+      blocked += 1;
+      continue;
+    }
+    const artistId = run.artist_id;
+    const envelopeMatchesRun = envelopes.some((envelope) =>
+      envelope.owner_id === run.owner_id
+      && envelope.artist_id === artistId
+      && envelope.campaign_id === run.campaign_id);
+    if (!envelopeMatchesRun) continue;
+
     const output = record(run.output);
     if (output.stage !== "prepared" || !run.campaign_id) continue;
     considered += 1;
     const inputContext = record(run.input_context);
+    if (inputContext.artistId !== artistId) {
+      blocked += 1;
+      continue;
+    }
     const productionGate = record(inputContext.productionGate);
     const kind = inputContext.outputKind;
     if (productionGate.passed !== true || (kind !== "image" && kind !== "video")) {
@@ -128,6 +143,7 @@ export async function processAutonomousCreativeSpend(limit = 4, ownerId?: string
       });
       const reservation = await reserveCampaignAiSpend({
         ownerId: run.owner_id,
+        artistId,
         campaignId: run.campaign_id,
         generationRunId: run.id,
         mediaKind: kind,
@@ -153,7 +169,7 @@ export async function processAutonomousCreativeSpend(limit = 4, ownerId?: string
           campaignSpendReservationId: reservation.id,
           autonomousSpendAuthorizedAt: authorizedAt,
         }),
-      }).eq("id", run.id).eq("status", "queued");
+      }).eq("id", run.id).eq("owner_id", run.owner_id).eq("artist_id", artistId).eq("status", "queued");
       if (authorizeError) throw new Error(authorizeError.message);
 
       const adapter = creativeProvider(provider);
@@ -165,6 +181,7 @@ export async function processAutonomousCreativeSpend(limit = 4, ownerId?: string
       if (reservationId && isCreativeDefiniteRejection(submissionError)) {
         await releaseCampaignAiSpend({
           ownerId: run.owner_id,
+          artistId,
           reservationId,
           reason: `definite_pre_submission_rejection:${message}`,
         }).catch(() => undefined);
@@ -172,7 +189,7 @@ export async function processAutonomousCreativeSpend(limit = 4, ownerId?: string
           status: "failed",
           error: message,
           output: json({ ...output, stage: "failed_before_submission", autonomousSpendReleased: true }),
-        }).eq("id", run.id);
+        }).eq("id", run.id).eq("owner_id", run.owner_id).eq("artist_id", artistId);
         blocked += 1;
         continue;
       }
@@ -186,10 +203,10 @@ export async function processAutonomousCreativeSpend(limit = 4, ownerId?: string
             autonomousSpend: {
               reservationId,
               reserveLocked: true,
-              warning: "Provider submission is ambiguous. Atlas will not retry automatically and the campaign reserve remains locked pending reconciliation.",
+              warning: "Provider submission is ambiguous. Ensemblis will not retry automatically and the campaign reserve remains locked pending reconciliation.",
             },
           }),
-        }).eq("id", run.id);
+        }).eq("id", run.id).eq("owner_id", run.owner_id).eq("artist_id", artistId);
         ambiguous += 1;
         continue;
       }

@@ -2,6 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { isSocialPlatformKey } from "@/lib/marketing/social-platforms";
 import { createAutomationSocialAuthorizeUrl } from "@/lib/marketing/social-oauth";
+import {
+  resolveArtistContext,
+  resolveDefaultArtistContext,
+} from "@/lib/studio/artist-context";
 
 function requestOrigin(request: NextRequest) {
   const url = new URL(request.url);
@@ -14,15 +18,22 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ platform: string }> },
 ) {
-  await requireStudioAdmin();
+  const { supabase, user } = await requireStudioAdmin();
   const { platform } = await params;
   if (!isSocialPlatformKey(platform)) {
     return NextResponse.redirect(new URL("/studio/settings?social_error=unsupported_platform", request.url));
   }
 
   try {
-    const { url, state } = createAutomationSocialAuthorizeUrl(platform, requestOrigin(request));
-    const response = NextResponse.redirect(url);
+    const requestedArtistId = new URL(request.url).searchParams.get("artist_id")?.trim() || null;
+    const artist = requestedArtistId
+      ? await resolveArtistContext(supabase, user, requestedArtistId)
+      : await resolveDefaultArtistContext(supabase, user);
+    const oauth = createAutomationSocialAuthorizeUrl(platform, requestOrigin(request));
+    const state = `${oauth.state}.${artist.artistId}`;
+    oauth.url.searchParams.set("state", state);
+
+    const response = NextResponse.redirect(oauth.url);
     response.cookies.set(`atlas_social_${platform}_state`, state, {
       httpOnly: true,
       sameSite: "lax",

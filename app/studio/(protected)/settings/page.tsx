@@ -6,11 +6,13 @@ import {
   SOCIAL_PLATFORM_DEFINITIONS,
   SOCIAL_PLATFORM_KEYS,
 } from "@/lib/marketing/social-platforms";
+import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { asSocialClient } from "@/lib/studio/social-db";
 import { hasSocialPlatformEnv } from "@/lib/studio/social-connections";
 
 export default async function SettingsPage() {
   const { supabase, user } = await requireStudioAdmin();
+  const artist = await resolveDefaultArtistContext(supabase, user);
   const social = asSocialClient(supabase);
   const [spotifyResult, soundCloudResult, socialResult] = await Promise.all([
     supabase
@@ -26,7 +28,8 @@ export default async function SettingsPage() {
     social
       .from("social_channel_accounts")
       .select("platform,status,display_name,username,can_publish")
-      .eq("owner_id", user.id),
+      .eq("owner_id", user.id)
+      .eq("artist_id", artist.artistId),
   ]);
 
   const dataConnections = [
@@ -56,9 +59,9 @@ export default async function SettingsPage() {
       title: definition.label,
       connected,
       detail: connected
-        ? `${account?.display_name || account?.username || "Account connected"} · campaign planning enabled`
+        ? `${account?.display_name || account?.username || "Account connected"} · campaign planning enabled for ${artist.artistName}`
         : configured
-          ? "Ready to connect · excluded from campaign plans until connected"
+          ? `Ready to connect for ${artist.artistName} · excluded from campaign plans until connected`
           : "OAuth app setup required · excluded from campaign plans",
       publishing: Boolean(account?.can_publish),
     };
@@ -68,14 +71,14 @@ export default async function SettingsPage() {
     <div className="studio-v2-page">
       <PageHeader
         title="Settings"
-        description="Connections, brand rules and advanced maintenance. These should rarely interrupt the release workflow."
+        description={`Connections, brand rules and advanced maintenance for ${artist.artistName}. These should rarely interrupt the release workflow.`}
       />
 
       <section className="v2-section">
         <div className="v2-section-heading">
           <div>
             <span className="section-label">Data connections</span>
-            <h2>Where Atlas gets music data</h2>
+            <h2>Where Ensemblis gets music data</h2>
           </div>
         </div>
         <div className="v2-settings-grid">
@@ -100,7 +103,7 @@ export default async function SettingsPage() {
           </div>
         </div>
         <p className="v2-muted-copy">
-          Connect the accounts Atlas should actively include in campaign plans. A disconnected channel is deterministically excluded, even if an AI model tries to suggest it.
+          Connect the accounts Ensemblis should actively include in this artist&apos;s campaign plans. A disconnected channel is deterministically excluded, even if an AI model tries to suggest it.
         </p>
         <div className="v2-settings-grid">
           {socialConnections.map((connection) => (
@@ -126,7 +129,7 @@ export default async function SettingsPage() {
         <div className="v2-section-heading">
           <div>
             <span className="section-label">Creative system</span>
-            <h2>Teach Atlas your taste once</h2>
+            <h2>Teach Ensemblis this artist&apos;s taste once</h2>
           </div>
         </div>
         <div className="v2-settings-grid">
@@ -137,7 +140,7 @@ export default async function SettingsPage() {
           </Link>
           <Link href="/studio/analytics">
             <div><strong>Learning memory</strong></div>
-            <p>Review performance conclusions Atlas may reuse in future plans.</p>
+            <p>Review performance conclusions Ensemblis may reuse in future plans.</p>
             <small>Review learnings →</small>
           </Link>
         </div>

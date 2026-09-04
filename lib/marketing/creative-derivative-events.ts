@@ -27,6 +27,8 @@ export async function processApprovedCreativeDerivativeEvents(limit = 50) {
       const { error: markError } = await client.from("marketing_events")
         .update({ processed_at: new Date().toISOString() })
         .eq("id", event.id)
+        .eq("owner_id", event.owner_id)
+        .eq("artist_id", event.artist_id)
         .is("processed_at", null);
       if (markError) throw new Error(markError.message);
       processed += 1;
@@ -36,12 +38,15 @@ export async function processApprovedCreativeDerivativeEvents(limit = 50) {
     const generationRunId = typeof payload.generationRunId === "string" ? payload.generationRunId : null;
     const result = await createApprovedMasterDerivatives({
       ownerId: event.owner_id,
+      artistId: event.artist_id,
       contentItemId: event.entity_id,
       generationRunId,
     });
     const { error: markError } = await client.from("marketing_events")
       .update({ processed_at: new Date().toISOString() })
       .eq("id", event.id)
+      .eq("owner_id", event.owner_id)
+      .eq("artist_id", event.artist_id)
       .is("processed_at", null);
     if (markError) throw new Error(markError.message);
     processed += 1;
