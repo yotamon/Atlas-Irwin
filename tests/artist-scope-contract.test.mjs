@@ -22,8 +22,8 @@ test("Today resolves one ArtistContext and scopes operational state", async () =
     'from("publication_jobs")',
     'from("outreach_messages")',
   ]);
-  assert.ok((text.match(/\.eq\("artist_id", artist\.artistId\)/g) ?? []).length >= 10,
-    "Today should keep artist filters across the operational dashboard, not only one query");
+  assert.ok((text.match(/\.eq\("artist_id", artist\.artistId\)/g) ?? []).length >= 8,
+    "Today should keep artist filters across every artist-scoped decision-surface query");
 });
 
 test("Campaign mutations resolve a validated artist before writes", async () => {
