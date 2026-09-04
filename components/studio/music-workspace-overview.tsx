@@ -78,7 +78,8 @@ export function MusicWorkspaceOverview({
     trackCountByRelease.set(track.release_id, (trackCountByRelease.get(track.release_id) ?? 0) + 1);
   }
   const portfolioHref = `${ensemblisArtistHref("/studio/growth?view=portfolio", artistId)}#vault`;
-  const createHref = ensemblisArtistHref("/studio/music?view=generate", artistId);
+  const addHref = ensemblisArtistHref("/studio/music?view=add", artistId);
+  const generateHref = ensemblisArtistHref("/studio/music?view=generate", artistId);
   const trackHref = (trackId: string) => ensemblisArtistHref(`/studio/music/${trackId}`, artistId);
 
   return (
@@ -125,7 +126,7 @@ export function MusicWorkspaceOverview({
               ) : (
                 <div className="v2-calm-state compact">
                   <strong>{topCandidate.track.audio_url ? "Master ready for intelligence." : "No master attached yet."}</strong>
-                  <p>{topCandidate.track.audio_url ? "Open the track to inspect source context and manage its release decision." : "Attach the canonical master in Portfolio so Ensemblis can map structure, hooks and creative moments."}</p>
+                  <p>{topCandidate.track.audio_url ? "Open the track to inspect source context and manage its release decision." : "Attach the canonical master so Ensemblis can map structure, hooks and creative moments."}</p>
                 </div>
               )}
               <div className="actions">
@@ -136,8 +137,8 @@ export function MusicWorkspaceOverview({
           ) : (
             <div className="v2-calm-state compact">
               <strong>No unreleased tracks are waiting for a decision.</strong>
-              <p>Generate a draft or add a mastered track. Ensemblis will keep source audio, intelligence and release decisions connected.</p>
-              <Link className="button primary" href={createHref}>Create music</Link>
+              <p>Add an existing master, prepare a release, or create something new. Ensemblis will keep source audio, intelligence and release decisions connected.</p>
+              <Link className="button primary" href={addHref}>Add music</Link>
             </div>
           )}
         </section>
@@ -194,18 +195,21 @@ export function MusicWorkspaceOverview({
         ) : (
           <div className="v2-calm-state compact inline">
             <strong>{topCandidate ? "One clear unreleased priority." : "Nothing is waiting in the Vault."}</strong>
-            <p>{topCandidate ? "Keep the decision surface focused instead of manufacturing extra portfolio work." : "Add or generate music when there is a real track to develop."}</p>
+            <p>{topCandidate ? "Keep the decision surface focused instead of manufacturing extra portfolio work." : "Add music when there is a real track to understand or develop."}</p>
           </div>
         )}
       </section>
 
       <section className="music-workspace-create-callout">
         <div>
-          <span className="section-label">New music</span>
-          <h2>Start from an idea, not provider settings.</h2>
-          <p>Ensemblis chooses a sensible generation path first. Model, duration, prompt and other controls stay available when you need them.</p>
+          <span className="section-label">Bring music into Ensemblis</span>
+          <h2>Start with the song, however it was made.</h2>
+          <p>Upload an existing master, prepare a catalog release, or create a new draft with AI. Ensemblis becomes valuable after it can understand the actual music.</p>
         </div>
-        <Link className="button primary" href={createHref}>Create track</Link>
+        <div className="actions">
+          <Link className="button primary" href={addHref}>Add music</Link>
+          <Link className="button" href={generateHref}>Create with AI</Link>
+        </div>
       </section>
     </div>
   );
