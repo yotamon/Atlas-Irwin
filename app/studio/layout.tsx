@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ENSEMBLIS_PRODUCT } from "@/lib/ensemblis-product";
 import "./studio.css";
 import "./studio-v2.css";
 import "./studio-v2-workflows.css";
@@ -13,12 +14,15 @@ import "./video-director-refinements.css";
 import "./ai-control.css";
 import "./distribution.css";
 import "./distribution-release.css";
+import "./ensemblis-shell.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "Ensemblis Studio",
-    template: "%s · Ensemblis Studio",
+    default: ENSEMBLIS_PRODUCT.name,
+    template: `%s · ${ENSEMBLIS_PRODUCT.name}`,
   },
+  description: ENSEMBLIS_PRODUCT.promise,
+  applicationName: ENSEMBLIS_PRODUCT.name,
   robots: { index: false, follow: false, nocache: true },
   referrer: "no-referrer",
 };
