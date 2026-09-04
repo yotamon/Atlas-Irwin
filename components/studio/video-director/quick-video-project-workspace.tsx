@@ -12,7 +12,7 @@ import {
   ShotReviewPanel,
 } from "./production-panels";
 import { LookDevelopmentPanel } from "./look-development-panel";
-import { DeliveryPanel } from "./delivery-panel";
+import { QuickVideoDeliveryPanel } from "./quick-video-delivery-panel";
 import type { VideoWorkspaceData } from "./workspace-types";
 
 type QuickPhase = "direction" | "preview" | "production" | "delivery" | "attention";
@@ -143,7 +143,7 @@ function CurrentQuickStage({ data }: { data: VideoWorkspaceData }) {
     case "ready_to_render":
     case "rendering":
     case "complete":
-      return <DeliveryPanel data={data} />;
+      return <QuickVideoDeliveryPanel data={data} />;
     case "blocked":
     case "failed":
     case "archived":
