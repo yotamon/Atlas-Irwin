@@ -57,6 +57,9 @@ export default async function LearnPage() {
   const learnings = (learningsResult.data ?? []) as unknown as LearningRow[];
   const verifiedEvidence = evidenceResult.data ?? [];
   const verifiedMetricIds = new Set(verifiedEvidence.map((row) => row.metric_snapshot_id));
+  // This authenticated Server Component intentionally snapshots wall-clock time once per request
+  // so expiry is internally consistent across every learning rendered in this response.
+  // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
   const totals = aggregateMetrics(verifiedEvidence as unknown as Array<Record<string, unknown>>);
   const signals = metricSignals(totals);
