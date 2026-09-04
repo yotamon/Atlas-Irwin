@@ -1,6 +1,9 @@
-import { requireStudioAdmin } from "@/lib/auth/studio";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { StudioSidebar } from "@/components/studio/sidebar";
+import { requireStudioAdmin } from "@/lib/auth/studio";
+import {
+  listAccessibleArtists,
+  resolveActiveArtistContext,
+} from "@/lib/studio/artist-context";
 
 export const dynamic = "force-dynamic";
 
@@ -10,13 +13,20 @@ export default async function ProtectedStudioLayout({
   children: React.ReactNode;
 }) {
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const [artist, artists] = await Promise.all([
+    resolveActiveArtistContext(supabase, user),
+    listAccessibleArtists(supabase, user),
+  ]);
 
   return (
     <div className="studio-shell">
       <StudioSidebar
-        artistName={artist.artistName}
-        workspaceName={artist.workspaceName}
+        artistId={artist.artistId}
+        artists={artists.map((item) => ({
+          artistId: item.artistId,
+          artistName: item.artistName,
+          workspaceName: item.workspaceName,
+        }))}
       />
       <main className="studio-main">{children}</main>
     </div>
