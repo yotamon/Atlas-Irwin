@@ -1,3 +1,5 @@
+import type { ReleaseLifecycle } from "@/lib/marketing/release-lifecycle";
+
 export type MissionAttention = "blocking" | "recommended" | "optional";
 
 export type ReleaseMissionItem = {
@@ -9,8 +11,8 @@ export type ReleaseMissionItem = {
 };
 
 export type ReleaseMissionState = {
-  status: "blocked" | "needs_attention" | "on_track";
-  label: "Blocked" | "Needs attention" | "On track";
+  status: "blocked" | "needs_attention" | "on_track" | "archived";
+  label: "Blocked" | "Needs attention" | "On track" | "Archived";
   summary: string;
   blockers: ReleaseMissionItem[];
   recommendations: ReleaseMissionItem[];
@@ -20,7 +22,7 @@ export type ReleaseMissionState = {
 
 export type ReleaseMissionInput = {
   releaseId: string;
-  lifecycle: "development" | "pre_release" | "launch_window" | "catalog";
+  lifecycle: ReleaseLifecycle;
   releaseDate: string | null;
   hasMasterAudio: boolean;
   hasArtwork: boolean;
@@ -46,6 +48,18 @@ export function deriveReleaseMission(input: ReleaseMissionInput): ReleaseMission
   const recommendations: ReleaseMissionItem[] = [];
   const optional: ReleaseMissionItem[] = [];
   const releaseHref = `/studio/releases/${input.releaseId}`;
+
+  if (input.lifecycle === "archived") {
+    return {
+      status: "archived",
+      label: "Archived",
+      summary: "This release is archived, so Ensemblis is not manufacturing active Mission work for it.",
+      blockers,
+      recommendations,
+      optional,
+      nextAction: null,
+    };
+  }
 
   if (!input.hasMasterAudio) {
     blockers.push(item(
