@@ -22,7 +22,23 @@ test("global command search is keyboard accessible, artist aware and object awar
   const palette = await source("components/studio/command-palette.tsx");
   const context = await source("components/studio/context-bar.tsx");
   const search = await source("app/api/studio/search/route.ts");
-  for (const snippet of ["event.metaKey || event.ctrlKey", 'event.key.toLowerCase() === "k"', 'role="dialog"', 'aria-modal="true"', "ensemblisArtistHref", "New release", "Generate music", "Artist results"]) assert.ok(palette.includes(snippet), `command palette is missing ${snippet}`);
+  for (const snippet of [
+    "event.metaKey || event.ctrlKey",
+    'event.key.toLowerCase() === "k"',
+    'event.key === "ArrowDown"',
+    'event.key === "ArrowUp"',
+    'event.key === "Home"',
+    'event.key === "End"',
+    'role="dialog"',
+    'aria-modal="true"',
+    'aria-controls="ensemblis-command-results"',
+    "searchingObjects",
+    "AbortController",
+    "ensemblisArtistHref",
+    "New release",
+    "Generate music",
+    "Artist results",
+  ]) assert.ok(palette.includes(snippet), `command palette is missing ${snippet}`);
   assert.ok(context.includes("<CommandPalette artistId={artistId}"));
   assert.ok(search.includes("resolveArtistContext"));
   assert.ok(search.includes('.eq("artist_id", artist.artistId)'));
