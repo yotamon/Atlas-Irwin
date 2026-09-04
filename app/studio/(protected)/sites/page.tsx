@@ -54,7 +54,7 @@ export default async function SitesPage() {
           </p>
           <div className="v2-settings-grid">
             {templates.map((template) => (
-              <div key={template.key}>
+              <div key={`${template.key}@${template.version}`}>
                 <div><strong>{template.name}</strong></div>
                 <p>{template.description}</p>
                 <small>{template.supports.join(" · ")}</small>
@@ -137,11 +137,11 @@ export default async function SitesPage() {
         </div>
 
         <div className="actions">
-          <Link className="button primary" href={`/studio/site-preview/${site.id}`} target="_blank">
+          <Link className="button primary" href={`/site-preview/${site.id}`} target="_blank" rel="noreferrer">
             Preview private draft
           </Link>
           {site.state === "published" ? (
-            <Link className="button" href={`/sites/${site.slug}`} target="_blank">Open published shadow site</Link>
+            <Link className="button" href={`/sites/${site.slug}`} target="_blank" rel="noreferrer">Open published shadow site</Link>
           ) : null}
         </div>
       </section>

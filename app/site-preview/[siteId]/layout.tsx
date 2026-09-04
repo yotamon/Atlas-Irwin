@@ -1,7 +1,7 @@
-import "../../../sites/sites.css";
+import "../../sites/sites.css";
 
 export const metadata = {
-  robots: { index: false, follow: false },
+  robots: { index: false, follow: false, nocache: true },
 };
 
 export default function SitePreviewLayout({ children }: { children: React.ReactNode }) {

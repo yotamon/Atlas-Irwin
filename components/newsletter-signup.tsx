@@ -14,13 +14,27 @@ type SubmitState =
   | { type: "success"; message: string }
   | { type: "error"; message: string };
 
+type NewsletterSignupProps = {
+  endpoint?: string;
+  context?: Record<string, string>;
+  kicker?: string;
+  heading?: string;
+  copy?: string;
+};
+
 const initialFormState: FormState = {
   name: "",
   email: "",
   website: "",
 };
 
-export function NewsletterSignup() {
+export function NewsletterSignup({
+  endpoint = "/api/newsletter",
+  context = {},
+  kicker = "Newsletter",
+  heading = "Stay In The Loop",
+  copy = "Occasional release notes, live dates, sketches from the studio, and early listens before they land everywhere else.",
+}: NewsletterSignupProps = {}) {
   const [form, setForm] = useState(initialFormState);
   const [submitState, setSubmitState] = useState<SubmitState>({
     type: "idle",
@@ -34,10 +48,10 @@ export function NewsletterSignup() {
     setSubmitState({ type: "idle", message: "" });
 
     try {
-      const response = await fetch("/api/newsletter", {
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, ...context }),
       });
       const result = (await response.json()) as { message?: string };
 
@@ -79,16 +93,15 @@ export function NewsletterSignup() {
             <div className="relative z-10 flex h-full flex-col justify-between gap-12">
               <div>
                 <p className="font-display text-[1rem] uppercase tracking-[0.26em] text-accent">
-                  Newsletter
+                  {kicker}
                 </p>
                 <h2 className="mt-3 font-display text-[3.4rem] uppercase leading-[0.86] tracking-[0.05em] sm:text-[4.6rem] lg:text-[5.1rem]">
-                  Stay In The Loop
+                  {heading}
                 </h2>
               </div>
 
               <p className="max-w-110 text-[1.02rem] leading-8 text-paper/76">
-                Occasional release notes, live dates, sketches from the studio,
-                and early listens before they land everywhere else.
+                {copy}
               </p>
             </div>
           </div>
