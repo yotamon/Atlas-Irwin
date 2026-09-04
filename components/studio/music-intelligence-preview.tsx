@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import WaveSurfer from "wavesurfer.js";
 import { parseMusicMap } from "@/lib/video-director/creative-director";
 import type { Json } from "@/types/database";
 import styles from "./music-intelligence-preview.module.css";
@@ -22,6 +21,27 @@ function clamp(value: number) {
   return Math.max(0, Math.min(1, value));
 }
 
+function sampleWaveform(buffer: AudioBuffer, bars = 196) {
+  const count = Math.min(bars, Math.max(48, buffer.length));
+  const blockSize = Math.max(1, Math.floor(buffer.length / count));
+  const channels = Array.from(
+    { length: Math.min(buffer.numberOfChannels, 2) },
+    (_, index) => buffer.getChannelData(index),
+  );
+  const peaks = Array.from({ length: count }, (_, index) => {
+    const start = index * blockSize;
+    const end = index === count - 1 ? buffer.length : Math.min(buffer.length, start + blockSize);
+    const stride = Math.max(1, Math.floor((end - start) / 96));
+    let peak = 0;
+    for (let sample = start; sample < end; sample += stride) {
+      for (const channel of channels) peak = Math.max(peak, Math.abs(channel[sample] ?? 0));
+    }
+    return peak;
+  });
+  const ceiling = Math.max(...peaks, 0.0001);
+  return peaks.map((peak) => clamp(peak / ceiling));
+}
+
 export function MusicIntelligencePreview({
   audioUrl,
   musicMap,
@@ -31,12 +51,11 @@ export function MusicIntelligencePreview({
 }) {
   const map = parseMusicMap(musicMap);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const waveformRef = useRef<HTMLDivElement | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [endMs, setEndMs] = useState<number | null>(null);
   const [currentMs, setCurrentMs] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [waveformReady, setWaveformReady] = useState(false);
+  const [waveformPeaks, setWaveformPeaks] = useState<number[] | null>(null);
   const [waveformError, setWaveformError] = useState(false);
   const hooks = useMemo(
     () => [...(map?.hook_candidates ?? [])].sort((a, b) => b.score - a.score).slice(0, 5),
@@ -44,42 +63,41 @@ export function MusicIntelligencePreview({
   );
 
   useEffect(() => {
-    const container = waveformRef.current;
-    const media = audioRef.current;
-    if (!container || !media || !audioUrl) return;
-
-    const computed = getComputedStyle(container);
-    const waveSurfer = WaveSurfer.create({
-      container,
-      media,
-      url: audioUrl,
-      backend: "MediaElement",
-      height: 64,
-      normalize: true,
-      interact: true,
-      dragToSeek: true,
-      waveColor: computed.getPropertyValue("--en-line-strong").trim() || "#35443b",
-      progressColor: computed.getPropertyValue("--en-accent").trim() || "#b7f36a",
-      cursorColor: computed.getPropertyValue("--en-accent-strong").trim() || "#d3ff99",
-      cursorWidth: 1,
-      barWidth: 2,
-      barGap: 1,
-      barRadius: 2,
-    });
-
-    const ready = waveSurfer.on("ready", () => {
-      setWaveformReady(true);
+    if (!audioUrl) {
+      setWaveformPeaks(null);
       setWaveformError(false);
-    });
-    const error = waveSurfer.on("error", () => {
-      setWaveformError(true);
-      setWaveformReady(false);
-    });
+      return;
+    }
+    const controller = new AbortController();
+    let audioContext: AudioContext | null = null;
+    let cancelled = false;
+    setWaveformPeaks(null);
+    setWaveformError(false);
+
+    void fetch(audioUrl, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Waveform audio request failed (${response.status}).`);
+        const bytes = await response.arrayBuffer();
+        if (controller.signal.aborted) return null;
+        audioContext = new AudioContext();
+        return audioContext.decodeAudioData(bytes);
+      })
+      .then((buffer) => {
+        if (!buffer || cancelled) return;
+        setWaveformPeaks(sampleWaveform(buffer));
+      })
+      .catch((error) => {
+        if (controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError")) return;
+        if (!cancelled) setWaveformError(true);
+      })
+      .finally(() => {
+        if (audioContext && audioContext.state !== "closed") void audioContext.close();
+      });
 
     return () => {
-      ready();
-      error();
-      waveSurfer.destroy();
+      cancelled = true;
+      controller.abort();
+      if (audioContext && audioContext.state !== "closed") void audioContext.close();
     };
   }, [audioUrl]);
 
@@ -98,6 +116,24 @@ export function MusicIntelligencePreview({
     .filter((point) => point.ms > 0 && point.ms < durationMs)
     .sort((a, b) => b.confidence - a.confidence)
     .slice(0, 24);
+  const waveformProgress = clamp(currentMs / durationMs);
+
+  function seekToRatio(ratio: number) {
+    const audio = audioRef.current;
+    if (!audio || !audioUrl) return;
+    const seconds = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : durationMs / 1000;
+    const nextSeconds = clamp(ratio) * seconds;
+    audio.currentTime = nextSeconds;
+    setCurrentMs(nextSeconds * 1000);
+    setEndMs(null);
+    setActiveId(null);
+  }
+
+  function seekFromPointer(event: React.PointerEvent<HTMLDivElement>) {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    if (!bounds.width) return;
+    seekToRatio((event.clientX - bounds.left) / bounds.width);
+  }
 
   function toggle(id: string, startMs: number, stopMs: number) {
     const audio = audioRef.current;
@@ -154,9 +190,56 @@ export function MusicIntelligencePreview({
         <div className={styles.waveformBlock}>
           <div className={styles.timelineHeading}>
             <span>Waveform</span>
-            <small>{waveformError ? "Waveform unavailable · playback still works" : waveformReady ? "Drag to seek" : "Reading audio…"}</small>
+            <small>{waveformError ? "Waveform unavailable · playback still works" : waveformPeaks ? "Drag or use arrow keys to seek" : "Reading audio…"}</small>
           </div>
-          <div className={`${styles.waveform}${waveformReady ? ` ${styles.waveformReady}` : ""}`} ref={waveformRef} aria-label="Interactive audio waveform" />
+          <div
+            className={`${styles.waveform}${waveformPeaks ? ` ${styles.waveformReady}` : ""}`}
+            role="slider"
+            tabIndex={0}
+            aria-label="Seek audio waveform"
+            aria-valuemin={0}
+            aria-valuemax={Math.round(durationMs)}
+            aria-valuenow={Math.round(Math.min(currentMs, durationMs))}
+            aria-valuetext={`${time(currentMs)} of ${time(durationMs)}`}
+            onPointerDown={(event) => {
+              event.currentTarget.setPointerCapture(event.pointerId);
+              seekFromPointer(event);
+            }}
+            onPointerMove={(event) => {
+              if (event.currentTarget.hasPointerCapture(event.pointerId)) seekFromPointer(event);
+            }}
+            onPointerUp={(event) => {
+              if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+            }}
+            onKeyDown={(event) => {
+              const audio = audioRef.current;
+              const seconds = audio && Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : durationMs / 1000;
+              if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+                event.preventDefault();
+                const direction = event.key === "ArrowLeft" ? -1 : 1;
+                const current = audio?.currentTime ?? currentMs / 1000;
+                seekToRatio((current + direction * 5) / seconds);
+              } else if (event.key === "Home") {
+                event.preventDefault();
+                seekToRatio(0);
+              } else if (event.key === "End") {
+                event.preventDefault();
+                seekToRatio(1);
+              }
+            }}
+          >
+            {waveformPeaks ? (
+              <div className={styles.waveformBars} aria-hidden="true">
+                {waveformPeaks.map((peak, index) => (
+                  <i
+                    key={index}
+                    className={(index + 1) / waveformPeaks.length <= waveformProgress ? styles.waveformPlayed : ""}
+                    style={{ height: `${Math.max(10, Math.round(peak * 100))}%` }}
+                  />
+                ))}
+              </div>
+            ) : <span className={styles.waveformSkeleton} aria-hidden="true" />}
+          </div>
         </div>
       ) : null}
 
