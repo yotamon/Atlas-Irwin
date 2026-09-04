@@ -244,8 +244,9 @@ create trigger publication_jobs_snapshot_learning_lineage
 before insert or update of content_item_id,content_variant_id on public.publication_jobs
 for each row execute function private.snapshot_publication_learning_lineage();
 
--- Expose the creative cause alongside the musical cause. Metrics remain trusted
--- only when they are provider-backed and all owner/artist/release/platform links agree.
+-- Expose the creative cause alongside the musical cause. Existing view columns
+-- stay in their original order so CREATE OR REPLACE is migration-replay safe;
+-- creative lineage is appended as new columns.
 create or replace view public.verified_moment_learning_evidence
 with (security_invoker = true)
 as
@@ -254,10 +255,7 @@ select
   ms.owner_id,
   ms.artist_id,
   ms.content_item_id,
-  ms.content_variant_id,
   ci.moment_id,
-  coalesce(cv.creative_recipe_id, ci.creative_recipe_id) as creative_recipe_id,
-  cr.recipe as creative_recipe,
   m.track_id,
   m.release_id,
   ci.campaign_id,
@@ -290,7 +288,10 @@ select
   ms.link_clicks,
   ms.streams,
   ms.listeners,
-  ms.playlist_adds
+  ms.playlist_adds,
+  ms.content_variant_id,
+  coalesce(cv.creative_recipe_id, ci.creative_recipe_id) as creative_recipe_id,
+  cr.recipe as creative_recipe
 from public.metric_snapshots ms
 join public.content_items ci on ci.id = ms.content_item_id
 left join public.content_variants cv
