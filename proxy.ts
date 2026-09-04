@@ -5,6 +5,7 @@ import {
   isLocalStudioBypassHost,
 } from "@/lib/auth/local-studio";
 import { ENSEMBLIS_ACTIVE_ARTIST_COOKIE } from "@/lib/ensemblis-product";
+import { getSiteUrl } from "@/lib/site-url";
 import {
   normalizeRequestHostname,
   resolveSiteHostForProxy,
@@ -79,24 +80,30 @@ function isGlobalSystemPath(pathname: string) {
   ].some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
+function addHostAndWwwVariant(hosts: Set<string>, input: string) {
+  const hostname = normalizeRequestHostname(input);
+  if (!hostname) return;
+  hosts.add(hostname);
+  hosts.add(hostname.startsWith("www.") ? hostname.slice(4) : `www.${hostname}`);
+}
+
 function legacyPublicHosts() {
   const hosts = new Set<string>();
+
+  // getSiteUrl() is the canonical transition-era public root. It has a safe repo
+  // default, so deploying routing code before domain cutover cannot turn the live
+  // legacy artist site into an unknown-host 404 merely because an env var is absent.
+  try {
+    addHostAndWwwVariant(hosts, new URL(getSiteUrl()).hostname);
+  } catch {
+    // getSiteUrl is already defensive; keep this boundary fail-closed regardless.
+  }
+
   const configured = process.env.ENSEMBLIS_SITES_LEGACY_HOSTS
     ?.split(",")
     .map((item) => normalizeRequestHostname(item))
     .filter(Boolean) ?? [];
   configured.forEach((host) => hosts.add(host));
-
-  const publicSiteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  if (publicSiteUrl) {
-    try {
-      const hostname = normalizeRequestHostname(new URL(publicSiteUrl).hostname);
-      hosts.add(hostname);
-      hosts.add(hostname.startsWith("www.") ? hostname.slice(4) : `www.${hostname}`);
-    } catch {
-      // Invalid optional configuration must not widen the trusted-host set.
-    }
-  }
 
   for (const candidate of [process.env.VERCEL_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL]) {
     if (candidate) hosts.add(normalizeRequestHostname(candidate));
