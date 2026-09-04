@@ -193,9 +193,14 @@ type Table<Row> = {
   Relationships: [];
 };
 
+type DistributionRelease = Database["public"]["Tables"]["releases"]["Row"] & {
+  artist_id: string;
+};
+
 export type DistributionDatabase = {
   public: {
-    Tables: Database["public"]["Tables"] & {
+    Tables: Omit<Database["public"]["Tables"], "releases"> & {
+      releases: Table<DistributionRelease>;
       distribution_accounts: Table<DistributionAccount>;
       distribution_artist_profiles: Table<DistributionArtistProfile>;
       release_distribution_configs: Table<ReleaseDistributionConfig>;
