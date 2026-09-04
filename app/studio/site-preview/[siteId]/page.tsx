@@ -35,7 +35,7 @@ export default async function PrivateSitePreviewPage({ params }: PageProps) {
   if (versionError) throw new Error(versionError.message);
   if (!version) notFound();
 
-  const definition = getSiteTemplate(site.template_key);
+  const definition = getSiteTemplate(version.template_key, version.template_version);
   const Template = definition.render;
 
   return (
