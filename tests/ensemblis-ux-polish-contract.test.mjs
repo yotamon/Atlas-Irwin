@@ -134,7 +134,7 @@ test("Media Library uses signed resumable TUS above 6 MB without expanding stora
     'method: "PATCH"',
     "sessionStorage",
     "RETRY_DELAYS",
-    "const chunkOffset = offset",
+    "const chunkOffset: number = offset",
     "patchChunk(uploadUrl, target, chunk, chunkOffset)",
     "serverOffset !== chunkOffset",
   ]) assert.ok(resumable.includes(snippet), `resumable transport is missing ${snippet}`);
