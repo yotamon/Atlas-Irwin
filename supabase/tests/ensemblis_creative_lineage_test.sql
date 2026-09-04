@@ -58,16 +58,8 @@ select is(
 create temporary table original_recipe as
 select creative_recipe_id as id from public.content_items where id='88000000-0000-0000-0000-000000000001';
 update public.content_items set caption='Edited caption' where id='88000000-0000-0000-0000-000000000001';
-select isnt(
-  (select creative_recipe_id from public.content_items where id='88000000-0000-0000-0000-000000000001'),
-  (select id from original_recipe),
-  'editing a generated treatment creates a new recipe revision instead of rewriting history'
-);
-select is(
-  (select parent_recipe_id from public.creative_recipes where id=(select creative_recipe_id from public.content_items where id='88000000-0000-0000-0000-000000000001')),
-  (select id from original_recipe),
-  'recipe revisions retain explicit immutable parent lineage'
-);
+select isnt((select creative_recipe_id from public.content_items where id='88000000-0000-0000-0000-000000000001'),(select id from original_recipe),'editing a generated treatment creates a new recipe revision instead of rewriting history');
+select is((select parent_recipe_id from public.creative_recipes where id=(select creative_recipe_id from public.content_items where id='88000000-0000-0000-0000-000000000001')),(select id from original_recipe),'recipe revisions retain explicit immutable parent lineage');
 
 insert into public.content_variants(
   id,owner_id,artist_id,content_item_id,label,hypothesis,hook_text,caption,cta,visual_prompt,production_notes,is_control
@@ -78,11 +70,11 @@ insert into public.content_variants(
 select ok((select creative_recipe_id is not null from public.content_variants where id='89000000-0000-0000-0000-000000000001'),'each creative variant gets its own causal recipe snapshot');
 
 insert into public.publication_jobs(
-  id,owner_id,artist_id,campaign_id,content_item_id,content_variant_id,platform,adapter,status,approval_status,request_payload
+  id,owner_id,artist_id,campaign_id,content_item_id,content_variant_id,platform,adapter,status,approval_status,published_at,external_post_id,request_payload
 ) values (
   '8a000000-0000-0000-0000-000000000001','18000000-0000-0000-0000-000000000001','38000000-0000-0000-0000-000000000001',
   '78000000-0000-0000-0000-000000000001','88000000-0000-0000-0000-000000000001','89000000-0000-0000-0000-000000000001',
-  'Instagram','manual:instagram','approved','approved','{}'
+  'Instagram','manual:instagram','published','approved',now(),'ig-creative-lineage','{}'
 );
 select ok(
   (select moment_id='68000000-0000-0000-0000-000000000001'::uuid
@@ -100,13 +92,9 @@ insert into public.metric_snapshots(
 select ok(
   (select creative_recipe_id is not null and creative_recipe ->> 'hookText'='Voice first'
    from public.verified_creative_learning_evidence where content_variant_id='89000000-0000-0000-0000-000000000001'),
-  'trusted provider outcomes resolve back to the immutable variant treatment that produced them'
+  'a provider outcome reconciled to the published external object resolves back to the immutable variant treatment'
 );
-select is(
-  (select count(*)::integer from public.creative_recipes where artist_id='38000000-0000-0000-0000-000000000001'),
-  3,
-  'creative history contains the original content recipe, its edit revision, and the variant recipe'
-);
+select is((select count(*)::integer from public.creative_recipes where artist_id='38000000-0000-0000-0000-000000000001'),3,'creative history contains the original content recipe, its edit revision, and the variant recipe');
 
 select * from finish();
 rollback;
