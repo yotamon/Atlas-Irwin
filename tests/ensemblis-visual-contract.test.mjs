@@ -67,3 +67,51 @@ test("legacy warm Atlas-era chrome cannot become the Ensemblis source of truth",
     assert.ok(shell.includes(selector), `${selector} is not covered by the Ensemblis compatibility skin`);
   }
 });
+
+test("specialist modules resolve through a late Ensemblis screen integration layer", async () => {
+  const layout = await readFile("app/studio/layout.tsx", "utf8");
+  const screens = await readFile("app/studio/ensemblis-screens.css", "utf8");
+  const featureImports = [
+    './growth-os.css',
+    './video-director.css',
+    './ai-control.css',
+    './distribution.css',
+    './distribution-release.css',
+  ];
+  const screensIndex = layout.indexOf('import "./ensemblis-screens.css"');
+
+  assert.ok(screensIndex >= 0, "Ensemblis specialist screen integration is not loaded");
+  for (const featureImport of featureImports) {
+    const featureIndex = layout.indexOf(`import "${featureImport}"`);
+    assert.ok(featureIndex >= 0, `${featureImport} is missing from Studio layout`);
+    assert.ok(screensIndex > featureIndex, `Ensemblis screen integration must load after ${featureImport}`);
+  }
+
+  for (const selector of [
+    ".studio-root .growth-north-star-main",
+    ".studio-root .video-project-card",
+    ".studio-root .distribution-section",
+    ".studio-root .ai-budget-track",
+    ".studio-root .v2-provider-lock",
+  ]) {
+    assert.ok(screens.includes(selector), `${selector} is not integrated with Ensemblis chrome`);
+  }
+
+  for (const legacyColor of ["#d8c9a8", "#d9d0bd", "#dfd5bd", "#d8cfbd", "#101411"]) {
+    assert.equal(screens.toLowerCase().includes(legacyColor), false, `${legacyColor} leaked into Ensemblis screen integration`);
+  }
+});
+
+test("Ensemblis navigation exposes persistent route orientation", async () => {
+  const sidebar = await readFile("components/studio/sidebar.tsx", "utf8");
+  const navigation = await readFile("components/studio/sidebar-navigation.tsx", "utf8");
+  const screens = await readFile("app/studio/ensemblis-screens.css", "utf8");
+
+  assert.ok(sidebar.includes("StudioPrimaryNavigation"));
+  assert.ok(sidebar.includes("StudioAdvancedNavigation"));
+  assert.ok(navigation.includes("usePathname"));
+  assert.ok(navigation.includes('aria-current={active ? "page" : undefined}'));
+  assert.ok(navigation.includes('className={active ? "is-active" : undefined}'));
+  assert.ok(screens.includes(".studio-root .studio-sidebar nav a.is-active"));
+  assert.ok(screens.includes("box-shadow: inset 2px 0 var(--en-accent)"));
+});
