@@ -33,6 +33,8 @@ export type ReleaseMissionInput = {
   providerScheduledCount?: number;
 };
 
+const BLOCKING_ATTENTION: Pick<ReleaseMissionItem, "attention"> = { attention: "blocking" };
+
 function item(
   key: string,
   title: string,
@@ -67,7 +69,7 @@ export function deriveReleaseMission(input: ReleaseMissionInput): ReleaseMission
       "Add the canonical master",
       "Ensemblis cannot reliably analyze, create from, or prepare distribution for this release without the actual master.",
       `${releaseHref}#master-audio`,
-      "blocking",
+      BLOCKING_ATTENTION.attention,
     ));
   }
 
@@ -77,7 +79,7 @@ export function deriveReleaseMission(input: ReleaseMissionInput): ReleaseMission
       "Choose the release date",
       "The release date anchors lifecycle planning, distribution timing and campaign scheduling.",
       `${releaseHref}#release-details`,
-      "blocking",
+      BLOCKING_ATTENTION.attention,
     ));
   }
 
