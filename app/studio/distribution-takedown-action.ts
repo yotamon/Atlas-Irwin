@@ -75,6 +75,8 @@ export async function requestDistributionTakedown(form: FormData) {
     db.from("distribution_deliveries").select("*").eq("release_id", releaseId).eq("owner_id", user.id),
   ]);
   for (const result of [releaseResult, configResult, accountResult, deliveriesResult]) if (result.error) throw new Error(result.error.message);
+  if (!configResult.data) throw new Error("Distribution configuration not found for this release.");
+  if (!accountResult.data) throw new Error("Distribution account not found.");
   const config = configResult.data;
   const account = accountResult.data;
   if (!config.provider_release_id) throw new Error("This release has no provider catalog record to take down.");
