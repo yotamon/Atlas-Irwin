@@ -1,5 +1,3 @@
-"use server";
-
 export { saveDistributionAccount } from "./distribution-account-action";
 export { prepareDistributionCatalog } from "./distribution-catalog-router";
 export { requestDistributionTakedown } from "./distribution-takedown-action";
