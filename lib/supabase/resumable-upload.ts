@@ -163,14 +163,15 @@ export async function uploadResumableMedia({
   onProgress?.(file.size ? Math.min(1, offset / file.size) : 0);
 
   while (offset < file.size) {
-    const chunk = file.slice(offset, Math.min(file.size, offset + TUS_CHUNK_SIZE));
+    const chunkOffset = offset;
+    const chunk = file.slice(chunkOffset, Math.min(file.size, chunkOffset + TUS_CHUNK_SIZE));
     let chunkHandled = false;
     let lastError: unknown = null;
 
     for (const delay of RETRY_DELAYS) {
       if (delay) await sleep(delay);
       try {
-        offset = await patchChunk(uploadUrl, target, chunk, offset);
+        offset = await patchChunk(uploadUrl, target, chunk, chunkOffset);
         onProgress?.(file.size ? Math.min(1, offset / file.size) : 1);
         chunkHandled = true;
         break;
@@ -187,11 +188,13 @@ export async function uploadResumableMedia({
           chunkHandled = true;
           break;
         }
-        offset = serverOffset;
-        if (offset >= file.size) {
+        if (serverOffset !== chunkOffset) {
+          offset = serverOffset;
+          onProgress?.(file.size ? Math.min(1, offset / file.size) : 1);
           chunkHandled = true;
           break;
         }
+        offset = chunkOffset;
       }
     }
 
