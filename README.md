@@ -1,115 +1,172 @@
 <div align="center">
 
-# Atlas Irwin
+# Ensemblis
 
-**Artist website + private release-operations studio — live in production.**
+**Music-aware artist growth, creation and management platform.**
 
-[![Live site](https://img.shields.io/badge/Live-atlasirwin.com-0d9488?style=for-the-badge&logo=vercel&logoColor=white)](https://atlasirwin.com)
+> The platform that understands the song before it markets it.
+
+[![Public reference artist](https://img.shields.io/badge/Reference%20artist-Atlas%20Irwin-0d9488?style=for-the-badge&logo=vercel&logoColor=white)](https://atlasirwin.com)
 [![CI](https://img.shields.io/github/actions/workflow/status/yotamon/Atlas-Irwin/ci.yml?branch=main&style=for-the-badge&label=CI)](https://github.com/yotamon/Atlas-Irwin/actions)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=nextdotjs&logoColor=white)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 
-[Live site](https://atlasirwin.com) · [Architecture](docs/catalog-architecture.md) · [Security](SECURITY.md)
+[Atlas Irwin public site](https://atlasirwin.com) · [Product roadmap](docs/ensemblis-product-roadmap.md) · [Multi-artist architecture](docs/ensemblis-multi-artist-architecture.md) · [Security](SECURITY.md)
 
 </div>
 
 ---
 
-<p align="center">
-  <img src="docs/images/hero.jpg" alt="Atlas Irwin homepage hero — dark cosmic brand composition with lime CTA" width="900" />
-</p>
+## Product identity
 
-A full-stack product for an independent music project: a public, conversion-minded artist site on one side, and **Atlas Release Engine** — a private Studio for catalog publishing, media, campaigns, analytics, and platform sync — on the other.
+This repository currently hosts two intentionally separate experiences:
 
-Built as a real production system, not a brochure page.
+| Surface | Identity | Purpose |
+| --- | --- | --- |
+| `/studio` | **Ensemblis** | Multi-artist management, music intelligence, creative production, growth, audience and operational tooling |
+| `/` | **Atlas Irwin** | Public artist website for one artist managed inside Ensemblis |
 
-## Why this project exists
+**Atlas Irwin is not the product name.** It is the production reference artist and a normal artist record inside an Ensemblis workspace. Generic application surfaces must never assume that the active artist is Atlas Irwin.
 
-Most artist sites are static marketing shells. This one treats releases as an **operating system**:
+The product hierarchy is:
 
-- Publish catalog changes to the homepage **without redeploying**
-- Plan campaigns, content, and outreach around each release
-- Sync SoundCloud and Spotify with OAuth 2.1 + PKCE, then reconcile unmatched tracks intentionally
-- Keep private Studio assets, tokens, and admin routes isolated from the public surface
+```text
+User / Profile
+      ↓
+Workspace
+      ↓
+Active Artist
+      ↓
+Music
+      ↓
+Track + Lyrics + Stem Intelligence
+      ↓
+Moments
+      ↓
+Creative + Campaign Actions
+      ↓
+Publishing / Growth / Audience
+      ↓
+Outcomes
+      ↓
+Artist Memory + Better Decisions
+```
 
-## Highlights
+The core loop is **Music → Moments → Actions → Outcomes → Memory**.
 
-| Area | What shipped |
+## What Ensemblis does
+
+Ensemblis starts from the artist's actual music rather than an empty AI prompt. It understands recordings, lyrics, stems, structure and artist identity, then turns that evidence into creative and growth actions.
+
+Primary product surfaces:
+
+| Surface | Job |
 | --- | --- |
-| **Public site** | Brand-led homepage, multi-release player (local audio + SoundCloud), platforms, about, SMTP contact, MailerLite newsletter, light/dark theme |
-| **Live catalog** | Supabase is the source of truth; Studio mutations call `revalidateTag("public-catalog")` so listeners see updates immediately |
-| **Release Engine** | Command Center, per-release workspace, campaigns, media library (SHA-256 dedupe), data-health audits, weighted analytics, brand guardrails |
-| **Integrations** | SoundCloud + Spotify OAuth with PKCE, private token storage, sync staging tables, reconciliation queue, explicit campaign playlists |
-| **Security** | Supabase RLS, studio route guards, CSP/HSTS headers, honeypot + rate-limited APIs, Studio `noindex` / `no-store` |
-| **Engineering** | Strict TypeScript, Zod-validated server actions, typed DB schema, GitHub Actions CI (typecheck · lint · build) |
+| **Today** | Next move, needs-you queue, active work and operational priorities |
+| **Music** | Catalog, unreleased tracks, audio analysis, Lyrics Intelligence, Stem Intelligence and Moments |
+| **Releases** | Lifecycle-aware release workspace from preparation through sustained growth |
+| **Create** | Music-aware creative generation, production and Video Director workflows |
+| **Growth** | Strategy, campaign planning, experiments and evidence-backed next actions |
+| **Audience** | Social interactions, replies and audience workflows |
+| **Library** | Reusable creative/media assets and lineage |
+| **Connections** | Music data, social channels and distribution integrations |
+| **Settings** | Artist brand memory, AI policy, autonomy, connections and advanced maintenance |
 
-<p align="center">
-  <img src="docs/images/release-cover.jpg" alt="Featured release card for Dancing In Color on the Atlas Irwin site" width="420" />
-  &nbsp;
-  <img src="docs/images/player.jpg" alt="Release player with tracklist for Dancing In Color" width="420" />
-</p>
+Specialist/internal tools remain available as advanced surfaces without defining the primary navigation.
 
-## Architecture at a glance
+## Multi-artist model
 
-```mermaid
-flowchart LR
-  subgraph Public["Public surface"]
-    Home["Homepage / player"]
-    API["Contact · Newsletter APIs"]
-  end
+Ensemblis separates authentication from artist ownership:
 
-  subgraph Studio["Atlas Release Engine /studio"]
-    CC["Command Center"]
-    Rel["Releases · Media · Campaigns"]
-    Conn["SoundCloud · Spotify"]
-  end
+```text
+profile ≠ workspace ≠ artist
+```
 
-  subgraph Data["Supabase"]
-    PG[(PostgreSQL + RLS)]
-    Storage[(public-media · studio-assets)]
-  end
+A user receives access through `workspace_memberships`. The active artist is resolved server-side and validated against that membership. The UI can switch artists and preserves the active artist through Ensemblis navigation and deep links.
 
-  Home -->|cached catalog| PG
-  Studio -->|admin session| PG
-  Studio --> Storage
-  Conn -->|OAuth PKCE| PG
-  Rel -->|revalidateTag| Home
-  API --> SMTP["SMTP"]
-  API --> ML["MailerLite"]
+Important invariants:
+
+- client-provided artist IDs are never trusted without membership validation;
+- artist-scoped data uses explicit `artist_id` where the domain has migrated;
+- durable jobs carry artist lineage rather than inferring a current interactive user;
+- Atlas legacy `owner_id` fields remain only as compatibility scope while domains migrate;
+- a second artist must not inherit Atlas copy, brand rules, connections or creative assumptions.
+
+Deep dive: [`docs/ensemblis-multi-artist-architecture.md`](docs/ensemblis-multi-artist-architecture.md).
+
+## Music-aware intelligence
+
+The product already contains production-grade foundations for:
+
+- Track Intelligence and section/hook analysis;
+- Lyrics Intelligence with timing and lyric moments;
+- Stem Intelligence and Audio Scenes;
+- cross-modal creative intelligence;
+- durable Moments linking useful musical windows to downstream work;
+- campaign planning and lifecycle automation;
+- music-aware social creative generation and deterministic finishing;
+- approval-gated publishing and platform integrations;
+- Growth OS for released and unreleased music;
+- analytics, learnings and audience interactions;
+- spend envelopes and approval-gated external effects.
+
+Artist identity remains artist data. Ensemblis supplies the operating frame and intelligence, not a visual style that overwrites the artist.
+
+## Public Atlas Irwin site
+
+The root page remains the public Atlas Irwin artist experience. It keeps its own metadata, structured data, visual identity, catalog player, platform links, contact and newsletter flows.
+
+This separation is deliberate:
+
+```text
+Ensemblis product chrome          Atlas Irwin artist identity
+/studio                           /
+Ensemblis metadata                Atlas SEO + MusicGroup JSON-LD
+Ensemblis design tokens           Atlas public visual language
+Active-artist aware               Atlas-specific public catalog
+```
+
+Generated artist media should use the active artist's brand rules, not Ensemblis branding, unless the output is explicitly Ensemblis marketing material.
+
+## Architecture
+
+```text
+Browser
+├── /studio  → Ensemblis product shell
+│              ├── ArtistContext / workspace membership validation
+│              ├── Today / Music / Releases / Create / Growth
+│              ├── Audience / Library / Connections / Settings
+│              ├── AI Control Plane + specialist generation providers
+│              └── Supabase Auth / Postgres / Storage
+│
+└── /        → Atlas Irwin public artist site
+               ├── public catalog
+               ├── player + listening platforms
+               ├── contact / newsletter
+               └── tagged catalog cache revalidation
+
+Workers / cron / automation
+└── explicit artist lineage → Supabase → Ensemblis workflows
 ```
 
 | Layer | Stack |
 | --- | --- |
-| App | Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · Framer Motion |
-| Data | Supabase (Auth, Postgres, Storage) · Zod · tagged cache revalidation |
-| Ops | Vercel · GitHub Actions · SMTP · MailerLite · SoundCloud / Spotify APIs |
-
-## Atlas Release Engine (Studio)
-
-Private product surface at `/studio` — password auth, admin allowlist, and localhost bypass for development.
-
-| Surface | Job |
-| --- | --- |
-| **Command Center** | Active release, attention queue, homepage preview, 7-day runway, metrics pulse |
-| **Releases** | Full workspace per release: Overview · Music · Media · Website · Campaign · Performance |
-| **Campaigns** | Content + outreach workload in list or calendar form |
-| **Media Library** | Global assets, signed uploads, SHA-256 dedupe, attach-to-release |
-| **Data Health** | Reconciliation, metadata, media, placement, and stale-sync audits |
-| **Analytics** | Manual metric snapshots + weighted content performance scoring |
-| **Connections** | SoundCloud / Spotify hubs — sync, reconcile, never silently invent catalog rows |
-
-Deep dive: [`docs/catalog-architecture.md`](docs/catalog-architecture.md)
+| App | Next.js 16 App Router · React 19 · TypeScript · Tailwind CSS 4 · Framer Motion |
+| Data | Supabase Auth · PostgreSQL + RLS · Storage · typed database contracts |
+| AI | Vercel AI Gateway control plane + direct specialist image/video/music providers where appropriate |
+| Ops | Vercel · GitHub Actions · deployment-native media worker/sandbox orchestration |
+| Integrations | Spotify · SoundCloud · Instagram · TikTok · YouTube · distribution provider layer |
 
 ## Quick start
 
 ```bash
 npm install
-cp .env.example .env.local   # fill in values
+cp .env.example .env.local
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Studio at `/studio` bypasses login on localhost when `NODE_ENV` is not production.
+Open `http://localhost:3000/studio` for Ensemblis. Local Studio routes can use the documented development bypass when not running in production.
 
 | Command | Purpose |
 | --- | --- |
@@ -118,96 +175,64 @@ Open [http://localhost:3000](http://localhost:3000). Studio at `/studio` bypasse
 | `npm run start` | Serve production build |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | TypeScript check |
-| `npm run env:restore` | Merge non-secret vars from Vercel into `.env.local` |
-| `npm run studio:import` | Import legacy `public/releases/` manifests into Supabase |
+| `npm run test:studio` | Product, workflow, intelligence, artist-scope and distribution contracts |
+| `npm run env:restore` | Restore permitted Vercel environment values locally |
+| `npm run studio:import` | Import legacy release manifests |
 
 ## Project layout
 
-```
-app/              Public pages, API routes, and Studio (protected)
-components/       Shared UI and Studio components
-lib/              Auth, catalog, Supabase clients, integrations
-public/           Static assets, fonts, legacy release manifests (import only)
-supabase/         Database migrations + RLS
-scripts/          Import, seed, and maintenance tooling
-docs/             Architecture docs and README screenshots
-```
-
-## Environment
-
-Copy `.env.example` to `.env.local`, or pull what Vercel allows locally:
-
-```bash
-npm run env:restore
+```text
+app/              Public Atlas page, APIs and Ensemblis /studio routes
+components/       Public artist UI + Ensemblis product components
+lib/              Artist context, AI, intelligence, marketing, integrations and data services
+features/         Feature-oriented product modules
+public/           Static assets, artist assets and Ensemblis product mark
+supabase/         Database migrations, functions, policies and tests
+scripts/          Import, seed and maintenance tooling
+tests/            Product and behavior contracts
+docs/             Ensemblis architecture/product docs plus specialist technical docs
 ```
 
-Vercel CLI only exports non-sensitive values. **Secrets** (`STUDIO_PASSWORD`, `SUPABASE_SERVICE_ROLE_KEY`, SMTP, SoundCloud, Spotify, MailerLite, etc.) must be copied from Vercel → Settings → Environment Variables.
+## Environment and compatibility
 
-Required variables (see `.env.example` for the full list):
+Copy `.env.example` to `.env.local`. Secrets remain server-only.
+
+Ensemblis is migrating old product-level `ATLAS_*` environment names to `ENSEMBLIS_*`. New code should prefer `ENSEMBLIS_*`. Where production still depends on a legacy variable, the code reads the Ensemblis name first and falls back to its documented legacy alias so deployment does not require a risky flag-day migration.
+
+Core variables include:
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 STUDIO_ADMIN_EMAILS=artist@example.com
-STUDIO_PASSWORD=your-studio-password
-NEXT_PUBLIC_SITE_URL=https://atlasirwin.com
+AI_GATEWAY_API_KEY=
+ENSEMBLIS_AI_GATEWAY_PROVIDER_SORT=cost
+ENSEMBLIS_AI_GATEWAY_TIMEOUT_MS=90000
+ENSEMBLIS_MARKETING_MODEL=openai/gpt-5.6-sol
 ```
 
-Only the Supabase URL and publishable/anon key are browser-visible. The service-role key stays server-only.
-
-### Supabase setup
-
-1. Create a Supabase project and apply migrations in `supabase/migrations/` (`npx supabase db push`).
-2. Auth → URL Configuration: set the site URL and add `/studio/auth/callback` redirects for local + production.
-3. Sign in at `/studio/login`, then approve the profile:
-
-```sql
-update public.profiles
-set is_admin = true
-where email = 'artist@example.com';
-```
-
-The email must also appear in `STUDIO_ADMIN_EMAILS`. Tables and the private `studio-assets` bucket use RLS.
-
-### Platform OAuth
-
-- **SoundCloud** — OAuth 2.1 + PKCE; sync updates staging tables; unmatched tracks go to a reconciliation queue.
-- **Spotify** — authorization code + PKCE; local callbacks must use `127.0.0.1` (not `localhost`). Catalog sync, listener pulse, and campaign playlists are explicit Studio actions.
-
-### Studio workflow (short)
-
-1. Create a release → fill story fields → generate release identity.
-2. Generate a content pack (drafts only — nothing auto-posts).
-3. Schedule in Content Lab / Calendar; log outreach copy without sending.
-4. Publish + enable homepage placement → public catalog revalidates.
-5. Resolve mismatches in Data Health / Connections.
-
-Legacy folders under `public/releases/` are **import input only** — the homepage reads Supabase at runtime.
-
-```bash
-npm run studio:import
-```
-
-## Public homepage catalog
-
-`getPublicReleases()` powers the player. Publish in Studio, enable homepage placement, and the site updates through cache revalidation — no redeploy. Set `NEXT_PUBLIC_SITE_URL` to the production HTTPS origin.
+See [`.env.example`](.env.example) for provider-specific configuration.
 
 ## Security
 
-Production enforces HTTPS redirect plus HSTS, CSP, clickjacking, content-sniffing, referrer, and permissions headers. Studio responses are `private, no-store`, carry `X-Robots-Tag: noindex`, and are excluded by `robots.txt`. Private assets use signed/authenticated Storage access.
+Production Ensemblis routes remain authenticated, private and `noindex`. Supabase RLS and application authorization enforce account/workspace/artist boundaries. Service-role workflows must validate artist lineage explicitly because service-role access bypasses RLS.
+
+The public Atlas site remains independently cacheable and indexable.
 
 See [`SECURITY.md`](SECURITY.md) for vulnerability reporting.
 
-## Contact & newsletter
+## Product documentation
 
-- **Contact** — SMTP (`CONTACT_SMTP_*`, `CONTACT_EMAIL_FROM`, `CONTACT_EMAIL_TO`). Gmail needs an app password.
-- **Newsletter** — MailerLite (`MAILERLITE_API_KEY`, optional `MAILERLITE_GROUP_IDS`). Both routes use rate limiting and honeypot fields.
-
-## Windows note
-
-If `next build` fails on missing native CSS binaries (`lightningcss` / `tailwindcss-oxide`), run `npm run postinstall` to fetch the correct bindings for your CPU target.
+- [`docs/ensemblis-product-roadmap.md`](docs/ensemblis-product-roadmap.md) — product direction and execution order
+- [`docs/ensemblis-multi-artist-architecture.md`](docs/ensemblis-multi-artist-architecture.md) — user/workspace/artist separation
+- [`docs/ensemblis-ownership-migration-matrix.md`](docs/ensemblis-ownership-migration-matrix.md) — ownership migration plan
+- [`docs/ai-control-plane.md`](docs/ai-control-plane.md) — AI routing, quality, budget and learning
+- [`docs/music-intelligence.md`](docs/music-intelligence.md) — recording intelligence
+- [`docs/lyrics-intelligence.md`](docs/lyrics-intelligence.md) — lyric context and timing
+- [`docs/stem-intelligence.md`](docs/stem-intelligence.md) — stem analysis and Audio Scenes
+- [`docs/video-director.md`](docs/video-director.md) — music-aware video workflow
 
 ## License
 
-Application source is MIT — see [`LICENSE`](LICENSE). Fonts under `public/fonts/` keep their own licenses.
+Application source is MIT — see [`LICENSE`](LICENSE). Fonts under `public/fonts/` retain their own licenses.
