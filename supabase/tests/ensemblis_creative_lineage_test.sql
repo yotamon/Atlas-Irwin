@@ -20,7 +20,8 @@ insert into public.track_music_intelligence(
   track_id,owner_id,analysis_version,engine,quality,semantic_structure,source_audio_url,audio_sha256,analysis
 ) values (
   '58000000-0000-0000-0000-000000000001','18000000-0000-0000-0000-000000000001',1,'test','full',true,
-  'https://example.com/creative.wav','creative-sha','{}'::jsonb
+  'https://example.com/creative.wav','creative-sha',
+  '{"source":"worker","version":1,"hook_candidates":[{"id":"creative-moment","start_ms":12000,"end_ms":20000,"kind":"instant_hook","label":"Creative Moment","score":0.9,"metrics":{"energy":0.7,"novelty":0.7},"intent_scores":{"instant_hook":0.9}}]}'::jsonb
 );
 insert into public.moments(
   id,owner_id,artist_id,release_id,track_id,start_ms,end_ms,source_start_ms,source_end_ms,
@@ -94,7 +95,7 @@ select ok(
    from public.verified_creative_learning_evidence where content_variant_id='89000000-0000-0000-0000-000000000001'),
   'a provider outcome reconciled to the published external object resolves back to the immutable variant treatment'
 );
-select is((select count(*)::integer from public.creative_recipes where artist_id='38000000-0000-0000-0000-000000000001'),3,'creative history contains the original content recipe, its edit revision, and the variant recipe');
+select is((select count(*)::integer from public.creative_recipes where artist_id='38000000-0000-0000-000000000001'),3,'creative history contains the original content recipe, its edit revision, and the variant recipe');
 
 select * from finish();
 rollback;
