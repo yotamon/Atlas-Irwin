@@ -4,6 +4,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
+import { QUICK_VIDEO_CONCEPT_IDS } from "@/lib/video-director/quick-video";
 import {
   VIDEO_ASPECT_RATIOS,
   VIDEO_PEOPLE_MODES,
@@ -24,6 +27,7 @@ const aspectRatioSchema = z.enum(VIDEO_ASPECT_RATIOS);
 const resolutionSchema = z.enum(VIDEO_RESOLUTIONS);
 const storyModeSchema = z.enum(VIDEO_STORY_MODES);
 const peopleModeSchema = z.enum(VIDEO_PEOPLE_MODES);
+const quickVideoConceptSchema = z.enum(QUICK_VIDEO_CONCEPT_IDS);
 const projectStatusSchema = z.enum(VIDEO_PROJECT_STATUSES);
 const titleSchema = z.string().trim().min(1).max(160);
 const noteSchema = z.string().trim().max(4000);
@@ -35,10 +39,13 @@ function projectPath(projectId: string) {
 
 export async function createMusicVideoProject(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
+  const artist = await resolveActiveArtistContext(supabase, user);
+  const music = asArtistScopedMusicClient(supabase);
   const parsed = z.object({
     release_id: z.uuid(),
     track_id: z.uuid(),
     title: titleSchema,
+    quick_video_concept: quickVideoConceptSchema,
     project_kind: projectKindSchema,
     primary_aspect_ratio: aspectRatioSchema,
     target_resolution: resolutionSchema,
@@ -50,6 +57,7 @@ export async function createMusicVideoProject(form: FormData) {
     release_id: value(form, "release_id"),
     track_id: value(form, "track_id"),
     title: value(form, "title"),
+    quick_video_concept: value(form, "quick_video_concept"),
     project_kind: value(form, "project_kind"),
     primary_aspect_ratio: value(form, "primary_aspect_ratio"),
     target_resolution: value(form, "target_resolution"),
@@ -60,16 +68,30 @@ export async function createMusicVideoProject(form: FormData) {
   });
 
   const [{ data: release, error: releaseError }, { data: track, error: trackError }] = await Promise.all([
-    supabase.from("releases").select("id,owner_id,title").eq("id", parsed.release_id).single(),
-    supabase.from("tracks").select("id,owner_id,release_id,title").eq("id", parsed.track_id).single(),
+    music
+      .from("releases")
+      .select("id,owner_id,artist_id,title")
+      .eq("id", parsed.release_id)
+      .eq("owner_id", user.id)
+      .eq("artist_id", artist.artistId)
+      .single(),
+    music
+      .from("tracks")
+      .select("id,owner_id,artist_id,release_id,title")
+      .eq("id", parsed.track_id)
+      .eq("owner_id", user.id)
+      .eq("artist_id", artist.artistId)
+      .single(),
   ]);
-  if (releaseError || !release) throw new Error(releaseError?.message ?? "Release not found.");
-  if (trackError || !track) throw new Error(trackError?.message ?? "Track not found.");
-  if (release.owner_id !== user.id || track.owner_id !== user.id || track.release_id !== release.id) {
+  if (releaseError || !release) throw new Error(releaseError?.message ?? "Release not found for the active artist.");
+  if (trackError || !track) throw new Error(trackError?.message ?? "Track not found for the active artist.");
+  if (track.release_id !== release.id) {
     throw new Error("The selected track must belong to this release.");
   }
 
   const creative_brief = {
+    workflow_mode: "quick_video",
+    concept_id: parsed.quick_video_concept,
     note: parsed.creative_note,
     story_mode: parsed.story_mode,
     people_mode: parsed.people_mode,
@@ -134,7 +156,11 @@ export async function updateMusicVideoProjectBrief(form: FormData) {
     throw new Error("The hard budget cannot be lower than spent and reserved credits.");
   }
 
+  const currentBrief = project.creative_brief && typeof project.creative_brief === "object" && !Array.isArray(project.creative_brief)
+    ? project.creative_brief
+    : {};
   const creative_brief = {
+    ...currentBrief,
     note: parsed.creative_note,
     story_mode: parsed.story_mode,
     people_mode: parsed.people_mode,
