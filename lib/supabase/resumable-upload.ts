@@ -147,13 +147,21 @@ export async function uploadResumableMedia({
   onProgress?: (progress: number) => void;
 }) {
   const key = resumeKey(file, target);
-  let uploadUrl = readResumeUrl(key);
-  let offset = uploadUrl ? await currentOffset(uploadUrl, target).catch((error) => {
-    if (error instanceof ResumableUploadAuthorizationError) throw error;
-    return null;
-  }) : null;
+  const resumedUrl = readResumeUrl(key);
+  const resumedOffset: number | null = resumedUrl
+    ? await currentOffset(resumedUrl, target).catch((error) => {
+        if (error instanceof ResumableUploadAuthorizationError) throw error;
+        return null;
+      })
+    : null;
 
-  if (offset === null) {
+  let uploadUrl: string;
+  let offset: number;
+
+  if (resumedUrl && resumedOffset !== null) {
+    uploadUrl = resumedUrl;
+    offset = resumedOffset;
+  } else {
     forgetResumeUrl(key);
     uploadUrl = await createUpload(file, target);
     rememberResumeUrl(key, uploadUrl);
@@ -163,7 +171,7 @@ export async function uploadResumableMedia({
   onProgress?.(file.size ? Math.min(1, offset / file.size) : 0);
 
   while (offset < file.size) {
-    const chunkOffset = offset;
+    const chunkOffset: number = offset;
     const chunk = file.slice(chunkOffset, Math.min(file.size, chunkOffset + TUS_CHUNK_SIZE));
     let chunkHandled = false;
     let lastError: unknown = null;
