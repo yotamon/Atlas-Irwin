@@ -23,7 +23,7 @@ export default async function DistributionHub({
   const db = supabase as unknown as SupabaseClient<DistributionDatabase>;
   const [accountResult, releasesResult, configsResult, issuesResult, deliveriesResult] = await Promise.all([
     db.from("distribution_accounts").select("*").eq("owner_id", user.id).eq("provider", "revelator").maybeSingle(),
-    supabase.from("releases").select("id,title,artist,release_type,release_date,artwork_url,cover_asset,status,is_archived").eq("owner_id", user.id).eq("artist_id", artist.artistId).eq("is_archived", false).order("release_date", { ascending: false, nullsFirst: false }),
+    db.from("releases").select("id,title,artist,release_type,release_date,artwork_url,cover_asset,status,is_archived").eq("owner_id", user.id).eq("artist_id", artist.artistId).eq("is_archived", false).order("release_date", { ascending: false, nullsFirst: false }),
     db.from("release_distribution_configs").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId),
     db.from("distribution_validation_issues").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).in("status", ["open", "acknowledged"]).order("severity").limit(12),
     db.from("distribution_deliveries").select("release_id,state,store_id").eq("owner_id", user.id).eq("artist_id", artist.artistId),
