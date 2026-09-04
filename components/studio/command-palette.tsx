@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 
 type Command = {
@@ -26,6 +26,7 @@ export function CommandPalette({ artistId }: { artistId: string }) {
   const [searchingObjects, setSearchingObjects] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const dialogRef = useRef<HTMLElement | null>(null);
   const resultsRef = useRef<HTMLDivElement | null>(null);
   const commands = useMemo<Command[]>(() => [
     { label: "Today", group: "Navigate", keywords: "home next action needs you working", href: ensemblisArtistHref("/studio", artistId) },
@@ -85,7 +86,7 @@ export function CommandPalette({ artistId }: { artistId: string }) {
     links[nextIndex]?.focus();
   }, [resultLinks]);
 
-  const onResultKeyDown = useCallback((event: React.KeyboardEvent<HTMLAnchorElement>) => {
+  const onResultKeyDown = useCallback((event: ReactKeyboardEvent<HTMLAnchorElement>) => {
     if (event.key === "ArrowDown") {
       event.preventDefault();
       focusResult("next", event.currentTarget);
@@ -102,6 +103,23 @@ export function CommandPalette({ artistId }: { artistId: string }) {
       focusResult("last");
     }
   }, [focusResult, resultLinks]);
+
+  const onDialogKeyDown = useCallback((event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
+      'input:not([disabled]), button:not([disabled]), a[href]:not([aria-disabled="true"])',
+    ) ?? []).filter((element) => element.tabIndex !== -1);
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last?.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first?.focus();
+    }
+  }, []);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -125,10 +143,7 @@ export function CommandPalette({ artistId }: { artistId: string }) {
   }, [open]);
 
   useEffect(() => {
-    if (!open || normalized.length < 2) {
-      setSearchingObjects(false);
-      return;
-    }
+    if (!open || normalized.length < 2) return;
     const controller = new AbortController();
     setSearchingObjects(true);
     const timer = window.setTimeout(() => {
@@ -176,7 +191,14 @@ export function CommandPalette({ artistId }: { artistId: string }) {
         <div className="ensemblis-command-backdrop" onMouseDown={(event) => {
           if (event.target === event.currentTarget) close();
         }}>
-          <section className="ensemblis-command-dialog" role="dialog" aria-modal="true" aria-label="Search Ensemblis">
+          <section
+            ref={dialogRef}
+            className="ensemblis-command-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Search Ensemblis"
+            onKeyDown={onDialogKeyDown}
+          >
             <div className="ensemblis-command-search">
               <input
                 ref={inputRef}
