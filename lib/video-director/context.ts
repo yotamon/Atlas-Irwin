@@ -13,6 +13,12 @@ import type { AudioScene, StemDatabase } from "@/types/stem-database";
 import type { ExtendedMusicVideoProject, VideoDatabase } from "@/types/video-database";
 import { parseMusicMap, type DirectorPreferences, type MusicMap, type VideoProjectContext } from "./creative-director";
 
+function jsonRecord(value: Json | unknown): Record<string, Json | undefined> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, Json | undefined>
+    : {};
+}
+
 function stemAwareMusicMap(value: Json, scenes: AudioScene[], graph: TrackCreativeIntelligenceGraph | null) {
   const map = parseMusicMap(value);
   if (!map) return null;
@@ -124,6 +130,31 @@ export async function loadVideoProjectContext(
     : { data: [], error: null };
   if (mediaError) throw new Error(mediaError.message);
 
+  const recommendationByAsset = new Map(
+    creativeMemory.recommendations.map((recommendation) => [recommendation.assetId, recommendation]),
+  );
+  const enrichedMedia = (media ?? []).map((asset) => {
+    const recommendation = recommendationByAsset.get(asset.id);
+    if (!recommendation) return asset;
+    return {
+      ...asset,
+      metadata: {
+        ...jsonRecord(asset.metadata),
+        creative_memory: {
+          recommendation_score: recommendation.score,
+          reasons: recommendation.reasons,
+          approvals: recommendation.approvals,
+          rejections: recommendation.rejections,
+          uses: recommendation.uses,
+          performance_score: recommendation.performanceScore,
+          brand_relevance: recommendation.brandRelevance,
+          visual_descriptors: recommendation.visualDescriptors,
+          semantic_descriptors: recommendation.semanticDescriptors,
+        },
+      } satisfies Json,
+    };
+  });
+
   const preferences: DirectorPreferences = {
     positive: creativeMemory.preferences.positive,
     negative: creativeMemory.preferences.negative,
@@ -137,7 +168,7 @@ export async function loadVideoProjectContext(
     musicMap: stemAwareMusicMap(project.music_map, (sceneResult.data ?? []) as AudioScene[], graph),
     lyrics,
     brandSettings: (brandResult.data ?? []).map((item) => item.content),
-    media: media ?? [],
+    media: enrichedMedia,
     preferences,
     creativeMemory: {
       summary: creativeMemory.preferences.summary,
