@@ -2,16 +2,29 @@
   /* Ensemblis owns a neutral product system. Artist visual identity belongs to
      generated creative and artist data, never to product chrome. */
   --font-heading: var(--font-body);
-  --en-bg: #090c0a;
-  --en-surface: #101512;
-  --en-surface-raised: #151c18;
-  --en-ink: #f5f7f2;
-  --en-muted: #94a098;
-  --en-line: #263029;
+  --en-bg: #080b09;
+  --en-bg-elevated: #0c110e;
+  --en-surface: #101713;
+  --en-surface-raised: #151e19;
+  --en-surface-hover: #1a251e;
+  --en-ink: #f6f8f4;
+  --en-muted: #9aa79f;
+  --en-subtle: #6f7c74;
+  --en-line: #25302a;
+  --en-line-strong: #35443b;
   --en-accent: #b7f36a;
+  --en-accent-strong: #d3ff99;
+  --en-accent-soft: rgba(183, 243, 106, 0.1);
   --en-violet: #8a7cff;
+  --en-violet-soft: rgba(138, 124, 255, 0.11);
   --en-mint: #5ce1c6;
+  --en-mint-soft: rgba(92, 225, 198, 0.09);
   --en-danger: #ff786c;
+  --en-danger-soft: rgba(255, 120, 108, 0.09);
+  --en-radius-sm: 0.62rem;
+  --en-radius: 0.86rem;
+  --en-radius-lg: 1.1rem;
+  --en-shadow: 0 22px 70px rgba(0, 0, 0, 0.24);
   --s-bg: var(--en-bg);
   --s-surface: var(--en-surface);
   --s-surface-2: var(--en-surface-raised);
@@ -21,15 +34,62 @@
   --s-accent: var(--en-accent);
   --s-coral: var(--en-danger);
   --s-teal: var(--en-mint);
+  position: relative;
+  isolation: isolate;
+  z-index: 1;
+  min-height: 100svh;
+  overflow-x: clip;
+  color-scheme: dark;
   background:
-    radial-gradient(circle at 82% -8%, rgba(138, 124, 255, 0.1), transparent 28%),
-    radial-gradient(circle at 18% 0%, rgba(92, 225, 198, 0.06), transparent 24%),
-    var(--en-bg);
+    radial-gradient(circle at 82% -8%, rgba(138, 124, 255, 0.13), transparent 30%),
+    radial-gradient(circle at 18% 0%, rgba(92, 225, 198, 0.075), transparent 25%),
+    linear-gradient(180deg, #080b09 0%, #0a0f0c 55%, #080b09 100%);
+  color: var(--en-ink);
+}
+
+/* Keep the Studio visually independent from the Atlas public-site paper/grain
+   layer inherited from the shared root layout. */
+.studio-root::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.52;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(to bottom, black 0%, rgba(0, 0, 0, 0.55) 42%, transparent 88%);
+}
+
+.studio-root ::selection {
+  background: color-mix(in srgb, var(--en-accent) 46%, transparent);
+  color: var(--en-ink);
+}
+
+.studio-root :focus-visible {
+  outline-color: var(--en-accent);
+}
+
+.studio-root .studio-shell {
+  position: relative;
+}
+
+.studio-root .studio-main {
+  position: relative;
+  background: transparent;
 }
 
 .studio-root .studio-sidebar {
   background: color-mix(in srgb, var(--en-bg) 94%, transparent);
-  backdrop-filter: blur(18px);
+  border-right-color: var(--en-line);
+  backdrop-filter: blur(20px) saturate(118%);
+  box-shadow: 12px 0 42px rgba(0, 0, 0, 0.12);
+}
+
+.studio-root .studio-page-header {
+  border-bottom-color: var(--en-line);
 }
 
 .studio-root .studio-page-header h1,
@@ -46,11 +106,51 @@
   line-height: 0.98;
 }
 
+.studio-root .studio-page-header p,
+.studio-root .v2-muted-copy,
+.studio-root .studio-form-intro p {
+  color: var(--en-muted);
+}
+
 .studio-root .hero-release h2,
 .studio-root .soundcloud-profile h2 {
   font-family: var(--font-body), sans-serif;
   letter-spacing: -0.04em;
   text-transform: none;
+}
+
+/* One product surface language across old and new Studio screens. */
+.studio-root .studio-panel.feature,
+.studio-root .v2-focus-card,
+.studio-root .v2-release-card,
+.studio-root .v2-section,
+.studio-root .v2-create-card,
+.studio-root .catalog-card,
+.studio-root .kanban-card,
+.studio-root .empty-state,
+.studio-root .studio-auth section {
+  border-color: var(--en-line);
+  border-radius: var(--en-radius-lg);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.035), transparent 46%),
+    color-mix(in srgb, var(--en-surface) 95%, transparent);
+  box-shadow: var(--en-shadow);
+}
+
+.studio-root .v2-focus-card,
+.studio-root .v2-release-card,
+.studio-root .v2-section,
+.studio-root .v2-create-card {
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    transform 160ms ease;
+}
+
+.studio-root .v2-create-card:hover,
+.studio-root a.catalog-card:hover,
+.studio-root a.kanban-card:hover {
+  border-color: var(--en-line-strong);
 }
 
 .studio-root .button,
@@ -59,20 +159,189 @@
 .studio-root .kanban-card,
 .studio-root .empty-state,
 .studio-root .studio-auth section {
-  border-radius: 0.8rem;
+  border-radius: var(--en-radius);
+}
+
+.studio-root .button {
+  min-height: 2.4rem;
+  border-color: var(--en-line-strong);
+  border-radius: var(--en-radius-sm);
+  background: color-mix(in srgb, var(--en-surface-raised) 72%, transparent);
+  color: var(--en-ink);
+  letter-spacing: 0;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    color 150ms ease,
+    transform 150ms ease;
+}
+
+.studio-root .button:hover,
+.studio-root .button:focus-visible {
+  border-color: color-mix(in srgb, var(--en-accent) 58%, var(--en-line));
+  background: var(--en-surface-hover);
+}
+
+.studio-root .button:active {
+  transform: translateY(1px);
 }
 
 .studio-root .button.primary {
   border-color: var(--en-accent);
   background: var(--en-accent);
   color: #0a0d0b;
+  box-shadow: 0 10px 28px rgba(183, 243, 106, 0.1);
 }
 
 .studio-root .button.primary:hover,
 .studio-root .button.primary:focus-visible {
-  background: color-mix(in srgb, var(--en-accent) 88%, white);
+  border-color: var(--en-accent-strong);
+  background: var(--en-accent-strong);
 }
 
+.studio-root .text-button {
+  color: var(--en-accent);
+}
+
+/* Remove warm Atlas-era chrome from reusable legacy components. */
+.studio-root .studio-mark small,
+.studio-root .panel-head h2,
+.studio-root .studio-table th,
+.studio-root .field > span,
+.studio-root .studio-auth label {
+  color: var(--en-muted);
+}
+
+.studio-root .studio-sidebar nav a,
+.studio-root .studio-sidebar-foot a,
+.studio-root .studio-sidebar-foot button {
+  color: color-mix(in srgb, var(--en-ink) 82%, var(--en-muted));
+}
+
+.studio-root .studio-sidebar svg {
+  color: var(--en-muted);
+}
+
+.studio-root .studio-quick {
+  border-color: var(--en-line-strong) !important;
+  border-radius: var(--en-radius-sm);
+  background: var(--en-accent-soft) !important;
+  color: var(--en-ink) !important;
+}
+
+.studio-root .studio-quick svg {
+  color: var(--en-accent);
+}
+
+.studio-root .studio-table th,
+.studio-root .studio-table td,
+.studio-root .metric-row,
+.studio-root .timeline-row,
+.studio-root .list-row,
+.studio-root .spotify-track-picker,
+.studio-root .spotify-track-picker label,
+.studio-root .spotify-pulse-grid a {
+  border-color: var(--en-line);
+}
+
+.studio-root .studio-table tr:hover td {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.studio-root .status-chip,
+.studio-root .status-pill {
+  border-color: color-mix(in srgb, var(--en-accent) 34%, var(--en-line));
+  border-radius: 999px;
+  background: var(--en-accent-soft);
+  color: var(--en-accent);
+}
+
+/* Forms should feel like the Ensemblis application, not the old editorial site. */
+.studio-root .field input,
+.studio-root .field select,
+.studio-root .field textarea,
+.studio-root .studio-auth input {
+  border-color: var(--en-line);
+  border-radius: var(--en-radius-sm);
+  background: var(--en-bg-elevated);
+  color: var(--en-ink);
+  caret-color: var(--en-accent);
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    background-color 140ms ease;
+}
+
+.studio-root .field input:hover,
+.studio-root .field select:hover,
+.studio-root .field textarea:hover,
+.studio-root .studio-auth input:hover {
+  border-color: var(--en-line-strong);
+}
+
+.studio-root .field input:focus,
+.studio-root .field select:focus,
+.studio-root .field textarea:focus,
+.studio-root .studio-auth input:focus {
+  outline: none;
+  border-color: var(--en-accent);
+  background: color-mix(in srgb, var(--en-bg-elevated) 88%, var(--en-accent));
+  box-shadow: 0 0 0 3px rgba(183, 243, 106, 0.1);
+}
+
+.studio-root .field input::placeholder,
+.studio-root .field textarea::placeholder,
+.studio-root .studio-auth input::placeholder {
+  color: var(--en-subtle);
+}
+
+/* V2 state language: violet = attention, coral = risk, green = healthy. */
+.studio-root .v2-count {
+  background: var(--en-surface-raised);
+  color: var(--en-muted);
+}
+
+.studio-root .v2-count.has-items {
+  background: var(--en-violet-soft);
+  color: color-mix(in srgb, var(--en-violet) 86%, white);
+}
+
+.studio-root .v2-inbox-item,
+.studio-root .v2-status-grid article,
+.studio-root .v2-calm-state {
+  border-color: var(--en-line);
+  background: color-mix(in srgb, var(--en-surface-raised) 66%, transparent);
+}
+
+.studio-root .v2-inbox-item:hover {
+  border-color: var(--en-line-strong);
+  background: var(--en-surface-hover);
+}
+
+.studio-root .v2-inbox-item.important {
+  border-color: color-mix(in srgb, var(--en-violet) 38%, var(--en-line));
+  background: var(--en-violet-soft);
+}
+
+.studio-root .v2-inbox-item.warning {
+  border-color: color-mix(in srgb, var(--en-danger) 38%, var(--en-line));
+  background: var(--en-danger-soft);
+}
+
+.studio-root .v2-calm-state {
+  border-style: dashed;
+  color: var(--en-muted);
+}
+
+.studio-root .section-label,
+.studio-root .studio-sidebar-section-label,
+.studio-root .ensemblis-artist-switcher-heading span {
+  color: var(--en-muted);
+  font-weight: 720;
+  letter-spacing: 0.08em;
+}
+
+/* Product identity */
 .studio-mark.ensemblis-product-mark {
   min-height: 5.8rem;
   height: auto;
@@ -84,20 +353,43 @@
 
 .ensemblis-mark-symbol,
 .ensemblis-auth-symbol {
+  position: relative;
   display: grid;
   place-items: center;
   flex: 0 0 auto;
   width: 2.5rem;
   height: 2.5rem;
   padding: 0.38rem;
+  overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--en-accent) 28%, var(--en-line));
   border-radius: 0.78rem;
-  background: linear-gradient(145deg, rgba(183, 243, 106, 0.08), rgba(138, 124, 255, 0.08));
-  box-shadow: inset 0 1px rgba(255, 255, 255, 0.04), 0 8px 28px rgba(0, 0, 0, 0.16);
+  background:
+    radial-gradient(circle at 28% 20%, rgba(183, 243, 106, 0.14), transparent 45%),
+    linear-gradient(145deg, rgba(92, 225, 198, 0.07), rgba(138, 124, 255, 0.09));
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.05),
+    0 8px 28px rgba(0, 0, 0, 0.18);
+}
+
+.ensemblis-mark-symbol::after,
+.ensemblis-auth-symbol::after {
+  content: "";
+  position: absolute;
+  inset: -45%;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 36%, rgba(255, 255, 255, 0.08) 49%, transparent 62%);
+  transform: translateX(-42%) rotate(4deg);
+  transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ensemblis-product-mark:hover .ensemblis-mark-symbol::after {
+  transform: translateX(42%) rotate(4deg);
 }
 
 .ensemblis-mark-symbol svg,
 .ensemblis-auth-symbol svg {
+  position: relative;
+  z-index: 1;
   width: 100%;
   height: 100%;
 }
@@ -130,8 +422,10 @@
   margin: 0.85rem 0.95rem 0.35rem;
   padding: 0.8rem;
   border: 1px solid var(--en-line);
-  border-radius: 0.8rem;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.025), rgba(138, 124, 255, 0.025));
+  border-radius: var(--en-radius);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.025), transparent),
+    var(--en-violet-soft);
 }
 
 .ensemblis-artist-switcher-heading {
@@ -202,15 +496,23 @@
   margin-bottom: 0.6rem;
 }
 
-.studio-root .studio-sidebar nav a:hover,
-.studio-root .studio-sidebar nav a:focus-visible {
-  background: linear-gradient(90deg, rgba(183, 243, 106, 0.065), transparent);
-  color: var(--en-ink);
-  box-shadow: inset 2px 0 var(--en-accent);
+.studio-root .studio-sidebar nav a,
+.studio-root .studio-sidebar-foot a,
+.studio-root .studio-sidebar-foot button {
+  border-radius: 0.5rem;
+  margin-inline: 0.45rem;
+  width: calc(100% - 0.9rem);
+  transition:
+    color 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease;
 }
 
-.studio-root .studio-sidebar svg {
-  color: var(--en-muted);
+.studio-root .studio-sidebar nav a:hover,
+.studio-root .studio-sidebar nav a:focus-visible {
+  background: linear-gradient(90deg, rgba(183, 243, 106, 0.075), transparent);
+  color: var(--en-ink);
+  box-shadow: inset 2px 0 var(--en-accent);
 }
 
 .studio-root .studio-sidebar nav a:hover svg,
@@ -218,18 +520,27 @@
   color: var(--en-accent);
 }
 
+.studio-root .studio-sidebar-foot button:hover,
+.studio-root .studio-sidebar-foot button:focus-visible,
+.studio-root .studio-sidebar-foot a:not(.studio-quick):hover,
+.studio-root .studio-sidebar-foot a:not(.studio-quick):focus-visible {
+  background: var(--en-surface-raised);
+  color: var(--en-ink);
+}
+
+/* Authentication is part of the product, not a utility screen. */
 .studio-auth {
   background:
-    radial-gradient(circle at 80% 5%, rgba(138, 124, 255, 0.13), transparent 30%),
-    radial-gradient(circle at 15% 85%, rgba(92, 225, 198, 0.08), transparent 28%),
+    radial-gradient(circle at 80% 5%, rgba(138, 124, 255, 0.15), transparent 31%),
+    radial-gradient(circle at 15% 85%, rgba(92, 225, 198, 0.1), transparent 29%),
     var(--en-bg);
 }
 
 .studio-auth section {
   position: relative;
   border-color: var(--en-line);
-  background: color-mix(in srgb, var(--en-surface) 92%, transparent);
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28);
+  background: color-mix(in srgb, var(--en-surface) 94%, transparent);
+  box-shadow: 0 32px 90px rgba(0, 0, 0, 0.32);
 }
 
 .studio-root .studio-auth h1 {
@@ -261,6 +572,34 @@
 .ensemblis-auth-symbol {
   width: 2.75rem;
   height: 2.75rem;
+}
+
+.studio-root .auth-message {
+  border-left-color: var(--en-accent);
+  border-radius: 0 var(--en-radius-sm) var(--en-radius-sm) 0;
+  background: var(--en-accent-soft);
+}
+
+/* Product scrollbar: visible enough to be useful, quiet enough to stay out of the way. */
+.studio-root * {
+  scrollbar-color: var(--en-line-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.studio-root *::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.studio-root *::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--en-line-strong);
+  background-clip: padding-box;
+}
+
+.studio-root *::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 @media (max-width: 900px) {
@@ -305,5 +644,23 @@
     border: 0;
     font-size: 0.58rem;
     text-align: center;
+  }
+
+  .studio-root .studio-sidebar nav a,
+  .studio-root .studio-sidebar-foot a,
+  .studio-root .studio-sidebar-foot button {
+    margin-inline: 0.35rem;
+    width: calc(100% - 0.7rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-root *,
+  .studio-root *::before,
+  .studio-root *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }
