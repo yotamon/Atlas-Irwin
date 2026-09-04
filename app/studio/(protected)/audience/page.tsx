@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { approveAudienceReply, ignoreAudienceInteraction, syncAudienceNow } from "@/app/studio/audience-actions";
-import { PageHeader, Status } from "@/components/studio/ui";
+import { PageHeader } from "@/components/studio/ui";
 import { createAutonomyServiceClient } from "@/lib/marketing/autonomy-db";
 import { requireArtistContext } from "@/lib/studio/artist-context";
 
@@ -12,6 +11,11 @@ function shortDate(value: string) {
     minute: "2-digit",
     timeZone: "Europe/Berlin",
   }).format(new Date(value));
+}
+
+function readable(value: string | null | undefined, fallback: string) {
+  if (!value) return fallback;
+  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 export default async function AudiencePage() {
@@ -27,58 +31,65 @@ export default async function AudiencePage() {
   if (error) throw new Error(error.message);
   const interactions = data ?? [];
   const ready = interactions.filter((item) => item.suggested_reply);
+  const reviewOnly = interactions.filter((item) => !item.suggested_reply);
+  const ordered = [...ready, ...reviewOnly];
 
   return (
-    <div className="studio-v2-page">
+    <div className="studio-v2-page audience-polish-page">
       <PageHeader
         title="Audience"
-        description={`Comments and conversations that deserve a human ${artist.artistName} response. Ensemblis drafts; you decide what leaves the Studio.`}
-        action={<div className="actions"><form action={syncAudienceNow}><button className="button" type="submit">Sync now</button></form><Link className="button" href="/studio">Back to Today</Link></div>}
+        description={`Only conversations that may deserve ${artist.artistName}'s attention. Ensemblis can draft, classify and prioritize; nothing is sent without your decision.`}
+        action={<form action={syncAudienceNow}><button className="button" type="submit">Sync conversations</button></form>}
       />
 
-      <section className="v2-section">
-        <div className="v2-section-heading">
-          <div><span className="section-label">Community signal</span><h2>{interactions.length ? `${interactions.length} conversation${interactions.length === 1 ? "" : "s"}` : "Inbox is clear"}</h2></div>
-          <span className={`v2-count${ready.length ? " has-items" : ""}`}>{ready.length} drafted</span>
-        </div>
-        <p className="v2-muted-copy">Replies are never auto-sent. Collaboration, booking, rights, money, criticism and ambiguous messages always stay under human review.</p>
+      <section className="audience-polish-summary" aria-label="Audience inbox summary">
+        <div><strong>{ready.length}</strong><span>drafts ready</span></div>
+        <div><strong>{reviewOnly.length}</strong><span>need review</span></div>
+        <p>Booking, rights, money, criticism and ambiguous conversations stay human-reviewed by design.</p>
+      </section>
 
-        {interactions.length ? (
-          <div className="v2-inbox">
-            {interactions.map((item) => (
-              <article className="v2-inbox-item" key={item.id}>
-                <div style={{ width: "100%" }}>
-                  <div className="actions">
-                    <Status>{item.platform}</Status>
-                    <Status>{item.sentiment || "unclassified"}</Status>
-                    <small>{shortDate(item.occurred_at)}</small>
+      <section className="audience-polish-queue">
+        <div className="audience-polish-heading">
+          <div><span className="section-label">Needs judgment</span><h2>{interactions.length ? `${interactions.length} conversation${interactions.length === 1 ? "" : "s"}` : "Inbox is clear"}</h2></div>
+        </div>
+
+        {ordered.length ? (
+          <div className="audience-thread-list">
+            {ordered.map((item) => (
+              <article className="audience-thread" key={item.id}>
+                <header>
+                  <div>
+                    <small>{readable(item.platform, "Channel")} · {shortDate(item.occurred_at)}</small>
+                    <strong>{item.author_name || item.author_handle || "Listener"}</strong>
                   </div>
-                  <strong>{item.author_name || item.author_handle || "Listener"}</strong>
-                  <p>{item.body}</p>
-                  {item.suggested_reply ? (
-                    <form action={approveAudienceReply}>
-                      <input type="hidden" name="id" value={item.id} />
-                      <label>
-                        <small>Ensemblis draft</small>
-                        <textarea name="reply" defaultValue={item.suggested_reply} rows={3} maxLength={1000} required />
-                      </label>
-                      <div className="actions">
-                        <button className="button primary" type="submit">Approve & reply</button>
-                        <button className="button" type="submit" formAction={ignoreAudienceInteraction}>Ignore</button>
-                      </div>
-                    </form>
-                  ) : (
-                    <form action={ignoreAudienceInteraction}>
-                      <input type="hidden" name="id" value={item.id} />
-                      <button className="button" type="submit">Ignore</button>
-                    </form>
-                  )}
-                </div>
+                  <span>{readable(item.sentiment, "Unclassified")}</span>
+                </header>
+                <p className="audience-message">{item.body}</p>
+
+                {item.suggested_reply ? (
+                  <form action={approveAudienceReply} className="audience-draft">
+                    <input type="hidden" name="id" value={item.id} />
+                    <label>
+                      <span>Ensemblis draft</span>
+                      <textarea name="reply" defaultValue={item.suggested_reply} rows={3} maxLength={1000} required />
+                    </label>
+                    <div className="actions">
+                      <button className="button primary" type="submit">Approve & reply</button>
+                      <button className="text-button" type="submit" formAction={ignoreAudienceInteraction}>Ignore</button>
+                    </div>
+                  </form>
+                ) : (
+                  <form action={ignoreAudienceInteraction} className="audience-no-draft">
+                    <input type="hidden" name="id" value={item.id} />
+                    <span>No safe reply was drafted. Review the message itself rather than forcing automation.</span>
+                    <button className="text-button" type="submit">Ignore</button>
+                  </form>
+                )}
               </article>
             ))}
           </div>
         ) : (
-          <div className="v2-calm-state compact"><strong>No audience messages need you.</strong><p>Ensemblis will keep listening to connected channels for {artist.artistName}.</p></div>
+          <div className="v2-calm-state compact"><strong>No audience messages need you.</strong><p>Ensemblis will keep listening to connected channels for {artist.artistName} and surface only conversations worth a decision.</p></div>
         )}
       </section>
     </div>
