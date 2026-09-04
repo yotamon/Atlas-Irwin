@@ -110,6 +110,7 @@ async function loadContext(releaseId: string): Promise<RuntimeContext> {
   for (const result of [releaseResult, tracksResult, configResult, accountResult, profilesResult, metadataResult, writersResult, contributorsResult]) {
     if (result.error) throw new Error(result.error.message);
   }
+  if (!releaseResult.data) throw new Error("Release not found or unauthorized.");
   const tracks = tracksResult.data ?? [];
   const trackIds = new Set(tracks.map((track) => track.id));
   return {
