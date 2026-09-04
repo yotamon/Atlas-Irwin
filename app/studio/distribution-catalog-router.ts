@@ -114,10 +114,15 @@ export async function prepareDistributionCatalog(form: FormData) {
   for (const result of [releaseResult, tracksResult, configResult, accountResult, profilesResult, metadataResult, writersResult, contributorsResult, baselineResult]) {
     if (result.error) throw new Error(result.error.message);
   }
+  if (!releaseResult.data) throw new Error("Release not found or unauthorized.");
+  if (!configResult.data) throw new Error("Distribution configuration not found for correction mode.");
+  if (!accountResult.data) throw new Error("Distribution account not found.");
+  if (!baselineResult.data) throw new Error("Baseline distribution submission not found.");
   const release = releaseResult.data;
   const tracks = tracksResult.data ?? [];
   const config = configResult.data;
   const account = accountResult.data;
+  const baseline = baselineResult.data;
   if (!config.provider_release_id) throw new Error("Provider release identity is missing for correction mode.");
   if (!account.agreement_accepted_at || !account.rights_terms_accepted_at || ["setup_required", "restricted", "suspended"].includes(account.status)) throw new Error("Distribution account is not eligible for catalog corrections.");
 
@@ -151,11 +156,11 @@ export async function prepareDistributionCatalog(form: FormData) {
     tracks,
     trackMetadata: metadata,
     baseline: {
-      submissionId: baselineResult.data.id,
-      version: baselineResult.data.version,
-      metadataSnapshot: baselineResult.data.metadata_snapshot,
-      assetSnapshot: baselineResult.data.asset_snapshot,
-      destinationSnapshot: baselineResult.data.destination_snapshot,
+      submissionId: baseline.id,
+      version: baseline.version,
+      metadataSnapshot: baseline.metadata_snapshot,
+      assetSnapshot: baseline.asset_snapshot,
+      destinationSnapshot: baseline.destination_snapshot,
     },
     providerIdentity: assignedIdentity,
   });
@@ -199,7 +204,7 @@ export async function prepareDistributionCatalog(form: FormData) {
     }),
   };
 
-  const baselineAssets = object(baselineResult.data.asset_snapshot);
+  const baselineAssets = object(baseline.asset_snapshot);
   const artworkChanged = String(baselineAssets.artwork_url ?? "") !== String(release.artwork_url ?? "");
   const packageHash = createHash("sha256").update(JSON.stringify({ input, artworkChanged })).digest("hex").slice(0, 24);
   const operationKey = `update_catalog:${releaseId}:${packageHash}`;
@@ -248,7 +253,7 @@ export async function prepareDistributionCatalog(form: FormData) {
     refresh(releaseId);
     throw new Error(`The corrected provider catalog was saved, but supply-chain configuration needs attention: ${error instanceof Error ? error.message : "unknown provider error"}`);
   }
-  const event = await db.from("distribution_events").insert({ owner_id: user.id, release_id: releaseId, submission_id: baselineResult.data.id, event_type: "distribution.update_catalog_synchronized", actor_type: "system", provider: config.provider, payload: json({ packageHash, artworkChanged }) });
+  const event = await db.from("distribution_events").insert({ owner_id: user.id, release_id: releaseId, submission_id: baseline.id, event_type: "distribution.update_catalog_synchronized", actor_type: "system", provider: config.provider, payload: json({ packageHash, artworkChanged }) });
   if (event.error) throw new Error(event.error.message);
   refresh(releaseId);
 }
