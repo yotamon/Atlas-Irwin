@@ -100,7 +100,7 @@ const siteViewModelSchema = z.object({
     name: z.string().min(1),
     slug: z.string().min(1),
     bio: z.string().nullable(),
-    avatarUrl: publicUrl.nullable(),
+    avatarUrl: siteAsset.nullable(),
     accentColor: hexColor.nullable(),
   }),
   releases: z.array(z.object({
@@ -110,7 +110,7 @@ const siteViewModelSchema = z.object({
     releaseType: z.string().min(1),
     releaseDate: z.string().nullable(),
     story: z.string().nullable(),
-    artworkUrl: publicUrl.nullable(),
+    artworkUrl: siteAsset.nullable(),
     genre: z.string().nullable(),
     links: z.array(z.object({
       label: z.string().min(1),
