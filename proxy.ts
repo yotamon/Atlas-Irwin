@@ -264,6 +264,7 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
+    "/__sites/:path*",
     "/robots.txt",
     "/sitemap.xml",
     "/manifest.webmanifest",
