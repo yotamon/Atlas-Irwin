@@ -14,7 +14,11 @@ export type PublishedSiteRuntime = {
   viewModel: ReturnType<typeof parseSiteViewModel>;
 };
 
-async function loadPublishedSiteByIdUncached(siteId: string): Promise<PublishedSiteRuntime | null> {
+type PublishedSiteRuntimeCore = Omit<PublishedSiteRuntime, "primaryHostname">;
+
+async function loadPublishedSiteCoreByIdUncached(
+  siteId: string,
+): Promise<PublishedSiteRuntimeCore | null> {
   const db = asSitesClient(createCatalogClient());
   const { data: site, error: siteError } = await db
     .from("artist_sites")
@@ -26,47 +30,65 @@ async function loadPublishedSiteByIdUncached(siteId: string): Promise<PublishedS
   if (siteError) throw new Error(siteError.message);
   if (!site?.published_version_id) return null;
 
-  const [versionResult, domainResult] = await Promise.all([
-    db
-      .from("artist_site_versions")
-      .select("*")
-      .eq("id", site.published_version_id)
-      .eq("site_id", site.id)
-      .eq("status", "published")
-      .maybeSingle(),
-    db
-      .from("artist_site_domains")
-      .select("hostname")
-      .eq("site_id", site.id)
-      .eq("is_primary", true)
-      .eq("verification_status", "verified")
-      .eq("ssl_status", "active")
-      .maybeSingle(),
-  ]);
+  const { data: version, error: versionError } = await db
+    .from("artist_site_versions")
+    .select("*")
+    .eq("id", site.published_version_id)
+    .eq("site_id", site.id)
+    .eq("status", "published")
+    .maybeSingle();
 
-  if (versionResult.error) throw new Error(versionResult.error.message);
-  if (domainResult.error) throw new Error(domainResult.error.message);
-  if (!versionResult.data) return null;
+  if (versionError) throw new Error(versionError.message);
+  if (!version) return null;
 
   return {
     site,
-    version: versionResult.data,
-    primaryHostname: domainResult.data?.hostname ?? null,
-    config: parseSiteConfig(versionResult.data.config),
-    viewModel: parseSiteViewModel(versionResult.data.content_snapshot),
+    version,
+    config: parseSiteConfig(version.config),
+    viewModel: parseSiteViewModel(version.content_snapshot),
   };
 }
 
-export function loadPublishedSiteById(siteId: string) {
+async function loadPrimaryHostnameUncached(siteId: string): Promise<string | null> {
+  const db = asSitesClient(createCatalogClient());
+  const { data, error } = await db
+    .from("artist_site_domains")
+    .select("hostname")
+    .eq("site_id", siteId)
+    .eq("is_primary", true)
+    .eq("verification_status", "verified")
+    .eq("ssl_status", "active")
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data?.hostname ?? null;
+}
+
+async function attachCurrentPrimaryHostname(
+  runtime: PublishedSiteRuntimeCore | null,
+): Promise<PublishedSiteRuntime | null> {
+  if (!runtime) return null;
+  return {
+    ...runtime,
+    primaryHostname: await loadPrimaryHostnameUncached(runtime.site.id),
+  };
+}
+
+function loadPublishedSiteCoreById(siteId: string) {
   return unstable_cache(
-    () => loadPublishedSiteByIdUncached(siteId),
+    () => loadPublishedSiteCoreByIdUncached(siteId),
     ["ensemblis-site-id", siteId],
     { revalidate: 60, tags: [`site:${siteId}`] },
   )();
 }
 
-export function loadPublishedSiteBySlug(slug: string) {
-  return unstable_cache(
+export async function loadPublishedSiteById(siteId: string) {
+  const runtime = await loadPublishedSiteCoreById(siteId);
+  return attachCurrentPrimaryHostname(runtime);
+}
+
+export async function loadPublishedSiteBySlug(slug: string) {
+  const runtime = await unstable_cache(
     async () => {
       const db = asSitesClient(createCatalogClient());
       const { data, error } = await db
@@ -76,29 +98,26 @@ export function loadPublishedSiteBySlug(slug: string) {
         .eq("state", "published")
         .maybeSingle();
       if (error) throw new Error(error.message);
-      return data ? loadPublishedSiteByIdUncached(data.id) : null;
+      return data ? loadPublishedSiteCoreByIdUncached(data.id) : null;
     },
     ["ensemblis-site-slug", slug],
     { revalidate: 60, tags: [`site-slug:${slug}`] },
   )();
+
+  return attachCurrentPrimaryHostname(runtime);
 }
 
-export function loadPublishedSiteByHostname(hostname: string) {
+export async function loadPublishedSiteByHostname(hostname: string) {
   const normalized = hostname.trim().toLowerCase().replace(/:\d+$/, "");
-  return unstable_cache(
-    async () => {
-      const db = asSitesClient(createCatalogClient());
-      const { data: domain, error } = await db
-        .from("artist_site_domains")
-        .select("site_id")
-        .eq("hostname", normalized)
-        .eq("verification_status", "verified")
-        .eq("ssl_status", "active")
-        .maybeSingle();
-      if (error) throw new Error(error.message);
-      return domain ? loadPublishedSiteByIdUncached(domain.site_id) : null;
-    },
-    ["ensemblis-site-host", normalized],
-    { revalidate: 60, tags: [`site-host:${normalized}`] },
-  )();
+  const db = asSitesClient(createCatalogClient());
+  const { data: domain, error } = await db
+    .from("artist_site_domains")
+    .select("site_id")
+    .eq("hostname", normalized)
+    .eq("verification_status", "verified")
+    .eq("ssl_status", "active")
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return domain ? loadPublishedSiteById(domain.site_id) : null;
 }
