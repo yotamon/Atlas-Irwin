@@ -91,7 +91,6 @@ export function MomentReviewPanel({
   const rollupMap = useMemo(() => new Map(performance.map((item) => [item.moment_id, item])), [performance]);
   const lyricMap = useMemo(() => new Map(lyricSources.map((item) => [item.id, item])), [lyricSources]);
   const activeMoments = useMemo(() => [...moments].sort((a, b) => a.curation.rank - b.curation.rank), [moments]);
-  const proposedCount = activeMoments.filter((moment) => moment.state === "proposed").length;
   const approvedCount = activeMoments.filter((moment) => moment.state === "approved").length;
 
   function audition(moment: CuratedMoment) {
