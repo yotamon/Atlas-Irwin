@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CommandPalette } from "@/components/studio/command-palette";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 
 export function StudioContextBar({
@@ -16,6 +17,7 @@ export function StudioContextBar({
       </div>
 
       <nav className="ensemblis-context-actions" aria-label="Global workspace actions">
+        <CommandPalette artistId={artistId} />
         <Link className="ensemblis-context-link" href={ensemblisArtistHref("/studio/inbox", artistId)}>
           Needs you
         </Link>

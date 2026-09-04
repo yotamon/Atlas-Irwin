@@ -21,6 +21,11 @@ import "./ensemblis-states.css";
 import "./ux-polish.css";
 import "./music-polish.css";
 import "./release-polish.css";
+import "./create-polish.css";
+import "./growth-polish.css";
+import "./audience-polish.css";
+import "./library-polish.css";
+import "./shared-interactions.css";
 
 export const metadata: Metadata = {
   title: {
