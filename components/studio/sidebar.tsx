@@ -77,12 +77,17 @@ export function StudioSidebar({ artistId, artists }: StudioSidebarProps) {
         <div className="ensemblis-sidebar-settings">
           <StudioAdvancedNavigation item={settingsNavigation} />
         </div>
-        <Link href={ensemblisArtistHref("/studio/growth/import", artistId)} className="studio-quick">
+        <Link
+          href={ensemblisArtistHref("/studio/growth/import", artistId)}
+          className="studio-quick"
+          aria-label="Add unreleased tracks"
+          title="Add unreleased tracks"
+        >
           <Plus aria-hidden />
           <span className="studio-nav-text">Add unreleased tracks</span>
         </Link>
         <form action={signOut}>
-          <button>
+          <button aria-label="Sign out" title="Sign out">
             <Logout aria-hidden />
             <span className="studio-nav-text">Sign out</span>
           </button>
