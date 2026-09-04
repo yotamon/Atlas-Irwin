@@ -35,6 +35,7 @@ function nonNegativeCost(value: unknown) {
 export async function applyMarketingCreativeProviderStatus(input: {
   runId?: string;
   providerRequestId?: string;
+  artistId?: string;
   status: CreativeProviderStatus;
 }) {
   const marketing = createMarketingServiceClient();
@@ -42,6 +43,7 @@ export async function applyMarketingCreativeProviderStatus(input: {
   if (input.runId) query = query.eq("id", input.runId);
   else if (input.providerRequestId) query = query.eq("provider_request_id", input.providerRequestId);
   else throw new Error("A generation run id or provider request id is required.");
+  if (input.artistId) query = query.eq("artist_id", input.artistId);
 
   const { data: run, error: runError } = await query.limit(1).maybeSingle();
   if (runError) throw new Error(runError.message);
@@ -49,6 +51,9 @@ export async function applyMarketingCreativeProviderStatus(input: {
   if (!run.purpose.startsWith("content_asset:")) return { ignored: true as const, reason: "not_marketing_creative" };
   if (!run.artist_id) throw new Error("Marketing generation is missing durable artist lineage.");
   const artistId = run.artist_id;
+  if (input.artistId && input.artistId !== artistId) {
+    throw new Error("Creative provider status does not match the expected artist lineage.");
+  }
 
   const inputContext = record(run.input_context);
   const contentItemId = stringValue(inputContext.contentItemId) || run.purpose.slice("content_asset:".length);
