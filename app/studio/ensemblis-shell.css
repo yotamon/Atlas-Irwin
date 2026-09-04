@@ -1,3 +1,23 @@
+.studio-root {
+  /* The public Atlas site owns --font-heading. Ensemblis intentionally uses a
+     neutral product type system so artist branding never becomes product chrome. */
+  --font-heading: var(--font-body);
+}
+
+.studio-root .studio-page-header h1 {
+  font-weight: 680;
+  line-height: 0.98;
+  letter-spacing: -0.05em;
+  text-transform: none;
+}
+
+.studio-root .hero-release h2,
+.studio-root .soundcloud-profile h2 {
+  font-family: var(--font-body), sans-serif;
+  letter-spacing: -0.04em;
+  text-transform: none;
+}
+
 .studio-mark.ensemblis-product-mark {
   min-height: 5.6rem;
   height: auto;
