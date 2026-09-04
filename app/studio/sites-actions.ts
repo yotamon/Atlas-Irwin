@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
 import { DEFAULT_SITE_CONFIG, normalizeSiteSlug } from "@/lib/sites/domain";
 import { asSitesClient } from "@/lib/sites/db";
@@ -13,6 +13,7 @@ import type { Json } from "@/types/database";
 const uuid = z.string().uuid();
 
 function revalidateSiteSurfaces(slug?: string) {
+  updateTag("ensemblis-sites");
   revalidatePath("/studio/sites");
   if (slug) revalidatePath(`/sites/${slug}`);
 }
