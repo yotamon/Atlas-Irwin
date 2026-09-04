@@ -60,21 +60,76 @@ test("Ensemblis primary navigation matches the product roadmap and keeps special
   }
 
   assert.ok(sidebar.includes("ENSEMBLIS_PRIMARY_NAV"));
-  assert.ok(sidebar.includes("Active artist"));
+  assert.ok(sidebar.includes("ArtistSwitcher"));
+  assert.ok(sidebar.includes("ensemblisArtistHref"));
   assert.equal(sidebar.includes("ATLAS"), false, "Atlas product branding leaked back into the Ensemblis shell");
+});
+
+test("Ensemblis persists and validates active artist context across primary navigation and deep links", async () => {
+  const product = await readFile("lib/ensemblis-product.ts", "utf8");
+  const context = await readFile("lib/studio/artist-context.ts", "utf8");
+  const switcher = await readFile("components/studio/artist-switcher.tsx", "utf8");
+  const sidebar = await readFile("components/studio/sidebar.tsx", "utf8");
+  const proxy = await readFile("proxy.ts", "utf8");
+  const layout = await readFile("app/studio/(protected)/layout.tsx", "utf8");
+
+  assert.ok(product.includes('ENSEMBLIS_ACTIVE_ARTIST_COOKIE = "ensemblis_active_artist"'));
+  assert.ok(context.includes("listAccessibleArtists"));
+  assert.ok(context.includes("resolveActiveArtistContext"));
+  assert.ok(context.includes("resolveArtistContext(client, identity, preferredArtistId)"));
+  assert.ok(switcher.includes('params.set("artist", artistId)'));
+  assert.ok(sidebar.includes("ensemblisArtistHref(href, artistId)"));
+  assert.ok(proxy.includes("requestedArtistId"));
+  assert.ok(proxy.includes("This value is still untrusted"));
+  assert.ok(layout.includes("resolveActiveArtistContext"));
+  assert.ok(layout.includes("listAccessibleArtists"));
 });
 
 test("Ensemblis auth and shell keep artist identity separate from product identity", async () => {
   const login = await readFile("app/studio/login/page.tsx", "utf8");
   const layout = await readFile("app/studio/(protected)/layout.tsx", "utf8");
   const product = await readFile("lib/ensemblis-product.ts", "utf8");
+  const mark = await readFile("components/ensemblis-logo.tsx", "utf8");
 
   assert.ok(product.includes('name: "Ensemblis"'));
   assert.ok(login.includes("ENSEMBLIS_PRODUCT"));
+  assert.ok(login.includes("EnsemblisMark"));
   assert.equal(login.includes("Atlas Irwin"), false);
-  assert.ok(layout.includes("resolveDefaultArtistContext"));
-  assert.ok(layout.includes("artistName={artist.artistName}"));
-  assert.ok(layout.includes("workspaceName={artist.workspaceName}"));
+  assert.ok(layout.includes("resolveActiveArtistContext"));
+  assert.ok(mark.includes("ensemblis-mark-wave"));
+});
+
+test("Atlas public identity is page-scoped and cannot leak into Ensemblis metadata", async () => {
+  const rootLayout = await readFile("app/layout.tsx", "utf8");
+  const publicPage = await readFile("app/page.tsx", "utf8");
+  const studioLayout = await readFile("app/studio/layout.tsx", "utf8");
+  const studioManifest = await readFile("app/studio/manifest.ts", "utf8");
+
+  assert.equal(rootLayout.includes("Atlas Irwin"), false);
+  assert.ok(publicPage.includes("Atlas Irwin — Retro-Futuristic Electronic Music"));
+  assert.ok(publicPage.includes('"@type": "MusicGroup"'));
+  assert.ok(studioLayout.includes("ENSEMBLIS_PRODUCT"));
+  assert.ok(studioLayout.includes("/ensemblis-mark.svg"));
+  assert.ok(studioManifest.includes('start_url: "/studio"'));
+  assert.ok(studioManifest.includes("ENSEMBLIS_PRODUCT"));
+});
+
+test("generic product surfaces contain no hardcoded Atlas user-facing language", async () => {
+  const files = [
+    "components/studio/sidebar.tsx",
+    "app/studio/login/page.tsx",
+    "app/studio/access-denied/page.tsx",
+    "app/studio/error.tsx",
+    "app/studio/layout.tsx",
+    "app/studio/(protected)/settings/page.tsx",
+    "app/studio/(protected)/settings/ai/page.tsx",
+    "app/studio/(protected)/connections/page.tsx",
+    "proxy.ts",
+  ];
+  for (const path of files) {
+    const source = await readFile(path, "utf8");
+    assert.equal(/\bAtlas(?: Irwin)?\b/.test(source), false, `${path} contains hardcoded Atlas product language`);
+  }
 });
 
 test("release workspace exposes lifecycle-aware growth stages and preserves an advanced escape hatch", async () => {
