@@ -1,5 +1,8 @@
 import { notFound } from "next/navigation";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { loadArtistCreativeMemory } from "@/lib/creative-memory/server";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { createServiceClient } from "@/lib/supabase/service";
 import { openAIDirectorReadiness } from "@/lib/video-director/openai-director";
 import { mediaWorkerReadiness } from "@/lib/video-director/worker";
@@ -32,8 +35,10 @@ export default async function VideoProjectPage({
 }) {
   const { id } = await params;
   const { mode } = await searchParams;
-  const { user } = await requireStudioAdmin();
+  const { supabase, user } = await requireStudioAdmin();
+  const artist = await resolveActiveArtistContext(supabase, user);
   const db = createServiceClient();
+  const music = asArtistScopedMusicClient(db);
 
   const { data: project, error: projectError } = await db.from("music_video_projects")
     .select("*").eq("id", id).eq("owner_id", user.id).maybeSingle();
@@ -53,8 +58,10 @@ export default async function VideoProjectPage({
     mediaLinksResult,
     thumbnailAssetsResult,
   ] = await Promise.all([
-    db.from("releases").select("*").eq("id", project.release_id).eq("owner_id", user.id).maybeSingle(),
-    db.from("tracks").select("*").eq("id", project.track_id).eq("owner_id", user.id).maybeSingle(),
+    music.from("releases").select("*")
+      .eq("id", project.release_id).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
+    music.from("tracks").select("*")
+      .eq("id", project.track_id).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
     db.from("music_video_concepts").select("*").eq("project_id", project.id).eq("owner_id", user.id)
       .order("round_number", { ascending: false }).order("display_order"),
     db.from("music_video_scenes").select("*").eq("project_id", project.id).eq("owner_id", user.id).order("display_order"),
@@ -63,8 +70,9 @@ export default async function VideoProjectPage({
     db.from("music_video_approvals").select("*").eq("project_id", project.id).eq("owner_id", user.id).order("created_at", { ascending: false }),
     db.from("music_video_renders").select("*").eq("project_id", project.id).eq("owner_id", user.id).order("created_at", { ascending: false }),
     db.from("music_video_worker_jobs").select("*").eq("project_id", project.id).eq("owner_id", user.id).order("created_at", { ascending: false }).limit(50),
-    db.from("media_links").select("id,media_asset_id,role,release_id,track_id")
-      .eq("owner_id", user.id).or(`release_id.eq.${project.release_id},track_id.eq.${project.track_id}`),
+    music.from("media_links").select("id,media_asset_id,role,release_id,track_id,artist_id")
+      .eq("owner_id", user.id).eq("artist_id", artist.artistId)
+      .or(`release_id.eq.${project.release_id},track_id.eq.${project.track_id}`),
     db.from("media_assets").select("*")
       .eq("owner_id", user.id)
       .eq("asset_type", "thumbnail")
@@ -90,12 +98,22 @@ export default async function VideoProjectPage({
   const track = trackResult.data;
   if (!release || !track || track.release_id !== release.id) notFound();
 
+  const creativeMemory = await loadArtistCreativeMemory({
+    db,
+    ownerId: user.id,
+    artistId: artist.artistId,
+    releaseId: release.id,
+    trackId: track.id,
+    recommendationLimit: 8,
+  });
+
   const shots = shotsResult.data ?? [];
   const generations = generationsResult.data ?? [];
   const renders = rendersResult.data ?? [];
   const linkedAssetIds = (mediaLinksResult.data ?? []).map((link) => link.media_asset_id);
   const assetIds = [...new Set([
     ...linkedAssetIds,
+    ...creativeMemory.recommendations.map((recommendation) => recommendation.assetId),
     ...generations.flatMap((generation) => generation.result_asset_id ? [generation.result_asset_id] : []),
     ...renders.flatMap((render) => render.media_asset_id ? [render.media_asset_id] : []),
     ...shots.flatMap((shot) => [
@@ -114,7 +132,7 @@ export default async function VideoProjectPage({
   const roles = new Set((mediaLinksResult.data ?? []).map((link) => link.role));
   const hasAudio = Boolean(track.audio_url) || roles.has("master_audio") || roles.has("audio_preview");
   const hasArtwork = Boolean(release.artwork_url) || roles.has("cover") || roles.has("alternate_artwork");
-  const audioUrl = hasAudio ? await resolveProjectAudioUrl(db, project, user.id) : null;
+  const audioUrl = hasAudio ? await resolveProjectAudioUrl(db, project, user.id, artist.artistId) : null;
 
   return (
     <VideoProjectWorkspace
@@ -132,6 +150,11 @@ export default async function VideoProjectPage({
         renders,
         workerJobs: workerJobsResult.data ?? [],
         assets,
+        creativeMemory: {
+          summary: creativeMemory.preferences.summary,
+          evidenceCount: creativeMemory.eventCount,
+          recommendations: creativeMemory.recommendations,
+        },
         services: {
           director: openAIDirectorReadiness(),
           higgsfield: higgsfieldReadiness(),

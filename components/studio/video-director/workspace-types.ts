@@ -1,3 +1,4 @@
+import type { CreativeMemoryRecommendation } from "@/lib/creative-memory/server";
 import type { MediaAsset, MusicVideoConcept, MusicVideoRender, MusicVideoScene, Release, Track } from "@/types/database";
 import type {
   ExtendedMusicVideoApproval,
@@ -31,6 +32,11 @@ export type VideoWorkspaceData = {
   renders: MusicVideoRender[];
   workerJobs: MusicVideoWorkerJob[];
   assets: MediaAsset[];
+  creativeMemory: {
+    summary: string;
+    evidenceCount: number;
+    recommendations: CreativeMemoryRecommendation[];
+  };
   services: VideoServiceReadiness;
   contextSignals: {
     hasAudio: boolean;
