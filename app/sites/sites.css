@@ -1,0 +1,181 @@
+.artist-site-root {
+  min-height: 100vh;
+  background: var(--artist-bg);
+  color: var(--artist-fg);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.artist-site-root * { box-sizing: border-box; }
+.artist-site-root a { color: inherit; }
+
+.artist-site-preview-ribbon {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  padding: 8px 20px;
+  background: var(--artist-accent);
+  color: #111;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.artist-site-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 28px clamp(24px, 5vw, 72px);
+}
+
+.artist-site-name {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.artist-site-nav nav { display: flex; gap: 24px; }
+.artist-site-nav nav a,
+.artist-site-link-row a {
+  color: var(--artist-muted);
+  font-size: 13px;
+  text-decoration: none;
+  transition: color .16s ease;
+}
+.artist-site-nav nav a:hover,
+.artist-site-link-row a:hover { color: var(--artist-accent); }
+
+.artist-site-hero {
+  display: grid;
+  align-content: end;
+  min-height: min(78vh, 820px);
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 80px clamp(24px, 5vw, 72px) clamp(72px, 9vw, 128px);
+}
+
+.artist-site-kicker,
+.artist-site-section-head span {
+  color: var(--artist-accent);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+}
+
+.artist-site-hero h1 {
+  max-width: 11ch;
+  margin: 12px 0 18px;
+  font-size: clamp(64px, 12vw, 168px);
+  line-height: .84;
+  letter-spacing: -.075em;
+}
+
+.artist-site-hero p {
+  max-width: 620px;
+  margin: 0 0 32px;
+  color: var(--artist-muted);
+  font-size: clamp(18px, 2vw, 26px);
+  line-height: 1.45;
+}
+
+.artist-site-primary-cta {
+  justify-self: start;
+  padding: 13px 18px;
+  border: 1px solid var(--artist-accent);
+  border-radius: 999px;
+  color: var(--artist-accent) !important;
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.artist-site-section {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: clamp(72px, 10vw, 140px) clamp(24px, 5vw, 72px);
+  border-top: 1px solid color-mix(in srgb, var(--artist-fg) 12%, transparent);
+}
+
+.artist-site-section-head { margin-bottom: 44px; }
+.artist-site-section-head h2 {
+  margin: 8px 0 0;
+  font-size: clamp(38px, 6vw, 72px);
+  letter-spacing: -.05em;
+}
+
+.artist-site-release-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 52px 28px;
+}
+
+.artist-site-release img,
+.artist-site-cover-placeholder {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 4px;
+  background: var(--artist-surface);
+  object-fit: cover;
+}
+
+.artist-site-release-copy { padding-top: 18px; }
+.artist-site-release-copy > p {
+  margin: 0 0 7px;
+  color: var(--artist-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.artist-site-release-copy h3 {
+  margin: 0 0 10px;
+  font-size: clamp(24px, 3vw, 38px);
+  letter-spacing: -.035em;
+}
+.artist-site-release-copy small {
+  display: block;
+  max-width: 54ch;
+  color: var(--artist-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.artist-site-link-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.artist-site-copy-section > p {
+  max-width: 760px;
+  color: var(--artist-muted);
+  font-size: clamp(20px, 2.4vw, 34px);
+  line-height: 1.55;
+}
+
+.artist-site-empty { color: var(--artist-muted); }
+
+.artist-site-footer {
+  display: flex;
+  justify-content: space-between;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 36px clamp(24px, 5vw, 72px) 52px;
+  border-top: 1px solid color-mix(in srgb, var(--artist-fg) 12%, transparent);
+  color: var(--artist-muted);
+  font-size: 12px;
+}
+
+@media (max-width: 720px) {
+  .artist-site-nav nav { gap: 14px; }
+  .artist-site-hero { min-height: 68vh; }
+  .artist-site-release-grid { grid-template-columns: 1fr; }
+  .artist-site-footer { gap: 20px; flex-direction: column; }
+}

@@ -1,0 +1,45 @@
+name: Sites PR
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - "app/sites/**"
+      - "app/studio/(protected)/sites/**"
+      - "app/studio/site-preview/**"
+      - "app/studio/sites-actions.ts"
+      - "components/sites/**"
+      - "lib/sites/**"
+      - "types/ensemblis-sites.ts"
+      - ".github/workflows/sites-pr.yml"
+
+concurrency:
+  group: sites-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        timeout-minutes: 8
+        run: npm ci --no-audit --fetch-retries=2 --fetch-timeout=60000 --fetch-retry-mintimeout=1000 --fetch-retry-maxtimeout=5000
+
+      - name: Build production application
+        run: npm run build
+        env:
+          NEXT_PUBLIC_SITE_URL: https://example.com
+          NEXT_PUBLIC_SUPABASE_URL: https://your-project.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: your-publishable-or-legacy-anon-key

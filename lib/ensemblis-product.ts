@@ -15,6 +15,7 @@ export const ENSEMBLIS_PRIMARY_NAV = [
   { href: "/studio/growth", label: "Growth", icon: "analytics" },
   { href: "/studio/audience", label: "Audience", icon: "outreach" },
   { href: "/studio/library", label: "Library", icon: "media" },
+  { href: "/studio/sites", label: "Sites", icon: "sites" },
   { href: "/studio/connections", label: "Connections", icon: "distribution" },
   { href: "/studio/settings", label: "Settings", icon: "brand" },
 ] as const;
