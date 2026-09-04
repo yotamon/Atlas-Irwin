@@ -136,6 +136,7 @@ async function loadContext(releaseId: string): Promise<DistributionContext> {
   for (const result of [releaseResult, tracksResult, configResult, accountResult, profilesResult, metadataResult, writersResult, contributorsResult]) {
     if (result.error) throw new Error(result.error.message);
   }
+  if (!releaseResult.data) throw new Error("Release not found or unauthorized.");
   const tracks = tracksResult.data ?? [];
   const trackIds = new Set(tracks.map((track) => track.id));
   return {
@@ -476,9 +477,10 @@ export async function prepareDistributionCatalog(form: FormData) {
     throw new Error("Complete the blocking Ensemblis metadata, rights and credit requirements before preparing the distribution package.");
   }
   const input = catalogInput(context);
+  const ugcEnabled = parseRights(context.config?.rights)?.ugc.enabled ?? false;
   const provider = getDistributionProvider();
   if (context.config?.provider_release_id) {
-    await provider.configureRelease(context.config.provider_release_id, { releaseDate: input.releaseDate });
+    await provider.configureRelease(context.config.provider_release_id, { releaseDate: input.releaseDate, ugcEnabled });
     await logEvent(context.db, { ownerId: context.userId, releaseId, eventType: "distribution.provider_schedule_refreshed", actorType: "system", provider: context.config.provider, payload: { releaseDate: input.releaseDate } });
     refreshDistributionRoutes(releaseId);
     return;
@@ -491,7 +493,7 @@ export async function prepareDistributionCatalog(form: FormData) {
   if (existing?.state === "completed" && existing.provider_resource_id) {
     const recover = await context.db.from("release_distribution_configs").upsert({ release_id: releaseId, owner_id: context.userId, provider: "revelator", provider_release_id: existing.provider_resource_id, destinations: context.config?.destinations ?? json({ mode: "all_enabled", storeIds: [] }), territories: context.config?.territories ?? json({ mode: "worldwide", countries: [] }), rights: context.config?.rights ?? {}, ai_provenance: context.config?.ai_provenance ?? {}, provider_metadata: context.config?.provider_metadata ?? {}, state: "draft" }, { onConflict: "release_id" });
     if (recover.error) throw new Error(recover.error.message);
-    await provider.configureRelease(existing.provider_resource_id, { releaseDate: input.releaseDate });
+    await provider.configureRelease(existing.provider_resource_id, { releaseDate: input.releaseDate, ugcEnabled });
     refreshDistributionRoutes(releaseId);
     return;
   }
@@ -522,7 +524,7 @@ export async function prepareDistributionCatalog(form: FormData) {
   if (operationResult.error) throw new Error(operationResult.error.message);
   await logEvent(context.db, { ownerId: context.userId, releaseId, eventType: "distribution.provider_catalog_prepared", actorType: "system", provider: "revelator", payload: { providerReleaseId: prepared.providerReleaseId } });
   try {
-    await provider.configureRelease(prepared.providerReleaseId, { releaseDate: input.releaseDate });
+    await provider.configureRelease(prepared.providerReleaseId, { releaseDate: input.releaseDate, ugcEnabled });
   } catch (error) {
     const metadata = json({ ...object(context.config?.provider_metadata), preparedAt: now, scheduleError: error instanceof Error ? error.message : "Unknown schedule configuration error" });
     await context.db.from("release_distribution_configs").update({ state: "needs_attention", provider_metadata: metadata }).eq("release_id", releaseId).eq("owner_id", context.userId);
