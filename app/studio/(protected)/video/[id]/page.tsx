@@ -25,10 +25,13 @@ function uniqueAssets(assets: MediaAsset[]) {
 
 export default async function VideoProjectPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ mode?: string }>;
 }) {
   const { id } = await params;
+  const { mode } = await searchParams;
   const { user } = await requireStudioAdmin();
   const db = createServiceClient();
 
@@ -115,6 +118,7 @@ export default async function VideoProjectPage({
 
   return (
     <VideoProjectWorkspace
+      mode={mode === "pro" ? "pro" : "default"}
       data={{
         project,
         release,
