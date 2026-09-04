@@ -4,6 +4,7 @@ import {
   FiCalendar,
   FiDisc,
   FiFeather,
+  FiGlobe,
   FiHome,
   FiImage,
   FiLayers,
@@ -17,6 +18,7 @@ import {
 export const studioIcons = {
   dashboard: FiHome,
   releases: FiDisc,
+  distribution: FiGlobe,
   musicLab: FiMusic,
   content: FiFeather,
   calendar: FiCalendar,
