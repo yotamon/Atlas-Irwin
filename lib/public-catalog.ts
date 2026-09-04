@@ -1,7 +1,6 @@
 import "server-only";
 
 import { unstable_cache } from "next/cache";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Release, ReleaseLink, ReleaseTrack } from "@/lib/releases/types";
 import {
   formatDurationSeconds,
@@ -24,7 +23,6 @@ import type {
   Track,
   TrackExternalId,
 } from "@/types/database";
-import type { EnsemblisDatabase } from "@/types/ensemblis-database";
 import { adminEmails } from "@/lib/auth/studio";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 
@@ -43,9 +41,26 @@ type PostgrestErrorLike = {
   message?: string | null;
 };
 
+const NO_PUBLIC_ARTIST = Symbol("no-public-artist");
+type CatalogArtistId = string | null | typeof NO_PUBLIC_ARTIST;
+
+function emptyCatalogBundle(): CatalogBundle {
+  return {
+    releases: [],
+    tracks: [],
+    placements: [],
+    mediaAssets: [],
+    mediaLinks: [],
+    externalLinks: [],
+    externalTrackIds: [],
+  };
+}
+
 function isPreEnsemblisSchemaError(error: PostgrestErrorLike | null) {
-  return error?.code === "PGRST205"
-    || /Could not find the table 'public\.artists' in the schema cache/i.test(error?.message ?? "");
+  return error?.code === "PGRST204"
+    || /Could not find the ['\"]artist_id['\"] column of ['\"]releases['\"] in the schema cache/i.test(
+      error?.message ?? "",
+    );
 }
 
 async function resolveCatalogOwnerId() {
@@ -78,47 +93,62 @@ async function resolveCatalogOwnerId() {
 }
 
 /**
- * Expand/contract compatibility for the Ensemblis ownership rollout.
+ * Resolve the public catalog Artist without granting anon access to the private
+ * Ensemblis artists table.
  *
- * Before the workspace/artist migrations land, the legacy Atlas database has no
- * `artists` table and is inherently single-artist. Returning null in that one
- * explicit schema state keeps the public site/build on its historical owner scope.
- * As soon as the table exists, resolution is strict: a missing or ambiguous legacy
- * Artist mapping is an error rather than a silent owner-wide fallback.
+ * The only safe low-privilege source is the already-public release catalog. Before
+ * artist_id existed, a missing-column response identifies the legacy single-artist
+ * schema and owner scope remains valid. Once artist_id exists, zero public releases
+ * fails closed to an empty catalog, while multiple public artists require an explicit
+ * PUBLIC_CATALOG_ARTIST_ID instead of silently combining artist data.
  */
-async function resolveCatalogArtistId(ownerId: string): Promise<string | null> {
+async function resolveCatalogArtistId(ownerId: string): Promise<CatalogArtistId> {
+  const explicitArtistId = process.env.PUBLIC_CATALOG_ARTIST_ID?.trim();
+  if (explicitArtistId) return explicitArtistId;
+
   const supabase = createCatalogClient();
-  const ensemblis = supabase as unknown as SupabaseClient<EnsemblisDatabase>;
-  const { data, error } = await ensemblis
-    .from("artists")
-    .select("id")
-    .eq("legacy_owner_id", ownerId)
-    .eq("status", "active")
-    .limit(2);
+  const music = asArtistScopedMusicClient(supabase);
+  const { data, error } = await music
+    .from("releases")
+    .select("artist_id")
+    .eq("owner_id", ownerId)
+    .eq("is_public", true)
+    .eq("publish_state", "live")
+    .eq("is_archived", false);
+
   if (error) {
     if (isPreEnsemblisSchemaError(error)) return null;
     throw new Error(error.message);
   }
-  const artists = data ?? [];
-  if (artists.length !== 1) {
+
+  const artistIds = [...new Set(
+    (data ?? [])
+      .map((release) => release.artist_id)
+      .filter((artistId): artistId is string => Boolean(artistId)),
+  )];
+
+  if (artistIds.length === 0) return NO_PUBLIC_ARTIST;
+  if (artistIds.length > 1) {
     throw new Error(
-      artists.length
-        ? "The public catalog owner has more than one legacy artist mapping."
-        : "No active legacy artist is configured for the public catalog owner.",
+      "The public catalog owner has multiple live public artists. Set PUBLIC_CATALOG_ARTIST_ID explicitly.",
     );
   }
-  return artists[0].id;
+  return artistIds[0];
 }
 
 async function loadCatalogBundle(
   ownerId: string,
-  artistId?: string | null,
+  artistId?: CatalogArtistId,
 ): Promise<CatalogBundle> {
   const supabase = createCatalogClient();
   const music = asArtistScopedMusicClient(supabase);
   const resolvedArtistId = artistId === undefined
     ? await resolveCatalogArtistId(ownerId)
     : artistId;
+
+  if (resolvedArtistId === NO_PUBLIC_ARTIST) {
+    return emptyCatalogBundle();
+  }
 
   let releasesQuery = music
     .from("releases")
