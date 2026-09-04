@@ -43,6 +43,25 @@ test("published snapshots pin template identity/version and remain immutable", a
   ]);
 });
 
+test("Atlas is backfilled only as an inactive shadow Sites tenant", async () => {
+  const migration = await requireSnippets("supabase/migrations/20260904161000_ensemblis_sites_atlas_backfill.sql", [
+    "lower(trim(artist.name)) = 'atlas irwin'",
+    "'atlas-irwin'",
+    "'artist-editorial'",
+    "'draft'",
+    "'atlasirwin.com'",
+    "'custom'",
+    "'pending'",
+    "is_primary",
+    "false",
+  ]);
+  assert.doesNotMatch(
+    migration,
+    /verification_status[\s\S]{0,200}'verified'|ssl_status[\s\S]{0,200}'active'/,
+    "Atlas backfill must never activate routing or TLS before explicit cutover",
+  );
+});
+
 test("public runtime resolves only published versions and isolates cache keys", async () => {
   await requireSnippets("lib/sites/runtime.ts", [
     '.eq("state", "published")',
@@ -95,7 +114,7 @@ test("site snapshots read the active artist instead of the legacy owner", async 
   ]);
   assert.doesNotMatch(
     snapshot,
-    /\.eq\(["']owner_id["']/, 
+    /\.eq\(["']owner_id["']/,
     "Site snapshot queries must never scope public artist content through owner_id",
   );
 });
