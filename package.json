@@ -1,8 +1,8 @@
 {
-  "name": "atlas-irwin-website",
+  "name": "ensemblis-platform",
   "version": "0.1.0",
   "private": true,
-  "description": "Atlas Irwin — artist website and Atlas Release Engine studio (Next.js, Supabase catalog, SoundCloud/Spotify OAuth)",
+  "description": "Ensemblis music-aware artist growth platform with the Atlas Irwin public artist site as its production reference artist",
   "homepage": "https://atlasirwin.com",
   "repository": {
     "type": "git",
