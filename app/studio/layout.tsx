@@ -29,6 +29,7 @@ import "./inbox-polish.css";
 import "./shared-interactions.css";
 import "./loading-polish.css";
 import "./object-workspace-polish.css";
+import "./production-polish.css";
 
 export const metadata: Metadata = {
   title: {
