@@ -4,7 +4,9 @@ import { headers as nextHeaders } from "next/headers";
 
 export const AI_GATEWAY_RESPONSES_URL = "https://ai-gateway.vercel.sh/v1/responses";
 
-export type AtlasGatewayProviderSort = "cost" | "ttft" | "tps";
+export type GatewayProviderSort = "cost" | "ttft" | "tps";
+/** @deprecated Use GatewayProviderSort. Kept for source compatibility during the Ensemblis migration. */
+export type AtlasGatewayProviderSort = GatewayProviderSort;
 
 export type GatewayStructuredResult<T> = {
   value: T;
@@ -59,9 +61,12 @@ async function gatewayToken() {
   }
 }
 
-export function atlasAiGatewayConfigured() {
+export function ensemblisAiGatewayConfigured() {
   return Boolean(envToken()) || Boolean(process.env.VERCEL);
 }
+
+/** @deprecated Use ensemblisAiGatewayConfigured. */
+export const atlasAiGatewayConfigured = ensemblisAiGatewayConfigured;
 
 export function normalizeGatewayModel(model: string, defaultProvider?: string) {
   const value = model.trim();
@@ -85,14 +90,24 @@ export function parseGatewayModelList(value: string | null | undefined, defaultP
   ));
 }
 
-export function gatewayProviderSort(): AtlasGatewayProviderSort {
-  const value = process.env.ATLAS_AI_GATEWAY_PROVIDER_SORT?.trim().toLowerCase();
+function preferredEnv(primary: string | undefined, legacy: string | undefined) {
+  return primary?.trim() || legacy?.trim() || "";
+}
+
+export function gatewayProviderSort(): GatewayProviderSort {
+  const value = preferredEnv(
+    process.env.ENSEMBLIS_AI_GATEWAY_PROVIDER_SORT,
+    process.env.ATLAS_AI_GATEWAY_PROVIDER_SORT,
+  ).toLowerCase();
   return value === "ttft" || value === "tps" ? value : "cost";
 }
 
 function requestTimeoutMs(override?: number) {
   if (override && Number.isFinite(override) && override >= 5_000) return Math.round(override);
-  const configured = Number(process.env.ATLAS_AI_GATEWAY_TIMEOUT_MS);
+  const configured = Number(preferredEnv(
+    process.env.ENSEMBLIS_AI_GATEWAY_TIMEOUT_MS,
+    process.env.ATLAS_AI_GATEWAY_TIMEOUT_MS,
+  ));
   if (Number.isFinite(configured) && configured >= 5_000 && configured <= 300_000) return Math.round(configured);
   return 90_000;
 }
@@ -171,7 +186,7 @@ export async function generateGatewayStructured<T>({
   model: string;
   fallbackModels?: string[];
   timeoutMs?: number;
-  providerSort?: AtlasGatewayProviderSort;
+  providerSort?: GatewayProviderSort;
 }): Promise<GatewayStructuredResult<T>> {
   const token = await gatewayToken();
   if (!token) {
@@ -196,7 +211,7 @@ export async function generateGatewayStructured<T>({
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
     "X-Client-Request-Id": clientRequestId,
-    "x-title": "Atlas Irwin",
+    "x-title": "Ensemblis",
   };
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
   if (siteUrl?.startsWith("https://") || siteUrl?.startsWith("http://")) requestHeaders["http-referer"] = siteUrl;
