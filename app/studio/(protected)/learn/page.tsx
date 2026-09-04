@@ -5,6 +5,7 @@ import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { aggregateMetrics, formatRate, metricSignals, objectivePerformanceScore, primarySignalValue } from "@/lib/marketing/domain";
 import { describeLearningEffect } from "@/lib/marketing/learning-contract";
+import { asLearningEvidenceClient } from "@/lib/marketing/learning-db";
 import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 
 type LearningRow = {
@@ -40,35 +41,33 @@ export default async function LearnPage() {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveDefaultArtistContext(supabase, user);
   const marketing = asMarketingClient(supabase);
-  const [metricsResult, contentResult, learningsResult, campaignsResult] = await Promise.all([
+  const learningEvidence = asLearningEvidenceClient(supabase);
+  const [metricsResult, contentResult, learningsResult, campaignsResult, evidenceResult] = await Promise.all([
     marketing.from("metric_snapshots").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("captured_at", { ascending: false }),
     marketing.from("content_items").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId),
     marketing.from("marketing_learnings").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("created_at", { ascending: false }),
     marketing.from("campaigns").select("id,name,status,objective,primary_kpi").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("updated_at", { ascending: false }),
+    learningEvidence.from("verified_moment_learning_evidence").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("captured_at", { ascending: false }),
   ]);
-  const error = [metricsResult, contentResult, learningsResult, campaignsResult].find((result) => result.error)?.error;
+  const error = [metricsResult, contentResult, learningsResult, campaignsResult, evidenceResult].find((result) => result.error)?.error;
   if (error) throw new Error(error.message);
 
   const metrics = metricsResult.data ?? [];
   const content = contentResult.data ?? [];
   const learnings = (learningsResult.data ?? []) as unknown as LearningRow[];
+  const verifiedEvidence = evidenceResult.data ?? [];
+  const verifiedMetricIds = new Set(verifiedEvidence.map((row) => row.metric_snapshot_id));
   const now = Date.now();
-  const contentById = new Map(content.map((item) => [item.id, item]));
-  const providerAttributedMetrics = metrics.filter((metric) => {
-    const item = metric.content_item_id ? contentById.get(metric.content_item_id) : null;
-    const hasMoment = Boolean(item && "moment_id" in item && item.moment_id);
-    return metric.source !== "manual" && Boolean(metric.external_object_id?.trim()) && hasMoment;
-  });
-  const totals = aggregateMetrics(providerAttributedMetrics as unknown as Array<Record<string, unknown>>);
+  const totals = aggregateMetrics(verifiedEvidence as unknown as Array<Record<string, unknown>>);
   const signals = metricSignals(totals);
   const proposed = learnings.filter((learning) => learning.status === "proposed" && !isExpired(learning, now));
   const staleProposals = learnings.filter((learning) => learning.status === "proposed" && isExpired(learning, now));
   const approved = learnings.filter((learning) => learning.status === "approved" && !isExpired(learning, now));
   const expiredMemory = learnings.filter((learning) => learning.status === "approved" && isExpired(learning, now));
-  const manualOrUntrustedMetricCount = metrics.length - providerAttributedMetrics.length;
+  const manualOrUntrustedMetricCount = metrics.filter((metric) => !verifiedMetricIds.has(metric.id)).length;
   const ranked = content
     .map((item) => {
-      const rows = providerAttributedMetrics.filter((metric) => metric.content_item_id === item.id);
+      const rows = verifiedEvidence.filter((metric) => metric.content_item_id === item.id);
       const aggregate = aggregateMetrics(rows as unknown as Array<Record<string, unknown>>);
       return { ...item, score: objectivePerformanceScore(item.goal, aggregate), signal: primarySignalValue(item.goal, aggregate) };
     })
@@ -80,13 +79,13 @@ export default async function LearnPage() {
     <div className="studio-v2-page">
       <PageHeader
         title="Learn"
-        description={`Ensemblis turns verified ${artist.artistName} outcomes into reviewable, expiring decision rules. Manual or unattributed metrics stay in analytics and never silently train the system.`}
+        description={`Ensemblis turns verified ${artist.artistName} outcomes into reviewable, expiring decision rules. Manual, first-party attribution, or unreconciled provider metrics stay in analytics and never silently train the system.`}
         action={<Link className="button" href="/studio/analytics">Advanced analytics</Link>}
       />
       <section className="v2-status-grid">
-        <article><strong>{(totals.reach || totals.views || 0).toLocaleString()}</strong><span>trusted reach</span><small>Provider-attributed Moment content only</small></article>
-        <article><strong>{formatRate(signals.saveRate)}</strong><span>save rate</span><small>From trusted evidence</small></article>
-        <article><strong>{formatRate(signals.linkClickRate)}</strong><span>link click rate</span><small>From trusted evidence</small></article>
+        <article><strong>{(totals.reach || totals.views || 0).toLocaleString()}</strong><span>trusted reach</span><small>Published-object provider evidence only</small></article>
+        <article><strong>{formatRate(signals.saveRate)}</strong><span>save rate</span><small>From reconciled evidence</small></article>
+        <article><strong>{formatRate(signals.linkClickRate)}</strong><span>link click rate</span><small>From reconciled evidence</small></article>
         <article><strong>{approved.length}</strong><span>active learnings</span><small>Approved and not expired</small></article>
       </section>
 
@@ -125,7 +124,7 @@ export default async function LearnPage() {
       <div className="v2-two-column">
         <section className="v2-section v2-compact-section">
           <div className="v2-section-heading"><div><span className="section-label">What worked</span><h2>Top verified content by its own job</h2></div></div>
-          {ranked.length ? <div className="v2-simple-list">{ranked.map((item) => <Link href={`/studio/production?edit=${item.id}`} key={item.id}><span>{item.platform}</span><strong>{item.title}</strong><small>{item.goal === "Reach" ? Math.round(item.signal).toLocaleString() : formatRate(item.signal)}</small></Link>)}</div> : <EmptyState title="No reliable ranking yet" body="Ensemblis waits for provider-attributed Moment performance instead of treating manual or ambiguous data as truth." />}
+          {ranked.length ? <div className="v2-simple-list">{ranked.map((item) => <Link href={`/studio/production?edit=${item.id}`} key={item.id}><span>{item.platform}</span><strong>{item.title}</strong><small>{item.goal === "Reach" ? Math.round(item.signal).toLocaleString() : formatRate(item.signal)}</small></Link>)}</div> : <EmptyState title="No reliable ranking yet" body="Ensemblis waits for published-object provider performance instead of treating manual, first-party, or ambiguous data as truth." />}
         </section>
         <section className="v2-section v2-compact-section">
           <div className="v2-section-heading"><div><span className="section-label">Memory</span><h2>What Ensemblis may reuse now</h2></div></div>
@@ -137,11 +136,11 @@ export default async function LearnPage() {
       <section className="v2-section v2-compact-section">
         <div className="v2-section-heading"><div><span className="section-label">Data coverage</span><h2>Trust before volume</h2></div></div>
         <div className="v2-data-coverage">
-          <div><strong>{providerAttributedMetrics.length}</strong><span>provider-attributed Moment snapshots</span></div>
+          <div><strong>{verifiedEvidence.length}</strong><span>verified published-object snapshots</span></div>
           <div><strong>{manualOrUntrustedMetricCount}</strong><span>analytics-only snapshots</span></div>
           <div><strong>{campaignsResult.data?.filter((campaign) => campaign.status === "active").length ?? 0}</strong><span>active measurement systems</span></div>
         </div>
-        <p className="v2-muted-copy">Automatic learning requires explicit Moment → content lineage plus a provider object identifier. Manual entries, inferred campaign context, and unattributed imports remain useful for inspection but cannot train Ensemblis.</p>
+        <p className="v2-muted-copy">Automatic learning requires approved Moment → content → published external object → provider metric lineage. Manual entries, first-party attribution, inferred campaign context, arbitrary source labels, and unreconciled imports remain inspectable but cannot train Ensemblis.</p>
       </section>
     </div>
   );
