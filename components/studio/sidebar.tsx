@@ -5,6 +5,7 @@ import { studioIcons } from "./icons";
 import { StudioAdvancedNavigation, StudioPrimaryNavigation } from "./sidebar-navigation";
 import { signOut } from "@/app/studio/actions";
 import {
+  ENSEMBLIS_PRIMARY_NAV,
   ENSEMBLIS_PRODUCT,
   ensemblisArtistHref,
 } from "@/lib/ensemblis-product";
@@ -21,6 +22,18 @@ type StudioSidebarProps = {
 export function StudioSidebar({ artistId, artists }: StudioSidebarProps) {
   const Plus = studioIcons.plus;
   const Logout = studioIcons.logout;
+  const primaryNavigation = ENSEMBLIS_PRIMARY_NAV.map(({ href, label, icon }) => ({
+    route: href,
+    href: ensemblisArtistHref(href, artistId),
+    label,
+    icon,
+  }));
+  const distributionNavigation = {
+    route: "/studio/distribution",
+    href: ensemblisArtistHref("/studio/distribution", artistId),
+    label: "Distribution",
+    icon: "distribution" as const,
+  };
 
   return (
     <aside className="studio-sidebar studio-sidebar-v2">
@@ -41,12 +54,12 @@ export function StudioSidebar({ artistId, artists }: StudioSidebarProps) {
       <ArtistSwitcher activeArtistId={artistId} artists={artists} />
 
       <span className="studio-sidebar-section-label">Workspace</span>
-      <StudioPrimaryNavigation artistId={artistId} />
+      <StudioPrimaryNavigation items={primaryNavigation} />
 
       <div className="studio-sidebar-foot">
         <div className="studio-sidebar-advanced">
           <span className="studio-sidebar-section-label">Advanced</span>
-          <StudioAdvancedNavigation artistId={artistId} />
+          <StudioAdvancedNavigation item={distributionNavigation} />
         </div>
         <Link href={ensemblisArtistHref("/studio/growth/import", artistId)} className="studio-quick">
           <Plus aria-hidden />
