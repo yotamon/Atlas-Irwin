@@ -175,12 +175,17 @@ test("generic product surfaces contain no hardcoded Atlas user-facing language",
 
 test("release workspace exposes lifecycle-aware growth stages and preserves an advanced escape hatch", async () => {
   const workspace = await readFile("components/studio/release-workspace-v2.tsx", "utf8");
+  const mission = await readFile("lib/studio/release-mission.ts", "utf8");
   for (const upcomingStage of ["Select", "Prepare", "Build hype", "Release", "Sustain"]) assert.ok(workspace.includes(upcomingStage));
   for (const catalogStage of ["Orient", "Rediscover", "Produce", "Distribute", "Learn"]) assert.ok(workspace.includes(catalogStage));
   assert.ok(workspace.includes("Advanced view"));
   assert.ok(workspace.includes("/studio/production"));
   assert.ok(workspace.includes("/studio/video?release="));
-  assert.ok(workspace.includes("Workflow readiness"));
+  assert.ok(workspace.includes('label: "Release mission"'));
+  assert.ok(workspace.includes("deriveReleaseMission"));
+  assert.ok(mission.includes('label: "Blocked"'));
+  assert.ok(mission.includes('label: "On track"'));
+  assert.equal(workspace.includes("Workflow readiness"), false);
 });
 
 test("Growth OS keeps planning and diagnosis deterministic before paid creative", async () => {
