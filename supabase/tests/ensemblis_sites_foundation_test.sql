@@ -1,6 +1,6 @@
 begin;
 
-select plan(14);
+select plan(18);
 
 select has_table('public', 'artist_sites', 'artist_sites table exists');
 select has_table('public', 'artist_site_versions', 'artist_site_versions table exists');
@@ -25,23 +25,33 @@ values
     '24100000-0000-0000-0000-000000000001',
     (select id from public.artists where legacy_owner_id='24000000-0000-0000-0000-000000000001'),
     'sites-a',
-    'artist-editorial-v1'
+    'artist-editorial'
   ),
   (
     '24100000-0000-0000-0000-000000000002',
     (select id from public.artists where legacy_owner_id='24000000-0000-0000-0000-000000000002'),
     'sites-b',
-    'artist-editorial-v1'
+    'artist-editorial'
   );
 
 insert into public.artist_site_versions (
-  id, site_id, version_number, status, config, content_snapshot, created_by
+  id,
+  site_id,
+  version_number,
+  status,
+  template_key,
+  template_version,
+  config,
+  content_snapshot,
+  created_by
 ) values
   (
     '24200000-0000-0000-0000-000000000001',
     '24100000-0000-0000-0000-000000000001',
     1,
     'draft',
+    'artist-editorial',
+    1,
     '{"theme":{"background":"#111111"}}',
     '{"schemaVersion":1,"artist":{"id":"24000000-0000-0000-0000-000000000001"}}',
     '24000000-0000-0000-0000-000000000001'
@@ -51,6 +61,8 @@ insert into public.artist_site_versions (
     '24100000-0000-0000-0000-000000000002',
     1,
     'draft',
+    'artist-editorial',
+    1,
     '{"theme":{"background":"#222222"}}',
     '{"schemaVersion":1,"artist":{"id":"24000000-0000-0000-0000-000000000002"}}',
     '24000000-0000-0000-0000-000000000002'
@@ -93,6 +105,16 @@ select is(
   'publish freezes the selected draft as published'
 );
 select is(
+  (select template_key from public.artist_site_versions where id='24200000-0000-0000-0000-000000000001'),
+  'artist-editorial',
+  'published version pins template identity'
+);
+select is(
+  (select template_version from public.artist_site_versions where id='24200000-0000-0000-0000-000000000001'),
+  1,
+  'published version pins template version'
+);
+select is(
   (select count(*)::integer from public.artist_site_deployments where site_id='24100000-0000-0000-0000-000000000001' and status='ready'),
   1,
   'publish records a ready shared-runtime deployment'
@@ -106,6 +128,11 @@ select is(
   (select version_number from public.artist_site_versions where id=(select draft_version_id from public.artist_sites where id='24100000-0000-0000-0000-000000000001')),
   2,
   'draft cloning advances the version number'
+);
+select is(
+  (select template_version from public.artist_site_versions where id=(select draft_version_id from public.artist_sites where id='24100000-0000-0000-0000-000000000001')),
+  1,
+  'draft cloning preserves the pinned template version'
 );
 reset role;
 
