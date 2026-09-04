@@ -31,6 +31,8 @@ export type ArtistSiteVersion = {
   site_id: string;
   version_number: number;
   status: ArtistSiteVersionStatus;
+  template_key: string;
+  template_version: number;
   config: Json;
   content_snapshot: Json;
   created_by: string | null;
