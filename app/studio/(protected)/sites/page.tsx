@@ -215,7 +215,7 @@ export default async function SitesPage() {
           <div className="v2-section-heading">
             <div>
               <span className="section-label">Domain</span>
-              <h2>Connect the artist's own domain</h2>
+              <h2>Connect the artist&apos;s own domain</h2>
             </div>
           </div>
           <p className="v2-muted-copy">Add the hostname you want fans to visit. Ensemblis will tell you only if a setup step still needs attention.</p>
