@@ -1,5 +1,6 @@
 "use client";
 
+import { EnsemblisMark } from "@/components/ensemblis-logo";
 import { ENSEMBLIS_PRODUCT } from "@/lib/ensemblis-product";
 
 export default function StudioError({
@@ -13,7 +14,7 @@ export default function StudioError({
     <main className="studio-auth">
       <section>
         <div className="ensemblis-auth-brand">
-          <span className="ensemblis-auth-symbol" aria-hidden>E</span>
+          <span className="ensemblis-auth-symbol" aria-hidden><EnsemblisMark /></span>
           <div>
             <strong>{ENSEMBLIS_PRODUCT.name}</strong>
             <small>{ENSEMBLIS_PRODUCT.descriptor}</small>
