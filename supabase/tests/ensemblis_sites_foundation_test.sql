@@ -1,6 +1,6 @@
 begin;
 
-select plan(18);
+select plan(23);
 
 select has_table('public', 'artist_sites', 'artist_sites table exists');
 select has_table('public', 'artist_site_versions', 'artist_site_versions table exists');
@@ -25,13 +25,13 @@ values
     '24100000-0000-0000-0000-000000000001',
     (select id from public.artists where legacy_owner_id='24000000-0000-0000-0000-000000000001'),
     'sites-a',
-    'artist-editorial'
+    'editorial-retrofuture'
   ),
   (
     '24100000-0000-0000-0000-000000000002',
     (select id from public.artists where legacy_owner_id='24000000-0000-0000-0000-000000000002'),
     'sites-b',
-    'artist-editorial'
+    'editorial-retrofuture'
   );
 
 insert into public.artist_site_versions (
@@ -50,7 +50,7 @@ insert into public.artist_site_versions (
     '24100000-0000-0000-0000-000000000001',
     1,
     'draft',
-    'artist-editorial',
+    'editorial-retrofuture',
     1,
     '{"theme":{"background":"#111111"}}',
     '{"schemaVersion":1,"artist":{"id":"24000000-0000-0000-0000-000000000001"}}',
@@ -61,7 +61,7 @@ insert into public.artist_site_versions (
     '24100000-0000-0000-0000-000000000002',
     1,
     'draft',
-    'artist-editorial',
+    'editorial-retrofuture',
     1,
     '{"theme":{"background":"#222222"}}',
     '{"schemaVersion":1,"artist":{"id":"24000000-0000-0000-0000-000000000002"}}',
@@ -72,6 +72,32 @@ update public.artist_sites set draft_version_id='24200000-0000-0000-0000-0000000
 where id='24100000-0000-0000-0000-000000000001';
 update public.artist_sites set draft_version_id='24200000-0000-0000-0000-000000000002'
 where id='24100000-0000-0000-0000-000000000002';
+
+insert into public.artist_site_domains (
+  id, site_id, hostname, domain_type, verification_status, ssl_status, is_primary, provider, verification_state
+) values
+  (
+    '24300000-0000-0000-0000-000000000001',
+    '24100000-0000-0000-0000-000000000001',
+    'artist-a.example',
+    'custom',
+    'verified',
+    'active',
+    false,
+    'vercel',
+    '{}'
+  ),
+  (
+    '24300000-0000-0000-0000-000000000002',
+    '24100000-0000-0000-0000-000000000001',
+    'pending-a.example',
+    'custom',
+    'pending',
+    'pending',
+    false,
+    'vercel',
+    '{}'
+  );
 
 select set_config('request.jwt.claim.sub', '24000000-0000-0000-0000-000000000001', true);
 select ok(
@@ -106,7 +132,7 @@ select is(
 );
 select is(
   (select template_key from public.artist_site_versions where id='24200000-0000-0000-0000-000000000001'),
-  'artist-editorial',
+  'editorial-retrofuture',
   'published version pins template identity'
 );
 select is(
@@ -118,6 +144,18 @@ select is(
   (select count(*)::integer from public.artist_site_deployments where site_id='24100000-0000-0000-0000-000000000001' and status='ready'),
   1,
   'publish records a ready shared-runtime deployment'
+);
+select is(
+  public.set_artist_site_primary_domain(
+    '24100000-0000-0000-0000-000000000001',
+    '24300000-0000-0000-0000-000000000001'
+  ),
+  '24300000-0000-0000-0000-000000000001'::uuid,
+  'verified active domain can become primary after publication'
+);
+select ok(
+  (select is_primary from public.artist_site_domains where id='24300000-0000-0000-0000-000000000001'),
+  'primary selection persists atomically'
 );
 select ok(
   public.create_artist_site_draft('24100000-0000-0000-0000-000000000001') is not null,
@@ -135,9 +173,23 @@ select is(
 );
 reset role;
 
+set local role anon;
+select is(
+  (select site_id from public.resolve_artist_site_hostname('ARTIST-A.EXAMPLE.') limit 1),
+  '24100000-0000-0000-0000-000000000001'::uuid,
+  'anonymous hostname resolver returns only the active published site'
+);
+select is(
+  (select count(*)::integer from public.resolve_artist_site_hostname('pending-a.example')),
+  0,
+  'pending domain is never exposed through public hostname resolution'
+);
+reset role;
+
 select set_config('request.jwt.claim.sub', '24000000-0000-0000-0000-000000000002', true);
 set local role authenticated;
 select is((select slug from public.artist_sites limit 1), 'sites-b', 'switching identity cannot expose Artist A site');
+select is((select template_key from public.artist_site_versions limit 1), 'editorial-retrofuture', 'Artist B independently uses the same reusable template');
 reset role;
 
 select * from finish();

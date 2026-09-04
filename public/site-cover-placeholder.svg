@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1200" role="img" aria-label="Release artwork placeholder">
+  <rect width="1200" height="1200" fill="#111111"/>
+  <circle cx="600" cy="600" r="360" fill="none" stroke="#f4eddd" stroke-width="18" opacity=".9"/>
+  <circle cx="600" cy="600" r="210" fill="none" stroke="#b6ff3b" stroke-width="14" opacity=".85"/>
+  <circle cx="600" cy="600" r="52" fill="#f4eddd"/>
+  <path d="M120 820C340 650 475 930 690 760s315-20 390-130" fill="none" stroke="#0fa9a2" stroke-width="26" stroke-linecap="round" opacity=".8"/>
+  <path d="M135 360c190 110 335-120 510 10s300 80 420-30" fill="none" stroke="#ff7b73" stroke-width="20" stroke-linecap="round" opacity=".72"/>
+</svg>

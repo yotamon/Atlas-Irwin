@@ -48,6 +48,10 @@ export type ArtistSiteDomain = {
   verification_status: ArtistSiteVerificationStatus;
   ssl_status: ArtistSiteSslStatus;
   is_primary: boolean;
+  provider: string | null;
+  provider_ref: string | null;
+  verification_state: Json;
+  last_checked_at: string | null;
   last_verified_at: string | null;
   created_at: string;
   updated_at: string;
@@ -74,7 +78,43 @@ export type SiteTheme = {
   surface: string;
 };
 
-export type SiteSectionKey = "hero" | "releases" | "about" | "links" | "contact";
+export type SiteSectionKey =
+  | "hero"
+  | "releases"
+  | "platforms"
+  | "about"
+  | "links"
+  | "contact"
+  | "newsletter";
+
+export type SiteSocialLink = { label: string; href: string; provider: string };
+
+export type SiteRetrofutureContent = {
+  logoUrl?: string;
+  heroTaglines?: string[];
+  primaryCtaLabel?: string;
+  primaryCtaHref?: string;
+  secondaryCtaLabel?: string;
+  secondaryCtaHref?: string;
+  listenHeading?: string;
+  platformLinks?: SiteSocialLink[];
+  aboutHeading?: string;
+  aboutParagraphs?: string[];
+  aboutImageUrl?: string;
+  aboutImageAlt?: string;
+  capabilities?: string[];
+  values?: string[];
+  contactHeading?: string;
+  contactCopy?: string;
+  contactEmail?: string;
+  contactFormEnabled?: boolean;
+  contactFormEndpoint?: string;
+  newsletterEnabled?: boolean;
+  newsletterEndpoint?: string;
+  newsletterKicker?: string;
+  newsletterHeading?: string;
+  newsletterCopy?: string;
+};
 
 export type ArtistSiteConfig = {
   theme: SiteTheme;
@@ -83,6 +123,7 @@ export type ArtistSiteConfig = {
   highlightedReleaseIds: string[];
   heroEyebrow?: string;
   heroCopy?: string;
+  retrofuture?: SiteRetrofutureContent;
 };
 
 export type SiteArtistProfile = {
@@ -96,6 +137,18 @@ export type SiteArtistProfile = {
 
 export type SiteReleaseLink = { label: string; href: string; provider: string };
 
+export type SiteTrackCard = {
+  id: string;
+  title: string;
+  trackNumber: number | null;
+  displayOrder: number;
+  durationSeconds: number | null;
+  audioUrl: string | null;
+  soundcloudUrl: string | null;
+  spotifyUrl: string | null;
+  isPrimary: boolean;
+};
+
 export type SiteReleaseCard = {
   id: string;
   slug: string;
@@ -106,9 +159,8 @@ export type SiteReleaseCard = {
   artworkUrl: string | null;
   genre: string | null;
   links: SiteReleaseLink[];
+  tracks?: SiteTrackCard[];
 };
-
-export type SiteSocialLink = { label: string; href: string; provider: string };
 
 export type SiteViewModel = {
   schemaVersion: 1;
@@ -134,6 +186,8 @@ export type EnsemblisSitesDatabase = {
       publish_artist_site: Rpc<{ target_site_id: string; target_version_id: string }, string>;
       create_artist_site_draft: Rpc<{ target_site_id: string }, string>;
       rollback_artist_site: Rpc<{ target_site_id: string; source_version_id: string }, string>;
+      set_artist_site_primary_domain: Rpc<{ target_site_id: string; target_domain_id: string }, string>;
+      resolve_artist_site_hostname: Rpc<{ target_hostname: string }, Array<{ site_id: string; site_slug: string }>>;
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;

@@ -14,6 +14,11 @@ type SubmitState =
   | { type: "success"; message: string }
   | { type: "error"; message: string };
 
+type ContactFormProps = {
+  endpoint?: string;
+  context?: Record<string, string>;
+};
+
 const initialFormState: FormState = {
   name: "",
   email: "",
@@ -21,7 +26,10 @@ const initialFormState: FormState = {
   company: "",
 };
 
-export function ContactForm() {
+export function ContactForm({
+  endpoint = "/api/contact",
+  context = {},
+}: ContactFormProps = {}) {
   const [form, setForm] = useState(initialFormState);
   const [submitState, setSubmitState] = useState<SubmitState>({
     type: "idle",
@@ -35,10 +43,10 @@ export function ContactForm() {
     setSubmitState({ type: "idle", message: "" });
 
     try {
-      const response = await fetch("/api/contact", {
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, ...context }),
       });
       const result = (await response.json()) as { message?: string };
 

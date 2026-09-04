@@ -5,7 +5,22 @@ import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import type { ArtistContext } from "@/lib/studio/artist-context";
 import type { Database } from "@/types/database";
 import type { EnsemblisDatabase } from "@/types/ensemblis-database";
-import type { SiteReleaseLink, SiteViewModel } from "@/types/ensemblis-sites";
+import type {
+  SiteReleaseLink,
+  SiteTrackCard,
+  SiteViewModel,
+} from "@/types/ensemblis-sites";
+
+function normalizedDuration(value: number | string | null) {
+  if (value === null || value === "") return null;
+  const numeric = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
+}
+
+function publicAsset(value: string | null) {
+  if (!value) return null;
+  return /^(?:\/|https?:\/\/)/i.test(value) ? value : null;
+}
 
 export async function buildArtistSiteSnapshot(
   client: SupabaseClient<Database>,
@@ -14,7 +29,7 @@ export async function buildArtistSiteSnapshot(
   const artistDb = client as unknown as SupabaseClient<EnsemblisDatabase>;
   const music = asArtistScopedMusicClient(client);
 
-  const [artistResult, releasesResult, linksResult] = await Promise.all([
+  const [artistResult, releasesResult, linksResult, tracksResult] = await Promise.all([
     artistDb
       .from("artists")
       .select("id,workspace_id,name,slug,project_type,status,avatar_url,accent_color,legacy_owner_id,created_at,updated_at")
@@ -32,12 +47,18 @@ export async function buildArtistSiteSnapshot(
       .from("release_external_links")
       .select("id,artist_id,release_id,provider,external_id,external_url,label,raw_metadata,synced_at,created_at,updated_at")
       .eq("artist_id", context.artistId),
+    music
+      .from("tracks")
+      .select("id,artist_id,release_id,title,track_number,display_order,duration,audio_url,soundcloud_url,spotify_url,is_primary")
+      .eq("artist_id", context.artistId)
+      .order("display_order", { ascending: true }),
   ]);
 
   if (artistResult.error) throw new Error(artistResult.error.message);
   if (!artistResult.data) throw new Error("Artist not found while building site snapshot.");
   if (releasesResult.error) throw new Error(releasesResult.error.message);
   if (linksResult.error) throw new Error(linksResult.error.message);
+  if (tracksResult.error) throw new Error(tracksResult.error.message);
 
   const externalByRelease = new Map<string, SiteReleaseLink[]>();
   for (const external of linksResult.data ?? []) {
@@ -48,6 +69,23 @@ export async function buildArtistSiteSnapshot(
       provider: external.provider,
     });
     externalByRelease.set(external.release_id, current);
+  }
+
+  const tracksByRelease = new Map<string, SiteTrackCard[]>();
+  for (const track of tracksResult.data ?? []) {
+    const current = tracksByRelease.get(track.release_id) ?? [];
+    current.push({
+      id: track.id,
+      title: track.title,
+      trackNumber: track.track_number,
+      displayOrder: track.display_order,
+      durationSeconds: normalizedDuration(track.duration),
+      audioUrl: publicAsset(track.audio_url),
+      soundcloudUrl: track.soundcloud_url,
+      spotifyUrl: track.spotify_url,
+      isPrimary: track.is_primary,
+    });
+    tracksByRelease.set(track.release_id, current);
   }
 
   const releases = (releasesResult.data ?? []).map((release) => {
@@ -71,6 +109,7 @@ export async function buildArtistSiteSnapshot(
       artworkUrl: release.artwork_url,
       genre: release.genre,
       links,
+      tracks: tracksByRelease.get(release.id) ?? [],
     };
   });
 
