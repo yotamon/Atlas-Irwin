@@ -42,6 +42,12 @@ function sampleWaveform(buffer: AudioBuffer, bars = 196) {
   return peaks.map((peak) => clamp(peak / ceiling));
 }
 
+type WaveformState = {
+  audioUrl: string;
+  peaks: number[] | null;
+  error: boolean;
+};
+
 export function MusicIntelligencePreview({
   audioUrl,
   musicMap,
@@ -55,24 +61,19 @@ export function MusicIntelligencePreview({
   const [endMs, setEndMs] = useState<number | null>(null);
   const [currentMs, setCurrentMs] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [waveformPeaks, setWaveformPeaks] = useState<number[] | null>(null);
-  const [waveformError, setWaveformError] = useState(false);
+  const [waveformState, setWaveformState] = useState<WaveformState>({ audioUrl: "", peaks: null, error: false });
+  const waveformPeaks = waveformState.audioUrl === audioUrl ? waveformState.peaks : null;
+  const waveformError = waveformState.audioUrl === audioUrl && waveformState.error;
   const hooks = useMemo(
     () => [...(map?.hook_candidates ?? [])].sort((a, b) => b.score - a.score).slice(0, 5),
     [map],
   );
 
   useEffect(() => {
-    if (!audioUrl) {
-      setWaveformPeaks(null);
-      setWaveformError(false);
-      return;
-    }
+    if (!audioUrl) return;
     const controller = new AbortController();
     let audioContext: AudioContext | null = null;
     let cancelled = false;
-    setWaveformPeaks(null);
-    setWaveformError(false);
 
     void fetch(audioUrl, { signal: controller.signal })
       .then(async (response) => {
@@ -84,11 +85,11 @@ export function MusicIntelligencePreview({
       })
       .then((buffer) => {
         if (!buffer || cancelled) return;
-        setWaveformPeaks(sampleWaveform(buffer));
+        setWaveformState({ audioUrl, peaks: sampleWaveform(buffer), error: false });
       })
       .catch((error) => {
         if (controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError")) return;
-        if (!cancelled) setWaveformError(true);
+        if (!cancelled) setWaveformState({ audioUrl, peaks: null, error: true });
       })
       .finally(() => {
         if (audioContext && audioContext.state !== "closed") void audioContext.close();
