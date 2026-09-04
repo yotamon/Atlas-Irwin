@@ -18,6 +18,7 @@ export type SiteTemplateProps = {
 
 export type SiteTemplateDefinition = {
   key: string;
+  version: number;
   name: string;
   description: string;
   supports: SiteTemplateCapability[];
@@ -27,7 +28,8 @@ export type SiteTemplateDefinition = {
 
 const templates = [
   {
-    key: "artist-editorial-v1",
+    key: "artist-editorial",
+    version: 1,
     name: "Artist Editorial",
     description: "A confident music-first artist site with editorial release storytelling and restrained motion-free presentation.",
     supports: ["releases", "artist-profile", "social-links", "contact", "seo"],
@@ -36,16 +38,27 @@ const templates = [
   } satisfies SiteTemplateDefinition,
 ] as const;
 
-const templateByKey = new Map<string, SiteTemplateDefinition>(
-  templates.map((template) => [template.key, template]),
+function registryId(key: string, version: number) {
+  return `${key}@${version}`;
+}
+
+const templateById = new Map<string, SiteTemplateDefinition>(
+  templates.map((template) => [registryId(template.key, template.version), template]),
 );
 
 export function listSiteTemplates() {
   return [...templates];
 }
 
-export function getSiteTemplate(key: string): SiteTemplateDefinition {
-  const template = templateByKey.get(key);
+export function getSiteTemplate(key: string, version: number): SiteTemplateDefinition {
+  const template = templateById.get(registryId(key, version));
+  if (!template) throw new Error(`Unknown Ensemblis site template: ${key}@${version}`);
+  return template;
+}
+
+export function getLatestSiteTemplate(key: string): SiteTemplateDefinition {
+  const matches = templates.filter((template) => template.key === key);
+  const template = matches.sort((left, right) => right.version - left.version)[0];
   if (!template) throw new Error(`Unknown Ensemblis site template: ${key}`);
   return template;
 }
