@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { requireStudioAdmin } from "@/lib/auth/studio";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { ReleaseCatalog } from "@/components/studio/release-catalog";
 import { EmptyState, PageHeader } from "@/components/studio/ui";
+import { requireStudioAdmin } from "@/lib/auth/studio";
+import { ensemblisArtistHref } from "@/lib/ensemblis-product";
+import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import type {
   ArtistScopedHomepagePlacement,
   ArtistScopedRelease,
@@ -28,6 +29,7 @@ export default async function ReleasesPage({
   const artist = await resolveDefaultArtistContext(supabase, user);
   const db = asArtistScopedMusicClient(supabase);
   const params = await searchParams;
+  const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
   let query = db
     .from("releases")
     .select("*")
@@ -67,30 +69,27 @@ export default async function ReleasesPage({
         : enriched;
 
   return (
-    <>
+    <div className="studio-v2-page release-catalog-page">
       <PageHeader
         title="Releases"
-        description={`Choose what moves next for ${artist.artistName}, then open its complete release workspace.`}
-        action={
-          <Link className="button primary" href="/studio/releases/new">
-            New release
-          </Link>
-        }
+        description={`Move ${artist.artistName}'s music from preparation to release day and then into a healthy long-term catalog. Open a release only when you need its full workflow.`}
+        action={<Link className="button primary" href={href("/studio/releases/new")}>New release</Link>}
       />
       {filtered.length ? (
         <ReleaseCatalog
           releases={filtered}
           view={params.view === "table" ? "table" : "grid"}
           filters={params}
+          artistId={artist.artistId}
         />
       ) : (
         <EmptyState
           title="The catalog starts here"
           body={`Create the first release for ${artist.artistName}, or import an existing catalog.`}
-          href="/studio/releases/new"
+          href={href("/studio/releases/new")}
           label="Create release"
         />
       )}
-    </>
+    </div>
   );
 }
