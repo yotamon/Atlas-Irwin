@@ -20,6 +20,58 @@ export default async function MusicPage({
   const artist = await resolveActiveArtistContext(supabase, user);
   const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
 
+  if (view === "add") {
+    return (
+      <div className="studio-v2-page music-workspace-page">
+        <PageHeader
+          title="Add music"
+          description={`Start with the actual music for ${artist.artistName}. Bring in an existing master or release first; AI generation is available when you genuinely want to create something new.`}
+          action={<Link className="button" href={href("/studio/music")}>Back to music</Link>}
+        />
+
+        <section className="create-intent-list" aria-label="Ways to add music">
+          <Link className="create-intent-row" href={`${href("/studio/growth?view=portfolio")}#vault`}>
+            <span className="create-intent-index">01</span>
+            <span className="create-intent-copy">
+              <small>Existing music</small>
+              <strong>Add a mastered track</strong>
+              <span>Bring in an unreleased master so Ensemblis can understand its structure, hooks and release potential before any marketing work begins.</span>
+            </span>
+            <b>Add master →</b>
+          </Link>
+
+          <Link className="create-intent-row" href={href("/studio/releases/new")}>
+            <span className="create-intent-index">02</span>
+            <span className="create-intent-copy">
+              <small>Catalog</small>
+              <strong>Add or prepare a release</strong>
+              <span>Create the canonical release record and keep its music, metadata, artwork, distribution, campaign and outcomes connected.</span>
+            </span>
+            <b>Add release →</b>
+          </Link>
+
+          <Link className="create-intent-row" href={href("/studio/music?view=generate")}>
+            <span className="create-intent-index">03</span>
+            <span className="create-intent-copy">
+              <small>AI music</small>
+              <strong>Create something new</strong>
+              <span>Generate a new musical draft when that is the creative job. Provider and model settings stay secondary to the idea.</span>
+            </span>
+            <b>Create music →</b>
+          </Link>
+        </section>
+
+        <aside className="create-next-action-callout">
+          <div>
+            <span className="section-label">Ensemblis principle</span>
+            <strong>The song comes before the marketing workflow.</strong>
+            <p>Once a real master exists, Ensemblis can analyze it, propose Moments and use that evidence throughout release, creative and growth decisions.</p>
+          </div>
+        </aside>
+      </div>
+    );
+  }
+
   if (view === "generate") {
     const operational = asArtistScopedOperationalClient(supabase);
     const { data: brandRows, error: brandError } = await operational
@@ -59,7 +111,7 @@ export default async function MusicPage({
         <PageHeader
           title="Create music"
           description={`Describe the musical idea for ${artist.artistName}. Ensemblis keeps the default path simple and exposes provider, timing and prompt controls only when you need them.`}
-          action={<Link className="button" href={href("/studio/music")}>Back to music</Link>}
+          action={<Link className="button" href={href("/studio/music?view=add")}>Back to add music</Link>}
         />
         <MusicGenerator
           providers={providers}
@@ -101,7 +153,7 @@ export default async function MusicPage({
       <PageHeader
         title="Music"
         description={`One source-material workspace for ${artist.artistName}: unreleased tracks, canonical masters, Track Intelligence and the releases those tracks become.`}
-        action={<Link className="button primary" href={href("/studio/music?view=generate")}>Create track</Link>}
+        action={<Link className="button primary" href={href("/studio/music?view=add")}>Add music</Link>}
       />
       <MusicWorkspaceOverview
         artistId={artist.artistId}

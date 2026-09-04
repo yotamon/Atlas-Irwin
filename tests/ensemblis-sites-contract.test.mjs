@@ -227,15 +227,18 @@ test("custom-domain provider has explicit attach inspect verify and detach bound
   ]);
 });
 
-test("Studio creates retrofuture sites and resets the pinned template defaults", async () => {
-  await requireSnippets("app/studio/(protected)/sites/page.tsx", [
+test("Studio keeps Sites artist-first while preserving recovery and technical controls", async () => {
+  const studio = await requireSnippets("app/studio/(protected)/sites/page.tsx", [
     "Create private site draft",
     "Preview private draft",
-    "Refresh draft from Ensemblis",
-    "Publish v",
+    "Update private draft from Ensemblis",
+    "Publish reviewed changes",
+    "Advanced site, domain and recovery controls",
+    "Connected and secure",
     "Restore v",
     "Version history",
   ]);
+  assert.ok(studio.indexOf("Advanced site, domain and recovery controls") < studio.indexOf("Provider: {domain.provider"), "provider/TLS details should live after Advanced disclosure");
   await requireSnippets("app/studio/sites-actions.ts", [
     "resolveActiveArtistContext",
     '.eq("artist_id", artist.artistId)',

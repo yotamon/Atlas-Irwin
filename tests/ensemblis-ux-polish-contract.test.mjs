@@ -66,16 +66,20 @@ test("protected Studio routes have product-specific transition feedback", async 
   assert.ok(css.includes("prefers-reduced-motion"));
 });
 
-test("Music defaults to source material and moves generation behind an explicit view", async () => {
+test("Music defaults to source material and makes Add music primary", async () => {
   const page = await source("app/studio/(protected)/music/page.tsx");
   const overview = await source("components/studio/music-workspace-overview.tsx");
+  assert.ok(page.includes('if (view === "add")'));
   assert.ok(page.includes('if (view === "generate")'));
+  assert.ok(page.includes(">Add music</Link>"));
+  assert.ok(page.includes("The song comes before the marketing workflow"));
   assert.ok(page.includes("<MusicWorkspaceOverview"));
   assert.ok(page.includes('from("track_vault")'));
   assert.ok(page.includes('.eq("artist_id", artist.artistId)'));
   assert.ok(overview.includes("Next track decision"));
   assert.ok(overview.includes("/studio/music/${trackId}"));
-  assert.ok(overview.includes("Manage Portfolio"));
+  assert.ok(overview.includes("Add music"));
+  assert.ok(overview.includes("Create with AI"));
 });
 
 test("track objects have one readable workspace for source, intelligence, stems and lyrics", async () => {
@@ -146,11 +150,18 @@ test("Media Library uses signed resumable TUS above 6 MB without expanding stora
   assert.equal(Boolean(packageJson.dependencies?.["wavesurfer.js"]), false);
 });
 
-test("release workspace uses the shared object grammar and no Atlas product copy", async () => {
+test("release workspace uses blocker-aware Mission semantics and no Atlas product copy", async () => {
   const release = await source("components/studio/release-workspace-v2.tsx");
+  const mission = await source("lib/studio/release-mission.ts");
   assert.ok(release.includes("<ObjectHeader"));
-  assert.ok(release.includes("Workflow readiness"));
+  assert.ok(release.includes("deriveReleaseMission"));
+  assert.ok(release.includes('label: "Release mission"'));
+  assert.ok(release.includes("This mission is blocked"));
+  assert.equal(release.includes("Workflow readiness"), false);
+  assert.equal(release.includes("healthScore"), false);
   assert.ok(release.includes("Advanced view"));
+  assert.ok(mission.includes('attention: "blocking"'));
+  assert.ok(mission.includes('status: "on_track"'));
   for (const stage of ["Select", "Prepare", "Build hype", "Release", "Sustain", "Rediscover", "Produce", "Distribute", "Learn"]) assert.ok(release.includes(stage), `release lifecycle lost ${stage}`);
   assert.equal(/\bAtlas\b/.test(release), false, "Atlas product language leaked into the Ensemblis release workspace");
 });
@@ -174,12 +185,22 @@ test("Production keeps the selected creative dominant and technical controls sec
   assert.ok(css.includes("@media (max-width: 960px)"));
 });
 
-test("core workspaces follow the outcome-first UX information architecture", async () => {
+test("Create starts from approved Moments before generic creation destinations", async () => {
   const create = await source("app/studio/(protected)/create/page.tsx");
   const grow = await source("app/studio/(protected)/growth/page.tsx");
   const audience = await source("app/studio/(protected)/audience/page.tsx");
   const library = await source("app/studio/(protected)/library/page.tsx");
-  for (const outcome of ["Create a track", "Start a release", "Make content", "Direct a video"]) assert.ok(create.includes(outcome));
+  for (const snippet of [
+    'from("moments")',
+    '.eq("state", "approved")',
+    "Create from this Moment",
+    "Inspect evidence",
+    "Recommended musical starting points",
+    "Add or create music",
+    "Start a release",
+    "Open the production queue",
+    "Direct a video",
+  ]) assert.ok(create.includes(snippet), `Moment-first Create is missing ${snippet}`);
   for (const view of ["overview", "opportunities", "performance", "portfolio"]) assert.ok(grow.includes(view));
   assert.ok(audience.includes("Needs judgment"));
   assert.ok(audience.includes("nothing is sent without your decision"));

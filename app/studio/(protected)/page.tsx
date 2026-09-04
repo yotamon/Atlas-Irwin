@@ -4,9 +4,11 @@ import { requireStudioAdmin } from "@/lib/auth/studio";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { createAutonomyServiceClient } from "@/lib/marketing/autonomy-db";
 import { asMarketingClient } from "@/lib/marketing/db";
+import { releaseLifecycle } from "@/lib/marketing/release-lifecycle";
 import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
+import { deriveReleaseMission } from "@/lib/studio/release-mission";
 
 function shortDate(value: string | null | undefined) {
   if (!value) return "No date";
@@ -105,6 +107,8 @@ export default async function TodayPage() {
 
   const [
     releasesResult,
+    tracksResult,
+    campaignsResult,
     tasksResult,
     automationResult,
     publicationResult,
@@ -117,10 +121,21 @@ export default async function TodayPage() {
   ] = await Promise.all([
     music
       .from("releases")
-      .select("id,title,release_date,active_release")
+      .select("id,title,release_date,active_release,artwork_url,cover_asset,primary_hook,smart_link_url,spotify_url,soundcloud_url,youtube_url,status,is_archived")
       .eq("owner_id", user.id)
       .eq("artist_id", artist.artistId)
       .order("updated_at", { ascending: false }),
+    music
+      .from("tracks")
+      .select("id,release_id,audio_url,is_primary")
+      .eq("owner_id", user.id)
+      .eq("artist_id", artist.artistId),
+    marketing
+      .from("campaigns")
+      .select("id,release_id,status")
+      .eq("owner_id", user.id)
+      .eq("artist_id", artist.artistId)
+      .not("status", "eq", "archived"),
     operational
       .from("tasks")
       .select("id,title,due_at,priority,status")
@@ -147,7 +162,7 @@ export default async function TodayPage() {
       .limit(40),
     marketing
       .from("content_items")
-      .select("id,title,platform,status,asset_url,scheduled_at")
+      .select("id,title,platform,status,asset_url,scheduled_at,release_id")
       .eq("owner_id", user.id)
       .eq("artist_id", artist.artistId)
       .not("status", "eq", "Archived")
@@ -189,6 +204,8 @@ export default async function TodayPage() {
 
   const firstError = [
     releasesResult,
+    tracksResult,
+    campaignsResult,
     tasksResult,
     automationResult,
     publicationResult,
@@ -202,6 +219,8 @@ export default async function TodayPage() {
   if (firstError) throw new Error(firstError.message);
 
   const releases = releasesResult.data ?? [];
+  const tracks = tracksResult.data ?? [];
+  const campaigns = campaignsResult.data ?? [];
   const content = contentResult.data ?? [];
   const automation = automationResult.data ?? [];
   const publications = publicationResult.data ?? [];
@@ -229,6 +248,28 @@ export default async function TodayPage() {
     (task) => task.due_at && new Date(task.due_at) <= sevenDays,
   );
   const outreachDraftCount = outreachDraftsResult.data?.length ?? 0;
+
+  const activeReleaseContent = activeRelease ? content.filter((item) => item.release_id === activeRelease.id) : [];
+  const activeReleaseContentIds = new Set(activeReleaseContent.map((item) => item.id));
+  const activeProviderScheduledCount = publications.filter(
+    (job) => job.content_item_id && activeReleaseContentIds.has(job.content_item_id) && String(job.status) === "provider_scheduled",
+  ).length;
+  const activeMission = activeRelease ? deriveReleaseMission({
+    releaseId: activeRelease.id,
+    lifecycle: releaseLifecycle({
+      releaseDate: activeRelease.release_date,
+      status: activeRelease.status,
+      isArchived: activeRelease.is_archived,
+    }, now),
+    releaseDate: activeRelease.release_date,
+    hasMasterAudio: tracks.some((track) => track.release_id === activeRelease.id && Boolean(track.audio_url)),
+    hasArtwork: Boolean(activeRelease.artwork_url || activeRelease.cover_asset),
+    hasCampaign: campaigns.some((campaign) => campaign.release_id === activeRelease.id),
+    missingAssetTitles: missingAssets.filter((item) => item.release_id === activeRelease.id).map((item) => item.title),
+    hasListeningDestination: Boolean(activeRelease.smart_link_url || activeRelease.spotify_url || activeRelease.soundcloud_url || activeRelease.youtube_url),
+    hasPrimaryHook: Boolean(activeRelease.primary_hook),
+    providerScheduledCount: activeProviderScheduledCount,
+  }) : null;
 
   const needsYou: TodayItem[] = [
     ...(workflowApprovalCount ? [{
@@ -348,13 +389,38 @@ export default async function TodayPage() {
     <div className="studio-v2-page ensemblis-today-v3">
       <PageHeader
         title="Today"
-        description={`A calm command center for ${artist.artistName}. See what matters, what Ensemblis is doing, and only the decisions that need you.`}
+        description={`A calm command center for ${artist.artistName}. See the active Mission, what Ensemblis is doing, and only the decisions that need you.`}
         action={needsYou.length ? (
           <Link className="button primary" href={href("/studio/inbox")}>
             Needs you ({needsYou.length})
           </Link>
         ) : undefined}
       />
+
+      {activeRelease && activeMission ? (
+        <section className="today-v3-next" aria-labelledby="today-mission-heading">
+          <div className="today-v3-section-heading">
+            <div>
+              <span className="section-label">Active release Mission</span>
+              <h2 id="today-mission-heading">{activeRelease.title}</h2>
+            </div>
+            <Status>{activeMission.label}</Status>
+          </div>
+          <p>{activeMission.summary}</p>
+          <div className="actions">
+            {activeMission.nextAction ? (
+              <Link className="button primary" href={href(activeMission.nextAction.href)}>
+                {activeMission.nextAction.title}
+              </Link>
+            ) : (
+              <Link className="button primary" href={href(`/studio/releases/${activeRelease.id}`)}>Open Mission</Link>
+            )}
+            <Link className="today-v3-secondary-link" href={href(`/studio/releases/${activeRelease.id}`)}>
+              View release Mission
+            </Link>
+          </div>
+        </section>
+      ) : null}
 
       <section className="today-v3-next" aria-labelledby="today-next-heading">
         <div className="today-v3-section-heading">

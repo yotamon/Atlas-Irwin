@@ -5,6 +5,7 @@ import { ObjectHeader } from "@/components/studio/object-header";
 import { ReleaseForm } from "@/components/studio/release-form";
 import { ReleaseMasterAudioPanel } from "@/components/studio/release-master-audio-panel";
 import { lifecycleLabel, releaseLifecycle, type ReleaseLifecycle } from "@/lib/marketing/release-lifecycle";
+import { deriveReleaseMission } from "@/lib/studio/release-mission";
 import type { ContentItem, MediaAsset, MediaLink, MetricSnapshot, Release, Track } from "@/types/database";
 import type { VaultTrack } from "@/types/growth-database";
 
@@ -27,32 +28,6 @@ function shortDate(value: string | null | undefined) {
 function total(rows: MetricSnapshot[], key: keyof MetricSnapshot) {
   return rows.reduce((sum,row) => sum + (typeof row[key] === "number" ? Number(row[key]) : 0), 0);
 }
-function healthScore({
-  release,
-  hasMasterAudio,
-  campaign,
-  contentItems,
-  missingAssets,
-}: {
-  release: Release;
-  hasMasterAudio: boolean;
-  campaign: CampaignSummary;
-  contentItems: ContentItem[];
-  missingAssets: ContentItem[];
-}) {
-  let score = 0;
-  if (release.release_date) score += 15;
-  if (hasMasterAudio) score += 20;
-  if (release.artwork_url || release.cover_asset) score += 15;
-  if (campaign) score += 15;
-  if (contentItems.length >= 4) score += 15;
-  else score += Math.min(12, contentItems.length * 3);
-  if (contentItems.length && missingAssets.length === 0) score += 10;
-  else if (contentItems.length) score += Math.max(0, 10 - missingAssets.length * 2);
-  if (release.spotify_url || release.smart_link_url) score += 5;
-  if (release.primary_hook) score += 5;
-  return Math.min(100, score);
-}
 
 export function ReleaseWorkspaceV2({ release, tracks, mediaLinks, mediaAssets, contentItems, metrics, campaign, stage, renderedAt, playbookTasks = [], providerScheduledCount = 0, vaultTrack = null }: {
   release: Release; tracks: Track[]; mediaLinks: MediaLink[]; mediaAssets: MediaAsset[]; contentItems: ContentItem[]; metrics: MetricSnapshot[]; campaign: CampaignSummary; stage: string; renderedAt: string; playbookTasks?: PlaybookTask[]; providerScheduledCount?: number; vaultTrack?: VaultTrack | null;
@@ -72,15 +47,19 @@ export function ReleaseWorkspaceV2({ release, tracks, mediaLinks, mediaAssets, c
   const hasMasterAudio = Boolean(primaryTrack?.audio_url || vaultTrack?.audio_url);
   const releaseDateLocked = providerScheduledCount > 0;
   const openPlaybook = playbookTasks.filter((task) => !["Done", "Skipped"].includes(task.status));
-  const score = healthScore({ release, hasMasterAudio, campaign, contentItems, missingAssets: missingAsset });
-  const needsYou = [
-    ...(!release.release_date && lifecycle !== "catalog" ? [{ title:"Choose a release date", detail:"Ensemblis needs one anchor date before it can schedule an upcoming release workflow.", href:"#release-details" }] : []),
-    ...(releaseDateLocked ? [{ title:"External schedule is active", detail:`${providerScheduledCount} post${providerScheduledCount === 1 ? " is" : "s are"} already scheduled at a provider, so the release date is locked against drift.`, href:"?stage=publish" }] : []),
-    ...(!hasMasterAudio ? [{ title:"Add the release master", detail:"Upload the canonical audio so Ensemblis can analyze sections and hooks for this release.", href:"#master-audio" }] : []),
-    ...(!release.artwork_url && !release.cover_asset ? [{ title:"Choose cover artwork", detail:"Upload it here and Ensemblis will attach it as the release cover automatically.", href:"#cover-upload" }] : []),
-    ...(!campaign ? [{ title:"Growth execution needs repair", detail:"Ensemblis normally creates the campaign shell automatically. Open Campaign Brain only if the self-healing heartbeat cannot restore it.", href:"/studio/campaigns" }] : []),
-    ...missingAsset.slice(0,2).map((item) => ({ title:`Finish ${item.title}`, detail:`${item.platform} has a future planned date but still needs the creative asset.`, href:`/studio/production?edit=${item.id}` })),
-  ];
+  const mission = deriveReleaseMission({
+    releaseId: release.id,
+    lifecycle,
+    releaseDate: release.release_date,
+    hasMasterAudio,
+    hasArtwork: Boolean(release.artwork_url || release.cover_asset),
+    hasCampaign: Boolean(campaign),
+    missingAssetTitles: missingAsset.map((item) => item.title),
+    hasListeningDestination: Boolean(release.smart_link_url || release.spotify_url || release.soundcloud_url || release.youtube_url),
+    hasPrimaryHook: Boolean(release.primary_hook),
+    providerScheduledCount,
+  });
+  const missionAttention = [...mission.blockers, ...mission.recommendations];
   const planTitle = lifecycle === "catalog"
     ? "A current rediscovery plan, starting from today"
     : lifecycle === "launch_window"
@@ -97,7 +76,7 @@ export function ReleaseWorkspaceV2({ release, tracks, mediaLinks, mediaAssets, c
       imageUrl={release.artwork_url}
       imageAlt={release.cover_alt || `${release.title} artwork`}
       facts={[
-        { label: "Workflow readiness", value: `${score}%` },
+        { label: "Release mission", value: mission.label },
         { label: "Current workflow", value: `Phase ${activeStageIndex + 1} of 5 · ${stages[activeStageIndex]?.[1]}` },
         { label: "Tracks", value: tracks.length },
         { label: "Content", value: contentItems.length },
@@ -107,10 +86,12 @@ export function ReleaseWorkspaceV2({ release, tracks, mediaLinks, mediaAssets, c
     />
 
     {activeStage === "overview" ? <div className="v2-release-layout release-object-overview">
-      <section className="v2-section"><div className="v2-section-heading"><div><span className="section-label">Orient</span><h2>{needsYou.length ? `${needsYou.length} thing${needsYou.length===1?"":"s"} need attention` : "Ensemblis has enough context to keep moving"}</h2></div><span className={`v2-count ${needsYou.length?"has-items":""}`}>{needsYou.length}</span></div>
-        {needsYou.length ? <div className="v2-inbox">{needsYou.map((item) => <Link className="v2-inbox-item" href={item.href} key={`${item.title}-${item.href}`}><div><strong>{item.title}</strong><small>{item.detail}</small></div><b aria-hidden>→</b></Link>)}</div> : <div className="v2-calm-state compact"><strong>Ensemblis has what it needs.</strong><p>The track, release identity and operating context are coherent enough to continue.</p></div>}
+      <section className="v2-section"><div className="v2-section-heading"><div><span className="section-label">Release mission</span><h2>{mission.status === "blocked" ? "This mission is blocked" : mission.status === "needs_attention" ? "A few useful decisions remain" : "Ensemblis can keep this mission moving"}</h2></div><span className={`v2-count ${missionAttention.length?"has-items":""}`}>{missionAttention.length}</span></div>
+        <p className="v2-muted-copy">{mission.summary}</p>
+        {missionAttention.length ? <div className="v2-inbox">{missionAttention.map((item) => <Link className="v2-inbox-item" href={item.href} key={item.key}><div><strong>{item.title}</strong><small>{item.detail}</small></div><b aria-hidden>→</b></Link>)}</div> : <div className="v2-calm-state compact"><strong>No required release decision is waiting.</strong><p>The canonical music, release identity and operating context are coherent enough for Ensemblis to continue without manufacturing extra work.</p></div>}
+        {!missionAttention.length && mission.optional.length ? <div className="v2-simple-list">{mission.optional.map((item) => <Link href={item.href} key={item.key}><span>Optional</span><strong>{item.title}</strong><small>{item.detail}</small></Link>)}</div> : null}
       </section>
-      <aside className="v2-release-summary-card release-object-summary"><dl><div><dt>Tracks</dt><dd>{tracks.length}</dd></div><div><dt>Assets</dt><dd>{releaseAssets.length}</dd></div><div><dt>Content</dt><dd>{contentItems.length}</dd></div><div><dt>Readiness</dt><dd>{score}%</dd></div></dl></aside>
+      <aside className="v2-release-summary-card release-object-summary"><dl><div><dt>Mission</dt><dd>{mission.label}</dd></div><div><dt>Blockers</dt><dd>{mission.blockers.length}</dd></div><div><dt>Recommended</dt><dd>{mission.recommendations.length}</dd></div><div><dt>Assets</dt><dd>{releaseAssets.length}</dd></div></dl></aside>
       <ReleaseMasterAudioPanel releaseId={release.id} primaryTrack={primaryTrack} vaultTrack={vaultTrack} />
       {!release.artwork_url && !release.cover_asset ? <section className="v2-section v2-full-column" id="cover-upload"><div className="v2-section-heading"><div><span className="section-label">Identity</span><h2>Drop the cover artwork here</h2></div></div><MediaUploader releaseId={release.id} defaultRole="cover" /></section> : null}
       <section className="v2-section v2-full-column" id="release-details"><div className="v2-section-heading"><div><span className="section-label">Source of truth</span><h2>Only the release facts Ensemblis must anchor around</h2></div></div><ReleaseForm release={release} releaseDateLocked={releaseDateLocked} /></section>
@@ -127,9 +108,9 @@ export function ReleaseWorkspaceV2({ release, tracks, mediaLinks, mediaAssets, c
     </div> : null}
 
     {activeStage === "create" ? <section className="v2-section"><div className="v2-section-heading"><div><span className="section-label">{stages[2][1]}</span><h2>Scale one coherent creative world, not filler</h2></div></div><p className="v2-muted-copy release-stage-intro">Ensemblis starts from the strongest available music, lyric, stem and visual context. Paid generation stays approval-gated; routine production should derive from the campaign need rather than manufacture unrelated posts.</p><div className="v2-create-grid">
-      <Link className="v2-create-card" href="/studio/music?view=generate"><span className="section-label">Audio</span><h2>Create music</h2><p>Develop edits or audio ideas only when the release strategy actually needs them.</p><strong>Open music creation →</strong></Link>
+      <Link className="v2-create-card" href="/studio/music?view=add"><span className="section-label">Audio</span><h2>Add or create music</h2><p>Bring in a master or develop an audio idea only when the release actually needs it.</p><strong>Open Music →</strong></Link>
       <Link className="v2-create-card" href={`/studio/video?release=${release.id}`}><span className="section-label">Motion</span><h2>Video Director</h2><p>Produce a coherent music-video world with cost checkpoints before paid generation.</p><strong>Open Video Director →</strong></Link>
-      <Link className="v2-create-card" href={`/studio/production?release=${release.id}`}><span className="section-label">Campaign creative</span><h2>Production queue</h2><p>Generate, refine and approve only the assets attached to measurable campaign moments.</p><strong>Open production →</strong></Link>
+      <Link className="v2-create-card" href={`/studio/production?release=${release.id}`}><span className="section-label">Campaign creative</span><h2>Production queue</h2><p>Generate, refine and approve only the assets attached to measurable campaign Moments.</p><strong>Open production →</strong></Link>
     </div></section> : null}
 
     {activeStage === "publish" ? <section className="v2-section"><div className="v2-section-heading"><div><span className="section-label">{stages[3][1]}</span><h2>{lifecycle === "catalog" ? "Keep the music discoverable without pretending it just launched" : "Ship the music and the winning discovery system together"}</h2></div><Link href="/studio/inbox">Needs you</Link></div><div className="v2-publish-grid">
@@ -141,6 +122,6 @@ export function ReleaseWorkspaceV2({ release, tracks, mediaLinks, mediaAssets, c
 
     {activeStage === "learn" ? <section className="v2-section"><div className="v2-section-heading"><div><span className="section-label">{stages[4][1]}</span><h2>Keep the release alive while the signal is useful</h2></div><Link href="/studio/growth?view=opportunities">Catalog opportunities</Link></div><div className="v2-status-grid">
       <article><strong>{total(metrics,"streams").toLocaleString()}</strong><span>streams</span><small>Recorded snapshots</small></article><article><strong>{total(metrics,"listeners").toLocaleString()}</strong><span>listeners</span><small>Unique audience signal</small></article><article><strong>{total(metrics,"saves").toLocaleString()}</strong><span>saves</span><small>Retention intent</small></article><article><strong>{total(metrics,"playlist_adds").toLocaleString()}</strong><span>playlist adds</span><small>Durable catalog intent</small></article>
-    </div><div className="v2-calm-state compact"><strong>Launch week is not the finish line.</strong><p>Ensemblis watches for catalog revival and breakout creative signals. Only approved learnings become memory for the next release.</p><div className="actions"><Link className="button primary" href="/studio/growth?view=opportunities">Scan portfolio opportunities</Link><Link className="button" href="/studio/learn">Learning memory</Link></div></div></section> : null}
+    </div><div className="v2-calm-state compact"><strong>Launch week is not the finish line.</strong><p>Ensemblis watches for catalog revival and breakout creative signals. Only approved learnings become memory for the next release.</p><div className="actions"><Link className="button primary" href="/studio/growth?view=opportunities">Review opportunities</Link><Link className="button" href="/studio/learn">Learning memory</Link></div></div></section> : null}
   </div>;
 }

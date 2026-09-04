@@ -77,6 +77,7 @@ test("Studio exposes a playable, explainable v3 production review inspector", as
 
 test("release workspace queues the same canonical analysis pipeline without a second direct worker path", async () => {
   const releaseWorkspace = await readFile("components/studio/release-workspace-v2.tsx", "utf8");
+  const releaseMission = await readFile("lib/studio/release-mission.ts", "utf8");
   const panel = await readFile("components/studio/release-master-audio-panel.tsx", "utf8");
   const uploader = await readFile("components/studio/media-uploader.tsx", "utf8");
   const actions = await readFile("app/studio/growth-media-actions.ts", "utf8");
@@ -84,7 +85,9 @@ test("release workspace queues the same canonical analysis pipeline without a se
   const vaultBridge = await readFile("lib/studio/vault-analysis.ts", "utf8");
 
   assert.ok(releaseWorkspace.includes("ReleaseMasterAudioPanel"));
-  assert.ok(releaseWorkspace.includes('href:"#master-audio"'));
+  assert.ok(releaseWorkspace.includes("deriveReleaseMission"));
+  assert.ok(releaseMission.includes("#master-audio"));
+  assert.ok(releaseMission.includes("Add the canonical master"));
   assert.ok(panel.includes("MusicIntelligencePreview"));
   assert.ok(panel.includes("AnalysisAutoRefresh"));
   assert.ok(panel.includes("Replace master audio"));
@@ -180,6 +183,8 @@ test("production Media Worker remains self-bootstrapping, zero-idle and Sandbox-
   assert.equal(bridge.includes('runtime: "python3.13"'), false);
   assert.ok(bridge.includes(".requirements.sha"));
   assert.ok(bridge.indexOf('printf \'%s\' "$required" > "$WORKDIR/.requirements.sha"') > bridge.indexOf("import allin1_infer"));
+  assert.equal(bridge.includes("google.cloud"), false);
+  assert.equal(bridge.includes("gcloud "), false);
   assert.ok(queue.includes('jobType: "analyze_audio"'));
   assert.ok(health.includes('dispatch_mode: readiness.runtime'));
   assert.ok(health.includes("sandbox_image: readiness.sandboxImage"));
