@@ -103,7 +103,10 @@ test("tenant SEO identity endpoints use the same non-looping published runtime",
     "app/sites/[slug]/manifest.webmanifest/route.ts",
     "app/sites/[slug]/favicon.ico/route.ts",
   ]) {
-    await requireSnippets(path, ["loadPublishedSiteBySlug(slug)"]);
+    await requireSnippets(path, [
+      'export const dynamic = "force-dynamic"',
+      "loadPublishedSiteBySlug(slug)",
+    ]);
   }
 
   const robots = await source("app/sites/[slug]/robots.txt/route.ts");
