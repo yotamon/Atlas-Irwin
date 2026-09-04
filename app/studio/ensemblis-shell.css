@@ -1,0 +1,113 @@
+.studio-mark.ensemblis-product-mark {
+  min-height: 5.6rem;
+  height: auto;
+  font-family: var(--font-body), sans-serif;
+  letter-spacing: 0;
+  gap: 0.75rem;
+}
+
+.ensemblis-mark-symbol,
+.ensemblis-auth-symbol {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.65rem;
+  background: var(--s-accent);
+  color: var(--s-bg);
+  font: 800 1rem/1 var(--font-body), sans-serif;
+  letter-spacing: -0.04em;
+}
+
+.ensemblis-wordmark {
+  display: grid !important;
+  gap: 0.12rem;
+}
+
+.ensemblis-wordmark strong {
+  font-size: 1.12rem;
+  font-weight: 720;
+  letter-spacing: -0.035em;
+}
+
+.ensemblis-wordmark small {
+  color: var(--s-muted);
+  font: 600 0.62rem/1.2 var(--font-body), sans-serif;
+  letter-spacing: 0.045em;
+  text-transform: none;
+}
+
+.studio-artist-context {
+  display: grid;
+  gap: 0.16rem;
+  margin: 0.9rem 1rem 0.45rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--s-line);
+  border-radius: 0.8rem;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.studio-artist-context span,
+.studio-sidebar-section-label {
+  color: var(--s-muted);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.studio-artist-context strong {
+  overflow: hidden;
+  font-size: 0.9rem;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-artist-context small {
+  overflow: hidden;
+  color: var(--s-muted);
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-sidebar-section-label {
+  display: block;
+  padding: 0.85rem 1.45rem 0.25rem;
+}
+
+.studio-sidebar-advanced {
+  display: grid;
+  gap: 0.2rem;
+  margin-bottom: 0.6rem;
+}
+
+.studio-auth section {
+  position: relative;
+}
+
+.ensemblis-auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin-bottom: 1.15rem;
+}
+
+.ensemblis-auth-brand strong {
+  font-size: 1.05rem;
+  letter-spacing: -0.035em;
+}
+
+.ensemblis-auth-brand small {
+  display: block;
+  margin-top: 0.08rem;
+  color: var(--s-muted);
+  font-size: 0.66rem;
+}
+
+.ensemblis-auth-symbol {
+  width: 2.5rem;
+  height: 2.5rem;
+}
