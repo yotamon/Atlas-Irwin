@@ -150,8 +150,13 @@ export async function reviewGeneratedCreativeImage(input: {
   if (input.context.artistId !== input.artistId) throw new Error("Visual QC context does not match its artist lineage.");
   const settings = await assertReviewBudget(input.ownerId);
   const client = createMarketingServiceClient();
-  const model = process.env.ATLAS_CREATIVE_REVIEW_MODEL?.trim() || "openai/gpt-5.6-terra";
-  const fallbacks = parseGatewayModelList(process.env.ATLAS_CREATIVE_REVIEW_FALLBACK_MODELS);
+  const model = process.env.ENSEMBLIS_CREATIVE_REVIEW_MODEL?.trim()
+    || process.env.ATLAS_CREATIVE_REVIEW_MODEL?.trim()
+    || "openai/gpt-5.6-terra";
+  const fallbacks = parseGatewayModelList(
+    process.env.ENSEMBLIS_CREATIVE_REVIEW_FALLBACK_MODELS
+      || process.env.ATLAS_CREATIVE_REVIEW_FALLBACK_MODELS,
+  );
   const started = new Date();
   const { data: run, error: createError } = await client.from("generation_runs").insert({
     owner_id: input.ownerId,
