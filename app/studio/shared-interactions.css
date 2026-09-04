@@ -92,7 +92,16 @@
 .studio-root .ensemblis-command-results {
   max-height: calc(min(68vh, 40rem) - 4.3rem);
   overflow: auto;
+  overscroll-behavior: contain;
   padding: 0.55rem;
+  scroll-padding-block: 0.7rem;
+}
+
+.studio-root .ensemblis-command-searching {
+  padding: 0.45rem 0.55rem 0.2rem;
+  color: var(--en-subtle);
+  font-size: 0.59rem;
+  font-weight: 620;
 }
 
 .studio-root .ensemblis-command-group {
