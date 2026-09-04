@@ -4,17 +4,22 @@ on:
   push:
     branches: [main, master]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
   schedule:
-    - cron: "41 3 * * *"
+    - cron: "41 3 * * 1"
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   verify:
     name: fast verification
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -45,7 +50,7 @@ jobs:
         run: node --check scripts/check-media-worker.mjs
 
       # Everything below this line is deliberately outside the PR hot path.
-      # It still runs on main, nightly, and manual dispatch so regressions remain visible.
+      # It still runs on main, the weekly deep schedule, and manual dispatch.
       - uses: actions/setup-python@v5
         if: github.event_name != 'pull_request'
         with:
