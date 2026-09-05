@@ -7,6 +7,8 @@ import {
 import type { MusicHookCandidate, MusicMap } from "@/lib/video-director/creative-director";
 import type { AudioScene, TrackStem } from "@/types/stem-database";
 
+export type { TrackCreativeIntelligenceGraph } from "@/lib/music-intelligence/creative-graph";
+
 function numeric(value: unknown, fallback = 0) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
