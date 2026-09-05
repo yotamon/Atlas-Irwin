@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { startOutcomeCreative } from "@/app/studio/create-actions";
 import { PageHeader } from "@/components/studio/ui";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { requireArtistContext } from "@/lib/studio/artist-context";
+import { CREATE_OUTCOMES } from "@/lib/studio/create-outcomes";
 import { momentEvidenceSummary } from "@/lib/studio/evidence-labels";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { asMomentsClient } from "@/lib/studio/moments-db";
@@ -16,10 +18,10 @@ function momentTime(ms: number) {
 
 function momentRecommendation(label: string, sourceMode: string) {
   const value = `${label} ${sourceMode}`.toLowerCase();
-  if (value.includes("lyric") || value.includes("vocal")) return "Best starting point for a lyric-led Reel, Story or vocal hook.";
-  if (value.includes("drop") || value.includes("climax") || value.includes("payoff")) return "Strong fit for a short teaser, release-day payoff or motion edit.";
-  if (value.includes("groove") || value.includes("instrument")) return "Strong fit for a loop, movement-led short or production-focused creative.";
-  if (value.includes("build") || value.includes("transition")) return "Strong fit for a narrative short, reveal or before/after structure.";
+  if (value.includes("lyric") || value.includes("vocal")) return "A strong source for lyric-led or vocal-forward creative.";
+  if (value.includes("drop") || value.includes("climax") || value.includes("payoff")) return "A strong payoff window for discovery or release creative.";
+  if (value.includes("groove") || value.includes("instrument")) return "A strong source for movement-led or production-focused creative.";
+  if (value.includes("build") || value.includes("transition")) return "A strong source for reveal, progression or narrative creative.";
   return "An evidence-backed musical starting point for campaign creative.";
 }
 
@@ -70,38 +72,26 @@ export default async function CreatePage() {
       ].slice(0, 4)
     : allMoments.slice(0, 4);
 
-  const outcomes = [
+  const otherStartingPoints = [
     {
-      index: "01",
-      eyebrow: "Music",
       title: "Add or create music",
-      description: "Bring in an existing master first, prepare a release, or create a new musical draft when that is actually the job.",
+      description: "Bring in a master or create a musical draft when the source music does not exist yet.",
       href: href("/studio/music?view=add"),
-      cta: "Add music",
     },
     {
-      index: "02",
-      eyebrow: "Release",
       title: "Start a release",
-      description: "Create the release identity. Ensemblis classifies the lifecycle and builds only the work that is still actionable.",
+      description: "Create the canonical release identity before campaign creative exists.",
       href: href("/studio/releases/new"),
-      cta: "Create release",
     },
     {
-      index: "03",
-      eyebrow: "Campaign creative",
       title: "Open the production queue",
-      description: "Create or refine only the campaign assets that already have a measurable job, using music and release context already in the system.",
+      description: "Inspect or continue existing creative work without choosing a new musical starting point.",
       href: href("/studio/production"),
-      cta: "Open production",
     },
     {
-      index: "04",
-      eyebrow: "Motion",
       title: "Direct a video",
-      description: "Build a music-aware visual treatment with explicit quality and spend checkpoints inside one coherent creative world.",
+      description: "Use Video Director when the outcome is a larger coherent music video rather than a campaign asset.",
       href: href(activeRelease ? `/studio/video?release=${activeRelease.id}` : "/studio/video"),
-      cta: "Open Video Director",
     },
   ];
 
@@ -109,7 +99,7 @@ export default async function CreatePage() {
     <div className="studio-v2-page create-polish-page">
       <PageHeader
         title="Create"
-        description={`Start from ${artist.artistName}'s actual music whenever Ensemblis already understands it. The musical Moment is the creative source; providers and prompts are implementation details.`}
+        description={`Choose what ${artist.artistName}'s music should achieve. Ensemblis keeps the musical Moment, delivery defaults, provider routing and lineage connected behind the outcome.`}
       />
 
       {preferredMoments.length ? (
@@ -117,15 +107,15 @@ export default async function CreatePage() {
           <div className="v2-section-heading">
             <div>
               <span className="section-label">Recommended musical starting points</span>
-              <h2>Create from a Moment Ensemblis already understands</h2>
+              <h2>Choose a Moment, then choose the result you want</h2>
             </div>
             {activeRelease ? <Link href={href(`/studio/releases/${activeRelease.id}?stage=create#moments`)}>Review all Moments</Link> : null}
           </div>
           <p className="v2-muted-copy">
-            These are approved Moments ranked from the track, lyric and stem evidence already stored for this artist. Choosing one keeps exact musical lineage attached to the creative and its later performance.
+            These approved Moments are ranked from the track, lyric and stem evidence already stored for this artist. You choose the outcome; Ensemblis creates the production item with the musical lineage and delivery defaults already attached.
           </p>
 
-          <div className="growth-opportunity-grid">
+          <div className="growth-opportunity-grid create-moment-grid">
             {preferredMoments.map((moment) => {
               const release = releaseById.get(moment.release_id);
               const track = trackById.get(moment.track_id);
@@ -133,7 +123,7 @@ export default async function CreatePage() {
               const endSeconds = Math.max(startSeconds, moment.end_ms / 1000);
               const evidence = momentEvidenceSummary(moment);
               return (
-                <article className="growth-opportunity accepted" key={moment.id}>
+                <article className="growth-opportunity accepted create-moment-card" key={moment.id}>
                   <div className="growth-opportunity-head">
                     <span>{moment.source_mode.replaceAll("_", " ")}</span>
                     <strong>Recommended</strong>
@@ -152,8 +142,25 @@ export default async function CreatePage() {
                       src={`${track.audio_url}#t=${startSeconds.toFixed(2)},${endSeconds.toFixed(2)}`}
                     />
                   ) : null}
-                  <div className="actions">
-                    <Link className="button primary" href={href(`/studio/production?release=${moment.release_id}&moment=${moment.id}`)}>Create from this Moment</Link>
+
+                  <div className="create-outcome-heading">
+                    <strong>What should this Moment do?</strong>
+                    <span>Create from this Moment by choosing the result, not the tool.</span>
+                  </div>
+                  <div className="create-outcome-grid" aria-label={`Creative outcomes for ${moment.label}`}>
+                    {CREATE_OUTCOMES.map((outcome) => (
+                      <form action={startOutcomeCreative} key={outcome.id}>
+                        <input type="hidden" name="artist_id" value={artist.artistId} />
+                        <input type="hidden" name="moment_id" value={moment.id} />
+                        <input type="hidden" name="outcome" value={outcome.id} />
+                        <button type="submit">
+                          <strong>{outcome.label}</strong>
+                          <span>{outcome.shortLabel}</span>
+                        </button>
+                      </form>
+                    ))}
+                  </div>
+                  <div className="actions create-evidence-action">
                     <Link className="button" href={href(`/studio/releases/${moment.release_id}?stage=create#moments`)}>Inspect evidence</Link>
                   </div>
                 </article>
@@ -171,28 +178,23 @@ export default async function CreatePage() {
         </section>
       )}
 
-      <section className="create-intent-list" aria-label="Other creation outcomes">
-        {outcomes.map((item) => (
-          <Link className="create-intent-row" href={item.href} key={item.title}>
-            <span className="create-intent-index">{item.index}</span>
-            <span className="create-intent-copy">
-              <small>{item.eyebrow}</small>
-              <strong>{item.title}</strong>
-              <span>{item.description}</span>
-            </span>
-            <b>{item.cta} →</b>
-          </Link>
-        ))}
-      </section>
-
       <aside className="create-next-action-callout">
         <div>
-          <span className="section-label">Not sure what should happen next?</span>
+          <span className="section-label">Not sure which outcome matters?</span>
           <strong>Use the decision Ensemblis has already ranked.</strong>
           <p>Today separates what needs your judgment from work the system can keep doing on its own.</p>
         </div>
         <Link className="button" href={href("/studio")}>Open Today</Link>
       </aside>
+
+      <details className="v2-advanced-disclosure create-specialist-tools">
+        <summary>Other starting points</summary>
+        <div className="create-specialist-links">
+          {otherStartingPoints.map((item) => (
+            <Link href={item.href} key={item.title}>{item.title}<span>{item.description}</span></Link>
+          ))}
+        </div>
+      </details>
 
       <details className="v2-advanced-disclosure create-specialist-tools">
         <summary>Specialist and legacy tools</summary>
