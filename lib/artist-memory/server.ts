@@ -10,6 +10,7 @@ import {
   creativePreferenceMemoryItems,
   summarizeArtistMemory,
   verifiedLearningMemoryItem,
+  type ArtistMemoryItem,
   type ArtistMemorySnapshot,
 } from "./domain";
 
@@ -81,7 +82,7 @@ export async function loadArtistMemory(input: {
   const firstError = brandResult.error ?? learningsResult.error;
   if (firstError) throw new Error(firstError.message);
 
-  const items = [];
+  const items: ArtistMemoryItem[] = [];
   for (const row of (brandResult.data ?? []) as unknown as BrandSettingRow[]) {
     const memory = brandSettingMemoryItem({
       id: row.id,
