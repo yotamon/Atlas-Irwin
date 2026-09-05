@@ -11,6 +11,7 @@ test("Artist Memory consumers declare allowlists and maximum effects", async () 
   }
   assert.match(domain, /moment_ranking:[\s\S]*maxEffect: "rank_only"/);
   assert.match(domain, /creative_direction:[\s\S]*maxEffect: "brief_only"/);
+  assert.match(domain, /growth:[\s\S]*maxEffect: "rank_only"/);
   assert.match(domain, /audience_assistance:[\s\S]*maxEffect: "prepare_copy_only"/);
   assert.match(domain, /audience_assistance:[\s\S]*allowedClasses: \["identity", "creative_rule", "provenance_compliance"\]/);
   assert.match(domain, /filter\(\(item\) => item\.lifecycle === "active"\)/);
@@ -25,4 +26,14 @@ test("outcome-first Create consumes memory only as a creative brief", async () =
   assert.match(create, /production_notes/);
   assert.doesNotMatch(create, /update\([\s\S]*moments/);
   assert.doesNotMatch(create, /state.*approved.*memory/i);
+});
+
+test("Paid Growth exposes bounded memory as supporting context without spend authority", async () => {
+  const page = await read("app/studio/(protected)/growth/paid/page.tsx");
+  assert.match(page, /loadArtistMemoryForConsumer/);
+  assert.match(page, /consumer: "growth"/);
+  assert.match(page, /Artist Memory can support the hypothesis, not authorize the spend/);
+  assert.match(page, /Maximum effect: rank opportunities only/);
+  assert.doesNotMatch(page, /budget_ceiling_usd[^\n]*growthMemory/);
+  assert.doesNotMatch(page, /approvePaidGrowthExperiment\(growthMemory/);
 });
