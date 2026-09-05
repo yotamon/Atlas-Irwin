@@ -5,9 +5,11 @@ import { createCatalogClient } from "@/lib/supabase/service";
 import type { Release } from "@/types/database";
 import type { SmartLink, SmartLinkDestination } from "@/types/smart-links-database";
 
+type SmartLinkRelease = Pick<Release, "id" | "title" | "release_date" | "artwork_url" | "cover_alt" | "artist">;
+
 export type SmartLinkRuntime = {
   link: SmartLink;
-  release: Pick<Release, "id" | "title" | "release_date" | "artwork_url" | "cover_alt" | "artist_display_name" | "primary_artist_name">;
+  release: SmartLinkRelease;
   mode: "pre_release" | "live";
   destinations: SmartLinkDestination[];
 };
@@ -37,9 +39,8 @@ export async function loadSmartLinkRuntime(siteId: string, slug: string): Promis
   const [{ data: release, error: releaseError }, { data: destinations, error: destinationError }] = await Promise.all([
     catalog
       .from("releases")
-      .select("id,title,release_date,artwork_url,cover_alt,artist_display_name,primary_artist_name")
+      .select("id,title,release_date,artwork_url,cover_alt,artist")
       .eq("id", link.release_id)
-      .eq("artist_id", link.artist_id)
       .maybeSingle(),
     smart
       .from("smart_link_destinations")
