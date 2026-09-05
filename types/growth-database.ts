@@ -9,6 +9,7 @@ type Table<Row> = {
 
 export type GrowthSettings = {
   owner_id: string;
+  artist_id: string;
   north_star: string;
   planning_horizon_days: number;
   release_cadence_days: number;
@@ -33,6 +34,7 @@ export type VaultTrackStatus =
 export type VaultTrack = {
   id: string;
   owner_id: string;
+  artist_id: string;
   linked_release_id: string | null;
   media_asset_id: string | null;
   title: string;
@@ -63,6 +65,7 @@ export type GrowthPlanStatus = "proposed" | "accepted" | "scheduled" | "complete
 export type GrowthPlanItem = {
   id: string;
   owner_id: string;
+  artist_id: string;
   track_vault_id: string | null;
   release_id: string | null;
   target_date: string;
@@ -85,6 +88,7 @@ export type GrowthOpportunityKind =
 export type GrowthOpportunity = {
   id: string;
   owner_id: string;
+  artist_id: string;
   kind: GrowthOpportunityKind;
   release_id: string | null;
   track_vault_id: string | null;
