@@ -18,6 +18,7 @@ export const ENSEMBLIS_WORK_NAV = [
 ] as const;
 
 export const ENSEMBLIS_MANAGE_NAV = [
+  { href: "/studio/memory", label: "Memory", icon: "brand" },
   { href: "/studio/sites", label: "Sites", icon: "sites" },
   { href: "/studio/distribution", label: "Distribution", icon: "distribution" },
   { href: "/studio/connections", label: "Connections", icon: "distribution" },
