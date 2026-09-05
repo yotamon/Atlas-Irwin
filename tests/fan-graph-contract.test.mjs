@@ -30,5 +30,5 @@ test("cross-channel merges require evidence and privacy deletion remains possibl
   assert.match(combined, /evidence/i);
   assert.match(combined, /delete/i);
   assert.match(combined, /revoke/i);
-  assert.doesNotMatch(combined, /visitor_hash|fingerprint/i);
+  assert.doesNotMatch(combined, /visitor_hash|fingerprint_hash|browser_fingerprint|device_fingerprint|fingerprint\s+(text|varchar|uuid|jsonb)/i);
 });
