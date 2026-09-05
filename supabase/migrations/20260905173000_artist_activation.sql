@@ -109,7 +109,7 @@ begin
     where workspace_id = v_workspace_id and slug = v_slug and id <> p_artist_id
   ) loop
     v_index := v_index + 1;
-    v_slug := left(v_base_slug, 70) || '-' || v_index::text;
+    v_slug := left(v_base_slug, greatest(1, 70 - char_length(v_index::text) - 1)) || '-' || v_index::text;
   end loop;
 
   update public.artists
@@ -158,15 +158,21 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+declare
+  v_version integer := 0;
 begin
   if tg_op = 'INSERT' and new.audio_url is not null then
     perform private.record_artist_activation_event(new.owner_id, new.artist_id, 'first_music_added', new.id,
       jsonb_build_object('source', coalesce(new.source,'unknown')));
   end if;
+
   if coalesce(new.audio_profile->>'source','') = 'worker'
-     and coalesce((new.audio_profile->>'version')::integer, 0) >= 3 then
+     and coalesce(new.audio_profile->>'version','') ~ '^[0-9]+$' then
+    v_version := (new.audio_profile->>'version')::integer;
+  end if;
+  if v_version >= 3 then
     perform private.record_artist_activation_event(new.owner_id, new.artist_id, 'first_intelligence_ready', new.id,
-      jsonb_build_object('analysis_version', new.audio_profile->>'version'));
+      jsonb_build_object('analysis_version', v_version));
   end if;
   return new;
 end;
@@ -204,11 +210,16 @@ security definer
 set search_path = ''
 as $$
 begin
-  if tg_op = 'INSERT' and new.state in ('proposed','approved') then
-    perform private.record_artist_activation_event(new.owner_id, new.artist_id, 'first_moment_curated', new.id,
-      jsonb_build_object('source_mode', new.source_mode));
-  end if;
-  if new.state = 'approved' and (tg_op = 'INSERT' or old.state is distinct from 'approved') then
+  if tg_op = 'INSERT' then
+    if new.state in ('proposed','approved') then
+      perform private.record_artist_activation_event(new.owner_id, new.artist_id, 'first_moment_curated', new.id,
+        jsonb_build_object('source_mode', new.source_mode));
+    end if;
+    if new.state = 'approved' then
+      perform private.record_artist_activation_event(new.owner_id, new.artist_id, 'first_moment_approved', new.id,
+        jsonb_build_object('source_mode', new.source_mode));
+    end if;
+  elsif tg_op = 'UPDATE' and new.state = 'approved' and old.state is distinct from 'approved' then
     perform private.record_artist_activation_event(new.owner_id, new.artist_id, 'first_moment_approved', new.id,
       jsonb_build_object('source_mode', new.source_mode));
   end if;
@@ -222,14 +233,17 @@ create trigger capture_moment_activation
 
 -- Backfill milestones for existing artists without inventing UI-start/dismiss events.
 do $$
-declare row record;
+declare row record; v_version integer;
 begin
   for row in select owner_id, artist_id, id, source from public.track_vault where audio_url is not null loop
     perform private.record_artist_activation_event(row.owner_id,row.artist_id,'first_music_added',row.id,jsonb_build_object('source',coalesce(row.source,'unknown')));
   end loop;
   for row in select owner_id, artist_id, id, audio_profile from public.track_vault
-    where coalesce(audio_profile->>'source','')='worker' and coalesce((audio_profile->>'version')::integer,0)>=3 loop
-    perform private.record_artist_activation_event(row.owner_id,row.artist_id,'first_intelligence_ready',row.id,jsonb_build_object('analysis_version',row.audio_profile->>'version'));
+    where coalesce(audio_profile->>'source','')='worker' loop
+    v_version := case when coalesce(row.audio_profile->>'version','') ~ '^[0-9]+$' then (row.audio_profile->>'version')::integer else 0 end;
+    if v_version >= 3 then
+      perform private.record_artist_activation_event(row.owner_id,row.artist_id,'first_intelligence_ready',row.id,jsonb_build_object('analysis_version',v_version));
+    end if;
   end loop;
   for row in select owner_id, artist_id, id, status from public.releases loop
     perform private.record_artist_activation_event(row.owner_id,row.artist_id,'first_release_mission',row.id,jsonb_build_object('status',row.status));
