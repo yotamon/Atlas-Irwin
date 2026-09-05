@@ -18,6 +18,7 @@ import { AI_PRICING_AS_OF, CREATIVE_PRESETS } from "@/lib/marketing/creative-pro
 import { creativeProviderReadiness } from "@/lib/marketing/creative-providers";
 import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { CONTENT_FORMATS, GOALS, PLATFORMS } from "@/lib/studio/constants";
+import { creativeContextQualityLabel, momentEvidenceSummary } from "@/lib/studio/evidence-labels";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { asMomentAwareMarketingClient, asMomentsClient } from "@/lib/studio/moments-db";
 import { higgsfieldReadiness } from "@/lib/video-providers/higgsfield/client";
@@ -240,7 +241,7 @@ export default async function ProductionPage({
           {selectedMoment ? (
             <div className="studio-smart-defaults" role="note">
               <strong>{editing ? "Moment lineage" : "Starting from approved Moment"} · {selectedMoment.label}</strong>
-              <span>{selectedMoment.source_mode.replaceAll("_", " ")} · {momentTime(selectedMoment.start_ms)}–{momentTime(selectedMoment.end_ms)} · {Math.round(selectedMoment.confidence * 100)} confidence · {selectedMoment.state}. This Moment ID remains attached to the creative so campaign and performance learning can trace back to the exact musical evidence.</span>
+              <span>{selectedMoment.source_mode.replaceAll("_", " ")} · {momentTime(selectedMoment.start_ms)}–{momentTime(selectedMoment.end_ms)} · {momentEvidenceSummary(selectedMoment) || "Approved evidence"} · {selectedMoment.state}. This Moment ID remains attached to the creative so campaign and performance learning can trace back to the exact musical evidence.</span>
               <small>Source timing remains immutable even if this content item later uses a custom cut.</small>
             </div>
           ) : !editing && selectedRelease ? (
@@ -259,7 +260,7 @@ export default async function ProductionPage({
                   <h2>Generate cohesive media</h2>
                   <p>Choose the outcome-level quality preset. Ensemblis handles provider and model routing, but shows the exact route and expected spend before you approve it.</p>
                 </div>
-                <Status>{creativeContext.cohesionScore}/100 context cohesion</Status>
+                <Status>{creativeContextQualityLabel(creativeContext.cohesionScore)}</Status>
               </div>
 
               <div className="studio-smart-defaults">
