@@ -87,6 +87,7 @@ export function MediaUploader({
   artistId,
   defaultRole = "cover",
   vaultMode = false,
+  musicIntakeMode = false,
   releaseMasterMode = false,
 }: {
   releaseId?: string;
@@ -94,20 +95,22 @@ export function MediaUploader({
   artistId?: string;
   defaultRole?: MediaType;
   vaultMode?: boolean;
+  musicIntakeMode?: boolean;
   releaseMasterMode?: boolean;
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
+  const masterIntake = vaultMode || musicIntakeMode;
   const [items, setItems] = useState<UploadItem[]>([]);
   const [dragging, setDragging] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState("");
-  const [primary, setPrimary] = useState(Boolean(releaseId && !contentItemId && !vaultMode));
+  const [primary, setPrimary] = useState(Boolean(releaseId && !contentItemId && !masterIntake));
   const [busy, setBusy] = useState(false);
 
   function addFiles(files: FileList | File[]) {
-    const next = Array.from(files).filter((file) => file.size > 0 && (!(vaultMode || releaseMasterMode) || file.type.startsWith("audio/")));
+    const next = Array.from(files).filter((file) => file.size > 0 && (!(masterIntake || releaseMasterMode) || file.type.startsWith("audio/")));
     if (!next.length) return;
     if (releaseMasterMode) {
       const file = next[0];
@@ -153,7 +156,7 @@ export function MediaUploader({
           ? "Preparing resumable upload…"
           : releaseMasterMode
             ? "Uploading master and preparing Music Intelligence…"
-            : vaultMode
+            : masterIntake
               ? "Uploading master…"
               : "Uploading securely…",
       } : entry));
@@ -207,11 +210,17 @@ export function MediaUploader({
           original_name: item.file.name,
           title: items.length === 1 ? title : "",
           description,
-          tags: releaseMasterMode ? [scopedTags, "release-master"].filter(Boolean).join(",") : vaultMode ? [scopedTags, "unreleased", "vault"].filter(Boolean).join(",") : scopedTags,
-          release_id: contentItemId || vaultMode ? "" : releaseId ?? "",
+          tags: releaseMasterMode
+            ? [scopedTags, "release-master"].filter(Boolean).join(",")
+            : musicIntakeMode
+              ? [scopedTags, "unreleased", "music"].filter(Boolean).join(",")
+              : vaultMode
+                ? [scopedTags, "unreleased", "vault"].filter(Boolean).join(",")
+                : scopedTags,
+          release_id: contentItemId || masterIntake ? "" : releaseId ?? "",
           is_primary: primary ? "on" : "",
           ...dimensions,
-        }).forEach(([key, value]) => form.set(key, value));
+        }).forEach(([key, formValue]) => form.set(key, formValue));
         const result = await registerMediaUpload(form);
         registered = true;
         if (contentItemId) {
@@ -221,7 +230,7 @@ export function MediaUploader({
           attachForm.set("role", item.role);
           await attachContentMediaV2(attachForm);
         }
-        if (vaultMode) {
+        if (masterIntake) {
           const vaultForm = new FormData();
           vaultForm.set("media_asset_id", result.id);
           vaultForm.set("title", items.length === 1 && title.trim() ? title.trim() : cleanAudioTitle(item.file.name));
@@ -244,13 +253,15 @@ export function MediaUploader({
               : releaseMasterResult?.analysisQueued
                 ? "Master attached. Ensemblis is analyzing its structure and strongest hooks."
                 : "Master attached. Analysis can be retried from the release when the media worker is available."
-            : vaultMode
-              ? "Master is in the Vault. Free audio analysis was queued when the media worker is available."
-              : result.deduplicated
-                ? "Already in the library, existing file reused and attached."
-                : contentItemId
-                  ? "Uploaded and attached to this content item."
-                  : "Added to the library.",
+            : musicIntakeMode
+              ? "Master added to Music. Ensemblis is understanding its structure and strongest moments."
+              : vaultMode
+                ? "Master is in the Vault. Free audio analysis was queued when the media worker is available."
+                : result.deduplicated
+                  ? "Already in the library, existing file reused and attached."
+                  : contentItemId
+                    ? "Uploaded and attached to this content item."
+                    : "Added to the library.",
         } : entry));
       } catch (error) {
         const authorizationExpired = error instanceof ResumableUploadAuthorizationError;
@@ -279,10 +290,10 @@ export function MediaUploader({
 
   const completed = items.filter((item) => item.state === "done").length;
   const hasPending = items.some((item) => item.state === "ready" || item.state === "error");
-  const contextualAttach = Boolean(releaseId || contentItemId || vaultMode || releaseMasterMode);
+  const contextualAttach = Boolean(releaseId || contentItemId || masterIntake || releaseMasterMode);
 
   return (
-    <div className={`media-uploader${vaultMode ? " vault-media-uploader" : ""}${releaseMasterMode ? " release-master-uploader" : ""}`}>
+    <div className={`media-uploader${vaultMode ? " vault-media-uploader" : ""}${musicIntakeMode ? " music-intake-uploader" : ""}${releaseMasterMode ? " release-master-uploader" : ""}`}>
       <div
         className={`media-dropzone${dragging ? " dragging" : ""}`}
         onDragEnter={(event) => { event.preventDefault(); setDragging(true); }}
@@ -291,11 +302,11 @@ export function MediaUploader({
         onDrop={(event) => { event.preventDefault(); setDragging(false); addFiles(event.dataTransfer.files); }}
       >
         <FiUploadCloud aria-hidden />
-        <strong>{releaseMasterMode ? "Drop the release master here" : vaultMode ? "Drop unreleased masters here" : "Drop media here"}</strong>
-        <span>{releaseMasterMode ? "WAV, MP3 or another audio master. Ensemblis will attach it to this release and analyze its structure and strongest hooks." : vaultMode ? "Audio masters only. Each file becomes an independent Vault track." : "Images, video, audio, masters, stems, or ZIP files"}</span>
+        <strong>{releaseMasterMode ? "Drop the release master here" : musicIntakeMode ? "Drop mastered tracks here" : vaultMode ? "Drop unreleased masters here" : "Drop media here"}</strong>
+        <span>{releaseMasterMode ? "WAV, MP3 or another audio master. Ensemblis will attach it to this release and analyze its structure and strongest hooks." : musicIntakeMode ? "Audio only. Title is optional; Ensemblis starts understanding structure and strongest moments automatically." : vaultMode ? "Audio masters only. Each file becomes an independent Vault track." : "Images, video, audio, masters, stems, or ZIP files"}</span>
         <small>Files over 6 MB upload in resumable chunks and retry automatically if the network drops.</small>
-        <button type="button" className="button" onClick={() => inputRef.current?.click()}>{releaseMasterMode ? "Choose master" : vaultMode ? "Choose masters" : "Choose files"}</button>
-        <input ref={inputRef} hidden multiple={!releaseMasterMode} type="file" accept={vaultMode || releaseMasterMode ? "audio/*" : "image/*,video/*,audio/*,.zip"} onChange={(event) => event.target.files && addFiles(event.target.files)} />
+        <button type="button" className="button" onClick={() => inputRef.current?.click()}>{releaseMasterMode ? "Choose master" : musicIntakeMode ? "Choose mastered tracks" : vaultMode ? "Choose masters" : "Choose files"}</button>
+        <input ref={inputRef} hidden multiple={!releaseMasterMode} type="file" accept={masterIntake || releaseMasterMode ? "audio/*" : "image/*,video/*,audio/*,.zip"} onChange={(event) => event.target.files && addFiles(event.target.files)} />
       </div>
 
       {items.length ? (
@@ -308,7 +319,7 @@ export function MediaUploader({
                 <small>{humanSize(item.file.size)} · {item.file.type || "Unknown format"}{item.message ? ` · ${item.message}` : ""}</small>
                 {item.state === "uploading" && typeof item.progress === "number" ? <progress className="upload-progress" max={100} value={Math.round(item.progress * 100)} aria-label={`Upload progress for ${item.file.name}`} /> : null}
               </span>
-              <select aria-label={`Use for ${item.file.name}`} value={item.role} disabled={vaultMode || releaseMasterMode || busy || item.state === "done"} onChange={(event) => setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, role: event.target.value as MediaType, state: entry.state === "error" ? "ready" : entry.state, message: undefined, target: undefined, progress: undefined } : entry))}>{compatibleMediaTypes(item.file.type).map((type) => <option value={type} key={type}>{MEDIA_TYPE_LABELS[type]}</option>)}</select>
+              <select aria-label={`Use for ${item.file.name}`} value={item.role} disabled={masterIntake || releaseMasterMode || busy || item.state === "done"} onChange={(event) => setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, role: event.target.value as MediaType, state: entry.state === "error" ? "ready" : entry.state, message: undefined, target: undefined, progress: undefined } : entry))}>{compatibleMediaTypes(item.file.type).map((type) => <option value={type} key={type}>{MEDIA_TYPE_LABELS[type]}</option>)}</select>
               {!busy && item.state !== "done" ? <button type="button" aria-label={`Remove ${item.file.name}`} onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}><FiX /></button> : null}
             </div>
           ))}
@@ -316,16 +327,18 @@ export function MediaUploader({
       ) : null}
 
       {!releaseMasterMode ? <div className="form-grid media-upload-fields">
-        <label className="field"><span>Display name {items.length > 1 ? "(file names are used for bulk imports)" : ""}</span><input value={title} onChange={(event) => setTitle(event.target.value)} disabled={items.length > 1} placeholder={items[0] ? cleanAudioTitle(items[0].file.name) : "Shown in the library"} /></label>
-        <label className="field"><span>Tags</span><input value={tags} onChange={(event) => setTags(event.target.value)} placeholder={vaultMode ? "mastered, nu-disco, priority" : "release, artwork, blue-hour"} /></label>
-        <label className="field wide"><span>Notes</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={2} placeholder={vaultMode ? "Optional source/rights notes. Track-specific creative notes can be refined in the Vault." : "Creative context, rights, source, or intended use"} /></label>
-        {releaseId && !contentItemId && !vaultMode ? <label className="checkbox-field"><input type="checkbox" checked={primary} onChange={(event) => setPrimary(event.target.checked)} /> Make primary for this role</label> : null}
+        <label className="field"><span>{musicIntakeMode ? `Title ${items.length > 1 ? "(file names are used for bulk uploads)" : "(optional)"}` : `Display name ${items.length > 1 ? "(file names are used for bulk imports)" : ""}`}</span><input value={title} onChange={(event) => setTitle(event.target.value)} disabled={items.length > 1} placeholder={items[0] ? cleanAudioTitle(items[0].file.name) : musicIntakeMode ? "Uses the file name when empty" : "Shown in the library"} /></label>
+        {!musicIntakeMode ? <>
+          <label className="field"><span>Tags</span><input value={tags} onChange={(event) => setTags(event.target.value)} placeholder={vaultMode ? "mastered, nu-disco, priority" : "release, artwork, blue-hour"} /></label>
+          <label className="field wide"><span>Notes</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={2} placeholder={vaultMode ? "Optional source/rights notes. Track-specific creative notes can be refined in the Vault." : "Creative context, rights, source, or intended use"} /></label>
+        </> : null}
+        {releaseId && !contentItemId && !masterIntake ? <label className="checkbox-field"><input type="checkbox" checked={primary} onChange={(event) => setPrimary(event.target.checked)} /> Make primary for this role</label> : null}
       </div> : null}
       <div className="media-upload-actions">
         <button className="button primary" type="button" disabled={!items.length || busy || !hasPending} onClick={upload}>
-          {busy ? `Uploading ${Math.min(items.length, completed + 1)} of ${items.length}…` : completed === items.length && items.length ? "Upload complete" : releaseMasterMode ? "Upload & analyze master" : vaultMode ? `Import ${items.length || ""} to Vault` : contextualAttach ? "Upload and attach" : `Add ${items.length || ""} to library`}
+          {busy ? `Uploading ${Math.min(items.length, completed + 1)} of ${items.length}…` : completed === items.length && items.length ? "Upload complete" : releaseMasterMode ? "Upload & analyze master" : musicIntakeMode ? `Add ${items.length || ""} mastered track${items.length === 1 ? "" : "s"}` : vaultMode ? `Import ${items.length || ""} to Vault` : contextualAttach ? "Upload and attach" : `Add ${items.length || ""} to library`}
         </button>
-        {completed ? <span>{completed} of {items.length} ready</span> : <span>{releaseMasterMode ? "The previous master stays in Media Library history when you replace it." : vaultMode ? "Upload is reusable in Media Library; audio analysis does not spend an AI call." : contentItemId ? "Media will be attached to this content item." : "Media is published to the public asset library."}</span>}
+        {completed ? <span>{completed} of {items.length} ready</span> : <span>{releaseMasterMode ? "The previous master stays in Media Library history when you replace it." : musicIntakeMode ? "Each master stays reusable in Media Library. Track Intelligence starts automatically after upload." : vaultMode ? "Upload is reusable in Media Library; audio analysis does not spend an AI call." : contentItemId ? "Media will be attached to this content item." : "Media is published to the public asset library."}</span>}
       </div>
     </div>
   );
