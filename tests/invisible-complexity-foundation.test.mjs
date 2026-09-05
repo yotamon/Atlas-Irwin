@@ -63,7 +63,7 @@ test("Today consumes the same canonical Needs You projection and avoids pseudo-p
   assert.ok(today.includes('href={href("/studio/needs-you")}'));
   assert.ok(today.includes("needsYouTone(item)"));
   assert.ok(today.includes("Recommended next move"));
-  assert.ok(today.includes('<Status>{nextAction ? "Recommended" : "Clear"}</Status>'));
+  assert.ok(today.includes('<Status>{nextAction ? "Required" : "Clear"}</Status>'));
   assert.equal(today.includes("const needsYou: TodayItem[]"), false, "Today must not maintain its own parallel decision queue");
   assert.equal(today.includes("/100 signal"), false, "Today should not expose pseudo-precise ranking scores as artist truth");
 });
