@@ -77,6 +77,82 @@
   color: var(--en-accent);
 }
 
+.studio-root .create-moment-grid {
+  gap: 1rem;
+}
+
+.studio-root .create-moment-card {
+  display: grid;
+  align-content: start;
+  gap: 0.65rem;
+}
+
+.studio-root .create-outcome-heading {
+  display: grid;
+  gap: 0.12rem;
+  margin-top: 0.25rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid color-mix(in srgb, var(--en-line) 72%, transparent);
+}
+
+.studio-root .create-outcome-heading strong {
+  color: var(--en-ink);
+  font-size: 0.75rem;
+}
+
+.studio-root .create-outcome-heading span {
+  color: var(--en-subtle);
+  font-size: 0.64rem;
+}
+
+.studio-root .create-outcome-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.studio-root .create-outcome-grid form {
+  min-width: 0;
+}
+
+.studio-root .create-outcome-grid button {
+  display: grid;
+  gap: 0.16rem;
+  width: 100%;
+  min-height: 4rem;
+  padding: 0.7rem 0.75rem;
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-sm);
+  background: color-mix(in srgb, var(--en-surface-raised) 58%, transparent);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 150ms ease, background-color 150ms ease, transform 150ms ease;
+}
+
+.studio-root .create-outcome-grid button:hover,
+.studio-root .create-outcome-grid button:focus-visible {
+  border-color: color-mix(in srgb, var(--en-accent) 52%, var(--en-line));
+  background: color-mix(in srgb, var(--en-accent-soft) 42%, var(--en-surface-raised));
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.studio-root .create-outcome-grid button strong {
+  color: var(--en-ink);
+  font-size: 0.72rem;
+}
+
+.studio-root .create-outcome-grid button span {
+  color: var(--en-muted);
+  font-size: 0.62rem;
+  line-height: 1.35;
+}
+
+.studio-root .create-evidence-action {
+  margin-top: 0.1rem;
+}
+
 .studio-root .create-next-action-callout {
   display: flex;
   align-items: center;
@@ -138,6 +214,14 @@
 
   .studio-root .create-intent-row > b {
     grid-column: 2;
+  }
+
+  .studio-root .create-outcome-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .studio-root .create-outcome-grid button {
+    min-height: 3.4rem;
   }
 
   .studio-root .create-next-action-callout {
