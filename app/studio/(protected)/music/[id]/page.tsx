@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { analyzeMusicTrack } from "@/app/studio/growth-media-actions-safe";
 import { LyricsIntelligencePanel } from "@/components/studio/lyrics-intelligence-panel";
 import { MusicIntelligencePreview } from "@/components/studio/music-intelligence-preview";
 import { ObjectHeader } from "@/components/studio/object-header";
@@ -8,7 +9,6 @@ import { requireStudioAdmin } from "@/lib/auth/studio";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asGrowthClient } from "@/lib/studio/growth-db";
-import { scoreVaultTrack } from "@/lib/studio/growth";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import type { Track } from "@/types/database";
 
@@ -23,6 +23,15 @@ function duration(seconds: number | null) {
 
 function hasMusicMap(value: unknown) {
   return Boolean(value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length);
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function analysisStatus(value: unknown) {
+  const status = asRecord(value).status;
+  return typeof status === "string" ? status : "pending";
 }
 
 export default async function TrackWorkspacePage({ params }: { params: Promise<{ id: string }> }) {
@@ -67,9 +76,18 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
     releaseTrack = (tracksResult.data ?? []).find((track) => track.is_primary) ?? tracksResult.data?.[0] ?? null;
   }
 
-  const score = scoreVaultTrack(vaultTrack);
   const intelligenceReady = hasMusicMap(vaultTrack.audio_profile);
-  const portfolioHref = `${href("/studio/growth?view=portfolio")}#vault`;
+  const musicMap = asRecord(vaultTrack.audio_profile);
+  const sections = Array.isArray(musicMap.sections) ? musicMap.sections.length : 0;
+  const hooks = Array.isArray(musicMap.hook_candidates) ? musicMap.hook_candidates.length : 0;
+  const bpm = typeof musicMap.bpm === "number" && Number.isFinite(musicMap.bpm) ? Math.round(musicMap.bpm) : null;
+  const currentAnalysisStatus = analysisStatus(vaultTrack.analysis);
+  const analysisNeedsRecovery = Boolean(
+    vaultTrack.audio_url
+    && !intelligenceReady
+    && (currentAnalysisStatus === "failed" || currentAnalysisStatus === "unavailable"),
+  );
+  const createHref = href(`/studio/create?intent=asset&track=${vaultTrack.id}`);
   const tabs = [
     { label: "Overview", href: "#overview", active: true },
     { label: "Intelligence", href: "#intelligence" },
@@ -83,16 +101,21 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
         backLabel="Music"
         eyebrow="Track"
         title={vaultTrack.title}
-        subtitle={`${titleCase(vaultTrack.status)} · ${duration(vaultTrack.duration_seconds)} · ${intelligenceReady ? "Intelligence ready" : vaultTrack.audio_url ? "Master ready" : "Needs master"}`}
+        subtitle={`${titleCase(vaultTrack.status)} · ${duration(vaultTrack.duration_seconds)} · ${intelligenceReady ? "Understanding ready" : vaultTrack.audio_url ? currentAnalysisStatus === "queued" || currentAnalysisStatus === "running" ? "Ensemblis is listening" : "Master ready" : "Needs master"}`}
         imageUrl={release?.artwork_url}
         imageAlt={release?.cover_alt || (release ? `${release.title} artwork` : "")}
         facts={[
-          { label: "Portfolio score", value: score.eligible ? Math.round(score.score) : "Hold" },
-          { label: "Hook", value: `${Math.round(vaultTrack.hook_strength)}/100` },
-          { label: "Short-form", value: `${Math.round(vaultTrack.short_form_potential)}/100` },
-          { label: "Confidence", value: `${Math.round(vaultTrack.analysis_confidence * 100)}%` },
+          { label: "Master", value: vaultTrack.audio_url ? "Ready" : "Missing" },
+          { label: "Intelligence", value: intelligenceReady ? "Ready" : analysisNeedsRecovery ? "Needs attention" : "Listening" },
+          { label: "Structure", value: intelligenceReady ? `${sections} section${sections === 1 ? "" : "s"}` : "Pending" },
+          { label: "Strong moments", value: intelligenceReady ? `${Math.min(hooks, 5)} surfaced` : "Pending" },
+          ...(bpm ? [{ label: "Tempo", value: `${bpm} BPM` }] : []),
         ]}
-        actions={release ? <Link className="button primary" href={href(`/studio/releases/${release.id}`)}>Open release</Link> : <Link className="button primary" href={portfolioHref}>Manage release decision</Link>}
+        actions={release
+          ? <Link className="button primary" href={href(`/studio/releases/${release.id}`)}>Open release</Link>
+          : intelligenceReady
+            ? <Link className="button primary" href={createHref}>Create from this track</Link>
+            : <Link className="button" href="#intelligence">Track Intelligence</Link>}
         tabs={tabs}
       />
 
@@ -100,31 +123,75 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
         <div className="track-object-primary">
           <span className="section-label">Source audio</span>
           <h2>{vaultTrack.audio_url ? "Canonical master" : "Master audio is still missing"}</h2>
-          {vaultTrack.notes ? <p>{vaultTrack.notes}</p> : <p>{vaultTrack.audio_url ? "This is the source Ensemblis uses for structure, hook and creative-moment intelligence." : "Attach the mastered source in Portfolio before relying on track intelligence or release recommendations."}</p>}
+          {vaultTrack.notes ? <p>{vaultTrack.notes}</p> : <p>{vaultTrack.audio_url ? "This is the source Ensemblis uses to understand structure, energy and strongest moments." : "Ensemblis needs the actual mastered source before it can make music-aware creative recommendations."}</p>}
           {vaultTrack.audio_url ? <audio controls preload="metadata" src={vaultTrack.audio_url} /> : null}
         </div>
         <aside className="track-object-decision">
-          <span className="section-label">Decision context</span>
-          <strong>{score.eligible ? `${Math.round(score.score)}/100` : "On hold"}</strong>
-          <p>{score.blocker || score.reasons.join(" · ") || "Add stronger portfolio signals before making a release decision."}</p>
-          <Link href={portfolioHref}>Edit portfolio signals →</Link>
+          <span className="section-label">Recommended next move</span>
+          {intelligenceReady ? (
+            <>
+              <strong>Create from the strongest moment</strong>
+              <p>Track Intelligence is ready. Start creative work from the musical evidence instead of choosing a random excerpt.</p>
+              <Link href={createHref}>Create with this track →</Link>
+            </>
+          ) : analysisNeedsRecovery ? (
+            <>
+              <strong>Analysis needs attention</strong>
+              <p>The master is safe. Retry only the intelligence step; there is no need to upload it again.</p>
+              <Link href="#recovery">Open recovery →</Link>
+            </>
+          ) : vaultTrack.audio_url ? (
+            <>
+              <strong>No action needed</strong>
+              <p>Ensemblis is preparing the musical understanding automatically. You can leave this screen.</p>
+              <Link href={href("/studio/music")}>Back to Music →</Link>
+            </>
+          ) : (
+            <>
+              <strong>Add the real master</strong>
+              <p>Music intelligence stays intentionally empty until Ensemblis has source audio to hear.</p>
+              <Link href={href("/studio/music/import")}>Add mastered music →</Link>
+            </>
+          )}
         </aside>
       </section>
 
       <section className="track-object-section" id="intelligence">
-        <div className="v2-section-heading"><div><span className="section-label">Track Intelligence</span><h2>{intelligenceReady ? "What Ensemblis hears in this track" : "Intelligence is not ready yet"}</h2></div></div>
-        {intelligenceReady ? <MusicIntelligencePreview audioUrl={vaultTrack.audio_url} musicMap={vaultTrack.audio_profile} /> : <div className="v2-calm-state compact"><strong>{vaultTrack.audio_url ? "Master attached." : "No source audio yet."}</strong><p>{vaultTrack.audio_url ? "Use the Portfolio maintenance view to run or retry analysis. This workspace will become the readable interpretation layer once the map is ready." : "Attach a master first. Ensemblis does not manufacture analysis without source audio."}</p><Link className="button" href={portfolioHref}>Open Portfolio</Link></div>}
+        <div className="v2-section-heading">
+          <div>
+            <span className="section-label">Track Intelligence</span>
+            <h2>{intelligenceReady ? "What Ensemblis hears in this track" : analysisNeedsRecovery ? "Understanding needs recovery" : "Ensemblis is understanding the track"}</h2>
+          </div>
+        </div>
+        {intelligenceReady ? (
+          <MusicIntelligencePreview audioUrl={vaultTrack.audio_url} musicMap={vaultTrack.audio_profile} />
+        ) : (
+          <div className="v2-calm-state compact">
+            <strong>{analysisNeedsRecovery ? "The source master is safe." : vaultTrack.audio_url ? "Nothing to fill in manually." : "No source audio yet."}</strong>
+            <p>{analysisNeedsRecovery ? "Use the recovery control below to retry Track Intelligence without changing the master." : vaultTrack.audio_url ? "Structure and strongest moments will appear here automatically when analysis completes." : "Add a master first. Ensemblis does not manufacture analysis without source audio."}</p>
+          </div>
+        )}
+
         <details className="track-object-advanced">
-          <summary>Detailed track signals</summary>
+          <summary>Technical details</summary>
           <dl>
-            <div><dt>Artist rating</dt><dd>{vaultTrack.artist_rating ?? "Not rated"}</dd></div>
-            <div><dt>Release readiness</dt><dd>{Math.round(vaultTrack.release_readiness)}/100</dd></div>
-            <div><dt>Uniqueness</dt><dd>{Math.round(vaultTrack.uniqueness_score)}/100</dd></div>
-            <div><dt>Visual potential</dt><dd>{Math.round(vaultTrack.visual_potential)}/100</dd></div>
-            <div><dt>Hook window</dt><dd>{vaultTrack.hook_start_seconds !== null && vaultTrack.hook_end_seconds !== null ? `${vaultTrack.hook_start_seconds}s–${vaultTrack.hook_end_seconds}s` : "Intelligence decides"}</dd></div>
             <div><dt>Source</dt><dd>{titleCase(vaultTrack.source)}</dd></div>
+            <div><dt>Analysis state</dt><dd>{titleCase(currentAnalysisStatus)}</dd></div>
+            <div><dt>Music map</dt><dd>{intelligenceReady ? `v${typeof musicMap.version === "number" ? musicMap.version : "?"}` : "Pending"}</dd></div>
+            <div><dt>Media asset</dt><dd>{vaultTrack.media_asset_id ? "Connected" : "Legacy source"}</dd></div>
           </dl>
         </details>
+
+        {analysisNeedsRecovery ? (
+          <details className="track-object-advanced" id="recovery">
+            <summary>Analysis recovery</summary>
+            <p className="v2-muted-copy">Retry only when Track Intelligence failed or the worker was unavailable. The existing master remains untouched.</p>
+            <form action={analyzeMusicTrack}>
+              <input type="hidden" name="id" value={vaultTrack.id} />
+              <button className="button" type="submit">Retry Track Intelligence</button>
+            </form>
+          </details>
+        ) : null}
       </section>
 
       {releaseTrack && release ? (

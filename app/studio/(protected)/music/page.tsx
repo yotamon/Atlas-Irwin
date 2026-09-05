@@ -30,12 +30,12 @@ export default async function MusicPage({
         />
 
         <section className="create-intent-list" aria-label="Ways to add music">
-          <Link className="create-intent-row" href={`${href("/studio/growth?view=portfolio")}#vault`}>
+          <Link className="create-intent-row" href={href("/studio/music/import")}>
             <span className="create-intent-index">01</span>
             <span className="create-intent-copy">
               <small>Existing music</small>
               <strong>Add a mastered track</strong>
-              <span>Bring in an unreleased master so Ensemblis can understand its structure, hooks and release potential before any marketing work begins.</span>
+              <span>Upload the real master. Ensemblis will begin understanding its structure and strongest moments automatically.</span>
             </span>
             <b>Add master →</b>
           </Link>

@@ -5,7 +5,9 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { kickMediaWorkerQueue } from "@/lib/media-worker/queue";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asGrowthClient } from "@/lib/studio/growth-db";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { vaultAnalysisReadiness } from "@/lib/studio/vault-analysis";
 import type { Json } from "@/types/database";
 
@@ -33,13 +35,18 @@ function analysisMatchesAsset(profile: Json, asset: { id: string; public_url: st
   return Boolean(asset.public_url) && typeof source.url === "string" && source.url === asset.public_url;
 }
 
-async function dispatchAnalysis(trackId: string, audioUrl: string, mediaAssetId: string | null) {
+async function dispatchAnalysis(
+  trackId: string,
+  artistId: string,
+  audioUrl: string,
+  mediaAssetId: string | null,
+) {
   const { supabase, user } = await requireStudioAdmin();
   const growth = asGrowthClient(supabase);
   if (!vaultAnalysisReadiness().configured) {
     await growth.from("track_vault").update({
       analysis: json({ status: "unavailable", message: "Vercel Sandbox is unavailable in this deployment." }),
-    }).eq("id", trackId).eq("owner_id", user.id);
+    }).eq("id", trackId).eq("owner_id", user.id).eq("artist_id", artistId);
     return { queued: false };
   }
   const requestId = randomUUID();
@@ -52,7 +59,7 @@ async function dispatchAnalysis(trackId: string, audioUrl: string, mediaAssetId:
       source_media_asset_id: mediaAssetId,
       music_intelligence_version: 3,
     }),
-  }).eq("id", trackId).eq("owner_id", user.id);
+  }).eq("id", trackId).eq("owner_id", user.id).eq("artist_id", artistId);
   if (error) throw new Error(error.message);
 
   // The request is durable before dispatch. A busy worker leaves it queued and the next
@@ -63,14 +70,19 @@ async function dispatchAnalysis(trackId: string, audioUrl: string, mediaAssetId:
 
 export async function createVaultTrackFromMedia(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
+  const artist = await resolveActiveArtistContext(supabase, user);
   const growth = asGrowthClient(supabase);
   const assetId = z.uuid().parse(value(form, "media_asset_id"));
   const { data: asset, error: assetError } = await supabase.from("media_assets").select("id,public_url,mime_type,duration_ms,metadata").eq("id", assetId).eq("owner_id", user.id).single();
   if (assetError || !asset) throw new Error(assetError?.message || "Media asset not found.");
-  if (!asset.mime_type?.startsWith("audio/")) throw new Error("Only audio assets can become Vault tracks.");
-  if (!asset.public_url) throw new Error("Vault analysis requires a public media URL.");
+  if (!asset.mime_type?.startsWith("audio/")) throw new Error("Only audio assets can become mastered tracks.");
+  if (!asset.public_url) throw new Error("Track Intelligence requires a public media URL.");
 
-  const { data: existing, error: existingError } = await growth.from("track_vault").select("*").eq("owner_id", user.id).eq("media_asset_id", asset.id).maybeSingle();
+  const { data: existing, error: existingError } = await growth.from("track_vault").select("*")
+    .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId)
+    .eq("media_asset_id", asset.id)
+    .maybeSingle();
   if (existingError) throw new Error(existingError.message);
   if (existing) return { id: existing.id, deduplicated: true };
 
@@ -83,6 +95,7 @@ export async function createVaultTrackFromMedia(form: FormData) {
   const durationSeconds = asset.duration_ms ? Math.round(asset.duration_ms / 1000) : null;
   const { data: track, error } = await growth.from("track_vault").insert({
     owner_id: user.id,
+    artist_id: artist.artistId,
     media_asset_id: asset.id,
     title,
     status: "mastered",
@@ -92,8 +105,10 @@ export async function createVaultTrackFromMedia(form: FormData) {
     release_readiness: durationSeconds ? 75 : 68,
     analysis: json({ status: "pending" }),
   }).select("*").single();
-  if (error || !track) throw new Error(error?.message || "Could not add the master to the Vault.");
-  await dispatchAnalysis(track.id, asset.public_url, asset.id);
+  if (error || !track) throw new Error(error?.message || "Could not add the master to Music.");
+  await dispatchAnalysis(track.id, artist.artistId, asset.public_url, asset.id);
+  revalidatePath("/studio/music");
+  revalidatePath(`/studio/music/${track.id}`);
   revalidatePath("/studio/growth");
   revalidatePath("/studio");
   return { id: track.id, deduplicated: false };
@@ -101,16 +116,18 @@ export async function createVaultTrackFromMedia(form: FormData) {
 
 export async function attachReleaseMasterFromMedia(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
+  const artist = await resolveActiveArtistContext(supabase, user);
   const growth = asGrowthClient(supabase);
+  const music = asArtistScopedMusicClient(supabase);
   const assetId = z.uuid().parse(value(form, "media_asset_id"));
   const releaseId = z.uuid().parse(value(form, "release_id"));
 
   const [assetResult, releaseResult, tracksResult, linkedVaultResult, assetVaultResult] = await Promise.all([
     supabase.from("media_assets").select("id,public_url,mime_type,duration_ms,metadata").eq("id", assetId).eq("owner_id", user.id).single(),
-    supabase.from("releases").select("id,title,status,publish_state").eq("id", releaseId).eq("owner_id", user.id).single(),
-    supabase.from("tracks").select("*").eq("release_id", releaseId).eq("owner_id", user.id).order("display_order").order("created_at"),
-    growth.from("track_vault").select("*").eq("owner_id", user.id).eq("linked_release_id", releaseId).order("updated_at", { ascending: false }).limit(1).maybeSingle(),
-    growth.from("track_vault").select("*").eq("owner_id", user.id).eq("media_asset_id", assetId).limit(1).maybeSingle(),
+    music.from("releases").select("id,title,status,publish_state,artist_id").eq("id", releaseId).eq("owner_id", user.id).eq("artist_id", artist.artistId).single(),
+    music.from("tracks").select("*").eq("release_id", releaseId).eq("owner_id", user.id).eq("artist_id", artist.artistId).order("display_order").order("created_at"),
+    growth.from("track_vault").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).eq("linked_release_id", releaseId).order("updated_at", { ascending: false }).limit(1).maybeSingle(),
+    growth.from("track_vault").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).eq("media_asset_id", assetId).limit(1).maybeSingle(),
   ]);
   const { data: asset, error: assetError } = assetResult;
   const { data: release, error: releaseError } = releaseResult;
@@ -126,7 +143,7 @@ export async function attachReleaseMasterFromMedia(form: FormData) {
   if (!asset.mime_type?.startsWith("audio/")) throw new Error("The release master must be an audio file.");
   if (!asset.public_url) throw new Error("Music Intelligence requires a public master URL.");
   if (assetVault?.linked_release_id && assetVault.linked_release_id !== release.id) {
-    throw new Error("This exact master is already attached to another release. Use that release or upload the correct master for this one.");
+    throw new Error("This exact master is already attached to another release for this artist. Use that release or upload the correct master for this one.");
   }
 
   const durationSeconds = asset.duration_ms ? Math.round(asset.duration_ms / 1000) : null;
@@ -134,16 +151,17 @@ export async function attachReleaseMasterFromMedia(form: FormData) {
   let canonicalTrack = currentTracks.find((track) => track.is_primary) ?? currentTracks[0] ?? null;
 
   if (canonicalTrack) {
-    const { data: updated, error } = await supabase.from("tracks").update({
+    const { data: updated, error } = await music.from("tracks").update({
       audio_url: asset.public_url,
       duration: durationSeconds ?? canonicalTrack.duration,
       is_primary: true,
-    }).eq("id", canonicalTrack.id).eq("owner_id", user.id).select("*").single();
+    }).eq("id", canonicalTrack.id).eq("owner_id", user.id).eq("artist_id", artist.artistId).select("*").single();
     if (error || !updated) throw new Error(error?.message || "Could not update the release master.");
     canonicalTrack = updated;
   } else {
-    const { data: created, error } = await supabase.from("tracks").insert({
+    const { data: created, error } = await music.from("tracks").insert({
       owner_id: user.id,
+      artist_id: artist.artistId,
       release_id: release.id,
       title: release.title,
       duration: durationSeconds,
@@ -158,19 +176,23 @@ export async function attachReleaseMasterFromMedia(form: FormData) {
 
   const otherPrimaryIds = currentTracks.filter((track) => track.id !== canonicalTrack.id && track.is_primary).map((track) => track.id);
   if (otherPrimaryIds.length) {
-    const { error } = await supabase.from("tracks").update({ is_primary: false }).in("id", otherPrimaryIds).eq("owner_id", user.id);
+    const { error } = await music.from("tracks").update({ is_primary: false }).in("id", otherPrimaryIds).eq("owner_id", user.id).eq("artist_id", artist.artistId);
     if (error) throw new Error(error.message);
   }
 
   const existingVault = assetVault ?? linkedVault;
   if (linkedVault && existingVault && linkedVault.id !== existingVault.id) {
-    const { error } = await growth.from("track_vault").update({ linked_release_id: null, status: "hold" }).eq("id", linkedVault.id).eq("owner_id", user.id);
+    const { error } = await growth.from("track_vault").update({ linked_release_id: null, status: "hold" })
+      .eq("id", linkedVault.id)
+      .eq("owner_id", user.id)
+      .eq("artist_id", artist.artistId);
     if (error) throw new Error(error.message);
   }
 
   const reusableAnalysis = Boolean(assetVault && analysisMatchesAsset(assetVault.audio_profile, asset));
   const vaultStatus = release.publish_state === "live" || release.status === "Live" ? "released" : release.status === "Scheduled" ? "scheduled" : "release_candidate";
   const vaultValues = {
+    artist_id: artist.artistId,
     linked_release_id: release.id,
     media_asset_id: asset.id,
     title: canonicalTrack.title || release.title,
@@ -193,15 +215,17 @@ export async function attachReleaseMasterFromMedia(form: FormData) {
   };
 
   const { data: vaultTrack, error: vaultError } = existingVault
-    ? await growth.from("track_vault").update(vaultValues).eq("id", existingVault.id).eq("owner_id", user.id).select("*").single()
+    ? await growth.from("track_vault").update(vaultValues).eq("id", existingVault.id).eq("owner_id", user.id).eq("artist_id", artist.artistId).select("*").single()
     : await growth.from("track_vault").insert({ owner_id: user.id, ...vaultValues }).select("*").single();
   if (vaultError || !vaultTrack) throw new Error(vaultError?.message || "Could not connect Music Intelligence to this release.");
 
   const analysisResult = reusableAnalysis
     ? { queued: false }
-    : await dispatchAnalysis(vaultTrack.id, asset.public_url, asset.id);
+    : await dispatchAnalysis(vaultTrack.id, artist.artistId, asset.public_url, asset.id);
   revalidatePath(`/studio/releases/${release.id}`);
   revalidatePath("/studio/releases");
+  revalidatePath("/studio/music");
+  revalidatePath(`/studio/music/${vaultTrack.id}`);
   revalidatePath("/studio/growth");
   revalidatePath("/studio/media");
   revalidatePath("/studio");
@@ -210,12 +234,20 @@ export async function attachReleaseMasterFromMedia(form: FormData) {
 
 export async function analyzeVaultTrack(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
+  const artist = await resolveActiveArtistContext(supabase, user);
   const growth = asGrowthClient(supabase);
   const id = z.uuid().parse(value(form, "id"));
-  const { data: track, error } = await growth.from("track_vault").select("id,audio_url,media_asset_id,linked_release_id").eq("id", id).eq("owner_id", user.id).single();
-  if (error || !track) throw new Error(error?.message || "Vault track not found.");
-  if (!track.audio_url) throw new Error("Add an audio URL or upload a master before analysis.");
-  await dispatchAnalysis(track.id, track.audio_url, track.media_asset_id);
+  const { data: track, error } = await growth.from("track_vault")
+    .select("id,audio_url,media_asset_id,linked_release_id,artist_id")
+    .eq("id", id)
+    .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId)
+    .single();
+  if (error || !track) throw new Error(error?.message || "Track not found.");
+  if (!track.audio_url) throw new Error("Add a master before analysis.");
+  await dispatchAnalysis(track.id, artist.artistId, track.audio_url, track.media_asset_id);
+  revalidatePath("/studio/music");
+  revalidatePath(`/studio/music/${track.id}`);
   revalidatePath("/studio/growth");
   if (track.linked_release_id) revalidatePath(`/studio/releases/${track.linked_release_id}`);
 }
