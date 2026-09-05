@@ -33,7 +33,7 @@ begin
   where content_item_id = item_row.id;
 
   if source_code is null then
-    source_code := replace(encode(gen_random_bytes(12), 'base64'), '/', '_');
+    source_code := replace(encode(extensions.gen_random_bytes(12), 'base64'), '/', '_');
     source_code := replace(source_code, '+', '-');
     source_code := replace(source_code, '=', '');
   end if;
