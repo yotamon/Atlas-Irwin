@@ -6,8 +6,15 @@ import shutil
 import sys
 from pathlib import Path
 
-from .main import WorkerRequest, execute
+from . import main as worker_main
+from .music_intelligence_v4 import analyze_music as analyze_music_v4
 from .social_finishing import SocialWorkerRequest, execute_social
+
+# V4 deliberately wraps the stable V3 analyzer. Keeping the swap at the worker
+# entrypoint makes rollback trivial while every production Sandbox job uses V4.
+worker_main.analyze_music = analyze_music_v4
+WorkerRequest = worker_main.WorkerRequest
+execute = worker_main.execute
 
 LOCK_PATH = Path("/tmp/atlas-media-worker.lock")
 
