@@ -116,9 +116,9 @@ export function deriveReleaseMission(input: ReleaseMissionInput): ReleaseMission
   if (!input.hasListeningDestination && input.lifecycle === "catalog") {
     recommendations.push(item(
       "destination",
-      "Connect a listening destination",
-      "Catalog growth needs at least one reliable place to send listeners.",
-      `${releaseHref}?view=advanced&tab=music`,
+      "Finish the owned release destination",
+      "Catalog growth needs a reliable artist-owned page that can route listeners to current DSP destinations and keep attribution attached.",
+      "/studio/sites/smart-links",
       "recommended",
     ));
   }

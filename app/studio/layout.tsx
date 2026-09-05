@@ -24,6 +24,7 @@ import "./music-polish.css";
 import "./release-polish.css";
 import "./create-polish.css";
 import "./growth-polish.css";
+import "./paid-growth-polish.css";
 import "./audience-polish.css";
 import "./library-polish.css";
 import "./inbox-polish.css";
@@ -32,6 +33,7 @@ import "./loading-polish.css";
 import "./object-workspace-polish.css";
 import "./production-polish.css";
 import "./responsive-polish.css";
+import "./onboarding.css";
 
 export const metadata: Metadata = {
   title: {

@@ -13,10 +13,24 @@ function strong(value: number | null | undefined, threshold = 0.72) {
   return typeof value === "number" && Number.isFinite(value) && value >= threshold;
 }
 
+export function evidenceStrengthLabel(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "Preliminary evidence";
+  if (value >= 0.82) return "Strong evidence";
+  if (value >= 0.64) return "Supported by evidence";
+  return "Preliminary evidence";
+}
+
 export function analysisConfidenceLabel(value: number) {
   if (value >= 0.82) return "High-confidence analysis";
   if (value >= 0.64) return "Good evidence coverage";
   return "Preliminary analysis";
+}
+
+export function creativeContextQualityLabel(score: number | null | undefined) {
+  if (typeof score !== "number" || !Number.isFinite(score)) return "Limited reference context";
+  if (score >= 80) return "Strong reference context";
+  if (score >= 60) return "Good reference context";
+  return "Limited reference context";
 }
 
 export function hookRecommendationLabel(score: number, rank: number) {

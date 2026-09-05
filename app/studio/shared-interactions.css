@@ -1,4 +1,17 @@
-/* Shared interaction polish: global command search, keyboard navigation and durable upload feedback. */
+/* Shared interaction polish: global keyboard focus, touch targets, command search and durable upload feedback. */
+
+.studio-root :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--en-accent) 82%, white);
+  outline-offset: 3px;
+}
+
+.studio-root :where(button, summary, a[href]) {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.studio-root :where(button, input, select, textarea) {
+  font: inherit;
+}
 
 .studio-root .ensemblis-command-trigger {
   display: inline-flex;
@@ -20,7 +33,6 @@
 .studio-root .ensemblis-command-trigger:focus-visible {
   border-color: var(--en-line-strong);
   color: var(--en-ink);
-  outline: none;
 }
 
 .studio-root .ensemblis-command-trigger kbd {
@@ -71,7 +83,6 @@
   color: var(--en-ink);
   font: inherit;
   font-size: 0.9rem;
-  outline: none;
 }
 
 .studio-root .ensemblis-command-search input::placeholder {
@@ -131,7 +142,6 @@
 .studio-root .ensemblis-command-group > a:hover,
 .studio-root .ensemblis-command-group > a:focus-visible {
   background: var(--en-surface-hover);
-  outline: none;
 }
 
 .studio-root .ensemblis-command-group strong {
@@ -208,6 +218,12 @@
   background: color-mix(in srgb, var(--en-danger, #ff7668) 5%, transparent);
 }
 
+@media (pointer: coarse) {
+  .studio-root :where(button, summary, a[href], input:not([type="hidden"]), select, textarea) {
+    min-height: 2.75rem;
+  }
+}
+
 @media (max-width: 680px) {
   .studio-root .ensemblis-command-trigger span,
   .studio-root .ensemblis-command-trigger kbd {
@@ -215,8 +231,8 @@
   }
 
   .studio-root .ensemblis-command-trigger {
-    width: 2.15rem;
-    min-width: 2.15rem;
+    width: 2.75rem;
+    min-width: 2.75rem;
     padding: 0;
   }
 
@@ -244,8 +260,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .studio-root .ensemblis-command-backdrop,
-  .studio-root .ensemblis-command-dialog {
-    scroll-behavior: auto;
+  .studio-root *,
+  .studio-root *::before,
+  .studio-root *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

@@ -1,0 +1,15 @@
+{
+  "note": "Example input only. Replace values with measured cohort or benchmark results before using the evaluator.",
+  "measurements": {
+    "moment_top5_usable_recall": 0.9,
+    "creative_acceptance_rate": 0.6,
+    "creative_median_edit_ratio": 0.35,
+    "onboarding_median_minutes_to_first_useful_recommendation": 10,
+    "onboarding_completion_rate": 0.7,
+    "release_zero_median_human_interventions": 8,
+    "mission_blocker_resolution_rate": 0.8,
+    "mobile_critical_path_pass_rate": 1,
+    "keyboard_critical_path_pass_rate": 1,
+    "recovery_critical_path_pass_rate": 1
+  }
+}

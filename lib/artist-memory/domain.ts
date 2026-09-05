@@ -18,6 +18,68 @@ export type ArtistMemoryConsumer =
   | "growth"
   | "audience_assistance";
 
+export type ArtistMemoryEffect = "rank_only" | "suggest_only" | "brief_only" | "prepare_copy_only";
+
+export type ArtistMemoryConsumerPolicy = {
+  consumer: ArtistMemoryConsumer;
+  allowedClasses: ArtistMemoryClass[];
+  maxEffect: ArtistMemoryEffect;
+  maxItems: number;
+  minimumLearnedConfidence: number;
+  description: string;
+};
+
+export const ARTIST_MEMORY_CONSUMER_POLICY: Record<ArtistMemoryConsumer, ArtistMemoryConsumerPolicy> = {
+  moment_ranking: {
+    consumer: "moment_ranking",
+    allowedClasses: ["performance_learning"],
+    maxEffect: "rank_only",
+    maxItems: 4,
+    minimumLearnedConfidence: 0.7,
+    description: "May reorder otherwise valid Moment proposals. It may not alter source timing, approval state or create artist truth.",
+  },
+  creative_direction: {
+    consumer: "creative_direction",
+    allowedClasses: ["identity", "creative_rule", "preference_evidence", "performance_learning", "provenance_compliance"],
+    maxEffect: "brief_only",
+    maxItems: 8,
+    minimumLearnedConfidence: 0.55,
+    description: "May shape a creative brief and recommendation. Explicit artist guidance outranks learned preferences.",
+  },
+  video_director: {
+    consumer: "video_director",
+    allowedClasses: ["identity", "creative_rule", "preference_evidence", "performance_learning", "provenance_compliance"],
+    maxEffect: "brief_only",
+    maxItems: 8,
+    minimumLearnedConfidence: 0.55,
+    description: "May shape direction and shot recommendations. It cannot approve paid generation or replace artist-approved source media.",
+  },
+  campaign_planning: {
+    consumer: "campaign_planning",
+    allowedClasses: ["identity", "creative_rule", "performance_learning", "strategic_constraint", "provenance_compliance"],
+    maxEffect: "suggest_only",
+    maxItems: 8,
+    minimumLearnedConfidence: 0.65,
+    description: "May suggest campaign emphasis and sequencing. Publishing, spend and external effects remain governed elsewhere.",
+  },
+  growth: {
+    consumer: "growth",
+    allowedClasses: ["performance_learning", "strategic_constraint"],
+    maxEffect: "rank_only",
+    maxItems: 6,
+    minimumLearnedConfidence: 0.65,
+    description: "May rank growth opportunities using verified artist-specific evidence. It cannot manufacture evidence or spend authority.",
+  },
+  audience_assistance: {
+    consumer: "audience_assistance",
+    allowedClasses: ["identity", "creative_rule", "provenance_compliance"],
+    maxEffect: "prepare_copy_only",
+    maxItems: 6,
+    minimumLearnedConfidence: 0.8,
+    description: "May prepare artist-consistent wording only. It cannot infer consent, sensitive traits, identity merges or permission to send.",
+  },
+};
+
 export type ArtistMemorySource = {
   kind: "brand_setting" | "creative_memory" | "verified_learning";
   id: string | null;
@@ -49,6 +111,14 @@ export type ArtistMemorySnapshot = {
   explicitCount: number;
   learnedCount: number;
   candidateCount: number;
+  summary: string;
+};
+
+export type ArtistMemoryConsumerSnapshot = {
+  consumer: ArtistMemoryConsumer;
+  maxEffect: ArtistMemoryEffect;
+  policy: ArtistMemoryConsumerPolicy;
+  items: ArtistMemoryItem[];
   summary: string;
 };
 
@@ -216,5 +286,29 @@ export function summarizeArtistMemory(items: ArtistMemoryItem[]): ArtistMemorySn
     summary: active.length
       ? `${active.length} active memory item${active.length === 1 ? "" : "s"}: ${explicitCount} explicit artist rule${explicitCount === 1 ? "" : "s"} and ${learnedCount} evidence-backed learned signal${learnedCount === 1 ? "" : "s"}.`
       : "Ensemblis has no durable artist memory yet. Explicit artist guidance will become the first source of truth.",
+  };
+}
+
+export function artistMemoryForConsumer(snapshot: ArtistMemorySnapshot, consumer: ArtistMemoryConsumer): ArtistMemoryConsumerSnapshot {
+  const policy = ARTIST_MEMORY_CONSUMER_POLICY[consumer];
+  const items = snapshot.items
+    .filter((item) => item.lifecycle === "active")
+    .filter((item) => item.consumers.includes(consumer))
+    .filter((item) => policy.allowedClasses.includes(item.class))
+    .filter((item) => item.confidence.label === "explicit" || item.confidence.score >= policy.minimumLearnedConfidence)
+    .sort((left, right) => {
+      const explicit = Number(right.confidence.label === "explicit") - Number(left.confidence.label === "explicit");
+      if (explicit) return explicit;
+      return right.confidence.score - left.confidence.score || left.title.localeCompare(right.title);
+    })
+    .slice(0, policy.maxItems);
+  return {
+    consumer,
+    maxEffect: policy.maxEffect,
+    policy,
+    items,
+    summary: items.length
+      ? `${items.length} bounded Artist Memory signal${items.length === 1 ? "" : "s"} available for ${consumer.replaceAll("_", " ")}. Maximum effect: ${policy.maxEffect.replaceAll("_", " ")}.`
+      : `No qualifying Artist Memory is active for ${consumer.replaceAll("_", " ")}.`,
   };
 }
