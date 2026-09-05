@@ -5,6 +5,7 @@ export type NeedsYouSeverity = "required" | "decision" | "review";
 export type NeedsYouSourceKind =
   | "mission"
   | "distribution"
+  | "paid_growth"
   | "approval"
   | "outreach"
   | "publication"
@@ -29,6 +30,7 @@ export type NeedsYouProjectionInput = {
   activeReleaseId?: string | null;
   activeMission?: ReleaseMissionState | null;
   distributionDecisions?: Array<{ key: string; title: string; detail: string; severity: NeedsYouSeverity; releaseId: string }>;
+  paidGrowthDecisions?: Array<{ key: string; title: string; detail: string; severity: NeedsYouSeverity; href: string }>;
   workflowApprovalCount: number;
   outreachDraftCount: number;
   manualReady: Array<{ id: string; platform: string; contentItemId?: string | null }>;
@@ -73,6 +75,20 @@ export function deriveNeedsYouQueue(input: NeedsYouProjectionInput): NeedsYouIte
       priority: 85,
       source: { kind: "distribution", id: decision.key },
       missionId: decision.releaseId,
+    }));
+  }
+
+  for (const decision of (input.paidGrowthDecisions ?? []).slice(0, 4)) {
+    queue.push(item({
+      id: `paid-growth:${decision.key}`,
+      category: "Paid experiment",
+      title: decision.title,
+      detail: decision.detail,
+      href: decision.href,
+      severity: decision.severity,
+      priority: decision.severity === "required" ? 88 : 78,
+      source: { kind: "paid_growth", id: decision.key },
+      missionId,
     }));
   }
 
