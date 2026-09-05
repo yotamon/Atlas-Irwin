@@ -176,14 +176,14 @@ select is(
 
 select is(
   (select unique_click_count from public.attribution_links where id = '80000000-0000-0000-0000-000000000001'),
-  1::bigint,
-  'the same visitor hash is unique only once in the rolling window'
+  0::bigint,
+  'sessionless attribution does not infer unique listeners from visitor hashes'
 );
 
 select is(
   (select link_clicks from public.metric_snapshots where content_variant_id = '70000000-0000-0000-0000-000000000001' and source = 'attribution'),
-  1::bigint,
-  'duplicate visitor redirects do not inflate canonical experiment link-click metrics'
+  2::bigint,
+  'sessionless redirects accumulate aggregate canonical link-click metrics'
 );
 
 select * from public.record_attribution_click(
@@ -191,15 +191,15 @@ select * from public.record_attribution_click(
 );
 
 select is(
-  (select unique_click_count from public.attribution_links where id = '80000000-0000-0000-0000-000000000001'),
-  2::bigint,
-  'a different visitor hash increments unique attribution'
+  (select count(*) from public.attribution_events where attribution_link_id = '80000000-0000-0000-0000-000000000001' and visitor_hash is null),
+  3::bigint,
+  'legacy redirect stores no visitor identity even when callers send hashes'
 );
 
 select is(
   (select link_clicks from public.metric_snapshots where content_variant_id = '70000000-0000-0000-0000-000000000001' and source = 'attribution'),
-  2::bigint,
-  'unique tracked clicks accumulate into the daily experiment snapshot'
+  3::bigint,
+  'all sessionless redirects accumulate into the daily experiment snapshot'
 );
 
 select is(
