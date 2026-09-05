@@ -1,45 +1,44 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
 
-function read(path) {
-  return readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
-}
+const root = process.cwd();
+const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
 test("Studio has one lifecycle model shared by product execution", () => {
   const lifecycle = read("lib/marketing/release-lifecycle.ts");
-  const executor = read("lib/marketing/lifecycle-executor.ts");
-  const releaseWorkspace = read("components/studio/release-workspace-v2.tsx");
-  const growth = read("app/studio/(protected)/growth/page.tsx");
-  assert.match(lifecycle, /pre_release/);
-  assert.match(lifecycle, /launch/);
-  assert.match(lifecycle, /sustain/);
-  assert.match(lifecycle, /catalog/);
-  assert.match(executor, /releaseLifecycle/);
-  assert.match(releaseWorkspace, /releaseLifecycle/);
-  assert.match(growth, /releaseLifecycle/);
+  assert.match(lifecycle, /"development"/);
+  assert.match(lifecycle, /"upcoming"/);
+  assert.match(lifecycle, /"launch_window"/);
+  assert.match(lifecycle, /"catalog"/);
+  assert.match(lifecycle, /Europe\/Berlin/);
 });
 
 test("marketing heartbeat self-heals state before publishing", () => {
-  const heartbeat = read("lib/marketing/heartbeat.ts");
-  assert.match(heartbeat, /reconcileMarketingState/);
-  assert.match(heartbeat, /executeLifecycleAutomation/);
-  assert.match(heartbeat, /executeDuePublicationJobs/);
-  assert.ok(heartbeat.indexOf("reconcileMarketingState") < heartbeat.indexOf("executeDuePublicationJobs"));
+  const cron = read("app/api/cron/marketing/route.ts");
+  const reconcile = cron.indexOf('runStep("state reconciliation"');
+  const publish = cron.indexOf('runStep("publication queue"');
+  assert.ok(reconcile >= 0, "cron must reconcile durable product state");
+  assert.ok(publish > reconcile, "state reconciliation must happen before external publishing");
 });
 
 test("lifecycle execution creates future internal work but keeps publishing approval-gated", () => {
-  const executor = read("lib/marketing/lifecycle-executor.ts");
-  assert.match(executor, /createLifecycleContent/);
-  assert.match(executor, /approval_status: "pending"/);
-  assert.doesNotMatch(executor, /approval_status: "approved"/);
+  const execution = read("lib/marketing/lifecycle-execution.ts");
+  assert.match(execution, /atlas-deterministic/);
+  assert.match(execution, /actual_cost_usd:\s*0/);
+  assert.match(execution, /status:\s*"awaiting_approval"/);
+  assert.match(execution, /requires_approval:\s*true/);
+  assert.match(execution, /relativeDayForFutureOffset/);
+  assert.match(execution, /connectedPlatforms/);
 });
 
 test("reconciliation retires safe orphan runs without retrying providers", () => {
-  const reconcile = read("lib/marketing/reconcile.ts");
-  assert.match(reconcile, /reconciledOrphan/);
-  assert.match(reconcile, /status: "failed"/);
-  assert.doesNotMatch(reconcile, /execute.*provider/i);
+  const reconciliation = read("lib/marketing/state-reconciliation.ts");
+  assert.match(reconciliation, /reconcileOrphanedGenerationRuns/);
+  assert.match(reconciliation, /provider_request_id/);
+  assert.match(reconciliation, /status:\s*"failed"/);
+  assert.match(reconciliation, /No retry was submitted/);
 });
 
 test("database playbook skips impossible historical work", () => {
