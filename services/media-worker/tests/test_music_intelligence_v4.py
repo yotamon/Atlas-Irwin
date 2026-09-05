@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import unittest
+
 from app.music_intelligence_v4 import MAX_PRIMARY_MOMENTS, upgrade_music_intelligence
 
 
@@ -103,63 +105,64 @@ def _v3_fixture() -> dict:
     }
 
 
-def test_v4_selects_few_complete_diverse_moments() -> None:
-    result = upgrade_music_intelligence(_v3_fixture())
-    moments = result["musical_moments"]
+class TrackIntelligenceV4Test(unittest.TestCase):
+    def test_v4_selects_few_complete_diverse_moments(self) -> None:
+        result = upgrade_music_intelligence(_v3_fixture())
+        moments = result["musical_moments"]
 
-    assert result["version"] == 4
-    assert result["schema"] == "atlas.track_music_intelligence.v4"
-    assert 1 <= len(moments) <= MAX_PRIMARY_MOMENTS
-    assert all(moment["unit_kind"] in {"phrase", "phrase_pair", "section"} for moment in moments)
-    assert all(moment["musical_completeness"] >= 0.75 for moment in moments)
-    assert len({(moment["start_ms"], moment["end_ms"]) for moment in moments}) == len(moments)
-    assert result["analysis"]["moment_selection"]["strategy"] == "musical_units_then_derived_cuts"
+        self.assertEqual(result["version"], 4)
+        self.assertEqual(result["schema"], "atlas.track_music_intelligence.v4")
+        self.assertGreaterEqual(len(moments), 1)
+        self.assertLessEqual(len(moments), MAX_PRIMARY_MOMENTS)
+        self.assertTrue(all(moment["unit_kind"] in {"phrase", "phrase_pair", "section"} for moment in moments))
+        self.assertTrue(all(moment["musical_completeness"] >= 0.75 for moment in moments))
+        self.assertEqual(len({(moment["start_ms"], moment["end_ms"]) for moment in moments}), len(moments))
+        self.assertEqual(result["analysis"]["moment_selection"]["strategy"], "musical_units_then_derived_cuts")
+
+    def test_social_cuts_are_derived_from_parent_moments_on_boundaries(self) -> None:
+        result = upgrade_music_intelligence(_v3_fixture())
+        valid_boundaries = set(result["downbeats_ms"])
+
+        for duration in ("6", "8", "15", "30"):
+            for cut in result["social_cut_options"][duration]:
+                if cut.get("legacy_fallback"):
+                    continue
+                self.assertTrue(cut["source_moment_id"])
+                self.assertIs(cut["musical_boundary_constrained"], True)
+                self.assertIn(cut["start_ms"], valid_boundaries)
+                self.assertTrue(cut["end_ms"] in valid_boundaries or cut["end_ms"] == result["duration_ms"])
+
+    def test_visible_hook_candidates_are_the_same_complete_moments(self) -> None:
+        result = upgrade_music_intelligence(_v3_fixture())
+        self.assertEqual(result["hook_candidates"], result["musical_moments"])
+        self.assertGreater(len(result["hook_candidates_v3"]), len(result["hook_candidates"]))
+
+    def test_rhythm_consensus_crosschecks_model_downbeats_against_beat_grid(self) -> None:
+        result = upgrade_music_intelligence(_v3_fixture())
+        consensus = result["rhythm_consensus"]
+        self.assertIs(consensus["internal_grid_crosscheck"]["available"], True)
+        self.assertEqual(consensus["internal_grid_crosscheck"]["median_downbeat_distance_ms"], 0.0)
+        self.assertEqual(consensus["internal_grid_crosscheck"]["agreement"], 1.0)
+        self.assertGreater(consensus["confidence"], 0.9)
+
+    def test_timeline_preserves_provenance_and_exposes_external_fusion_contract(self) -> None:
+        result = upgrade_music_intelligence(_v3_fixture())
+        timeline = result["timeline"]
+        self.assertEqual(timeline["version"], "atlas.musical_timeline.v1")
+        self.assertTrue(any(event["kind"] == "section" for event in timeline["events"]))
+        self.assertTrue(any(event["kind"] == "phrase" for event in timeline["events"]))
+        self.assertTrue(any(event["kind"] == "musical_moment" and event["analyzer"] == "track_intelligence_v4" for event in timeline["events"]))
+        self.assertIn("lyrics_intelligence", timeline["fusion_contract"]["external_evidence"])
+        self.assertIn("stem_intelligence", timeline["fusion_contract"]["external_evidence"])
+
+    def test_core_provider_features_are_gated_before_runtime_enrichment(self) -> None:
+        result = upgrade_music_intelligence(_v3_fixture())
+        capabilities = result["provider_capabilities"]
+        self.assertEqual(capabilities["beat_this"]["tier"], "deep")
+        self.assertEqual(capabilities["mert"]["tier"], "on_demand")
+        self.assertEqual(capabilities["basic_pitch"]["tier"], "on_demand")
+        self.assertEqual(capabilities["singing_aligner"]["status"], "adapter_required")
 
 
-def test_social_cuts_are_derived_from_parent_moments_on_boundaries() -> None:
-    result = upgrade_music_intelligence(_v3_fixture())
-    valid_boundaries = set(result["downbeats_ms"])
-
-    for duration in ("6", "8", "15", "30"):
-        for cut in result["social_cut_options"][duration]:
-            if cut.get("legacy_fallback"):
-                continue
-            assert cut["source_moment_id"]
-            assert cut["musical_boundary_constrained"] is True
-            assert cut["start_ms"] in valid_boundaries
-            assert cut["end_ms"] in valid_boundaries or cut["end_ms"] == result["duration_ms"]
-
-
-def test_visible_hook_candidates_are_the_same_complete_moments() -> None:
-    result = upgrade_music_intelligence(_v3_fixture())
-    assert result["hook_candidates"] == result["musical_moments"]
-    assert len(result["hook_candidates_v3"]) > len(result["hook_candidates"])
-
-
-def test_rhythm_consensus_crosschecks_model_downbeats_against_beat_grid() -> None:
-    result = upgrade_music_intelligence(_v3_fixture())
-    consensus = result["rhythm_consensus"]
-    assert consensus["internal_grid_crosscheck"]["available"] is True
-    assert consensus["internal_grid_crosscheck"]["median_downbeat_distance_ms"] == 0.0
-    assert consensus["internal_grid_crosscheck"]["agreement"] == 1.0
-    assert consensus["confidence"] > 0.9
-
-
-def test_timeline_preserves_provenance_and_exposes_external_fusion_contract() -> None:
-    result = upgrade_music_intelligence(_v3_fixture())
-    timeline = result["timeline"]
-    assert timeline["version"] == "atlas.musical_timeline.v1"
-    assert any(event["kind"] == "section" for event in timeline["events"])
-    assert any(event["kind"] == "phrase" for event in timeline["events"])
-    assert any(event["kind"] == "musical_moment" and event["analyzer"] == "track_intelligence_v4" for event in timeline["events"])
-    assert "lyrics_intelligence" in timeline["fusion_contract"]["external_evidence"]
-    assert "stem_intelligence" in timeline["fusion_contract"]["external_evidence"]
-
-
-def test_provider_features_are_truthful_and_gated() -> None:
-    result = upgrade_music_intelligence(_v3_fixture())
-    capabilities = result["provider_capabilities"]
-    assert capabilities["beat_this"]["tier"] == "deep"
-    assert capabilities["mert"]["tier"] == "on_demand"
-    assert capabilities["basic_pitch"]["tier"] == "on_demand"
-    assert capabilities["singing_aligner"]["status"] == "adapter_required"
+if __name__ == "__main__":
+    unittest.main()
