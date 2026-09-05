@@ -1,3 +1,5 @@
+import type { Database } from "./database";
+
 export type ArtistAutonomyContractRow = {
   id: string;
   owner_id: string;
@@ -37,28 +39,26 @@ type Table<Row, Insert = Partial<Row>, Update = Partial<Row>> = {
   Relationships: [];
 };
 
-export type AutonomyContractsDatabase = {
-  public: {
-    Tables: {
-      artist_autonomy_contracts: Table<
-        ArtistAutonomyContractRow,
-        Omit<ArtistAutonomyContractRow, "id" | "created_at" | "updated_at"> & {
-          id?: string;
-          created_at?: string;
-          updated_at?: string;
-        }
-      >;
-      autonomy_decision_events: Table<
-        AutonomyDecisionEventRow,
-        Omit<AutonomyDecisionEventRow, "id" | "created_at"> & {
-          id?: string;
-          created_at?: string;
-        }
-      >;
-    };
-    Views: Record<string, never>;
-    Functions: Record<string, never>;
-    Enums: Record<string, never>;
-    CompositeTypes: Record<string, never>;
+type AutonomyTables = {
+  artist_autonomy_contracts: Table<
+    ArtistAutonomyContractRow,
+    Omit<ArtistAutonomyContractRow, "id" | "created_at" | "updated_at"> & {
+      id?: string;
+      created_at?: string;
+      updated_at?: string;
+    }
+  >;
+  autonomy_decision_events: Table<
+    AutonomyDecisionEventRow,
+    Omit<AutonomyDecisionEventRow, "id" | "created_at"> & {
+      id?: string;
+      created_at?: string;
+    }
+  >;
+};
+
+export type AutonomyContractsDatabase = Omit<Database, "public"> & {
+  public: Omit<Database["public"], "Tables"> & {
+    Tables: Database["public"]["Tables"] & AutonomyTables;
   };
 };
