@@ -91,7 +91,17 @@ jobs:
 
       - name: Validate media worker Python
         if: github.event_name != 'pull_request'
-        run: python -m py_compile services/media-worker/app/main.py services/media-worker/app/music_intelligence.py services/media-worker/app/stem_intelligence.py services/media-worker/app/social_finishing.py services/media-worker/app/runner.py
+        run: >-
+          python -m py_compile
+          services/media-worker/app/main.py
+          services/media-worker/app/music_intelligence.py
+          services/media-worker/app/music_intelligence_v4.py
+          services/media-worker/app/music_intelligence_v4_runtime.py
+          services/media-worker/app/audio_intelligence_providers.py
+          services/media-worker/app/stem_intelligence.py
+          services/media-worker/app/stem_intelligence_v3.py
+          services/media-worker/app/social_finishing.py
+          services/media-worker/app/runner.py
 
       - name: Install Track Intelligence test DSP dependencies
         if: github.event_name != 'pull_request'
@@ -99,7 +109,8 @@ jobs:
 
       - name: Run Track Intelligence behavioral regression tests
         if: github.event_name != 'pull_request'
-        run: python -m unittest discover -s services/media-worker/tests -p 'test_*.py' -v
+        working-directory: services/media-worker
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
 
       - name: Build
         if: github.event_name != 'pull_request'
