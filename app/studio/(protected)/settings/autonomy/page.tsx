@@ -3,7 +3,6 @@ import { PageHeader, Status } from "@/components/studio/ui";
 import { saveAutonomyContract } from "@/app/studio/autonomy-contract-actions";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import {
-  AUTONOMY_DOMAINS,
   AUTONOMY_DOMAIN_META,
   type AutonomyContract,
   type AutonomyDomain,
@@ -50,7 +49,6 @@ function ContractCard({
   const meta = AUTONOMY_DOMAIN_META[domain];
   const selectedMode = contract?.mode ?? meta.defaultMode;
   const configured = Boolean(contract?.enabled);
-  const expired = Boolean(contract?.expiresAt && Date.parse(contract.expiresAt) <= Date.now());
 
   return (
     <article className="v2-section v2-compact-section" id={domain}>
@@ -62,7 +60,7 @@ function ContractCard({
             <h2>{meta.label}</h2>
             <p>{meta.description}</p>
           </div>
-          <Status>{expired ? "Expired · safe default" : configured ? `${modeLabel(selectedMode)} contract` : `${modeLabel(meta.defaultMode)} default`}</Status>
+          <Status>{configured ? `${modeLabel(selectedMode)} contract` : `${modeLabel(meta.defaultMode)} default`}</Status>
         </div>
 
         <div className="v2-settings-grid">
