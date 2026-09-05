@@ -1,7 +1,7 @@
 "use server";
 
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asGrowthClient } from "@/lib/studio/growth-db";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import * as actions from "./growth-media-actions";
@@ -12,7 +12,7 @@ function formValue(form: FormData, key: string) {
 
 async function releaseArtistContext(releaseId: string) {
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const db = asArtistScopedMusicClient(supabase);
   const { data: release, error } = await db
     .from("releases")
@@ -26,8 +26,7 @@ async function releaseArtistContext(releaseId: string) {
 }
 
 export async function createVaultTrackFromMedia(form: FormData) {
-  // Standalone Vault tracks remain owner/workspace scoped until the Growth-domain
-  // ownership migration. Release-linked tracks are guarded below.
+  // The underlying action resolves and persists the active artist explicitly.
   return actions.createVaultTrackFromMedia(form);
 }
 
@@ -38,18 +37,39 @@ export async function attachReleaseMasterFromMedia(form: FormData) {
   return actions.attachReleaseMasterFromMedia(form);
 }
 
+export async function analyzeMusicTrack(form: FormData) {
+  const vaultTrackId = formValue(form, "id");
+  if (!vaultTrackId) throw new Error("Track is required for analysis.");
+
+  const { supabase, user } = await requireStudioAdmin();
+  const artist = await resolveActiveArtistContext(supabase, user);
+  const growth = asGrowthClient(supabase);
+  const { data: vaultTrack, error } = await growth
+    .from("track_vault")
+    .select("id")
+    .eq("id", vaultTrackId)
+    .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!vaultTrack) throw new Error("Track not found for the active artist.");
+
+  return actions.analyzeVaultTrack(form);
+}
+
 export async function analyzeReleaseVaultTrack(form: FormData) {
   const releaseId = formValue(form, "release_id");
   const vaultTrackId = formValue(form, "id");
   if (!releaseId || !vaultTrackId) throw new Error("Release and Vault track are required for analysis.");
 
-  const { supabase, user } = await releaseArtistContext(releaseId);
+  const { supabase, user, artist } = await releaseArtistContext(releaseId);
   const growth = asGrowthClient(supabase);
   const { data: vaultTrack, error } = await growth
     .from("track_vault")
     .select("id,linked_release_id")
     .eq("id", vaultTrackId)
     .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId)
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!vaultTrack || vaultTrack.linked_release_id !== releaseId) {
