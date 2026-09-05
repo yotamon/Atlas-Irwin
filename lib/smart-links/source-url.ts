@@ -2,7 +2,7 @@ import "server-only";
 
 import { getSiteUrl } from "@/lib/site-url";
 import { asSitesClient } from "@/lib/sites/db";
-import { asSmartLinksClient, createSmartLinksServiceClient } from "@/lib/smart-links/db";
+import { createSmartLinksServiceClient } from "@/lib/smart-links/db";
 import { createCatalogClient } from "@/lib/supabase/service";
 
 export async function publicationSmartLinkUrl(contentItemId: string, ownerId: string, artistId: string) {
