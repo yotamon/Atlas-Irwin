@@ -51,8 +51,9 @@ test("compact Studio navigation keeps accessible names and coarse-pointer target
   const responsive = await source("app/studio/responsive-polish.css");
   assert.ok(navigation.includes("aria-label={label}"));
   assert.ok(navigation.includes("title={label}"));
-  assert.ok(sidebar.includes('aria-label="Add unreleased tracks"'));
+  assert.ok(sidebar.includes('aria-label="Open Needs You"'));
   assert.ok(sidebar.includes('aria-label="Sign out"'));
+  assert.equal(sidebar.includes('aria-label="Add unreleased tracks"'), false, "Music owns Add music; the persistent shortcut is reserved for human decisions");
   assert.ok(responsive.includes("@media (pointer: coarse)"));
   assert.ok(responsive.includes("min-height: 2.75rem"));
   assert.ok(responsive.includes(".studio-root .studio-nav-text"));

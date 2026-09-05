@@ -34,7 +34,7 @@ function navigationItems(
 }
 
 export function StudioSidebar({ artistId, artists }: StudioSidebarProps) {
-  const Plus = studioIcons.plus;
+  const NeedsYou = studioIcons.mail;
   const Logout = studioIcons.logout;
   const workNavigation = navigationItems(ENSEMBLIS_WORK_NAV, artistId);
   const manageNavigation = navigationItems(ENSEMBLIS_MANAGE_NAV, artistId);
@@ -78,13 +78,13 @@ export function StudioSidebar({ artistId, artists }: StudioSidebarProps) {
           <StudioAdvancedNavigation item={settingsNavigation} />
         </div>
         <Link
-          href={ensemblisArtistHref("/studio/growth/import", artistId)}
+          href={ensemblisArtistHref("/studio/needs-you", artistId)}
           className="studio-quick"
-          aria-label="Add unreleased tracks"
-          title="Add unreleased tracks"
+          aria-label="Open Needs You"
+          title="Open Needs You"
         >
-          <Plus aria-hidden />
-          <span className="studio-nav-text">Add unreleased tracks</span>
+          <NeedsYou aria-hidden />
+          <span className="studio-nav-text">Needs You</span>
         </Link>
         <form action={signOut}>
           <button aria-label="Sign out" title="Sign out">
