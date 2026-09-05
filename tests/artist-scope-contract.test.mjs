@@ -14,16 +14,24 @@ async function requireSnippets(path, snippets) {
   return text;
 }
 
-test("Today resolves one ArtistContext and scopes operational state", async () => {
-  const text = await requireSnippets("app/studio/(protected)/page.tsx", [
+test("Today resolves one ArtistContext and scopes operational state through the Manager boundary", async () => {
+  const page = await requireSnippets("app/studio/(protected)/page.tsx", [
     "resolveDefaultArtistContext",
+    "loadArtistOperatingSnapshot",
+    "artist,",
+  ]);
+  assert.equal(page.includes('.eq("artist_id", artist.artistId)'), false,
+    "Today renderer should not duplicate artist-scoped data fan-out");
+
+  const snapshot = await requireSnippets("lib/studio/artist-operating-snapshot.ts", [
     '.eq("artist_id", artist.artistId)',
     'from("next_best_actions")',
     'from("publication_jobs")',
     'from("outreach_messages")',
+    "artistId: artist.artistId",
   ]);
-  assert.ok((text.match(/\.eq\("artist_id", artist\.artistId\)/g) ?? []).length >= 8,
-    "Today should keep artist filters across every artist-scoped decision-surface query");
+  assert.ok((snapshot.match(/\.eq\("artist_id", artist\.artistId\)/g) ?? []).length >= 8,
+    "Manager snapshot should keep artist filters across every artist-scoped decision-surface query");
 });
 
 test("Campaign mutations resolve a validated artist before writes", async () => {
