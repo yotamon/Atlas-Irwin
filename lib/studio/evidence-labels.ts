@@ -26,6 +26,13 @@ export function analysisConfidenceLabel(value: number) {
   return "Preliminary analysis";
 }
 
+export function creativeContextQualityLabel(score: number | null | undefined) {
+  if (typeof score !== "number" || !Number.isFinite(score)) return "Limited reference context";
+  if (score >= 80) return "Strong reference context";
+  if (score >= 60) return "Good reference context";
+  return "Limited reference context";
+}
+
 export function hookRecommendationLabel(score: number, rank: number) {
   if (rank === 0) return "Best fit";
   if (score >= 0.72) return "Strong fit";
