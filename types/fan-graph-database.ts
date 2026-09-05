@@ -50,6 +50,7 @@ export type FanPermission = {
   status: FanPermissionStatus;
   source: "artist_record" | "fan_opt_in" | "provider_sync" | "privacy_request";
   evidence_at: string | null;
+  evidence_note: string | null;
   expires_at: string | null;
   created_at: string;
   updated_at: string;
@@ -89,12 +90,7 @@ export type FanPrivacyEvent = {
   created_at: string;
 };
 
-type Table<Row> = {
-  Row: Row;
-  Insert: Partial<Row>;
-  Update: Partial<Row>;
-  Relationships: [];
-};
+type Table<Row> = { Row: Row; Insert: Partial<Row>; Update: Partial<Row>; Relationships: [] };
 
 export type FanGraphDatabase = Omit<ArtistScopedAutonomyDatabase, "public"> & {
   public: Omit<ArtistScopedAutonomyDatabase["public"], "Tables" | "Functions"> & {
@@ -107,10 +103,7 @@ export type FanGraphDatabase = Omit<ArtistScopedAutonomyDatabase, "public"> & {
       fan_privacy_events: Table<FanPrivacyEvent>;
     };
     Functions: ArtistScopedAutonomyDatabase["public"]["Functions"] & {
-      merge_fan_profiles: {
-        Args: { p_source_fan_id: string; p_target_fan_id: string; p_evidence_type: string; p_evidence_note: string };
-        Returns: string;
-      };
+      merge_fan_profiles: { Args: { p_source_fan_id: string; p_target_fan_id: string; p_evidence_type: string; p_evidence_note: string }; Returns: string };
       revert_fan_merge: { Args: { p_merge_id: string }; Returns: undefined };
       record_fan_export: { Args: { p_fan_id: string }; Returns: undefined };
       revoke_fan_permissions: { Args: { p_fan_id: string; p_channel?: string | null }; Returns: number };
