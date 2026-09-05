@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/studio/ui";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { requireArtistContext } from "@/lib/studio/artist-context";
+import { momentEvidenceSummary } from "@/lib/studio/evidence-labels";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { asMomentsClient } from "@/lib/studio/moments-db";
 import { createClient } from "@/lib/supabase/server";
@@ -19,7 +20,7 @@ function momentRecommendation(label: string, sourceMode: string) {
   if (value.includes("drop") || value.includes("climax") || value.includes("payoff")) return "Strong fit for a short teaser, release-day payoff or motion edit.";
   if (value.includes("groove") || value.includes("instrument")) return "Strong fit for a loop, movement-led short or production-focused creative.";
   if (value.includes("build") || value.includes("transition")) return "Strong fit for a narrative short, reveal or before/after structure.";
-  return "A high-confidence musical starting point for campaign creative.";
+  return "An evidence-backed musical starting point for campaign creative.";
 }
 
 export default async function CreatePage() {
@@ -130,14 +131,16 @@ export default async function CreatePage() {
               const track = trackById.get(moment.track_id);
               const startSeconds = Math.max(0, moment.start_ms / 1000);
               const endSeconds = Math.max(startSeconds, moment.end_ms / 1000);
+              const evidence = momentEvidenceSummary(moment);
               return (
                 <article className="growth-opportunity accepted" key={moment.id}>
                   <div className="growth-opportunity-head">
                     <span>{moment.source_mode.replaceAll("_", " ")}</span>
-                    <strong>{Math.round(moment.confidence * 100)}%</strong>
+                    <strong>Recommended</strong>
                   </div>
                   <h3>{moment.label}</h3>
                   <p>{momentRecommendation(moment.label, moment.source_mode)}</p>
+                  {evidence ? <small>Why: {evidence}</small> : null}
                   <small>
                     {release?.title || "Release"} · {track?.title || "Track"} · {momentTime(moment.start_ms)}–{momentTime(moment.end_ms)}
                   </small>
