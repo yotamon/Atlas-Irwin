@@ -19,6 +19,20 @@ test("Grow keeps synthetic ranking precision internal", async () => {
   assert.match(evidence, /Preliminary evidence/);
 });
 
+test("Production translates implementation scores into artist-facing evidence language", async () => {
+  const [production, evidence] = await Promise.all([
+    read("app/studio/(protected)/production/page.tsx"),
+    read("lib/studio/evidence-labels.ts"),
+  ]);
+  assert.match(production, /momentEvidenceSummary\(selectedMoment\)/);
+  assert.match(production, /creativeContextQualityLabel\(creativeContext\.cohesionScore\)/);
+  assert.doesNotMatch(production, /Math\.round\(selectedMoment\.confidence \* 100\)/);
+  assert.doesNotMatch(production, /cohesionScore\}\/100 context cohesion/);
+  assert.match(evidence, /Strong reference context/);
+  assert.match(evidence, /Good reference context/);
+  assert.match(evidence, /Limited reference context/);
+});
+
 test("primary decision surfaces use the shared Required / Needs attention / Clear posture", async () => {
   const [today, needsYou, distribution, paid] = await Promise.all([
     read("app/studio/(protected)/page.tsx"),
