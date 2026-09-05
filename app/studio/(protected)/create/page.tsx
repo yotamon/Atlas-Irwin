@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { startOutcomeCreative } from "@/app/studio/create-actions";
 import { PageHeader } from "@/components/studio/ui";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { requireArtistContext } from "@/lib/studio/artist-context";
@@ -111,7 +112,7 @@ export default async function CreatePage() {
             {activeRelease ? <Link href={href(`/studio/releases/${activeRelease.id}?stage=create#moments`)}>Review all Moments</Link> : null}
           </div>
           <p className="v2-muted-copy">
-            These approved Moments are ranked from the track, lyric and stem evidence already stored for this artist. You choose the outcome; Ensemblis translates it into the production defaults.
+            These approved Moments are ranked from the track, lyric and stem evidence already stored for this artist. You choose the outcome; Ensemblis creates the production item with the musical lineage and delivery defaults already attached.
           </p>
 
           <div className="growth-opportunity-grid create-moment-grid">
@@ -148,13 +149,15 @@ export default async function CreatePage() {
                   </div>
                   <div className="create-outcome-grid" aria-label={`Creative outcomes for ${moment.label}`}>
                     {CREATE_OUTCOMES.map((outcome) => (
-                      <Link
-                        href={href(`/studio/production?release=${moment.release_id}&moment=${moment.id}&outcome=${outcome.id}`)}
-                        key={outcome.id}
-                      >
-                        <strong>{outcome.label}</strong>
-                        <span>{outcome.shortLabel}</span>
-                      </Link>
+                      <form action={startOutcomeCreative} key={outcome.id}>
+                        <input type="hidden" name="artist_id" value={artist.artistId} />
+                        <input type="hidden" name="moment_id" value={moment.id} />
+                        <input type="hidden" name="outcome" value={outcome.id} />
+                        <button type="submit">
+                          <strong>{outcome.label}</strong>
+                          <span>{outcome.shortLabel}</span>
+                        </button>
+                      </form>
                     ))}
                   </div>
                   <div className="actions create-evidence-action">
