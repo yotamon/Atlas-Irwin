@@ -5,6 +5,7 @@ import { loadDistributionArtistState } from "@/lib/distribution/server";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { releaseLifecycle } from "@/lib/marketing/release-lifecycle";
+import { loadPaidGrowthWorkspace, paidGrowthNeedsYou } from "@/lib/paid-growth/server";
 import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { deriveNeedsYouQueue, needsYouTone } from "@/lib/studio/needs-you";
@@ -39,7 +40,7 @@ export default async function NeedsYouPage() {
   sevenDays.setDate(sevenDays.getDate() + 7);
   const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
 
-  const [releasesResult, tracksResult, campaignsResult, tasksResult, automationResult, publicationResult, contentResult, learningsResult, soundCloudPendingResult, spotifyPendingResult, outreachDraftsResult] = await Promise.all([
+  const [releasesResult, tracksResult, campaignsResult, tasksResult, automationResult, publicationResult, contentResult, learningsResult, soundCloudPendingResult, spotifyPendingResult, outreachDraftsResult, paidWorkspace] = await Promise.all([
     music.from("releases").select("id,title,release_date,active_release,artwork_url,cover_asset,primary_hook,smart_link_url,spotify_url,soundcloud_url,youtube_url,status,is_archived").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("updated_at", { ascending: false }),
     music.from("tracks").select("id,release_id,audio_url,is_primary").eq("owner_id", user.id).eq("artist_id", artist.artistId),
     marketing.from("campaigns").select("id,release_id,status").eq("owner_id", user.id).eq("artist_id", artist.artistId).not("status", "eq", "archived"),
@@ -51,6 +52,7 @@ export default async function NeedsYouPage() {
     supabase.from("soundcloud_tracks").select("id,linked_track_id").eq("owner_id", user.id).eq("reconcile_status", "pending"),
     supabase.from("spotify_tracks").select("id,linked_track_id").eq("owner_id", user.id).eq("reconcile_status", "pending"),
     marketing.from("outreach_messages").select("id").eq("owner_id", user.id).eq("artist_id", artist.artistId).is("sent_at", null).eq("response_status", "Draft"),
+    loadPaidGrowthWorkspace({ db: supabase, ownerId: user.id, artistId: artist.artistId }),
   ]);
 
   const firstError = [releasesResult, tracksResult, campaignsResult, tasksResult, automationResult, publicationResult, contentResult, learningsResult, soundCloudPendingResult, spotifyPendingResult, outreachDraftsResult].find((result) => result.error)?.error;
@@ -80,9 +82,7 @@ export default async function NeedsYouPage() {
     hasPrimaryHook: Boolean(activeRelease.primary_hook),
     providerScheduledCount: activeProviderScheduledCount,
   }) : null;
-  const activeDistribution = activeRelease
-    ? await loadDistributionArtistState(supabase, user.id, artist.artistId, activeRelease.id)
-    : null;
+  const activeDistribution = activeRelease ? await loadDistributionArtistState(supabase, user.id, artist.artistId, activeRelease.id) : null;
 
   const workflowApprovalCount = (automationResult.data ?? []).filter((job) => job.status === "awaiting_approval" || job.approval_status === "pending").length
     + publications.filter((job) => job.status === "awaiting_approval" || job.approval_status === "pending").length;
@@ -92,13 +92,8 @@ export default async function NeedsYouPage() {
   const queue = deriveNeedsYouQueue({
     activeReleaseId: activeRelease?.id ?? null,
     activeMission,
-    distributionDecisions: activeRelease ? (activeDistribution?.decisions ?? []).map((decision) => ({
-      key: decision.key,
-      title: decision.title,
-      detail: decision.detail,
-      severity: decision.severity,
-      releaseId: activeRelease.id,
-    })) : [],
+    distributionDecisions: activeRelease ? (activeDistribution?.decisions ?? []).map((decision) => ({ key: decision.key, title: decision.title, detail: decision.detail, severity: decision.severity, releaseId: activeRelease.id })) : [],
+    paidGrowthDecisions: paidGrowthNeedsYou(paidWorkspace.cards),
     workflowApprovalCount,
     outreachDraftCount: outreachDraftsResult.data?.length ?? 0,
     manualReady: publications.filter((job) => String(job.status) === "manual_ready").map((job) => ({ id: job.id, platform: job.platform, contentItemId: job.content_item_id })),
@@ -110,16 +105,16 @@ export default async function NeedsYouPage() {
 
   return (
     <div className="studio-v2-page ensemblis-today-v3">
-      <PageHeader title="Needs You" description={`Every decision that genuinely requires ${artist.artistName}'s judgment, gathered from canonical Mission, distribution, approval, creative, catalog and learning state.`} action={<Link className="button" href={href("/studio")}>Back to Today</Link>} />
+      <PageHeader title="Needs You" description={`Every decision that genuinely requires ${artist.artistName}'s judgment, gathered from canonical Mission, distribution, paid experiments, approval, creative, catalog and learning state.`} action={<Link className="button" href={href("/studio")}>Back to Today</Link>} />
 
-      <section className="today-v3-next"><div className="today-v3-section-heading"><div><span className="section-label">Universal decision queue</span><h2>{queue.length ? `${queue.length} decision${queue.length === 1 ? "" : "s"} worth interrupting you for` : "Ensemblis can keep moving"}</h2></div><Status>{queue.some((item) => item.severity === "required") ? "Blocked" : queue.length ? "Needs attention" : "Clear"}</Status></div><p>{queue.length ? "Required Mission and distribution blockers come first, then external-effect decisions, ambiguity and review work. The queue is derived from source state rather than maintained as a second task system." : "Nothing currently needs human judgment. Safe internal work can continue without manufacturing tasks."}</p></section>
+      <section className="today-v3-next"><div className="today-v3-section-heading"><div><span className="section-label">Universal decision queue</span><h2>{queue.length ? `${queue.length} decision${queue.length === 1 ? "" : "s"} worth interrupting you for` : "Ensemblis can keep moving"}</h2></div><Status>{queue.some((item) => item.severity === "required") ? "Blocked" : queue.length ? "Needs attention" : "Clear"}</Status></div><p>{queue.length ? "Required Mission, distribution and paid-spend stop conditions come first, then external-effect decisions, ambiguity and review work. The queue is derived from source state rather than maintained as a second task system." : "Nothing currently needs human judgment. Safe internal work can continue without manufacturing tasks."}</p></section>
 
       <section className="today-v3-section" aria-labelledby="needs-you-list-heading">
         <div className="today-v3-section-heading compact"><div><span className="section-label">Decisions</span><h2 id="needs-you-list-heading">Needs you</h2></div><span className={`today-v3-count${queue.length ? " has-items" : ""}`}>{queue.length}</span></div>
         {queue.length ? <div className="today-v3-list">{queue.map((entry) => <Link className={`today-v3-row ${needsYouTone(entry)}`} href={href(entry.href)} key={entry.id}><span className="today-v3-row-copy"><small>{entry.category} · {entry.severity}</small><strong>{entry.title}</strong><span>{entry.detail}</span></span><span className="today-v3-arrow" aria-hidden>→</span></Link>)}</div> : <div className="today-v3-calm-state"><strong>Nothing needs your judgment right now.</strong><p>Approvals, ambiguity, release blockers and trustworthy learning decisions will appear here automatically.</p></div>}
       </section>
 
-      <section className="v2-section v2-compact-section"><div className="v2-section-heading"><div><span className="section-label">Contract</span><h2>One queue, no duplicate tasks</h2></div></div><p className="v2-muted-copy">Needs You is a projection over canonical product state. Resolving the source action removes the item. Ensemblis does not create a second checklist that can drift away from Releases, Distribution, publishing, catalog reconciliation or learning evidence.</p></section>
+      <section className="v2-section v2-compact-section"><div className="v2-section-heading"><div><span className="section-label">Contract</span><h2>One queue, no duplicate tasks</h2></div></div><p className="v2-muted-copy">Needs You is a projection over canonical product state. Resolving the source action removes the item. Ensemblis does not create a second checklist that can drift away from Releases, Distribution, Paid Growth, publishing, catalog reconciliation or learning evidence.</p></section>
     </div>
   );
 }
