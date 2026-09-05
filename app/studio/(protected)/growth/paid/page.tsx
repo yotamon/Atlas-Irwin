@@ -11,6 +11,7 @@ import {
 } from "@/app/studio/paid-growth-actions";
 import { PageHeader, Status } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { loadArtistMemoryForConsumer } from "@/lib/artist-memory/server";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { asPaidGrowthClient } from "@/lib/paid-growth/db";
@@ -42,8 +43,9 @@ export default async function PaidGrowthPage({ searchParams }: { searchParams: P
   const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
   const paid = asPaidGrowthClient(supabase);
   const marketing = asMarketingClient(supabase);
-  const [workspace, releasesResult, momentsResult, contentResult, smartLinksResult] = await Promise.all([
+  const [workspace, growthMemory, releasesResult, momentsResult, contentResult, smartLinksResult] = await Promise.all([
     loadPaidGrowthWorkspace({ db: supabase, ownerId: user.id, artistId: artist.artistId }),
+    loadArtistMemoryForConsumer({ db: supabase, ownerId: user.id, artistId: artist.artistId, consumer: "growth" }),
     paid.from("releases").select("id,title,status,release_date").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("updated_at", { ascending: false }),
     paid.from("moments").select("id,release_id,label,state").eq("owner_id", user.id).eq("artist_id", artist.artistId).eq("state", "approved").order("created_at", { ascending: false }),
     marketing.from("content_items").select("id,title,release_id,platform,asset_url,status").eq("owner_id", user.id).eq("artist_id", artist.artistId).not("asset_url", "is", null).order("updated_at", { ascending: false }).limit(100),
@@ -78,6 +80,11 @@ export default async function PaidGrowthPage({ searchParams }: { searchParams: P
 
     <section className="v2-section paid-growth-create">
       <div className="v2-section-heading"><div><span className="section-label">Prepare one bounded test</span><h2>What do you believe is worth paying to learn?</h2><p>Preparing this does not spend money or launch an ad.</p></div></div>
+      {growthMemory.items.length ? <div className="studio-smart-defaults" role="note">
+        <strong>Artist Memory can support the hypothesis, not authorize the spend.</strong>
+        <span>{growthMemory.items.length} qualifying evidence-backed signal{growthMemory.items.length === 1 ? " is" : "s are"} available. Maximum effect: rank opportunities only.</span>
+        <details><summary>Review supporting memory</summary><ul>{growthMemory.items.map((item) => <li key={item.id}><strong>{item.title}</strong><span>{item.value}</span></li>)}</ul></details>
+      </div> : null}
       <form action={createPaidGrowthExperiment} className="paid-growth-form">
         <div className="paid-growth-field-grid">
           <label>Test name<input name="title" required minLength={3} maxLength={160} placeholder="Chorus discovery test" /></label>
