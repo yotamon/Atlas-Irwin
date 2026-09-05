@@ -55,7 +55,7 @@ export default async function AudiencePage() {
         <div><strong>{fanGraph.returningCount}</strong><span>returning relationships</span></div>
         <div><strong>{fanGraph.knownSupporterCount}</strong><span>known supporters</span></div>
         <div><strong>{fanGraph.permissionedIdentityCount}</strong><span>permissioned channel identities</span></div>
-        <p>Engagement is not consent. Ensemblis never turns a comment, follow, matching handle, or behavioral similarity into permission to market to someone.</p>
+        <p>Engagement is not consent. Ensemblis never turns a comment, follow, matching handle, or behavioral similarity into permission to market to someone, and nothing is sent without your decision.</p>
       </section>
 
       <section className="fan-graph-section">
