@@ -14,6 +14,8 @@ const EDITABLE_STATES = new Set(["draft", "needs_attention", "ready", "rejected"
 const ARTIST_PROFILE_PLATFORMS = new Set(["spotify", "apple_music", "amazon_music", "youtube_music", "soundcloud"]);
 const AI_INVOLVEMENT = new Set(["none", "assisted", "generated"]);
 
+type TerritorySelection = { mode: "worldwide" | "include"; countries: string[] };
+
 function text(form: FormData, key: string) {
   return String(form.get(key) ?? "").trim();
 }
@@ -32,19 +34,29 @@ function releaseId(form: FormData) {
   return value;
 }
 
-function territorySelection(form: FormData) {
-  const mode = text(form, "territory_mode") === "include" ? "include" as const : "worldwide" as const;
-  const tokens = [
-    ...form.getAll("territory_country").map(String),
-    ...text(form, "territory_codes").split(/[\s,;]+/),
-  ]
-    .map((value) => value.trim().toUpperCase())
-    .filter(Boolean);
-  const countries = [...new Set(tokens)];
+function normalizeTerritoryCodes(values: string[]) {
+  const countries = [...new Set(values.map((value) => value.trim().toUpperCase()).filter(Boolean))];
   const invalid = countries.find((country) => !/^[A-Z]{2}$/.test(country));
   if (invalid) throw new Error(`Territory '${invalid}' must be a two-letter ISO country code.`);
+  return countries;
+}
+
+function territorySelection(form: FormData): TerritorySelection | null {
+  if (!form.has("territory_mode") && !form.has("territory_codes") && !form.has("territory_country")) return null;
+  const mode = text(form, "territory_mode") === "include" ? "include" as const : "worldwide" as const;
+  const countries = normalizeTerritoryCodes([
+    ...form.getAll("territory_country").map(String),
+    ...text(form, "territory_codes").split(/[\s,;]+/),
+  ]);
   if (mode === "include" && !countries.length) throw new Error("Choose at least one territory, or distribute worldwide.");
   return { mode, countries: mode === "include" ? countries : [] };
+}
+
+function existingTerritories(value: Json | null | undefined): TerritorySelection {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return { mode: "worldwide", countries: [] };
+  const raw = value as Record<string, unknown>;
+  const countries = Array.isArray(raw.countries) ? normalizeTerritoryCodes(raw.countries.map(String)) : [];
+  return raw.mode === "include" && countries.length ? { mode: "include", countries } : { mode: "worldwide", countries: [] };
 }
 
 async function editableContext(form: FormData) {
@@ -93,7 +105,8 @@ function refreshDistribution(releaseId: string) {
 export async function saveDistributionDeclarations(form: FormData) {
   const context = await editableContext(form);
   const id = releaseId(form);
-  const territories = territorySelection(form);
+  const previous = context.config;
+  const territories = territorySelection(form) ?? existingTerritories(previous?.territories);
   const year = Number(text(form, "copyright_year"));
   if (!Number.isInteger(year) || year < 1900 || year > new Date().getUTCFullYear() + 1) {
     throw new Error("Enter a valid copyright year.");
@@ -143,7 +156,6 @@ export async function saveDistributionDeclarations(form: FormData) {
   };
   const destinationMode = text(form, "destination_mode") === "custom" ? "custom" : "all_enabled";
   const storeIds = [...new Set(form.getAll("store_id").map(Number).filter(Number.isFinite))];
-  const previous = context.config;
 
   const result = await context.db.from("release_distribution_configs").upsert({
     release_id: id,
