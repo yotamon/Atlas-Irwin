@@ -13,6 +13,13 @@ function strong(value: number | null | undefined, threshold = 0.72) {
   return typeof value === "number" && Number.isFinite(value) && value >= threshold;
 }
 
+export function evidenceStrengthLabel(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "Preliminary evidence";
+  if (value >= 0.82) return "Strong evidence";
+  if (value >= 0.64) return "Supported by evidence";
+  return "Preliminary evidence";
+}
+
 export function analysisConfidenceLabel(value: number) {
   if (value >= 0.82) return "High-confidence analysis";
   if (value >= 0.64) return "Good evidence coverage";
