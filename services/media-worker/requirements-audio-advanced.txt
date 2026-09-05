@@ -1,0 +1,7 @@
+# Optional deep-audio profile. Do NOT install this file in the default Vercel Sandbox.
+# Beat This is used only in shadow mode until the private catalog benchmark passes.
+beat-this==1.1.0
+
+# Basic Pitch 0.4.0 supports Python <=3.11. Keep it in a separate compatible
+# external/on-demand worker profile rather than the default Python runtime.
+basic-pitch==0.4.0; python_version < "3.12"

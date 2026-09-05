@@ -8,7 +8,7 @@ import type { AudioScene, StemDatabase, TrackStem } from "@/types/stem-database"
 import {
   buildTrackCreativeIntelligenceGraph,
   type TrackCreativeIntelligenceGraph,
-} from "./creative-graph";
+} from "./creative-graph-v2";
 
 export async function loadTrackCreativeIntelligenceGraph(
   db: SupabaseClient,
