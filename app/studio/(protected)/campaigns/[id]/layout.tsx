@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { CampaignAiSpendCard } from "@/components/studio/campaign-ai-spend-card";
@@ -27,6 +28,10 @@ export default async function CampaignWorkspaceLayout({
 
   return (
     <>
+      <nav className="actions" aria-label="Campaign workspace views">
+        <Link className="button" href={`/studio/campaigns/${campaign.id}`}>Execution</Link>
+        <Link className="button" href={`/studio/campaigns/${campaign.id}/intelligence`}>Campaign Intelligence</Link>
+      </nav>
       <CampaignAiSpendCard campaignId={campaign.id} campaignMode={campaign.mode} />
       {children}
     </>
