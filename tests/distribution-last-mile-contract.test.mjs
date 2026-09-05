@@ -19,7 +19,8 @@ test("Distribution keeps canonical release identity and exact artist decisions",
   assert.match(view, /I reviewed this release and approve distribution/);
   assert.match(state, /Confirm the label name/);
   assert.match(state, /Review and confirm release rights/);
-  assert.match(state, /Confirm the Spotify artist identity/);
+  assert.match(state, /profile\.\$\{platform\}/);
+  assert.match(state, /platform === "spotify" \? "Spotify" : "Apple Music"/);
 });
 
 test("Distribution snapshots canonical identity and territories before irreversible submission", async () => {
