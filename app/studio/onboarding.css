@@ -93,6 +93,23 @@
 .ensemblis-onboarding-skip { display: flex; justify-content: center; }
 .ensemblis-onboarding-skip button { appearance: none; border: 0; background: transparent; color: var(--text-secondary); text-decoration: underline; text-underline-offset: .2rem; cursor: pointer; }
 
+.ensemblis-first-use-nudge {
+  margin: .7rem clamp(.8rem, 2vw, 1.4rem) 0;
+  padding: .7rem .8rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-md);
+  background: color-mix(in srgb, var(--en-accent-soft) 42%, var(--en-surface));
+}
+.ensemblis-first-use-nudge > span { min-width: 0; display: grid; gap: .08rem; }
+.ensemblis-first-use-nudge strong { color: var(--en-ink); font-size: .72rem; }
+.ensemblis-first-use-nudge small { color: var(--en-muted); font-size: .61rem; line-height: 1.35; }
+.ensemblis-first-use-nudge a { flex: 0 0 auto; color: var(--en-ink); font-size: .66rem; font-weight: 700; text-decoration: none; }
+.ensemblis-first-use-nudge a:hover { text-decoration: underline; text-underline-offset: .18rem; }
+
 @media (max-width: 760px) {
   .ensemblis-onboarding-shell { padding: 1rem; gap: 1.4rem; }
   .ensemblis-onboarding-steps { grid-template-columns: 1fr; }
@@ -100,6 +117,8 @@
   .ensemblis-onboarding-action { border-radius: 1rem; }
   .ensemblis-onboarding-action .actions { display: grid; }
   .ensemblis-onboarding-action .button { width: 100%; justify-content: center; min-height: 3rem; }
+  .ensemblis-first-use-nudge { align-items: stretch; flex-direction: column; gap: .55rem; }
+  .ensemblis-first-use-nudge a { min-height: 2.75rem; display: inline-flex; align-items: center; }
 }
 
 @media (prefers-reduced-motion: reduce) {
