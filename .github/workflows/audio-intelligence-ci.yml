@@ -1,0 +1,57 @@
+name: Audio Intelligence CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - "services/media-worker/app/music_intelligence*.py"
+      - "services/media-worker/app/stem_intelligence*.py"
+      - "services/media-worker/app/audio_intelligence_providers.py"
+      - "services/media-worker/app/runner.py"
+      - "services/media-worker/tests/test_music_intelligence*.py"
+      - "services/media-worker/requirements*.txt"
+      - "lib/music-intelligence/**"
+      - "lib/lyrics-intelligence/**"
+      - "scripts/evaluate-track-intelligence.mjs"
+      - ".github/workflows/audio-intelligence-ci.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: audio-intelligence-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deep-audio-regression:
+    name: deep audio regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install deterministic DSP test dependencies
+        run: python -m pip install numpy==2.2.6 librosa==0.11.0 soundfile==0.13.1 pyloudnorm==0.1.1
+
+      - name: Compile canonical and V4 worker modules
+        run: >-
+          python -m py_compile
+          services/media-worker/app/main.py
+          services/media-worker/app/music_intelligence.py
+          services/media-worker/app/music_intelligence_v4.py
+          services/media-worker/app/music_intelligence_v4_runtime.py
+          services/media-worker/app/audio_intelligence_providers.py
+          services/media-worker/app/stem_intelligence.py
+          services/media-worker/app/stem_intelligence_v3.py
+          services/media-worker/app/social_finishing.py
+          services/media-worker/app/runner.py
+
+      - name: Run complete Media Worker behavioral regression suite
+        working-directory: services/media-worker
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
