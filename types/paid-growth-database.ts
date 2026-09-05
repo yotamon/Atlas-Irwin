@@ -23,6 +23,7 @@ export type PaidGrowthExperiment = {
   objective: "discovery" | "traffic" | "pre_save" | "streams";
   audience: Json;
   geo_countries: string[];
+  currency: "USD";
   budget_ceiling_cents: number;
   daily_budget_cents: number | null;
   spent_cents: number;
@@ -98,7 +99,7 @@ export type PaidGrowthEvent = {
 type Table<Row> = { Row: Row; Insert: Partial<Row>; Update: Partial<Row>; Relationships: [] };
 type ArtistScopedRelease = Database["public"]["Tables"]["releases"]["Row"] & { artist_id: string };
 type PaidMoment = { id: string; owner_id: string; artist_id: string; release_id: string; label: string; state: string; start_ms: number; end_ms: number };
-type PaidContentItem = { id: string; owner_id: string; artist_id: string; release_id: string | null; title: string; asset_url: string | null; status: string; platform: string; moment_id?: string | null };
+type PaidContentItem = { id: string; owner_id: string; artist_id: string; release_id: string | null; title: string; asset_url: string | null; status: string; platform: string };
 type PaidSmartLink = { id: string; owner_id: string; artist_id: string; release_id: string; slug: string; goal: string; is_active: boolean; site_id: string };
 type PaidSmartLinkSource = { id: string; smart_link_id: string; owner_id: string; artist_id: string; campaign_id: string | null; content_item_id: string | null; moment_id: string | null; code: string; label: string | null };
 type PaidSmartLinkEvent = { id: string; smart_link_id: string; owner_id: string; artist_id: string; release_id: string; campaign_id: string | null; content_item_id: string | null; moment_id: string | null; source_code: string | null; event_type: "landing_view" | "outbound_click" | "pre_save_start" | "pre_save_completion"; verified: boolean; verification_reference: string | null; occurred_at: string };
