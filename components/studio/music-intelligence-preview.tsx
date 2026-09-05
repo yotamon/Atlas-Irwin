@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { analysisConfidenceLabel, hookRecommendationLabel } from "@/lib/studio/evidence-labels";
 import { parseMusicMap } from "@/lib/video-director/creative-director";
 import type { Json } from "@/types/database";
 import styles from "./music-intelligence-preview.module.css";
@@ -180,7 +181,7 @@ export function MusicIntelligencePreview({
 
       {map.version >= 3 ? (
         <p className={styles.note}>
-          {typeof confidence === "number" ? `${Math.round(confidence * 100)}% analysis confidence · ` : ""}
+          {typeof confidence === "number" ? `${analysisConfidenceLabel(confidence)} · ` : ""}
           {downbeatCopy(map.analysis?.downbeat_source ?? map.downbeat_source)}
           {map.analysis?.embeddings_used ? " · semantic recurrence" : ""}
           {qc ? ` · ${qc.technical_ready ? "master QC clear" : "master QC review"}` : ""}
@@ -308,14 +309,14 @@ export function MusicIntelligencePreview({
                 disabled={!audioUrl}
               >
                 <span>{activeId === hook.id && playing ? "❚❚" : "▶"}</span>
-                <div><strong>#{index + 1} {hook.label}</strong><small>{time(hook.start_ms)}–{time(hook.end_ms)} · {topIntent ? `${topIntent[0].replaceAll("_", " ")} ${Math.round(topIntent[1] * 100)}` : hook.kind.replaceAll("_", " ")}</small></div>
-                <b>{Math.round(hook.score * 100)}</b>
+                <div><strong>#{index + 1} {hook.label}</strong><small>{time(hook.start_ms)}–{time(hook.end_ms)} · {topIntent ? topIntent[0].replaceAll("_", " ") : hook.kind.replaceAll("_", " ")}</small></div>
+                <b>{hookRecommendationLabel(hook.score, index)}</b>
               </button>
             );
           })}
         </div>
       ) : (
-        <p className={styles.note}>{map.source === "worker" && map.version < 3 ? "Legacy analysis. Re-analyze this track to get v3 production moments and ranked alternatives." : "No scored hook candidates are available for this map."}</p>
+        <p className={styles.note}>{map.source === "worker" && map.version < 3 ? "Legacy analysis. Re-analyze this track to get v3 production moments and ranked alternatives." : "No strong moment candidates are available for this map."}</p>
       )}
       {!audioUrl ? <p className={styles.note}>Attach an audio master to enable section and hook playback.</p> : null}
     </div>
