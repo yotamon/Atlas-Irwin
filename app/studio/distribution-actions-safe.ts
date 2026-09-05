@@ -29,7 +29,7 @@ async function validateReleaseArtistScope(form: FormData) {
 
   const { data: release, error } = await db
     .from("releases")
-    .select("id,artist_id")
+    .select("id,artist_id,label,upc")
     .eq("id", releaseId)
     .eq("owner_id", user.id)
     .eq("artist_id", artist.artistId)
@@ -39,7 +39,27 @@ async function validateReleaseArtistScope(form: FormData) {
   if (!release) throw new Error("Release not found for the active artist.");
 
   form.set("artist_id", artist.artistId);
-  return artist;
+  return { artist, db, userId: user.id, releaseId, release };
+}
+
+async function assertCanonicalIdentity(form: FormData) {
+  const context = await validateReleaseArtistScope(form);
+  const { data: meta, error } = await context.db.from("distribution_release_metadata")
+    .select("product_copyright_line,recording_copyright_line,upc_source")
+    .eq("release_id", context.releaseId)
+    .eq("owner_id", context.userId)
+    .eq("artist_id", context.artist.artistId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+
+  const missing: string[] = [];
+  if (!context.release.label?.trim()) missing.push("label / imprint");
+  if (!meta?.product_copyright_line.trim()) missing.push("product copyright line");
+  if (!meta?.recording_copyright_line.trim()) missing.push("sound-recording copyright line");
+  if (meta?.upc_source === "artist" && !context.release.upc) missing.push("UPC/EAN");
+  if (!meta) missing.push("release delivery identity");
+  if (missing.length) throw new Error(`Complete ${missing.join(", ")} before Ensemblis prepares external distribution work.`);
+  return context;
 }
 
 async function runReleaseAction(form: FormData, action: (form: FormData) => Promise<unknown>, notice: string) {
@@ -54,7 +74,7 @@ async function runReleaseAction(form: FormData, action: (form: FormData) => Prom
 }
 
 export async function saveDistributionDeclarations(form: FormData) {
-  return runReleaseAction(form, actions.saveDistributionDeclarations, "Distribution declarations saved. Run preflight to refresh readiness.");
+  return runReleaseAction(form, actions.saveDistributionDeclarations, "Distribution declarations saved.");
 }
 
 export async function saveDistributionArtistProfile(form: FormData) {
@@ -82,7 +102,14 @@ export async function removeDistributionTrackContributor(form: FormData) {
 }
 
 export async function prepareDistributionCatalog(form: FormData) {
-  return runReleaseAction(form, actions.prepareDistributionCatalog, "Distribution package synchronized. Run full preflight before final approval.");
+  const destination = releaseDestination(form);
+  try {
+    await assertCanonicalIdentity(form);
+    await actions.prepareDistributionCatalog(form);
+  } catch (error) {
+    redirect(`${destination}?error=${encodeURIComponent(message(error))}`);
+  }
+  redirect(`${destination}?notice=${encodeURIComponent("Distribution package synchronized.")}`);
 }
 
 export async function runDistributionPreflight(form: FormData) {
@@ -90,15 +117,30 @@ export async function runDistributionPreflight(form: FormData) {
 }
 
 export async function submitDistribution(form: FormData) {
-  return runReleaseAction(form, actions.submitDistribution, "Release submitted to the selected music services.");
+  const destination = releaseDestination(form);
+  try {
+    await assertCanonicalIdentity(form);
+    if (!(form.get("confirm_submission") === "on" || form.get("confirm_submission") === "true" || form.get("confirm_submission") === "1")) {
+      throw new Error("Review and explicitly approve the release before distribution.");
+    }
+    // One artist approval covers the safe preparation sequence. Package synchronization and
+    // provider validation remain reversible/preparatory; the final submit call is still guarded
+    // by the explicit confirmation above and by the distribution runtime itself.
+    await actions.prepareDistributionCatalog(form);
+    await actions.runDistributionPreflight(form);
+    await actions.submitDistribution(form);
+  } catch (error) {
+    redirect(`${destination}?error=${encodeURIComponent(message(error))}`);
+  }
+  redirect(`${destination}?notice=${encodeURIComponent("Release approved and submitted to the selected music services.")}`);
 }
 
 export async function syncDistributionStatus(form: FormData) {
-  return runReleaseAction(form, actions.syncDistributionStatus, "Distribution status and provider identifiers refreshed.");
+  return runReleaseAction(form, actions.syncDistributionStatus, "Distribution status refreshed.");
 }
 
 export async function beginDistributionUpdate(form: FormData) {
-  return runReleaseAction(form, actions.beginDistributionUpdate, "Correction mode started. Make the allowed metadata changes, synchronize the package, run full preflight, then approve the resend.");
+  return runReleaseAction(form, actions.beginDistributionUpdate, "Correction mode started. Make the allowed metadata changes, then approve the resend.");
 }
 
 export async function requestDistributionTakedown(form: FormData) {
