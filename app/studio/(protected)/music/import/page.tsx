@@ -27,7 +27,9 @@ function analysisStatus(track: VaultTrack) {
   return track.audio_url ? "Preparing analysis" : "Needs master";
 }
 
-export default async function MusicImportPage() {
+export default async function MusicImportPage({ searchParams }: { searchParams: Promise<{ onboarding?: string }> }) {
+  const params = await searchParams;
+  const onboarding = params.onboarding === "1";
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveActiveArtistContext(supabase, user);
   const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
@@ -47,8 +49,10 @@ export default async function MusicImportPage() {
       <PageHeader
         title="Add mastered music"
         description={`Upload ${artist.artistName}'s mastered tracks. Title is optional; Ensemblis starts understanding structure and strongest moments automatically.`}
-        action={<Link className="button" href={href("/studio/music")}>Back to Music</Link>}
+        action={<Link className="button" href={onboarding ? href("/studio/onboarding") : href("/studio/music")}>{onboarding ? "Continue activation" : "Back to Music"}</Link>}
       />
+
+      {onboarding ? <section className="v2-section v2-compact-section"><div className="v2-section-heading"><div><span className="section-label">First useful loop</span><h2>One master is enough to start</h2></div></div><p className="v2-muted-copy">After the upload is saved, analysis continues automatically. Use <strong>Continue activation</strong> when you want to see the next real decision.</p></section> : null}
 
       <section className="v2-section">
         <div className="v2-section-heading">
@@ -66,11 +70,7 @@ export default async function MusicImportPage() {
             Automatic audio analysis is unavailable in this environment. The master is still saved safely in Music and can be analyzed when the media worker is available.
           </div>
         ) : null}
-        <MediaUploader
-          artistId={artist.artistId}
-          defaultRole="master_audio"
-          musicIntakeMode
-        />
+        <MediaUploader artistId={artist.artistId} defaultRole="master_audio" musicIntakeMode />
       </section>
 
       <section className="v2-section">
@@ -79,7 +79,7 @@ export default async function MusicImportPage() {
             <span className="section-label">Recent music</span>
             <h2>What Ensemblis is understanding</h2>
           </div>
-          <Link href={href("/studio/music")}>All music</Link>
+          <Link href={onboarding ? href("/studio/onboarding") : href("/studio/music")}>{onboarding ? "Continue activation" : "All music"}</Link>
         </div>
         {recent?.length ? (
           <div className="growth-vault-list">
