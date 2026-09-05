@@ -10,7 +10,7 @@ test("Fan Graph keeps identity and permission channel-scoped", async () => {
     read("app/studio/fan-actions.ts"),
     read("lib/audience/fan-graph-server.ts"),
   ]);
-  assert.match(migration, /fan_channel_identities/);
+  assert.match(migration, /fan_identities/);
   assert.match(migration, /fan_permissions/);
   assert.match(migration, /channel/);
   assert.match(actions, /evidence/i);
