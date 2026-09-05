@@ -15,7 +15,7 @@ test("Create asks for an outcome instead of exposing production subsystems", asy
     "startOutcomeCreative",
     "Other starting points",
   ]) assert.ok(create.includes(snippet), `Create must retain ${snippet}`);
-  assert.equal(create.includes("Create from this Moment"), false);
+  assert.ok(create.includes("<form action={startOutcomeCreative}"));
   assert.equal(create.includes('href={href(`/studio/production?release=${moment.release_id}&moment=${moment.id}`)}'), false);
 });
 
