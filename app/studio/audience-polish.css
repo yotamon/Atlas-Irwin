@@ -1,4 +1,4 @@
-/* Audience as a decision queue, not a social inbox clone. */
+/* Audience as relationship memory plus a decision queue, not a social inbox clone. */
 
 .studio-root .audience-polish-page {
   width: min(100%, 82rem);
@@ -23,6 +23,10 @@
   border-right: 1px solid color-mix(in srgb, var(--en-line) 76%, transparent);
 }
 
+.studio-root .fan-graph-summary {
+  grid-template-columns: repeat(4, auto) minmax(14rem, 1fr);
+}
+
 .studio-root .audience-polish-summary strong {
   color: var(--en-ink);
   font-size: 1.3rem;
@@ -38,8 +42,17 @@
 }
 
 .studio-root .audience-polish-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
   padding-bottom: 0.9rem;
   border-bottom: 1px solid var(--en-line);
+}
+
+.studio-root .audience-polish-heading > span {
+  color: var(--en-subtle);
+  font-size: 0.63rem;
 }
 
 .studio-root .audience-polish-heading h2 {
@@ -48,6 +61,69 @@
   font-size: 1.4rem;
   font-weight: 690;
   letter-spacing: -0.04em;
+}
+
+.studio-root .fan-graph-section {
+  display: grid;
+  gap: 0;
+  margin-bottom: clamp(2.4rem, 4vw, 4rem);
+}
+
+.studio-root .fan-relationship-list {
+  display: grid;
+}
+
+.studio-root .fan-relationship-row {
+  display: grid;
+  grid-template-columns: minmax(10rem, 0.85fr) minmax(14rem, 1.25fr) minmax(11rem, 0.85fr);
+  gap: 1rem;
+  align-items: center;
+  min-height: 4.6rem;
+  padding: 0.9rem 0.2rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--en-line) 76%, transparent);
+  color: inherit;
+  text-decoration: none;
+  transition: background-color 160ms ease, transform 160ms ease;
+}
+
+.studio-root .fan-relationship-row:hover {
+  background: color-mix(in srgb, var(--en-surface-raised) 62%, transparent);
+  transform: translateX(0.18rem);
+}
+
+.studio-root .fan-relationship-person,
+.studio-root .fan-relationship-context {
+  display: grid;
+  gap: 0.22rem;
+}
+
+.studio-root .fan-relationship-person strong,
+.studio-root .fan-relationship-context strong {
+  color: var(--en-ink);
+  font-size: 0.78rem;
+  font-weight: 680;
+}
+
+.studio-root .fan-relationship-person span,
+.studio-root .fan-relationship-context span,
+.studio-root .fan-relationship-context small {
+  color: var(--en-muted);
+  font-size: 0.62rem;
+  line-height: 1.4;
+}
+
+.studio-root .fan-channel-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.studio-root .fan-channel-chips span {
+  padding: 0.28rem 0.46rem;
+  border: 1px solid var(--en-line);
+  border-radius: 999px;
+  color: var(--en-muted);
+  font-size: 0.59rem;
 }
 
 .studio-root .audience-thread-list {
@@ -59,6 +135,7 @@
   gap: 0.85rem;
   padding: 1.15rem 0;
   border-bottom: 1px solid color-mix(in srgb, var(--en-line) 76%, transparent);
+  scroll-margin-top: 6rem;
 }
 
 .studio-root .audience-thread > header {
@@ -141,6 +218,244 @@
   font-size: 0.7rem;
 }
 
+.studio-root .fan-detail-page {
+  display: grid;
+  gap: clamp(2rem, 4vw, 3.6rem);
+}
+
+.studio-root .fan-relationship-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(20rem, 0.85fr);
+  gap: 2rem;
+  align-items: end;
+  padding-block: 1rem 1.5rem;
+  border-bottom: 1px solid var(--en-line);
+}
+
+.studio-root .fan-relationship-hero > div {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.studio-root .fan-relationship-hero > div > strong {
+  color: var(--en-ink);
+  font-size: clamp(1.8rem, 4vw, 3rem);
+  font-weight: 700;
+  letter-spacing: -0.055em;
+}
+
+.studio-root .fan-relationship-hero > div > small,
+.studio-root .fan-privacy-note {
+  color: var(--en-muted);
+  font-size: 0.68rem;
+  line-height: 1.55;
+}
+
+.studio-root .fan-profile-form,
+.studio-root .fan-inline-form,
+.studio-root .fan-detail-control form,
+.studio-root .fan-danger-control form {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.studio-root .fan-profile-form {
+  grid-template-columns: 1fr 1fr auto;
+  align-items: end;
+}
+
+.studio-root .fan-profile-form label,
+.studio-root .fan-inline-form label,
+.studio-root .fan-detail-control label,
+.studio-root .fan-danger-control label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--en-muted);
+  font-size: 0.62rem;
+}
+
+.studio-root .fan-profile-form input,
+.studio-root .fan-profile-form select,
+.studio-root .fan-inline-form input,
+.studio-root .fan-inline-form select,
+.studio-root .fan-inline-form textarea,
+.studio-root .fan-detail-control input,
+.studio-root .fan-detail-control select,
+.studio-root .fan-detail-control textarea,
+.studio-root .fan-danger-control input {
+  width: 100%;
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-sm);
+  background: var(--en-surface-raised);
+  color: var(--en-ink);
+  padding: 0.65rem 0.72rem;
+  font: inherit;
+}
+
+.studio-root .fan-detail-section {
+  display: grid;
+  gap: 1rem;
+}
+
+.studio-root .fan-identity-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 0.75rem;
+}
+
+.studio-root .fan-identity-card {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-md);
+  background: color-mix(in srgb, var(--en-surface-raised) 82%, transparent);
+}
+
+.studio-root .fan-identity-card > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.studio-root .fan-identity-card > header > div {
+  display: grid;
+  gap: 0.16rem;
+}
+
+.studio-root .fan-identity-card > header span,
+.studio-root .fan-identity-card > header small,
+.studio-root .fan-identity-card > p,
+.studio-root .fan-permission-list small {
+  color: var(--en-muted);
+  font-size: 0.61rem;
+  line-height: 1.45;
+}
+
+.studio-root .fan-identity-card > header strong {
+  color: var(--en-ink);
+  font-size: 0.82rem;
+}
+
+.studio-root .fan-permission-list {
+  display: grid;
+  gap: 0.38rem;
+}
+
+.studio-root .fan-permission-list > div {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.2rem 0.6rem;
+  padding-block: 0.38rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--en-line) 72%, transparent);
+  font-size: 0.62rem;
+}
+
+.studio-root .fan-permission-list > div small {
+  grid-column: 1 / -1;
+}
+
+.studio-root .fan-permission-list strong[data-status="granted"] { color: var(--en-success, var(--en-ink)); }
+.studio-root .fan-permission-list strong[data-status="revoked"] { color: var(--en-danger, var(--en-muted)); }
+
+.studio-root .fan-detail-control,
+.studio-root .fan-danger-control {
+  border-top: 1px solid var(--en-line);
+  padding-top: 0.6rem;
+}
+
+.studio-root .fan-detail-control > summary,
+.studio-root .fan-danger-control > summary {
+  cursor: pointer;
+  color: var(--en-muted);
+  font-size: 0.66rem;
+  font-weight: 650;
+}
+
+.studio-root .fan-detail-control[open] > summary,
+.studio-root .fan-danger-control[open] > summary {
+  margin-bottom: 0.8rem;
+}
+
+.studio-root .fan-history-list,
+.studio-root .fan-merge-history {
+  display: grid;
+}
+
+.studio-root .fan-history-list > article,
+.studio-root .fan-merge-history > div {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.8rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--en-line) 76%, transparent);
+}
+
+.studio-root .fan-history-list header,
+.studio-root .fan-merge-history > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.studio-root .fan-history-list span,
+.studio-root .fan-history-list small,
+.studio-root .fan-merge-history small {
+  color: var(--en-muted);
+  font-size: 0.61rem;
+}
+
+.studio-root .fan-history-list p {
+  max-width: 60rem;
+  color: var(--en-ink);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.studio-root .fan-merge-history span {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.studio-root .fan-privacy-section {
+  padding: 1rem;
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-md);
+  background: color-mix(in srgb, var(--en-surface-raised) 58%, transparent);
+}
+
+.studio-root .fan-privacy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.studio-root .fan-danger-control {
+  border-top-color: color-mix(in srgb, var(--en-danger, #a33) 30%, var(--en-line));
+}
+
+@media (max-width: 920px) {
+  .studio-root .fan-graph-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .studio-root .fan-graph-summary p {
+    grid-column: 1 / -1;
+  }
+
+  .studio-root .fan-relationship-row {
+    grid-template-columns: 1fr;
+    gap: 0.55rem;
+  }
+
+  .studio-root .fan-relationship-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .studio-root .fan-profile-form {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 720px) {
   .studio-root .audience-polish-summary {
     grid-template-columns: 1fr 1fr;
@@ -150,7 +465,10 @@
     grid-column: 1 / -1;
   }
 
-  .studio-root .audience-no-draft {
+  .studio-root .audience-no-draft,
+  .studio-root .audience-polish-heading,
+  .studio-root .fan-history-list header,
+  .studio-root .fan-merge-history > div {
     align-items: flex-start;
     flex-direction: column;
   }
