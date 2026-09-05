@@ -37,7 +37,8 @@ test("public Smart Link measurement is sessionless and verified pre-save complet
   assert.equal(legacy.includes("createHash"), false);
   assert.equal(legacy.includes("x-forwarded-for"), false);
   assert.equal(legacy.includes("user-agent"), false);
-  assert.ok(legacy.includes("p_visitor_hash: null"));
+  assert.ok(legacy.includes('p_visitor_hash: ""'));
+  assert.ok(legacy.includes("privacy-safe replacement intentionally ignores legacy visitor identity"));
   assert.ok(legacy.includes("p_user_agent: null"));
   assert.ok(tracker.includes('credentials: "omit"'));
 });
