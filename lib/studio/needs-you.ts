@@ -4,6 +4,7 @@ export type NeedsYouSeverity = "required" | "decision" | "review";
 
 export type NeedsYouSourceKind =
   | "mission"
+  | "distribution"
   | "approval"
   | "outreach"
   | "publication"
@@ -20,16 +21,14 @@ export type NeedsYouItem = {
   href: string;
   severity: NeedsYouSeverity;
   priority: number;
-  source: {
-    kind: NeedsYouSourceKind;
-    id: string | null;
-  };
+  source: { kind: NeedsYouSourceKind; id: string | null };
   missionId: string | null;
 };
 
 export type NeedsYouProjectionInput = {
   activeReleaseId?: string | null;
   activeMission?: ReleaseMissionState | null;
+  distributionDecisions?: Array<{ key: string; title: string; detail: string; severity: NeedsYouSeverity; releaseId: string }>;
   workflowApprovalCount: number;
   outreachDraftCount: number;
   manualReady: Array<{ id: string; platform: string; contentItemId?: string | null }>;
@@ -39,17 +38,10 @@ export type NeedsYouProjectionInput = {
   proposedLearningCount: number;
 };
 
-const SEVERITY_WEIGHT: Record<NeedsYouSeverity, number> = {
-  required: 300,
-  decision: 200,
-  review: 100,
-};
+const SEVERITY_WEIGHT: Record<NeedsYouSeverity, number> = { required: 300, decision: 200, review: 100 };
 
 function item(input: Omit<NeedsYouItem, "priority"> & { priority?: number }): NeedsYouItem {
-  return {
-    ...input,
-    priority: SEVERITY_WEIGHT[input.severity] + (input.priority ?? 0),
-  };
+  return { ...input, priority: SEVERITY_WEIGHT[input.severity] + (input.priority ?? 0) };
 }
 
 function dedupe(items: NeedsYouItem[]) {
@@ -67,126 +59,54 @@ export function deriveNeedsYouQueue(input: NeedsYouProjectionInput): NeedsYouIte
   const queue: NeedsYouItem[] = [];
 
   for (const blocker of input.activeMission?.blockers ?? []) {
+    queue.push(item({ id: `mission:${blocker.key}`, category: "Release Mission", title: blocker.title, detail: blocker.detail, href: blocker.href, severity: "required", priority: 90, source: { kind: "mission", id: blocker.key }, missionId }));
+  }
+
+  for (const decision of (input.distributionDecisions ?? []).slice(0, 5)) {
     queue.push(item({
-      id: `mission:${blocker.key}`,
-      category: "Release Mission",
-      title: blocker.title,
-      detail: blocker.detail,
-      href: blocker.href,
-      severity: "required",
-      priority: 90,
-      source: { kind: "mission", id: blocker.key },
-      missionId,
+      id: `distribution:${decision.releaseId}:${decision.key}`,
+      category: "Distribution",
+      title: decision.title,
+      detail: decision.detail,
+      href: `/studio/releases/${decision.releaseId}/distribution`,
+      severity: decision.severity,
+      priority: 85,
+      source: { kind: "distribution", id: decision.key },
+      missionId: decision.releaseId,
     }));
   }
 
   if (input.workflowApprovalCount) {
-    queue.push(item({
-      id: "workflow-approvals",
-      category: "Approval",
-      title: `${input.workflowApprovalCount} workflow approval${input.workflowApprovalCount === 1 ? "" : "s"} ready`,
-      detail: "Review external effects Ensemblis has prepared. Nothing is executed just because it was prepared.",
-      href: "/studio/inbox",
-      severity: "decision",
-      priority: 80,
-      source: { kind: "approval", id: null },
-      missionId,
-    }));
+    queue.push(item({ id: "workflow-approvals", category: "Approval", title: `${input.workflowApprovalCount} workflow approval${input.workflowApprovalCount === 1 ? "" : "s"} ready`, detail: "Review external effects Ensemblis has prepared. Nothing is executed just because it was prepared.", href: "/studio/inbox", severity: "decision", priority: 80, source: { kind: "approval", id: null }, missionId }));
   }
 
   if (input.outreachDraftCount) {
-    queue.push(item({
-      id: "outreach-drafts",
-      category: "Outreach",
-      title: `${input.outreachDraftCount} message${input.outreachDraftCount === 1 ? "" : "s"} prepared`,
-      detail: "Approve delivery or use the prepared manual handoff.",
-      href: "/studio/inbox",
-      severity: "decision",
-      priority: 70,
-      source: { kind: "outreach", id: null },
-      missionId,
-    }));
+    queue.push(item({ id: "outreach-drafts", category: "Outreach", title: `${input.outreachDraftCount} message${input.outreachDraftCount === 1 ? "" : "s"} prepared`, detail: "Approve delivery or use the prepared manual handoff.", href: "/studio/inbox", severity: "decision", priority: 70, source: { kind: "outreach", id: null }, missionId }));
   }
 
   for (const publication of input.manualReady.slice(0, 2)) {
-    queue.push(item({
-      id: `publication:${publication.id}`,
-      category: "Ready for handoff",
-      title: `${publication.platform} is prepared`,
-      detail: "Everything is ready for the final manual publishing step.",
-      href: publication.contentItemId ? `/studio/production?edit=${publication.contentItemId}` : "/studio/inbox",
-      severity: "decision",
-      priority: 60,
-      source: { kind: "publication", id: publication.id },
-      missionId,
-    }));
+    queue.push(item({ id: `publication:${publication.id}`, category: "Ready for handoff", title: `${publication.platform} is prepared`, detail: "Everything is ready for the final manual publishing step.", href: publication.contentItemId ? `/studio/production?edit=${publication.contentItemId}` : "/studio/inbox", severity: "decision", priority: 60, source: { kind: "publication", id: publication.id }, missionId }));
   }
 
   if (input.unmatchedCount) {
-    queue.push(item({
-      id: "catalog-matches",
-      category: "Needs matching",
-      title: `${input.unmatchedCount} catalog match${input.unmatchedCount === 1 ? "" : "es"} need a decision`,
-      detail: "Ensemblis found an ambiguous platform match and left the judgment to you.",
-      href: "/studio/data-health?category=unmatched",
-      severity: "decision",
-      priority: 55,
-      source: { kind: "catalog_match", id: null },
-      missionId,
-    }));
+    queue.push(item({ id: "catalog-matches", category: "Needs matching", title: `${input.unmatchedCount} catalog match${input.unmatchedCount === 1 ? "" : "es"} need a decision`, detail: "Ensemblis found an ambiguous platform match and left the judgment to you.", href: "/studio/data-health?category=unmatched", severity: "decision", priority: 55, source: { kind: "catalog_match", id: null }, missionId }));
   }
 
-  const missionMissingAssets = new Set(
-    (input.activeMission?.recommendations ?? [])
-      .filter((recommendation) => recommendation.key.startsWith("asset:"))
-      .map((recommendation) => recommendation.title.replace(/^Finish\s+/i, "").toLowerCase()),
-  );
+  const missionMissingAssets = new Set((input.activeMission?.recommendations ?? []).filter((recommendation) => recommendation.key.startsWith("asset:")).map((recommendation) => recommendation.title.replace(/^Finish\s+/i, "").toLowerCase()));
   for (const asset of input.missingAssets.slice(0, 3)) {
     if (asset.releaseId === missionId && missionMissingAssets.has(asset.title.toLowerCase())) continue;
-    queue.push(item({
-      id: `creative:${asset.id}`,
-      category: "Creative",
-      title: `${asset.title} is waiting for its asset`,
-      detail: `${asset.platform}${asset.scheduledLabel ? ` · ${asset.scheduledLabel}` : ""}`,
-      href: `/studio/production?edit=${asset.id}`,
-      severity: "review",
-      priority: 40,
-      source: { kind: "creative", id: asset.id },
-      missionId: asset.releaseId ?? missionId,
-    }));
+    queue.push(item({ id: `creative:${asset.id}`, category: "Creative", title: `${asset.title} is waiting for its asset`, detail: `${asset.platform}${asset.scheduledLabel ? ` · ${asset.scheduledLabel}` : ""}`, href: `/studio/production?edit=${asset.id}`, severity: "review", priority: 40, source: { kind: "creative", id: asset.id }, missionId: asset.releaseId ?? missionId }));
   }
 
   for (const task of input.dueTasks.slice(0, 3)) {
-    queue.push(item({
-      id: `task:${task.id}`,
-      category: "Task",
-      title: task.title,
-      detail: task.dueLabel ? `${task.priority} · ${task.dueLabel}` : task.priority,
-      href: missionId ? `/studio/releases/${missionId}` : "/studio/releases",
-      severity: "review",
-      priority: 30,
-      source: { kind: "task", id: task.id },
-      missionId,
-    }));
+    queue.push(item({ id: `task:${task.id}`, category: "Task", title: task.title, detail: task.dueLabel ? `${task.priority} · ${task.dueLabel}` : task.priority, href: missionId ? `/studio/releases/${missionId}` : "/studio/releases", severity: "review", priority: 30, source: { kind: "task", id: task.id }, missionId }));
   }
 
   if (input.proposedLearningCount) {
-    queue.push(item({
-      id: "learning-proposals",
-      category: "Learning",
-      title: `${input.proposedLearningCount} evidence-backed insight${input.proposedLearningCount === 1 ? "" : "s"} to review`,
-      detail: "Only approved findings may become active Artist Memory and influence future decisions.",
-      href: "/studio/learn",
-      severity: "review",
-      priority: 20,
-      source: { kind: "learning", id: null },
-      missionId,
-    }));
+    queue.push(item({ id: "learning-proposals", category: "Learning", title: `${input.proposedLearningCount} evidence-backed insight${input.proposedLearningCount === 1 ? "" : "s"} to review`, detail: "Only approved findings may become active Artist Memory and influence future decisions.", href: "/studio/learn", severity: "review", priority: 20, source: { kind: "learning", id: null }, missionId }));
   }
 
-  return dedupe(queue)
-    .sort((left, right) => right.priority - left.priority || left.title.localeCompare(right.title))
-    .slice(0, 10);
+  return dedupe(queue).sort((left, right) => right.priority - left.priority || left.title.localeCompare(right.title)).slice(0, 10);
 }
 
 export function needsYouTone(item: NeedsYouItem): "important" | "warning" | "normal" {
