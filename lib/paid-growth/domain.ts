@@ -40,6 +40,13 @@ function latest(observations: PaidGrowthObservation[]) {
   return [...observations].sort((left, right) => Date.parse(right.observed_at) - Date.parse(left.observed_at))[0] ?? null;
 }
 
+function sampleSize(row: PaidGrowthObservation | null) {
+  if (!row) return 0;
+  // Provider impressions are the preferred sample. Until a verified provider adapter exists,
+  // first-party landing views are a conservative fallback for experiments evaluated only on owned traffic.
+  return row.impressions > 0 ? row.impressions : row.landing_views;
+}
+
 function metricValue(metric: PaidGrowthSuccessMetric, row: PaidGrowthObservation | null) {
   if (!row) return null;
   switch (metric) {
@@ -76,7 +83,7 @@ export function paidGrowthMetricLabel(metric: PaidGrowthSuccessMetric) {
 
 export function evaluatePaidGrowthExperiment(experiment: PaidGrowthExperiment, observations: PaidGrowthObservation[]): PaidGrowthEvaluation {
   const row = latest(observations);
-  const sample = row?.impressions ?? 0;
+  const sample = sampleSize(row);
   const actual = metricValue(experiment.success_metric, row);
   const conditions = stopConditions(experiment.stop_conditions);
   const verified = Boolean(row?.verified);
@@ -95,7 +102,9 @@ export function evaluatePaidGrowthExperiment(experiment: PaidGrowthExperiment, o
     return {
       phase: shouldStop ? "stop" : "awaiting_sample",
       label: shouldStop ? "Stop condition reached" : "Gathering evidence",
-      detail: shouldStop ? "A configured safety condition was reached before the experiment had enough evidence." : `${sample.toLocaleString()} of ${experiment.minimum_sample.toLocaleString()} required impressions observed.`,
+      detail: shouldStop
+        ? "A configured safety condition was reached before the experiment had enough evidence."
+        : `${sample.toLocaleString()} of ${experiment.minimum_sample.toLocaleString()} required observations available.`,
       sample,
       metricValue: actual,
       metricLabel,
@@ -147,10 +156,14 @@ export function evaluatePaidGrowthExperiment(experiment: PaidGrowthExperiment, o
     };
   }
 
+  const countMetric = !experiment.success_metric.startsWith("cost_per_");
+  const halfway = countMetric && actual != null && actual >= Number(experiment.success_threshold) * 0.5;
   return {
-    phase: "underperforming",
-    label: "Below success threshold",
-    detail: "The minimum sample is available, but the approved success condition has not been reached yet.",
+    phase: halfway ? "promising" : "underperforming",
+    label: halfway ? "Promising, still below threshold" : "Below success threshold",
+    detail: halfway
+      ? "The minimum sample is available and the signal is moving toward the approved threshold, but Ensemblis will not call it a winner early."
+      : "The minimum sample is available, but the approved success condition has not been reached yet.",
     sample,
     metricValue: actual,
     metricLabel,
@@ -162,8 +175,17 @@ export function evaluatePaidGrowthExperiment(experiment: PaidGrowthExperiment, o
 
 export function paidGrowthEvidenceStrength(evidence: Json): PaidGrowthExperiment["evidence_strength"] {
   if (!Array.isArray(evidence)) return "preliminary";
-  const trusted = evidence.filter((entry) => entry && typeof entry === "object" && !Array.isArray(entry) && (entry as Record<string, unknown>).verified === true).length;
-  if (trusted >= 2) return "strong";
-  if (trusted === 1 || evidence.length >= 2) return "supported";
+  const performanceEvidence = evidence.filter((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
+    const row = entry as Record<string, unknown>;
+    return row.verified === true && ["learning", "performance", "first_party_outcome"].includes(String(row.kind ?? ""));
+  }).length;
+  const contextualEvidence = evidence.filter((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
+    return ["moment", "creative", "artist_rationale"].includes(String((entry as Record<string, unknown>).kind ?? ""));
+  }).length;
+  if (performanceEvidence >= 2) return "strong";
+  if (performanceEvidence === 1) return "supported";
+  if (contextualEvidence >= 2) return "supported";
   return "preliminary";
 }
