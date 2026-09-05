@@ -6,10 +6,12 @@ import { asMarketingClient } from "@/lib/marketing/db";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 import type { Database } from "@/types/database";
 import {
+  artistMemoryForConsumer,
   brandSettingMemoryItem,
   creativePreferenceMemoryItems,
   summarizeArtistMemory,
   verifiedLearningMemoryItem,
+  type ArtistMemoryConsumer,
   type ArtistMemoryItem,
   type ArtistMemorySnapshot,
 } from "./domain";
@@ -133,4 +135,26 @@ export async function loadArtistMemory(input: {
   });
 
   return summarizeArtistMemory(items);
+}
+
+export async function loadArtistMemoryForConsumer(input: {
+  db: DatabaseClient;
+  ownerId: string;
+  artistId: string;
+  consumer: ArtistMemoryConsumer;
+}) {
+  const snapshot = await loadArtistMemory(input);
+  return artistMemoryForConsumer(snapshot, input.consumer);
+}
+
+export function artistMemoryBrief(items: ArtistMemoryItem[], maxCharacters = 2_400) {
+  const lines: string[] = [];
+  let length = 0;
+  for (const item of items) {
+    const line = `[${item.confidence.label}/${item.class}] ${item.title}: ${item.value}`;
+    if (length + line.length > maxCharacters) break;
+    lines.push(line);
+    length += line.length + 1;
+  }
+  return lines.join("\n");
 }
