@@ -24,7 +24,7 @@ test("Distribution keeps canonical release identity and exact artist decisions",
 
 test("Distribution snapshots canonical identity and territories before irreversible submission", async () => {
   const [snapshotMigration, router, route] = await Promise.all([
-    read("supabase/migrations/20260905151000_distribution_submission_snapshot.sql"),
+    read("supabase/migrations/20260905151000_distribution_submission_canonical_snapshot.sql"),
     read("app/studio/distribution-edit-router.ts"),
     read("app/studio/(protected)/releases/[id]/distribution/page.tsx"),
   ]);
