@@ -7,12 +7,14 @@ import sys
 from pathlib import Path
 
 from . import main as worker_main
-from .music_intelligence_v4 import analyze_music as analyze_music_v4
+from .music_intelligence_v4_runtime import analyze_music as analyze_music_v4
 from .social_finishing import SocialWorkerRequest, execute_social
+from .stem_intelligence_v3 import analyze_stem as analyze_stem_v3
 
-# V4 deliberately wraps the stable V3 analyzer. Keeping the swap at the worker
-# entrypoint makes rollback trivial while every production Sandbox job uses V4.
+# Keep the stable analyzers importable for rollback, but route production Sandbox
+# entrypoints through the new post-processing layers.
 worker_main.analyze_music = analyze_music_v4
+worker_main.analyze_stem = analyze_stem_v3
 WorkerRequest = worker_main.WorkerRequest
 execute = worker_main.execute
 
