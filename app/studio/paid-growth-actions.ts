@@ -14,12 +14,31 @@ import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import type { Json } from "@/types/database";
 import type { PaidGrowthExperiment, PaidGrowthObservation, PaidGrowthSuccessMetric } from "@/types/paid-growth-database";
 
-const PLATFORMS = new Set(["instagram", "facebook", "tiktok", "youtube", "other"]);
-const OBJECTIVES = new Set(["discovery", "traffic", "pre_save", "streams"]);
 const SUCCESS_METRICS = new Set<PaidGrowthSuccessMetric>(["landing_views", "outbound_clicks", "pre_save_completions", "cost_per_outbound_click", "cost_per_pre_save_completion"]);
 
 function value(form: FormData, key: string) {
   return String(form.get(key) ?? "").trim();
+}
+
+function paidPlatform(raw: string): PaidGrowthExperiment["platform"] {
+  switch (raw.trim().toLowerCase()) {
+    case "instagram": return "instagram";
+    case "facebook": return "facebook";
+    case "tiktok": return "tiktok";
+    case "youtube": return "youtube";
+    case "other": return "other";
+    default: throw new Error("Unsupported paid platform.");
+  }
+}
+
+function paidObjective(raw: string): PaidGrowthExperiment["objective"] {
+  switch (raw.trim().toLowerCase()) {
+    case "discovery": return "discovery";
+    case "traffic": return "traffic";
+    case "pre_save": return "pre_save";
+    case "streams": return "streams";
+    default: throw new Error("Unsupported paid objective.");
+  }
 }
 
 function json(value: unknown): Json {
@@ -120,11 +139,9 @@ export async function createPaidGrowthExperiment(form: FormData) {
   if (hypothesis.length < 10) throw new Error("State a testable hypothesis before allocating budget.");
   if (rationale.length < 10) throw new Error("Explain why this experiment is worth spending money on.");
 
-  const platform = value(form, "platform").toLowerCase();
+  const platform = paidPlatform(value(form, "platform"));
   const provider = value(form, "provider").toLowerCase() || "meta";
-  const objective = value(form, "objective").toLowerCase();
-  if (!PLATFORMS.has(platform)) throw new Error("Unsupported paid platform.");
-  if (!OBJECTIVES.has(objective)) throw new Error("Unsupported paid objective.");
+  const objective = paidObjective(value(form, "objective"));
   const successMetric = value(form, "success_metric") as PaidGrowthSuccessMetric;
   if (!SUCCESS_METRICS.has(successMetric)) throw new Error("Choose a supported success metric.");
 
