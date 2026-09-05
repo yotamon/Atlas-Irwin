@@ -24,6 +24,7 @@ import "./music-polish.css";
 import "./release-polish.css";
 import "./create-polish.css";
 import "./growth-polish.css";
+import "./paid-growth-polish.css";
 import "./audience-polish.css";
 import "./library-polish.css";
 import "./inbox-polish.css";
