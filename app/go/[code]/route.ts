@@ -16,7 +16,9 @@ export async function GET(
   const client = createMarketingServiceClient();
   const { data, error } = await client.rpc("record_attribution_click", {
     p_code: code,
-    p_visitor_hash: null,
+    // The privacy-safe replacement intentionally ignores legacy visitor identity.
+    // Use an empty compatibility value because the older generated RPC type predates nullable input.
+    p_visitor_hash: "",
     p_referrer: request.headers.get("referer")?.slice(0, 1000) || null,
     p_user_agent: null,
   });
@@ -31,7 +33,7 @@ export async function GET(
   } catch {
     return new Response("Link unavailable", { status: 404 });
   }
-  if (!['http:', 'https:'].includes(destination.protocol)) {
+  if (!["http:", "https:"].includes(destination.protocol)) {
     return new Response("Link unavailable", { status: 404 });
   }
 
