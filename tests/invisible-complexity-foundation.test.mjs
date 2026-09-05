@@ -56,29 +56,35 @@ test("Needs You is a projection over canonical state rather than a second task s
   assert.equal(domain.includes("completed: boolean"), false, "Needs You items must not own duplicate completion state");
 });
 
-test("Today consumes the same canonical Needs You projection and avoids pseudo-precise recommendation scores", async () => {
+test("Today is a thin Manager renderer over one canonical operating snapshot", async () => {
   const today = await source("app/studio/(protected)/page.tsx");
-  assert.ok(today.includes('import { deriveNeedsYouQueue, needsYouTone } from "@/lib/studio/needs-you"'));
-  assert.ok(today.includes("const needsYou = deriveNeedsYouQueue({"));
+  const snapshot = await source("lib/studio/artist-operating-snapshot.ts");
+  assert.ok(today.includes("loadArtistOperatingSnapshot"));
   assert.ok(today.includes('href={href("/studio/needs-you")}'));
   assert.ok(today.includes("needsYouTone(item)"));
   assert.ok(today.includes("Recommended next move"));
-  assert.ok(today.includes("const topDecision = needsYou[0] ?? null"));
   assert.ok(today.includes('topDecision.severity === "required" ? "Required" : "Needs attention"'));
-  assert.ok(today.includes('? "Recommended"'));
-  assert.ok(today.includes(': "Clear"'));
-  assert.equal(today.includes("const needsYou: TodayItem[]"), false, "Today must not maintain its own parallel decision queue");
-  assert.equal(today.includes("/100 signal"), false, "Today should not expose pseudo-precise ranking scores as artist truth");
+  assert.equal(today.includes('from("releases")'), false, "Today page should not own cross-domain data fan-out");
+  assert.ok(snapshot.includes("deriveNeedsYouQueue"));
+  assert.ok(snapshot.includes("deriveReleaseMission"));
+  assert.ok(snapshot.includes("loadDistributionArtistState"));
+  assert.ok(snapshot.includes("loadPaidGrowthWorkspace"));
+  assert.ok(snapshot.includes("loadWorkspaceOperatingPreferences"));
+  assert.ok(snapshot.includes("topDecision: needsYou[0] ?? null"));
+  assert.equal(snapshot.includes("/100 signal"), false, "Manager should not expose pseudo-precise ranking scores as artist truth");
 });
 
-test("work navigation stays quiet while Needs You and Memory remain accessible", async () => {
+test("primary navigation stays at five outcomes while secondary capabilities remain available under More", async () => {
   const product = await source("lib/ensemblis-product.ts");
   const sidebar = await source("components/studio/sidebar.tsx");
-  for (const label of ["Today", "Music", "Releases", "Create", "Grow", "Audience", "Library"]) {
-    assert.ok(product.includes(`label: "${label}"`));
-  }
-  assert.ok(product.includes('{ href: "/studio/memory", label: "Memory"'));
+  const workStart = product.indexOf("export const ENSEMBLIS_WORK_NAV");
+  const moreStart = product.indexOf("export const ENSEMBLIS_MORE_NAV");
+  const workSource = product.slice(workStart, moreStart);
+  for (const label of ["Today", "Music", "Releases", "Create", "Grow"]) assert.ok(workSource.includes(`label: "${label}"`));
+  for (const label of ["Audience", "Library", "Memory", "Sites", "Distribution", "Connections"]) assert.equal(workSource.includes(`label: "${label}"`), false, `${label} must not compete in primary navigation`);
+  assert.ok(product.includes("ENSEMBLIS_MORE_NAV"));
+  assert.ok(sidebar.includes("<details"));
+  assert.ok(sidebar.includes(">More</summary>"));
   assert.ok(sidebar.includes('href={ensemblisArtistHref("/studio/needs-you", artistId)}'));
-  assert.ok(sidebar.includes("Needs You"));
-  assert.equal(product.includes('{ href: "/studio/needs-you", label:'), false, "Needs You should not add an eighth primary work-navigation item");
+  assert.equal(product.includes('{ href: "/studio/needs-you", label:'), false, "Needs You should stay a decision surface rather than another primary destination");
 });

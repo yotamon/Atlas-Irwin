@@ -180,3 +180,24 @@ test("artist workflow has a five-Moment ceiling and does not pad weak results", 
   });
   assert.equal(weak.curated.length, 0);
 });
+
+test("artist-facing ceiling also applies when many legacy Moments are already approved", () => {
+  const approved = Array.from({ length: 8 }, (_, index) => {
+    const start = index * 32_000;
+    return moment({
+      index: 300 + index,
+      state: "approved",
+      source_mode: "audio",
+      start_ms: start,
+      end_ms: start + 18_000,
+      confidence: 0.98 - index * 0.02,
+      hook_score: 0.94 - index * 0.02,
+    });
+  });
+
+  const result = curateReleaseMoments({ moments: approved, sections: [] });
+  assert.equal(result.curated.length, 5);
+  assert.equal(result.raw_active_count, 8);
+  assert.equal(result.suppressed_count, 3);
+  assert.deepEqual(result.curated.map((item) => item.curation.rank), [1, 2, 3, 4, 5]);
+});
