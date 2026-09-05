@@ -71,7 +71,7 @@ export default async function SettingsPage() {
     <div className="studio-v2-page">
       <PageHeader
         title="Settings"
-        description={`Connections, brand rules and advanced maintenance for ${artist.artistName}. These should rarely interrupt the release workflow.`}
+        description={`Connections, artist rules, autonomy and advanced maintenance for ${artist.artistName}. These should rarely interrupt the release workflow.`}
       />
 
       <section className="v2-section">
@@ -138,10 +138,10 @@ export default async function SettingsPage() {
             <p>Voice, visual world, audience and reusable creative guidance.</p>
             <small>Edit brand profile →</small>
           </Link>
-          <Link href="/studio/analytics">
-            <div><strong>Learning memory</strong></div>
-            <p>Review performance conclusions Ensemblis may reuse in future plans.</p>
-            <small>Review learnings →</small>
+          <Link href="/studio/memory">
+            <div><strong>Artist Memory</strong></div>
+            <p>Inspect explicit rules, creative preferences and verified performance learnings with their evidence.</p>
+            <small>Review memory →</small>
           </Link>
         </div>
       </section>
@@ -149,11 +149,16 @@ export default async function SettingsPage() {
       <section className="v2-section">
         <div className="v2-section-heading">
           <div>
-            <span className="section-label">AI & generation</span>
-            <h2>One control plane for model quality, routing and cost</h2>
+            <span className="section-label">AI & autonomy</span>
+            <h2>Control intelligence and how independently it may act</h2>
           </div>
         </div>
         <div className="v2-settings-grid">
+          <Link href="/studio/settings/autonomy">
+            <div><strong>Autonomy</strong></div>
+            <p>Choose Assist, Prepare or Run per domain, with spend ceilings and hard safety overrides.</p>
+            <small>Set autonomy rules →</small>
+          </Link>
           <Link href="/studio/settings/ai">
             <div>
               <span className={`v2-dot ${ensemblisAiGatewayConfigured() ? "connected" : ""}`} aria-hidden />
