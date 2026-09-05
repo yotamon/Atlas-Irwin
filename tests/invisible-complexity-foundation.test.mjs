@@ -56,6 +56,18 @@ test("Needs You is a projection over canonical state rather than a second task s
   assert.equal(domain.includes("completed: boolean"), false, "Needs You items must not own duplicate completion state");
 });
 
+test("Today consumes the same canonical Needs You projection and avoids pseudo-precise recommendation scores", async () => {
+  const today = await source("app/studio/(protected)/page.tsx");
+  assert.ok(today.includes('import { deriveNeedsYouQueue, needsYouTone } from "@/lib/studio/needs-you"'));
+  assert.ok(today.includes("const needsYou = deriveNeedsYouQueue({"));
+  assert.ok(today.includes('href={href("/studio/needs-you")}'));
+  assert.ok(today.includes("needsYouTone(item)"));
+  assert.ok(today.includes("Recommended next move"));
+  assert.ok(today.includes('<Status>{nextAction ? "Recommended" : "Clear"}</Status>'));
+  assert.equal(today.includes("const needsYou: TodayItem[]"), false, "Today must not maintain its own parallel decision queue");
+  assert.equal(today.includes("/100 signal"), false, "Today should not expose pseudo-precise ranking scores as artist truth");
+});
+
 test("work navigation stays quiet while Needs You and Memory remain accessible", async () => {
   const product = await source("lib/ensemblis-product.ts");
   const sidebar = await source("components/studio/sidebar.tsx");

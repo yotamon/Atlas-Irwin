@@ -7,6 +7,7 @@ import { asMarketingClient } from "@/lib/marketing/db";
 import { releaseLifecycle } from "@/lib/marketing/release-lifecycle";
 import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
+import { deriveNeedsYouQueue, needsYouTone } from "@/lib/studio/needs-you";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 import { deriveReleaseMission } from "@/lib/studio/release-mission";
 
@@ -67,15 +68,6 @@ function humanizeJobType(value: string | null | undefined) {
   const sentence = value.replace(/[_-]+/g, " ").trim();
   return sentence ? sentence.charAt(0).toUpperCase() + sentence.slice(1) : "Background work";
 }
-
-type TodayItem = {
-  id: string;
-  eyebrow: string;
-  title: string;
-  detail: string;
-  href: string;
-  tone?: "normal" | "important" | "warning";
-};
 
 type WorkingItem = {
   id: string;
@@ -271,64 +263,32 @@ export default async function TodayPage() {
     providerScheduledCount: activeProviderScheduledCount,
   }) : null;
 
-  const needsYou: TodayItem[] = [
-    ...(workflowApprovalCount ? [{
-      id: "approvals",
-      eyebrow: "Approval",
-      title: `${workflowApprovalCount} workflow approval${workflowApprovalCount === 1 ? "" : "s"} ready`,
-      detail: "Review the external effects Ensemblis has prepared for you.",
-      href: href("/studio/inbox"),
-      tone: "important" as const,
-    }] : []),
-    ...(outreachDraftCount ? [{
-      id: "outreach",
-      eyebrow: "Outreach",
-      title: `${outreachDraftCount} message${outreachDraftCount === 1 ? "" : "s"} prepared`,
-      detail: "Approve delivery or use the prepared manual handoff.",
-      href: href("/studio/inbox"),
-      tone: "important" as const,
-    }] : []),
-    ...manualReady.slice(0, 1).map((job) => ({
-      id: `manual-${job.id}`,
-      eyebrow: "Ready for handoff",
-      title: `${job.platform} is prepared`,
-      detail: "Everything is ready for the final manual publishing step.",
-      href: href(job.content_item_id ? `/studio/production?edit=${job.content_item_id}` : "/studio/inbox"),
-      tone: "warning" as const,
+  const needsYou = deriveNeedsYouQueue({
+    activeReleaseId: activeRelease?.id ?? null,
+    activeMission,
+    workflowApprovalCount,
+    outreachDraftCount,
+    manualReady: manualReady.map((job) => ({
+      id: job.id,
+      platform: job.platform,
+      contentItemId: job.content_item_id,
     })),
-    ...(unmatched ? [{
-      id: "unmatched",
-      eyebrow: "Needs matching",
-      title: `${unmatched} catalog match${unmatched === 1 ? "" : "es"} need a decision`,
-      detail: "Ensemblis found an ambiguous platform match and left the judgment to you.",
-      href: href("/studio/data-health?category=unmatched"),
-      tone: "warning" as const,
-    }] : []),
-    ...missingAssets.slice(0, 2).map((item) => ({
-      id: `asset-${item.id}`,
-      eyebrow: "Creative",
-      title: `${item.title} is waiting for its asset`,
-      detail: `${item.platform}${item.scheduled_at ? ` · ${shortDate(item.scheduled_at)}` : ""}`,
-      href: href(`/studio/production?edit=${item.id}`),
-      tone: "normal" as const,
+    unmatchedCount: unmatched,
+    missingAssets: missingAssets.map((item) => ({
+      id: item.id,
+      title: item.title,
+      platform: item.platform,
+      scheduledLabel: item.scheduled_at ? shortDate(item.scheduled_at) : null,
+      releaseId: item.release_id,
     })),
-    ...dueTasks.slice(0, 2).map((task) => ({
-      id: `task-${task.id}`,
-      eyebrow: "Task",
+    dueTasks: dueTasks.map((task) => ({
+      id: task.id,
       title: task.title,
-      detail: task.due_at ? `${task.priority} · ${dateDistance(task.due_at)}` : task.priority,
-      href: href(activeRelease ? `/studio/releases/${activeRelease.id}` : "/studio/releases"),
-      tone: "normal" as const,
+      priority: task.priority,
+      dueLabel: task.due_at ? dateDistance(task.due_at) : null,
     })),
-    ...(proposedLearningCount ? [{
-      id: "learnings",
-      eyebrow: "Learning",
-      title: `${proposedLearningCount} evidence-backed insight${proposedLearningCount === 1 ? "" : "s"} to review`,
-      detail: `Only approved findings become future memory for ${artist.artistName}.`,
-      href: href("/studio/learn"),
-      tone: "normal" as const,
-    }] : []),
-  ].slice(0, 7);
+    proposedLearningCount,
+  }).slice(0, 7);
 
   const working: WorkingItem[] = [
     ...automation
@@ -391,7 +351,7 @@ export default async function TodayPage() {
         title="Today"
         description={`A calm command center for ${artist.artistName}. See the active Mission, what Ensemblis is doing, and only the decisions that need you.`}
         action={needsYou.length ? (
-          <Link className="button primary" href={href("/studio/inbox")}>
+          <Link className="button primary" href={href("/studio/needs-you")}>
             Needs you ({needsYou.length})
           </Link>
         ) : undefined}
@@ -425,12 +385,12 @@ export default async function TodayPage() {
       <section className="today-v3-next" aria-labelledby="today-next-heading">
         <div className="today-v3-section-heading">
           <div>
-            <span className="section-label">Next best action</span>
+            <span className="section-label">Recommended next move</span>
             <h2 id="today-next-heading">
               {nextAction?.title || "Ensemblis can keep moving without interrupting you"}
             </h2>
           </div>
-          <Status>{nextAction ? `${Math.round(Number(nextAction.score))}/100 signal` : "Clear"}</Status>
+          <Status>{nextAction ? "Recommended" : "Clear"}</Status>
         </div>
 
         {nextAction ? (
@@ -460,19 +420,22 @@ export default async function TodayPage() {
               <span className="section-label">Decision queue</span>
               <h2 id="today-needs-you-heading">Needs you</h2>
             </div>
-            <span className={`today-v3-count${needsYou.length ? " has-items" : ""}`}>{needsYou.length}</span>
+            <div className="actions">
+              <span className={`today-v3-count${needsYou.length ? " has-items" : ""}`}>{needsYou.length}</span>
+              <Link className="today-v3-secondary-link" href={href("/studio/needs-you")}>Open queue</Link>
+            </div>
           </div>
 
           {needsYou.length ? (
             <div className="today-v3-list">
               {needsYou.map((item) => (
                 <Link
-                  className={`today-v3-row ${item.tone ?? "normal"}`}
-                  href={item.href}
+                  className={`today-v3-row ${needsYouTone(item)}`}
+                  href={href(item.href)}
                   key={item.id}
                 >
                   <span className="today-v3-row-copy">
-                    <small>{item.eyebrow}</small>
+                    <small>{item.category} · {item.severity}</small>
                     <strong>{item.title}</strong>
                     <span>{item.detail}</span>
                   </span>
@@ -483,7 +446,7 @@ export default async function TodayPage() {
           ) : (
             <div className="today-v3-calm-state compact">
               <strong>Nothing needs your judgment right now.</strong>
-              <p>Approvals, ambiguity and important decisions will appear here.</p>
+              <p>Approvals, ambiguity and important decisions will appear here from the same canonical queue used across Ensemblis.</p>
             </div>
           )}
         </section>

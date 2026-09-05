@@ -56,9 +56,12 @@ test("Today is the operational command center and Autopilot is behavior", () => 
   const today = read("app/studio/(protected)/page.tsx");
   assert.doesNotMatch(sidebar, /\/studio\/autopilot/);
   assert.match(autopilot, /redirect\("\/studio"\)/);
-  for (const surface of ["Next best action", "Needs you", "Working", "Coming up"]) {
+  for (const surface of ["Recommended next move", "Needs you", "Working", "Coming up"]) {
     assert.match(today, new RegExp(surface));
   }
+  assert.match(today, /deriveNeedsYouQueue/);
+  assert.match(today, /\/studio\/needs-you/);
+  assert.doesNotMatch(today, /\/100 signal/);
   assert.doesNotMatch(today, /Evidence readiness/);
   assert.doesNotMatch(today, /Working benchmark/);
   assert.doesNotMatch(today, /Artist-learned memory/);
