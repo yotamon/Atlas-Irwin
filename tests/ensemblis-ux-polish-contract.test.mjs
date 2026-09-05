@@ -77,7 +77,7 @@ test("Music defaults to source material and makes Add music primary", async () =
   assert.ok(page.includes("<MusicWorkspaceOverview"));
   assert.ok(page.includes('from("track_vault")'));
   assert.ok(page.includes('.eq("artist_id", artist.artistId)'));
-  assert.ok(overview.includes("Next track decision"));
+  assert.ok(overview.includes("Track understanding"));
   assert.ok(overview.includes("/studio/music/${trackId}"));
   assert.ok(overview.includes("Add music"));
   assert.ok(overview.includes("Create with AI"));
@@ -86,7 +86,8 @@ test("Music defaults to source material and makes Add music primary", async () =
 test("track objects have one readable workspace for source, intelligence, stems and lyrics", async () => {
   const track = await source("app/studio/(protected)/music/[id]/page.tsx");
   const header = await source("components/studio/object-header.tsx");
-  for (const snippet of ["<ObjectHeader", 'from("track_vault")', '.eq("artist_id", artist.artistId)', "<MusicIntelligencePreview", "<StemIntelligencePanel", "<LyricsIntelligencePanel", "Detailed track signals"]) assert.ok(track.includes(snippet), `track workspace is missing ${snippet}`);
+  for (const snippet of ["<ObjectHeader", 'from("track_vault")', '.eq("artist_id", artist.artistId)', "<MusicIntelligencePreview", "<StemIntelligencePanel", "<LyricsIntelligencePanel", "Technical details"]) assert.ok(track.includes(snippet), `track workspace is missing ${snippet}`);
+  assert.equal(track.includes("Portfolio score"), false, "track workspace must not present Growth scoring as music understanding");
   assert.ok(header.includes("ensemblis-object-header"));
   assert.ok(header.includes("ensemblis-object-tabs"));
 });
