@@ -9,6 +9,16 @@ import type { AudioScene, TrackStem } from "@/types/stem-database";
 
 export type { TrackCreativeIntelligenceGraph } from "@/lib/music-intelligence/creative-graph";
 
+type V4MusicHookCandidate = MusicHookCandidate & {
+  musical_completeness?: number;
+  boundary_confidence?: number;
+  unit_kind?: string;
+  metrics: MusicHookCandidate["metrics"] & {
+    musical_completeness?: number;
+    boundary_confidence?: number;
+  };
+};
+
 function numeric(value: unknown, fallback = 0) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
@@ -21,18 +31,24 @@ function overlapRatio(
   return overlap / Math.max(1, Math.min(a.endMs - a.startMs, b.endMs - b.startMs));
 }
 
+function asV4Hook(hook: MusicHookCandidate): V4MusicHookCandidate {
+  return hook as V4MusicHookCandidate;
+}
+
 function completeMomentScore(hook: MusicHookCandidate) {
-  const extended = hook as MusicHookCandidate & {
-    musical_completeness?: number;
-    boundary_confidence?: number;
-    unit_kind?: string;
-  };
-  return numeric(extended.musical_completeness, numeric(hook.metrics?.musical_completeness, 0));
+  const extended = asV4Hook(hook);
+  return numeric(
+    extended.musical_completeness,
+    numeric(extended.metrics?.musical_completeness, 0),
+  );
 }
 
 function boundaryConfidence(hook: MusicHookCandidate) {
-  const extended = hook as MusicHookCandidate & { boundary_confidence?: number };
-  return numeric(extended.boundary_confidence, numeric(hook.metrics?.boundary_confidence, 0));
+  const extended = asV4Hook(hook);
+  return numeric(
+    extended.boundary_confidence,
+    numeric(extended.metrics?.boundary_confidence, 0),
+  );
 }
 
 /**
