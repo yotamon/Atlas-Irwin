@@ -10,7 +10,7 @@ test("Create asks for an outcome instead of exposing production subsystems", asy
   const create = await source("app/studio/(protected)/create/page.tsx");
   for (const snippet of [
     "What should this Moment do?",
-    "Choose the result, not the tool.",
+    "Create from this Moment by choosing the result, not the tool.",
     "CREATE_OUTCOMES",
     "startOutcomeCreative",
     "Other starting points",
