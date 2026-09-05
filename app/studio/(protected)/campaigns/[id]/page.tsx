@@ -5,13 +5,13 @@ import {
   approveAutomationJob,
   approveContentVariant,
   evaluateExperiment,
-  generateCampaignStrategy,
   queueVariantPublication,
   rejectContentVariant,
   setLearningStatus,
   updateCampaignMode,
   updateCampaignStatus,
 } from "@/app/studio/marketing-actions";
+import { refreshCampaignIntelligence } from "@/app/studio/marketing-intelligence-actions";
 import {
   markPublicationPublished,
   runMarketingAutomationNow,
@@ -182,7 +182,7 @@ export default async function CampaignWorkspacePage({
         <section className={styles.heroCard}>
           <span className={styles.eyebrow}>{campaign.status} / {campaign.mode}</span>
           <h1>{release?.title || campaign.name}</h1>
-          <p>{strategySummary || release?.primary_hook || release?.core_emotion || "Generate the first campaign plan to turn this release into a testable marketing system."}</p>
+          <p>{strategySummary || release?.primary_hook || release?.core_emotion || "Build the first intelligent campaign to turn this release into a testable artist-specific marketing system."}</p>
           <div className={styles.heroMeta}>
             <span className={styles.statusChip}>{campaign.objective}</span>
             <span className={styles.chip}>Primary KPI: {campaign.primary_kpi}</span>
@@ -209,13 +209,12 @@ export default async function CampaignWorkspacePage({
             </form>
           </div>
           <div className={styles.controlGroup}>
-            <span className={styles.miniLabel}>Planner</span>
-            <form action={generateCampaignStrategy}>
+            <span className={styles.miniLabel}>Campaign Intelligence</span>
+            <form action={refreshCampaignIntelligence}>
               {artistInput}<input type="hidden" name="campaign_id" value={campaign.id} />
-              {hasPlan ? <input type="hidden" name="force" value="1" /> : null}
-              <button className="button primary" type="submit">{hasPlan ? "Regenerate draft plan" : "Generate campaign plan"}</button>
+              <button className="button primary" type="submit">{hasPlan ? "Rebuild intelligent campaign" : "Build intelligent campaign"}</button>
             </form>
-            <small>{generationRuns[0] ? `Last plan: ${generationRuns[0].provider} / ${generationRuns[0].model}` : "No generation spend yet."}</small>
+            <small>{generationRuns[0] ? `Last intelligence: ${generationRuns[0].provider} / ${generationRuns[0].model}` : "Quality-gated planning only. No image/video spend yet."}</small>
           </div>
           <div className={styles.controlGroup}>
             <span className={styles.miniLabel}>Runtime</span>
@@ -268,7 +267,7 @@ export default async function CampaignWorkspacePage({
             </div>
           </div>
         ) : (
-          <div className={styles.emptyBrain}><div><span className={styles.eyebrow}>Zero automatic spend</span><h2>Generate when ready</h2><p>The planner call is explicit. Ensemblis combines release identity, brand settings, approved learnings and historical performance. If the AI provider is unavailable, it falls back to an adaptive release-specific plan instead of generic templates.</p></div></div>
+          <div className={styles.emptyBrain}><div><span className={styles.eyebrow}>Zero automatic media spend</span><h2>Build intelligence when ready</h2><p>Ensemblis combines release identity, Artist Marketing DNA, approved learnings, historical performance and approved full musical Moments, then rejects generic or duplicated ideas before anything reaches production.</p></div></div>
         )}
       </section>
 
@@ -367,7 +366,7 @@ export default async function CampaignWorkspacePage({
                 </div>
               </article>
             );
-          }) : <div className={styles.emptyBrain}><div><h2>No experiments yet</h2><p>Generate a campaign plan to create the first release-specific hypotheses and variants.</p></div></div>}
+          }) : <div className={styles.emptyBrain}><div><h2>No experiments yet</h2><p>Build the Campaign Intelligence layer to create the first release-specific hypotheses and variants.</p></div></div>}
         </div>
       </section>
 
@@ -386,7 +385,7 @@ export default async function CampaignWorkspacePage({
                 <span className={item.status === "Published" ? styles.statusChip : styles.chip}>{item.status}</span>
               </article>
             );
-          }) : <div className={styles.emptyBrain}><div><h2>No content moments</h2><p>The planner will create a deliberately small release-relative timeline rather than a volume-based content dump.</p></div></div>}
+          }) : <div className={styles.emptyBrain}><div><h2>No content moments</h2><p>Campaign Intelligence will surface a deliberately small release-relative timeline rather than a volume-based content dump.</p></div></div>}
         </div>
       </section>
 

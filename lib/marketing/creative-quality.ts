@@ -13,8 +13,10 @@ export type CreativeQualityCheck = {
 
 export type CreativeProductionGate = {
   version: "creative-production-gate-v1";
+  publishabilityPolicyVersion: "artist-specificity-v2";
   passed: boolean;
   score: number;
+  specificityScore: number;
   checks: CreativeQualityCheck[];
   failures: string[];
   warnings: string[];
@@ -51,6 +53,82 @@ function sourceDiversity(treatment: CreativeTreatment) {
   return new Set(treatment.shotPlan.map((shot) => shot.sourcePreference)).size;
 }
 
+function tokens(value: string) {
+  return Array.from(new Set(
+    value.toLowerCase()
+      .replace(/[^\p{L}\p{N}\s-]+/gu, " ")
+      .split(/\s+/)
+      .map((part) => part.trim())
+      .filter((part) => part.length >= 4),
+  ));
+}
+
+function tokenOverlap(reference: string, candidate: string) {
+  const referenceTokens = new Set(tokens(reference));
+  if (!referenceTokens.size) return 0;
+  const candidateTokens = new Set(tokens(candidate));
+  let hits = 0;
+  for (const token of referenceTokens) if (candidateTokens.has(token)) hits += 1;
+  return hits / referenceTokens.size;
+}
+
+function treatmentSpecificity(treatment: CreativeTreatment, context: CreativeReferenceContext) {
+  const candidate = [
+    treatment.concept,
+    treatment.creativePromise,
+    treatment.heroMotif,
+    treatment.cameraLanguage,
+    treatment.lighting,
+    treatment.texture,
+    treatment.editingGrammar,
+    treatment.sourceStrategy,
+    treatment.audioPlan,
+    ...treatment.shotPlan.flatMap((shot) => [shot.purpose, shot.visual, shot.audioTreatment]),
+  ].join(" ");
+  const releaseOverlap = tokenOverlap(context.release.visualDirection, candidate);
+  const brandOverlap = tokenOverlap(context.brand.visualWorld, candidate);
+  const continuityOverlap = tokenOverlap(context.brand.continuityRules, candidate);
+  const sceneOverlap = context.selectedAudioScene
+    ? Math.max(
+        tokenOverlap(context.selectedAudioScene.name, candidate),
+        tokenOverlap(context.selectedAudioScene.description, candidate),
+        tokenOverlap(context.selectedAudioScene.type.replaceAll("_", " "), candidate),
+      )
+    : 0;
+  const explicitMusic = Boolean(context.selectedAudioScene || context.lyrics.analysisCurrent || context.audioReferenceUrl);
+  const referenceDepth = Math.min(1, (context.imageReferences.length + context.videoReferences.length + context.identityAssets.length) / 4);
+  const heroSpecific = tokens(treatment.heroMotif).length >= 4 && !/generic|abstract visual|neon city|festival crowd|chrome humanoid/i.test(treatment.heroMotif);
+  const score = Math.round(Math.min(100,
+    releaseOverlap * 24 +
+    brandOverlap * 20 +
+    continuityOverlap * 10 +
+    sceneOverlap * 18 +
+    (explicitMusic ? 12 : 0) +
+    referenceDepth * 8 +
+    (heroSpecific ? 8 : 0),
+  ));
+  return {
+    score,
+    detail: `Specificity ${score}/100: release ${Math.round(releaseOverlap * 100)}%, brand ${Math.round(brandOverlap * 100)}%, music-scene ${Math.round(sceneOverlap * 100)}%, reference depth ${Math.round(referenceDepth * 100)}%.`,
+  };
+}
+
+function firstSecondIsDeliberate(treatment: CreativeTreatment) {
+  const first = treatment.shotPlan[0];
+  if (!first) return false;
+  if (first.startSeconds > 0.25) return false;
+  const opening = `${first.purpose} ${first.visual} ${first.onScreenText}`.toLowerCase();
+  return !/logo sting|logo intro|establishing logo|title card only/.test(opening);
+}
+
+function realFirstSourcePolicy(treatment: CreativeTreatment) {
+  const strategy = treatment.sourceStrategy.toLowerCase();
+  const generatedShots = treatment.shotPlan.filter((shot) => shot.sourcePreference === "generated").length;
+  const realOrArtworkShots = treatment.shotPlan.filter((shot) => ["real", "artwork", "mixed", "motion_graphics"].includes(shot.sourcePreference)).length;
+  const explicitPreference = /real|artist|artwork|existing|reference|source material/.test(strategy);
+  return explicitPreference && (realOrArtworkShots >= generatedShots || generatedShots <= 1);
+}
+
 export function assessCreativeProductionPreflight(input: {
   treatment: CreativeTreatment;
   context: CreativeReferenceContext;
@@ -59,6 +137,7 @@ export function assessCreativeProductionPreflight(input: {
   const { treatment, context, route } = input;
   const checks: CreativeQualityCheck[] = [];
   const packageSpec = treatment.platformPackage;
+  const specificity = treatmentSpecificity(treatment, context);
 
   checks.push(check(
     "visual-lineage",
@@ -68,6 +147,16 @@ export function assessCreativeProductionPreflight(input: {
     context.cohesionScore >= 50
       ? `Creative context cohesion is ${context.cohesionScore}/100.`
       : `Creative context cohesion is only ${context.cohesionScore}/100. Add release artwork or approved artist references before paid generation.`,
+  ));
+
+  checks.push(check(
+    "artist-specificity",
+    "Concept is specific to this artist and release",
+    specificity.score >= 34,
+    "blocking",
+    specificity.score >= 34
+      ? specificity.detail
+      : `${specificity.detail} Paid generation is blocked because the direction is still too transferable to another artist.`,
   ));
 
   checks.push(check(
@@ -109,6 +198,18 @@ export function assessCreativeProductionPreflight(input: {
     validShots ? `${treatment.shotPlan.length} ordered production shot${treatment.shotPlan.length === 1 ? "" : "s"}.` : "Shot timing or ordering is invalid.",
   ));
 
+  checks.push(check(
+    "first-second",
+    "First second has an intentional hook",
+    route.outputKind === "image" || firstSecondIsDeliberate(treatment),
+    "blocking",
+    route.outputKind === "image"
+      ? "Static creative is evaluated by first-frame composition."
+      : firstSecondIsDeliberate(treatment)
+        ? "The first shot begins immediately and is not a logo-only intro."
+        : "Video must open on a deliberate visual/music hook instead of setup or a logo sting.",
+  ));
+
   const outputKind = route.outputKind;
   const duration = route.request.durationSeconds ?? null;
   const durationFits = outputKind === "image" || duration === null || (
@@ -121,6 +222,23 @@ export function assessCreativeProductionPreflight(input: {
     durationFits,
     "blocking",
     outputKind === "image" ? "Static output has no duration constraint." : `Requested duration is ${duration ?? "provider default"}s.`,
+  ));
+
+  const hasMusicContext = Boolean(context.audioReferenceUrl || context.selectedAudioScene || context.lyrics.analysisCurrent);
+  checks.push(check(
+    "music-context",
+    "Paid video direction is tied to verified music context",
+    outputKind === "image" || hasMusicContext,
+    outputKind === "video" ? "blocking" : "warning",
+    context.selectedAudioScene
+      ? `Uses Audio Scene: ${context.selectedAudioScene.name}.`
+      : context.lyrics.analysisCurrent
+        ? "Lyrics Intelligence supplies current semantic music context."
+        : context.audioReferenceUrl
+          ? "Canonical audio reference is available."
+          : outputKind === "video"
+            ? "Paid music video generation is blocked until a canonical audio, selected Audio Scene or current Lyrics Intelligence context is available."
+            : "No portable audio, selected Audio Scene or current Lyrics Intelligence is available.",
   ));
 
   const selectedScenePortable = !context.selectedAudioScene || Boolean(context.selectedAudioScene.previewUrl);
@@ -146,28 +264,26 @@ export function assessCreativeProductionPreflight(input: {
   ));
 
   checks.push(check(
-    "music-context",
-    "Creative direction is tied to the track",
-    Boolean(context.audioReferenceUrl || context.selectedAudioScene || context.lyrics.analysisCurrent),
+    "real-first",
+    "Real artist material and established artwork lead the source plan",
+    realFirstSourcePolicy(treatment),
     "warning",
-    context.selectedAudioScene
-      ? `Uses Audio Scene: ${context.selectedAudioScene.name}.`
-      : context.lyrics.analysisCurrent
-        ? "Lyrics Intelligence supplies current semantic music context."
-        : context.audioReferenceUrl
-          ? "Canonical audio reference is available."
-          : "No portable audio, selected Audio Scene or current Lyrics Intelligence is available.",
+    realFirstSourcePolicy(treatment)
+      ? "Source strategy is real-first and uses generation as supporting production material."
+      : "Prefer real artist material, established artwork and deterministic motion before generated plates.",
   ));
 
   const failures = checks.filter((item) => !item.passed && item.severity === "blocking").map((item) => item.detail);
   const warnings = checks.filter((item) => !item.passed && item.severity === "warning").map((item) => item.detail);
-  const weightedFailures = checks.filter((item) => !item.passed).reduce((sum, item) => sum + (item.severity === "blocking" ? 18 : 6), 0);
-  const score = Math.max(0, 100 - weightedFailures);
+  const weightedFailures = checks.filter((item) => !item.passed).reduce((sum, item) => sum + (item.severity === "blocking" ? 16 : 5), 0);
+  const score = Math.max(0, Math.min(100, 100 - weightedFailures - Math.max(0, 50 - specificity.score) * 0.35));
 
   return {
     version: "creative-production-gate-v1",
+    publishabilityPolicyVersion: "artist-specificity-v2",
     passed: failures.length === 0,
-    score,
+    score: Math.round(score),
+    specificityScore: specificity.score,
     checks,
     failures,
     warnings,
