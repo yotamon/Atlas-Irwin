@@ -1,33 +1,28 @@
 -- Ensemblis Distribution last mile.
 -- Keep artist-facing release identity canonical and provider-neutral. Provider catalog IDs,
 -- package IDs and store-specific contributor identifiers remain adapter details.
+-- `releases.label` and `releases.upc` remain the single canonical values; this table only
+-- carries delivery-specific identity/lifecycle fields that are not already on the release.
 
 create table public.distribution_release_metadata (
   release_id uuid primary key references public.releases(id) on delete cascade,
   owner_id uuid not null references auth.users(id) on delete cascade,
   artist_id uuid not null references public.artists(id) on delete restrict,
   metadata_language_code text not null default 'en' check (char_length(metadata_language_code) between 2 and 16),
-  label_name text not null default '',
   catalog_number text,
   product_copyright_line text not null default '',
   recording_copyright_line text not null default '',
   upc_source text not null default 'provider' check (upc_source in ('provider','artist')),
   upc_status text not null default 'unassigned' check (upc_status in ('unassigned','pending','assigned','verified')),
-  upc text,
   original_release_date date,
   preorder_date date,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  check (upc is null or upc ~ '^[0-9]{12,14}$'),
-  check (upc_source <> 'artist' or upc is not null),
   check (preorder_date is null or original_release_date is null or preorder_date <= original_release_date)
 );
 
 create index distribution_release_metadata_artist_idx
   on public.distribution_release_metadata(owner_id, artist_id, updated_at desc);
-create unique index distribution_release_metadata_upc_idx
-  on public.distribution_release_metadata(upc)
-  where upc is not null and upc_status in ('assigned','verified');
 
 create or replace function private.validate_distribution_release_metadata_scope()
 returns trigger
@@ -83,12 +78,13 @@ create policy distribution_release_metadata_delete
 revoke all on public.distribution_release_metadata from service_role;
 grant all on public.distribution_release_metadata to service_role;
 
--- Provision a provider-assigned UPC lifecycle row for every existing release without inventing
--- artist declarations. Empty copyright/label fields intentionally remain exact blockers.
+-- Provision a UPC lifecycle row for every existing release without inventing artist declarations.
+-- Existing canonical UPCs are marked assigned; blank UPCs default to provider assignment.
 insert into public.distribution_release_metadata (
   release_id, owner_id, artist_id, metadata_language_code, upc_source, upc_status
 )
-select r.id, r.owner_id, r.artist_id, 'en', 'provider', 'unassigned'
+select r.id, r.owner_id, r.artist_id, 'en', case when r.upc is null then 'provider' else 'artist' end,
+  case when r.upc is null then 'unassigned' else 'assigned' end
 from public.releases r
 where r.artist_id is not null
 on conflict (release_id) do nothing;
@@ -101,9 +97,15 @@ set search_path = ''
 as $$
 begin
   if new.artist_id is not null then
-    insert into public.distribution_release_metadata(release_id, owner_id, artist_id)
-    values(new.id, new.owner_id, new.artist_id)
-    on conflict (release_id) do nothing;
+    insert into public.distribution_release_metadata(
+      release_id, owner_id, artist_id, upc_source, upc_status
+    ) values(
+      new.id,
+      new.owner_id,
+      new.artist_id,
+      case when new.upc is null then 'provider' else 'artist' end,
+      case when new.upc is null then 'unassigned' else 'assigned' end
+    ) on conflict (release_id) do nothing;
   end if;
   return new;
 end;
@@ -114,6 +116,6 @@ create trigger releases_provision_distribution_metadata
   for each row execute function private.provision_distribution_release_metadata();
 
 comment on table public.distribution_release_metadata is
-  'Provider-neutral release-level distribution identity. Legal declarations remain in release_distribution_configs; provider IDs remain adapter details.';
+  'Provider-neutral release-level distribution identity supplements the canonical release. Legal declarations remain in release_distribution_configs; provider IDs remain adapter details.';
 comment on column public.distribution_release_metadata.upc_source is
-  'provider means Ensemblis may request provider assignment; artist means the artist supplied the canonical UPC.';
+  'Lifecycle metadata for canonical releases.upc: provider requests assignment; artist means the artist supplied the code.';
