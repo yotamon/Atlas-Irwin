@@ -53,6 +53,24 @@ export type ReleaseDistributionConfig = {
   updated_at: string;
 };
 
+export type DistributionReleaseMetadata = {
+  release_id: string;
+  owner_id: string;
+  artist_id: string;
+  metadata_language_code: string;
+  label_name: string;
+  catalog_number: string | null;
+  product_copyright_line: string;
+  recording_copyright_line: string;
+  upc_source: "provider" | "artist";
+  upc_status: "unassigned" | "pending" | "assigned" | "verified";
+  upc: string | null;
+  original_release_date: string | null;
+  preorder_date: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type DistributionSubmission = {
   id: string;
   owner_id: string;
@@ -204,6 +222,7 @@ export type DistributionDatabase = {
       distribution_accounts: Table<DistributionAccount>;
       distribution_artist_profiles: Table<DistributionArtistProfile>;
       release_distribution_configs: Table<ReleaseDistributionConfig>;
+      distribution_release_metadata: Table<DistributionReleaseMetadata>;
       distribution_submissions: Table<DistributionSubmission>;
       distribution_deliveries: Table<DistributionDelivery>;
       distribution_validation_issues: Table<DistributionValidationIssue>;
