@@ -20,7 +20,7 @@ export function ReleaseSmartLink({
   smartLink: SmartLinkRuntime;
   searchParams: Record<string, string | string[] | undefined>;
 }) {
-  const artistName = site.viewModel.artist.name || smartLink.release.artist_display_name || smartLink.release.primary_artist_name || "Artist";
+  const artistName = site.viewModel.artist.name || smartLink.release.artist || "Artist";
   const query = new URLSearchParams();
   for (const key of TRACKED_KEYS) {
     const raw = searchParams[key];
