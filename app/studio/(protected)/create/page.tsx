@@ -89,8 +89,8 @@ export default async function CreatePage() {
       href: href("/studio/production"),
     },
     {
-      title: "Direct a full music video",
-      description: "Use Video Director when the outcome is a larger coherent video rather than a campaign asset.",
+      title: "Direct a video",
+      description: "Use Video Director when the outcome is a larger coherent music video rather than a campaign asset.",
       href: href(activeRelease ? `/studio/video?release=${activeRelease.id}` : "/studio/video"),
     },
   ];
@@ -106,7 +106,7 @@ export default async function CreatePage() {
         <section className="v2-section">
           <div className="v2-section-heading">
             <div>
-              <span className="section-label">Start from the music</span>
+              <span className="section-label">Recommended musical starting points</span>
               <h2>Choose a Moment, then choose the result you want</h2>
             </div>
             {activeRelease ? <Link href={href(`/studio/releases/${activeRelease.id}?stage=create#moments`)}>Review all Moments</Link> : null}
@@ -145,7 +145,7 @@ export default async function CreatePage() {
 
                   <div className="create-outcome-heading">
                     <strong>What should this Moment do?</strong>
-                    <span>Choose the result, not the tool.</span>
+                    <span>Create from this Moment by choosing the result, not the tool.</span>
                   </div>
                   <div className="create-outcome-grid" aria-label={`Creative outcomes for ${moment.label}`}>
                     {CREATE_OUTCOMES.map((outcome) => (
