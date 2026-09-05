@@ -273,7 +273,7 @@ function selectClusters(clusters: Cluster[], maxResults: number, qualityFloor: n
   const explicit = clusters
     .filter((cluster) => cluster.members.some((member) => member.moment.state === "approved" || member.manualTiming))
     .sort((a, b) => b.qualityScore - a.qualityScore || a.representative.startMs - b.representative.startMs);
-  const selected: Cluster[] = [...explicit];
+  const selected: Cluster[] = explicit.slice(0, maxResults);
   const remaining = clusters.filter((cluster) => !explicit.includes(cluster) && (
     cluster.qualityScore >= qualityFloor || cluster.representative.section?.is_primary_hook
   ));

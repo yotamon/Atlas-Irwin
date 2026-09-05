@@ -25,6 +25,9 @@ export type Workspace = {
   kind: WorkspaceKind;
   created_by: string | null;
   legacy_owner_id: string | null;
+  timezone: string | null;
+  locale: string | null;
+  currency: string | null;
   created_at: string;
   updated_at: string;
 };

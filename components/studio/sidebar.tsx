@@ -37,7 +37,7 @@ export function StudioSidebar({ artistId, artists }: StudioSidebarProps) {
   const NeedsYou = studioIcons.mail;
   const Logout = studioIcons.logout;
   const workNavigation = navigationItems(ENSEMBLIS_WORK_NAV, artistId);
-  const manageNavigation = navigationItems(ENSEMBLIS_MANAGE_NAV, artistId);
+  const moreNavigation = navigationItems(ENSEMBLIS_MANAGE_NAV, artistId);
   const settingsNavigation = {
     route: ENSEMBLIS_SETTINGS_NAV.href,
     href: ensemblisArtistHref(ENSEMBLIS_SETTINGS_NAV.href, artistId),
@@ -68,10 +68,10 @@ export function StudioSidebar({ artistId, artists }: StudioSidebarProps) {
         <StudioPrimaryNavigation items={workNavigation} />
       </div>
 
-      <div className="ensemblis-sidebar-group ensemblis-sidebar-manage">
-        <span className="studio-sidebar-section-label">Manage</span>
-        <StudioPrimaryNavigation items={manageNavigation} />
-      </div>
+      <details className="ensemblis-sidebar-group ensemblis-sidebar-manage ensemblis-sidebar-more">
+        <summary className="studio-sidebar-section-label">More</summary>
+        <StudioPrimaryNavigation items={moreNavigation} />
+      </details>
 
       <div className="studio-sidebar-foot">
         <div className="ensemblis-sidebar-settings">

@@ -13,16 +13,19 @@ export const ENSEMBLIS_WORK_NAV = [
   { href: "/studio/releases", label: "Releases", icon: "releases" },
   { href: "/studio/create", label: "Create", icon: "content" },
   { href: "/studio/growth", label: "Grow", icon: "analytics" },
-  { href: "/studio/audience", label: "Audience", icon: "outreach" },
-  { href: "/studio/library", label: "Library", icon: "media" },
 ] as const;
 
-export const ENSEMBLIS_MANAGE_NAV = [
+export const ENSEMBLIS_MORE_NAV = [
+  { href: "/studio/audience", label: "Audience", icon: "outreach" },
+  { href: "/studio/library", label: "Library", icon: "media" },
   { href: "/studio/memory", label: "Memory", icon: "brand" },
   { href: "/studio/sites", label: "Sites", icon: "sites" },
   { href: "/studio/distribution", label: "Distribution", icon: "distribution" },
   { href: "/studio/connections", label: "Connections", icon: "distribution" },
 ] as const;
+
+// Compatibility alias while older callers still use the previous Manage name.
+export const ENSEMBLIS_MANAGE_NAV = ENSEMBLIS_MORE_NAV;
 
 export const ENSEMBLIS_SETTINGS_NAV = {
   href: "/studio/settings",
@@ -30,8 +33,6 @@ export const ENSEMBLIS_SETTINGS_NAV = {
   icon: "brand",
 } as const;
 
-// Compatibility alias for callers that still mean the daily work navigation.
-// Manage and Settings are deliberately separate information-architecture groups.
 export const ENSEMBLIS_PRIMARY_NAV = ENSEMBLIS_WORK_NAV;
 
 export function ensemblisArtistHref(href: string, artistId: string) {
