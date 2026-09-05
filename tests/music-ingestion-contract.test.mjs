@@ -79,4 +79,4 @@ test("track workspace keeps analysis recovery secondary and removes manual score
   ]);
   assert.doesNotMatch(detail, /scoreVaultTrack|Portfolio score|Edit portfolio signals|hook_strength|short_form_potential/,
     "track workspace must explain musical understanding rather than expose manual ranking signals");
-}
+});
