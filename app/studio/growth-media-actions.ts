@@ -7,6 +7,7 @@ import { requireStudioAdmin } from "@/lib/auth/studio";
 import { kickMediaWorkerQueue } from "@/lib/media-worker/queue";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asGrowthClient } from "@/lib/studio/growth-db";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { vaultAnalysisReadiness } from "@/lib/studio/vault-analysis";
 import type { Json } from "@/types/database";
 
@@ -117,13 +118,14 @@ export async function attachReleaseMasterFromMedia(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveActiveArtistContext(supabase, user);
   const growth = asGrowthClient(supabase);
+  const music = asArtistScopedMusicClient(supabase);
   const assetId = z.uuid().parse(value(form, "media_asset_id"));
   const releaseId = z.uuid().parse(value(form, "release_id"));
 
   const [assetResult, releaseResult, tracksResult, linkedVaultResult, assetVaultResult] = await Promise.all([
     supabase.from("media_assets").select("id,public_url,mime_type,duration_ms,metadata").eq("id", assetId).eq("owner_id", user.id).single(),
-    supabase.from("releases").select("id,title,status,publish_state,artist_id").eq("id", releaseId).eq("owner_id", user.id).eq("artist_id", artist.artistId).single(),
-    supabase.from("tracks").select("*").eq("release_id", releaseId).eq("owner_id", user.id).eq("artist_id", artist.artistId).order("display_order").order("created_at"),
+    music.from("releases").select("id,title,status,publish_state,artist_id").eq("id", releaseId).eq("owner_id", user.id).eq("artist_id", artist.artistId).single(),
+    music.from("tracks").select("*").eq("release_id", releaseId).eq("owner_id", user.id).eq("artist_id", artist.artistId).order("display_order").order("created_at"),
     growth.from("track_vault").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).eq("linked_release_id", releaseId).order("updated_at", { ascending: false }).limit(1).maybeSingle(),
     growth.from("track_vault").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).eq("media_asset_id", assetId).limit(1).maybeSingle(),
   ]);
@@ -149,7 +151,7 @@ export async function attachReleaseMasterFromMedia(form: FormData) {
   let canonicalTrack = currentTracks.find((track) => track.is_primary) ?? currentTracks[0] ?? null;
 
   if (canonicalTrack) {
-    const { data: updated, error } = await supabase.from("tracks").update({
+    const { data: updated, error } = await music.from("tracks").update({
       audio_url: asset.public_url,
       duration: durationSeconds ?? canonicalTrack.duration,
       is_primary: true,
@@ -157,7 +159,7 @@ export async function attachReleaseMasterFromMedia(form: FormData) {
     if (error || !updated) throw new Error(error?.message || "Could not update the release master.");
     canonicalTrack = updated;
   } else {
-    const { data: created, error } = await supabase.from("tracks").insert({
+    const { data: created, error } = await music.from("tracks").insert({
       owner_id: user.id,
       artist_id: artist.artistId,
       release_id: release.id,
@@ -174,7 +176,7 @@ export async function attachReleaseMasterFromMedia(form: FormData) {
 
   const otherPrimaryIds = currentTracks.filter((track) => track.id !== canonicalTrack.id && track.is_primary).map((track) => track.id);
   if (otherPrimaryIds.length) {
-    const { error } = await supabase.from("tracks").update({ is_primary: false }).in("id", otherPrimaryIds).eq("owner_id", user.id).eq("artist_id", artist.artistId);
+    const { error } = await music.from("tracks").update({ is_primary: false }).in("id", otherPrimaryIds).eq("owner_id", user.id).eq("artist_id", artist.artistId);
     if (error) throw new Error(error.message);
   }
 
