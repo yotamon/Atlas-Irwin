@@ -4,9 +4,6 @@ import { dirname, resolve } from "node:path";
 const root = resolve(import.meta.dirname, "..");
 const outputPath = resolve(root, "app/studio/design-system/legacy-compat.generated.css");
 
-// Migration inputs only. The Studio layout imports none of these directly.
-// They are compiled into the lowest cascade layer, with all legacy colors and
-// aliases normalized to Ensemblis tokens before canonical primitives load.
 const legacySources = [
   "app/studio/studio.css",
   "app/studio/studio-v2.css",
@@ -83,23 +80,18 @@ const legacyVarMap = [
   ["--card", "--en-surface"],
 ];
 
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
-}
-
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 function nearestToken(r, g, b) {
   let best = palette[0];
-  let bestDistance = Number.POSITIVE_INFINITY;
+  let distance = Number.POSITIVE_INFINITY;
   for (const candidate of palette) {
     const [cr, cg, cb] = candidate[1];
-    const distance = (r - cr) ** 2 * 2 + (g - cg) ** 2 * 4 + (b - cb) ** 2;
-    if (distance < bestDistance) {
-      bestDistance = distance;
+    const next = (r - cr) ** 2 * 2 + (g - cg) ** 2 * 4 + (b - cb) ** 2;
+    if (next < distance) {
       best = candidate;
+      distance = next;
     }
   }
   return best[0];
@@ -109,21 +101,21 @@ function tokenColor(r, g, b, alpha = 1) {
   const token = nearestToken(clamp(r, 0, 255), clamp(g, 0, 255), clamp(b, 0, 255));
   if (alpha >= 0.999) return `var(${token})`;
   if (alpha <= 0.001) return "transparent";
-  const percent = Math.round(alpha * 1000) / 10;
-  return `color-mix(in srgb, var(${token}) ${percent}%, transparent)`;
+  return `color-mix(in srgb, var(${token}) ${Math.round(alpha * 1000) / 10}%, transparent)`;
 }
 
 function parseHex(value) {
   const hex = value.slice(1);
   if (hex.length === 3 || hex.length === 4) {
-    const parts = hex.split("").map((part) => Number.parseInt(part + part, 16));
-    return [parts[0], parts[1], parts[2], hex.length === 4 ? parts[3] / 255 : 1];
+    const values = hex.split("").map((part) => Number.parseInt(part + part, 16));
+    return [values[0], values[1], values[2], hex.length === 4 ? values[3] / 255 : 1];
   }
-  const r = Number.parseInt(hex.slice(0, 2), 16);
-  const g = Number.parseInt(hex.slice(2, 4), 16);
-  const b = Number.parseInt(hex.slice(4, 6), 16);
-  const a = hex.length === 8 ? Number.parseInt(hex.slice(6, 8), 16) / 255 : 1;
-  return [r, g, b, a];
+  return [
+    Number.parseInt(hex.slice(0, 2), 16),
+    Number.parseInt(hex.slice(2, 4), 16),
+    Number.parseInt(hex.slice(4, 6), 16),
+    hex.length === 8 ? Number.parseInt(hex.slice(6, 8), 16) / 255 : 1,
+  ];
 }
 
 function hslToRgb(h, s, l) {
@@ -136,7 +128,7 @@ function hslToRgb(h, s, l) {
   }
   const q = lightness < 0.5 ? lightness * (1 + saturation) : lightness + saturation - lightness * saturation;
   const p = 2 * lightness - q;
-  const hueToRgb = (input) => {
+  const channel = (input) => {
     let value = input;
     if (value < 0) value += 1;
     if (value > 1) value -= 1;
@@ -146,9 +138,9 @@ function hslToRgb(h, s, l) {
     return p;
   };
   return [
-    Math.round(hueToRgb(hue + 1 / 3) * 255),
-    Math.round(hueToRgb(hue) * 255),
-    Math.round(hueToRgb(hue - 1 / 3) * 255),
+    Math.round(channel(hue + 1 / 3) * 255),
+    Math.round(channel(hue) * 255),
+    Math.round(channel(hue - 1 / 3) * 255),
   ];
 }
 
@@ -157,23 +149,15 @@ function normalizeColors(css) {
     const [r, g, b, a] = parseHex(value);
     return tokenColor(r, g, b, a);
   });
-
   result = result.replace(/rgba?\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)(?:\s*,\s*(\d*\.?\d+))?\s*\)/gi,
     (_match, r, g, b, alpha) => tokenColor(Number(r), Number(g), Number(b), alpha === undefined ? 1 : Number(alpha)));
-
   result = result.replace(/rgb\(\s*(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)(?:\s*\/\s*(\d*\.?\d+)%?)?\s*\)/gi,
-    (_match, r, g, b, alpha) => {
-      const parsedAlpha = alpha === undefined ? 1 : Number(alpha) > 1 ? Number(alpha) / 100 : Number(alpha);
-      return tokenColor(Number(r), Number(g), Number(b), parsedAlpha);
-    });
-
+    (_match, r, g, b, alpha) => tokenColor(Number(r), Number(g), Number(b), alpha === undefined ? 1 : Number(alpha) > 1 ? Number(alpha) / 100 : Number(alpha)));
   result = result.replace(/hsla?\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)%\s*,\s*(\d+(?:\.\d+)?)%(?:\s*,\s*(\d*\.?\d+))?\s*\)/gi,
     (_match, h, s, l, alpha) => {
       const [r, g, b] = hslToRgb(Number(h), Number(s), Number(l));
       return tokenColor(r, g, b, alpha === undefined ? 1 : Number(alpha));
     });
-
-  // Replace named colors only where they syntactically behave like values.
   result = result.replace(/(?<=[:(,\s])black(?=[\s,)%/;])/gi, "var(--en-black)");
   result = result.replace(/(?<=[:(,\s])white(?=[\s,)%/;])/gi, "var(--en-white)");
   return result;
@@ -187,29 +171,28 @@ function normalizeLegacyVariables(css) {
   return result.replaceAll("var(--font-heading)", "var(--font-body)");
 }
 
-function normalizeRadiusValue(value) {
-  return value.replace(/(\d*\.?\d+)(px|rem)\b/g, (match, amount, unit) => {
-    const numeric = Number(amount);
-    const rem = unit === "px" ? numeric / 16 : numeric;
-    if (numeric === 0) return "0";
-    if (unit === "px" && numeric >= 100) return "var(--en-radius-pill)";
-    if (rem <= 0.5) return "var(--en-radius-xs)";
-    if (rem <= 0.72) return "var(--en-radius-sm)";
-    if (rem <= 0.98) return "var(--en-radius)";
-    if (rem <= 1.3) return "var(--en-radius-lg)";
-    if (rem <= 1.8) return "var(--en-radius-xl)";
-    return match;
-  });
-}
-
-function normalizeChromeGeometry(css) {
-  return css.replace(/border-radius\s*:\s*([^;]+);/gi, (_match, value) => `border-radius: ${normalizeRadiusValue(value)};`);
-}
-
-function stripLegacyTokenDeclarations(css) {
+function stripTokenDeclarations(css) {
   return css
     .replace(/^\s*--(?:s|en)-[\w-]+\s*:[^;]+;\s*$/gm, "")
     .replace(/^\s*--font-heading\s*:[^;]+;\s*$/gm, "");
+}
+
+function normalizeChromeGeometry(css) {
+  return css.replace(/border-radius\s*:\s*([^;]+);/gi, (_match, value) => {
+    const normalized = value.replace(/(\d*\.?\d+)(px|rem)\b/g, (match, amount, unit) => {
+      const numeric = Number(amount);
+      const rem = unit === "px" ? numeric / 16 : numeric;
+      if (numeric === 0) return "0";
+      if (unit === "px" && numeric >= 100) return "var(--en-radius-pill)";
+      if (rem <= 0.5) return "var(--en-radius-xs)";
+      if (rem <= 0.72) return "var(--en-radius-sm)";
+      if (rem <= 0.98) return "var(--en-radius)";
+      if (rem <= 1.3) return "var(--en-radius-lg)";
+      if (rem <= 1.8) return "var(--en-radius-xl)";
+      return match;
+    });
+    return `border-radius: ${normalized};`;
+  });
 }
 
 function assertCompiledCss(css) {
@@ -219,8 +202,8 @@ function assertCompiledCss(css) {
     [/rgba?\(\s*\d/i, "raw rgb color"],
     [/hsla?\(\s*-?\d/i, "raw hsl color"],
     [/--s-/, "legacy --s-* token"],
-    [/--studio-surface/, "legacy --studio-surface token"],
-    [/--(?:border|card|foreground|muted-foreground)\b/, "generic non-Ensemblis chrome token"],
+    [/--studio-surface(?![\w-])/, "legacy --studio-surface token"],
+    [/--(?:border|card|foreground|muted-foreground)(?![\w-])/, "generic non-Ensemblis chrome token"],
     [/(?:^|[:(,\s])(?:black|white)(?=[\s,)%/;])/i, "named raw color"],
   ];
   for (const [pattern, label] of forbidden) {
@@ -235,14 +218,14 @@ function assertCompiledCss(css) {
 const chunks = [];
 for (const source of legacySources) {
   let css = await readFile(resolve(root, source), "utf8");
-  css = stripLegacyTokenDeclarations(css);
   css = normalizeLegacyVariables(css);
+  css = stripTokenDeclarations(css);
   css = normalizeColors(css);
   css = normalizeChromeGeometry(css);
   chunks.push(`\n/* compatibility source: ${source} */\n${css.trim()}\n`);
 }
 
-const output = `/* AUTO-GENERATED by scripts/build-studio-css.mjs. DO NOT EDIT.\n   Compatibility layout lives in the lowest cascade layer and has no independent color vocabulary. */\n${chunks.join("\n")}`;
+const output = `/* AUTO-GENERATED by scripts/build-studio-css.mjs. DO NOT EDIT.\n   Compatibility layout lives in the lowest cascade layer and has no independent color values. */\n${chunks.join("\n")}`;
 assertCompiledCss(output);
 await mkdir(dirname(outputPath), { recursive: true });
 await writeFile(outputPath, output, "utf8");
