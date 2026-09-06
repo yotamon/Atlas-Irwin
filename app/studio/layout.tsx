@@ -34,6 +34,7 @@ import "./object-workspace-polish.css";
 import "./production-polish.css";
 import "./responsive-polish.css";
 import "./onboarding.css";
+import "./ux-consolidation.css";
 
 export const metadata: Metadata = {
   title: {

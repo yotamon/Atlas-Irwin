@@ -96,19 +96,22 @@ export default async function GrowthPage({ searchParams }: { searchParams: Promi
 
   return (
     <div className="studio-v2-page growth-polish-page">
-      <PageHeader
-        title="Grow"
-        description={`Turn ${artist.artistName}'s attention into durable listening and fan relationships. Ensemblis surfaces evidence, the next useful action and what it learned, while keeping campaign machinery out of the way.`}
-        action={view === "overview"
-          ? <form action={generateGrowthPlan}><button className="button primary" type="submit">Refresh recommendations</button></form>
-          : view === "opportunities"
-            ? <form action={refreshGrowthOpportunities}><button className="button primary" type="submit">Scan for evidence</button></form>
-            : undefined}
-      />
+      <PageHeader title="Grow" description={`What is working for ${artist.artistName}, what is not, and what to do next.`} />
 
       <nav className="growth-polish-tabs" aria-label="Grow workspace">
         {growthTabs.map((tab) => <Link className={tab.active ? "active" : ""} href={tab.href} key={tab.label}>{tab.label}</Link>)}
       </nav>
+
+      {(view === "overview" || view === "opportunities") ? (
+        <details className="v2-advanced-disclosure">
+          <summary>Advanced data controls</summary>
+          <p className="v2-muted-copy">These controls are for an immediate manual refresh, not a routine step in the growth workflow.</p>
+          <div className="actions">
+            {view === "overview" ? <form action={generateGrowthPlan}><button className="button" type="submit">Refresh recommendations now</button></form> : null}
+            {view === "opportunities" ? <form action={refreshGrowthOpportunities}><button className="button" type="submit">Re-scan evidence now</button></form> : null}
+          </div>
+        </details>
+      ) : null}
 
       {view === "overview" ? <>
         <section className="growth-polish-north-star" aria-label="Current audience evidence">
@@ -126,12 +129,12 @@ export default async function GrowthPage({ searchParams }: { searchParams: Promi
               <p>{topCandidate.reasons.join(" · ")}</p>
               <div className="growth-chip-row"><span>{titleCase(topCandidate.track.status)}</span><span>{evidenceStrengthLabel(topCandidate.track.analysis_confidence)}</span></div>
               <div className="actions"><form action={promoteVaultTrack}><input type="hidden" name="id" value={topCandidate.track.id} /><button className="button primary" type="submit">Start a release Mission</button></form><Link className="button" href={href("/studio/music")}>Inspect music evidence</Link></div>
-            </> : <div className="v2-calm-state compact"><strong>Nothing needs promotion.</strong><p>Music owns the source backlog. When a mastered track has enough evidence to justify a release slot, Ensemblis will surface it here.</p><Link className="button" href={href("/studio/music")}>Open Music</Link></div>}
+            </> : <div className="v2-calm-state compact"><strong>Nothing needs promotion.</strong><p>When a mastered track has enough evidence for a release slot, it will surface here.</p><Link className="button" href={href("/studio/music")}>Open Music</Link></div>}
           </article>
 
           <article className="v2-section growth-bottleneck">
             <div className="v2-section-heading"><div><span className="section-label">Growth diagnosis</span><h2>{diagnosis ? diagnosis.label : "Need more signal"}</h2></div></div>
-            {diagnosis ? <><div className="growth-rate-compare"><div><strong>{percent(diagnosis.actual)}</strong><span>observed</span></div><div><strong>{percent(diagnosis.target)}</strong><span>working benchmark</span></div></div><p>{diagnosis.diagnosis}</p><div className="growth-action-note"><strong>Do next</strong><span>{diagnosis.action}</span></div><Link className="growth-inline-link" href={href("/studio/growth?view=performance")}>Inspect evidence →</Link></> : <div className="v2-calm-state compact"><strong>No clear bottleneck yet.</strong><p>Connect more performance data. Ensemblis will wait for evidence instead of manufacturing a growth task.</p></div>}
+            {diagnosis ? <><div className="growth-rate-compare"><div><strong>{percent(diagnosis.actual)}</strong><span>observed</span></div><div><strong>{percent(diagnosis.target)}</strong><span>working benchmark</span></div></div><p>{diagnosis.diagnosis}</p><div className="growth-action-note"><strong>Do next</strong><span>{diagnosis.action}</span></div><Link className="growth-inline-link" href={href("/studio/growth?view=performance")}>Inspect evidence →</Link></> : <div className="v2-calm-state compact"><strong>No clear bottleneck yet.</strong><p>Ensemblis waits for enough performance evidence before recommending a growth action.</p></div>}
           </article>
         </div>
 
@@ -145,13 +148,13 @@ export default async function GrowthPage({ searchParams }: { searchParams: Promi
               const target = track?.title || release?.title || "Portfolio item";
               return <div className="growth-queue-item" key={item.id}><span className="growth-queue-date">{shortDate(item.target_date)}</span><div><small>{titleCase(item.status)}</small><strong>{target}</strong><p>{item.rationale}</p></div>{track && !track.linked_release_id ? <form action={promoteVaultTrack}><input type="hidden" name="id" value={track.id} /><button className="button" type="submit">Use this slot</button></form> : <span />}</div>;
             })}
-            {!scheduledReleases.length && !plan.length ? <div className="v2-calm-state compact"><strong>No release plan yet.</strong><p>Refresh recommendations. Existing release dates stay authoritative; Ensemblis only suggests safe gaps.</p></div> : null}
+            {!scheduledReleases.length && !plan.length ? <div className="v2-calm-state compact"><strong>No release plan yet.</strong><p>Recommendations will appear as music and release evidence becomes strong enough.</p></div> : null}
           </div>
         </section>
 
         <section className="v2-section growth-polish-opportunity-preview">
           <div className="v2-section-heading"><div><span className="section-label">In motion</span><h2>{acceptedOpportunities.length ? `${acceptedOpportunities.length} evidence-backed opportunit${acceptedOpportunities.length === 1 ? "y" : "ies"}` : "No extra growth experiment is active"}</h2></div><Link href={href("/studio/growth?view=opportunities")}>Review opportunities</Link></div>
-          {acceptedOpportunities.length ? <div className="growth-polish-simple-list">{acceptedOpportunities.slice(0, 4).map((item) => <div key={item.id}><span>{titleCase(item.kind)}</span><strong>{item.title}</strong><small>{evidenceStrengthLabel(Number(item.confidence))}</small></div>)}</div> : <div className="v2-calm-state compact"><strong>Nothing extra needs activation.</strong><p>Ensemblis will surface catalog, creative or funnel opportunities only when there is evidence worth acting on.</p></div>}
+          {acceptedOpportunities.length ? <div className="growth-polish-simple-list">{acceptedOpportunities.slice(0, 4).map((item) => <div key={item.id}><span>{titleCase(item.kind)}</span><strong>{item.title}</strong><small>{evidenceStrengthLabel(Number(item.confidence))}</small></div>)}</div> : <div className="v2-calm-state compact"><strong>Nothing extra needs activation.</strong><p>Only evidence-backed opportunities appear here.</p></div>}
         </section>
 
         <details className="v2-section v2-compact-section">
@@ -162,7 +165,7 @@ export default async function GrowthPage({ searchParams }: { searchParams: Promi
 
       {view === "opportunities" ? <section className="v2-section growth-polish-view-section" id="opportunities">
         <div className="v2-section-heading"><div><span className="section-label">Evidence-backed opportunities</span><h2>What may be worth doing next</h2></div></div>
-        {opportunities.length ? <div className="growth-opportunity-grid">{opportunities.map((opportunity) => <article className={`growth-opportunity ${opportunity.status === "accepted" ? "accepted" : ""}`} key={opportunity.id}><div className="growth-opportunity-head"><span>{titleCase(opportunity.kind)}</span><strong>{priorityLabel(Number(opportunity.priority))}</strong></div><h3>{opportunity.title}</h3><p>{opportunity.rationale}</p><small>{evidenceStrengthLabel(Number(opportunity.confidence))} · {opportunity.status === "accepted" ? "In motion" : "Needs a decision"}</small><div className="actions">{opportunity.status === "new" ? <form action={activateGrowthOpportunity}><input type="hidden" name="id" value={opportunity.id} /><button className="button primary" type="submit">Use this opportunity</button></form> : <span className="growth-active-label">In motion</span>}{opportunity.status === "new" ? <form action={dismissGrowthOpportunity}><input type="hidden" name="id" value={opportunity.id} /><button className="button" type="submit">Not useful</button></form> : null}{opportunity.release_id ? <Link className="button" href={href(`/studio/releases/${opportunity.release_id}`)}>Open release</Link> : null}</div></article>)}</div> : <div className="v2-calm-state compact"><strong>No active opportunity alerts.</strong><p>Run a scan after performance data changes. Ensemblis will not create opportunities just to fill the screen.</p></div>}
+        {opportunities.length ? <div className="growth-opportunity-grid">{opportunities.map((opportunity) => <article className={`growth-opportunity ${opportunity.status === "accepted" ? "accepted" : ""}`} key={opportunity.id}><div className="growth-opportunity-head"><span>{titleCase(opportunity.kind)}</span><strong>{priorityLabel(Number(opportunity.priority))}</strong></div><h3>{opportunity.title}</h3><p>{opportunity.rationale}</p><small>{evidenceStrengthLabel(Number(opportunity.confidence))} · {opportunity.status === "accepted" ? "In motion" : "Needs a decision"}</small><div className="actions">{opportunity.status === "new" ? <form action={activateGrowthOpportunity}><input type="hidden" name="id" value={opportunity.id} /><button className="button primary" type="submit">Use this opportunity</button></form> : <span className="growth-active-label">In motion</span>}{opportunity.status === "new" ? <form action={dismissGrowthOpportunity}><input type="hidden" name="id" value={opportunity.id} /><button className="button" type="submit">Not useful</button></form> : null}{opportunity.release_id ? <Link className="button" href={href(`/studio/releases/${opportunity.release_id}`)}>Open release</Link> : null}</div></article>)}</div> : <div className="v2-calm-state compact"><strong>No active opportunity alerts.</strong><p>New opportunities appear when connected evidence justifies them. Use Advanced data controls only for an immediate manual re-scan.</p></div>}
       </section> : null}
 
       {view === "performance" ? <section className="v2-section growth-polish-view-section" id="funnel">
@@ -176,7 +179,7 @@ export default async function GrowthPage({ searchParams }: { searchParams: Promi
         <section className="v2-section growth-polish-view-section" id="portfolio-diagnostics">
           <div className="v2-section-heading"><div><span className="section-label">Advanced diagnostics</span><h2>Release-candidate ordering</h2></div><Link href={href("/studio/music")}>Edit music source data</Link></div>
           <p className="v2-muted-copy">This ordering is internal decision support. The artist-facing recommendation is the evidence and next action, not a synthetic score.</p>
-          {ranked.length ? <div className="growth-polish-simple-list">{ranked.slice(0, 12).map((item, index) => <div key={item.track.id}><span>{index === 0 && item.eligible ? "Best current fit" : item.eligible ? "Candidate" : "Hold"}</span><strong>{item.track.title}</strong><small>{item.blocker || item.reasons.join(" · ") || titleCase(item.track.status)}</small></div>)}</div> : <div className="v2-calm-state compact"><strong>No source tracks yet.</strong><p>Add mastered music in Music. Track Intelligence will populate the evidence used here.</p></div>}
+          {ranked.length ? <div className="growth-polish-simple-list">{ranked.slice(0, 12).map((item, index) => <div key={item.track.id}><span>{index === 0 && item.eligible ? "Best current fit" : item.eligible ? "Candidate" : "Hold"}</span><strong>{item.track.title}</strong><small>{item.blocker || item.reasons.join(" · ") || titleCase(item.track.status)}</small></div>)}</div> : <div className="v2-calm-state compact"><strong>No source tracks yet.</strong><p>Add mastered music in Music.</p></div>}
         </section>
 
         <section className="v2-section growth-settings growth-polish-rules">

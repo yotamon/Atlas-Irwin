@@ -1,6 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
 import { MusicIntelligencePreview } from "@/components/studio/music-intelligence-preview";
+import { TrackPreview } from "@/components/studio/track-preview";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import type { VaultTrack } from "@/types/growth-database";
 
@@ -72,9 +73,7 @@ export function MusicWorkspaceOverview({
 }) {
   const unreleased = vaultTracks.filter((track) => !track.linked_release_id);
   const focusTrack = unreleased[0] ?? null;
-  const remaining = focusTrack
-    ? unreleased.filter((track) => track.id !== focusTrack.id)
-    : unreleased;
+  const remaining = focusTrack ? unreleased.filter((track) => track.id !== focusTrack.id) : unreleased;
   const analyzedCount = unreleased.filter(hasMusicMap).length;
   const masteredCount = unreleased.filter((track) => Boolean(track.audio_url)).length;
   const trackCountByRelease = new Map<string, number>();
@@ -115,23 +114,18 @@ export function MusicWorkspaceOverview({
               </div>
               <p className="v2-muted-copy">
                 {hasMusicMap(focusTrack)
-                  ? "Ensemblis has mapped the musical structure and strongest moments. Hear the evidence below, then use the track directly in Create."
+                  ? "Structure and strongest Moments are ready. Hear the evidence below, then use the track in Create."
                   : focusTrack.audio_url
-                    ? "The master is safely in Music. Ensemblis is preparing its structural and strongest-moment understanding automatically."
-                    : "Attach the canonical master so Ensemblis can understand the actual song before recommending creative work."}
+                    ? "The master is safe in Music while Ensemblis prepares its musical understanding."
+                    : "Attach the canonical master so Ensemblis can understand the actual song."}
               </p>
-              {focusTrack.audio_url && !hasMusicMap(focusTrack) ? (
-                <audio className="music-workspace-audio" controls preload="metadata" src={focusTrack.audio_url} />
-              ) : null}
+              {focusTrack.audio_url && !hasMusicMap(focusTrack) ? <TrackPreview src={focusTrack.audio_url} label={`${focusTrack.title} master`} /> : null}
               {hasMusicMap(focusTrack) ? (
-                <MusicIntelligencePreview
-                  audioUrl={focusTrack.audio_url}
-                  musicMap={focusTrack.audio_profile}
-                />
+                <MusicIntelligencePreview audioUrl={focusTrack.audio_url} musicMap={focusTrack.audio_profile} />
               ) : (
                 <div className="v2-calm-state compact">
                   <strong>{focusTrack.audio_url ? "No action needed while Ensemblis is listening." : "Master audio is missing."}</strong>
-                  <p>{focusTrack.audio_url ? "When Track Intelligence is ready, this surface will show the musical timeline and strongest moments automatically." : "Add the mastered source instead of filling in manual scores."}</p>
+                  <p>{focusTrack.audio_url ? "Track Intelligence will appear here automatically when it is ready." : "Add the mastered source instead of filling in manual scores."}</p>
                 </div>
               )}
               <div className="actions">
@@ -142,7 +136,7 @@ export function MusicWorkspaceOverview({
           ) : (
             <div className="v2-calm-state compact">
               <strong>No unreleased music is waiting here.</strong>
-              <p>Add an existing master, prepare a release, or create something new. Ensemblis will keep source audio, intelligence and release context connected.</p>
+              <p>Add an existing master, prepare a release, or create something new.</p>
               <Link className="button primary" href={importHref}>Add mastered track</Link>
             </div>
           )}
@@ -169,7 +163,7 @@ export function MusicWorkspaceOverview({
               ))}
             </div>
           ) : (
-            <div className="v2-calm-state compact"><strong>No releases yet.</strong><p>When a track becomes a release, its master, Track Intelligence, stems and lyrics stay connected in the release workspace.</p></div>
+            <div className="v2-calm-state compact"><strong>No releases yet.</strong><p>When a track becomes a release, its music context stays connected.</p></div>
           )}
         </aside>
       </div>
@@ -191,7 +185,7 @@ export function MusicWorkspaceOverview({
                   <strong>{track.title}</strong>
                   <small>{titleCase(track.status)} · {analysisStatus(track)}{track.version ? ` · ${track.version}` : ""}</small>
                 </span>
-                {track.audio_url ? <audio controls preload="metadata" src={track.audio_url} /> : <span className="music-track-missing">No master</span>}
+                {track.audio_url ? <TrackPreview src={track.audio_url} label={track.title} compact /> : <span className="music-track-missing">No master</span>}
                 <span className="music-score small">{hasMusicMap(track) ? "Ready" : "Listening"}</span>
                 <Link className="music-row-link" href={trackHref(track.id)}>Open →</Link>
               </div>
@@ -209,7 +203,7 @@ export function MusicWorkspaceOverview({
         <div>
           <span className="section-label">Bring music into Ensemblis</span>
           <h2>Start with the song, however it was made.</h2>
-          <p>Upload an existing master, prepare a catalog release, or create a new draft with AI. Ensemblis becomes valuable after it can understand the actual music.</p>
+          <p>Upload an existing master, prepare a catalog release, or create a new draft with AI.</p>
         </div>
         <div className="actions">
           <Link className="button primary" href={addHref}>Add music</Link>

@@ -7,13 +7,7 @@ import { createAutonomyServiceClient } from "@/lib/marketing/autonomy-db";
 import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 
 function shortDate(value: string) {
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Europe/Berlin",
-  }).format(new Date(value));
+  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Berlin" }).format(new Date(value));
 }
 
 function readable(value: string | null | undefined, fallback: string) {
@@ -26,13 +20,7 @@ export default async function AudiencePage() {
   const artist = await resolveDefaultArtistContext(supabase, user);
   const db = createAutonomyServiceClient();
   const [interactionsResult, fanGraph] = await Promise.all([
-    db.from("audience_interactions")
-      .select("*")
-      .eq("owner_id", user.id)
-      .eq("artist_id", artist.artistId)
-      .not("status", "in", "(ignored,replied)")
-      .order("occurred_at", { ascending: false })
-      .limit(100),
+    db.from("audience_interactions").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).not("status", "in", "(ignored,replied)").order("occurred_at", { ascending: false }).limit(100),
     loadFanGraphSummary(supabase, user.id, artist.artistId),
   ]);
   if (interactionsResult.error) throw new Error(interactionsResult.error.message);
@@ -44,18 +32,14 @@ export default async function AudiencePage() {
 
   return (
     <div className="studio-v2-page audience-polish-page">
-      <PageHeader
-        title="Audience"
-        description={`Relationship memory for ${artist.artistName}, plus only the conversations that need judgment. Channel identities and permissions stay separate unless real evidence connects them.`}
-        action={<form action={syncAudienceNow}><button className="button" type="submit">Sync conversations</button></form>}
-      />
+      <PageHeader title="Audience" description={`Relationships and conversations that matter for ${artist.artistName}.`} />
 
       <section className="audience-polish-summary fan-graph-summary" aria-label="Audience relationship summary">
         <div><strong>{interactions.length}</strong><span>need judgment</span></div>
         <div><strong>{fanGraph.returningCount}</strong><span>returning relationships</span></div>
         <div><strong>{fanGraph.knownSupporterCount}</strong><span>known supporters</span></div>
-        <div><strong>{fanGraph.permissionedIdentityCount}</strong><span>permissioned channel identities</span></div>
-        <p>Engagement is not consent. Ensemblis never turns a comment, follow, matching handle, or behavioral similarity into permission to market to someone, and nothing is sent without your decision.</p>
+        <div><strong>{fanGraph.permissionedIdentityCount}</strong><span>permissioned identities</span></div>
+        <p>Channel relationships stay separate unless real evidence and permission connect them; nothing is sent without your decision.</p>
       </section>
 
       <section className="fan-graph-section">
@@ -69,48 +53,29 @@ export default async function AudiencePage() {
             <div className="fan-channel-chips">{profile.identities.slice(0, 4).map((identity) => <span key={identity.id}>{readable(identity.channel, "Channel")} · {identity.label}</span>)}</div>
             <div className="fan-relationship-context"><span>Last seen {shortDate(profile.lastSeenAt)}</span>{profile.nextAction ? <strong>{profile.nextAction.title}</strong> : <small>No action needed</small>}</div>
           </Link>)}
-        </div> : <div className="v2-calm-state compact"><strong>No relationship history yet.</strong><p>When the same handle returns on the same connected channel, Ensemblis can remember that channel relationship without pretending to know who they are elsewhere.</p></div>}
+        </div> : <div className="v2-calm-state compact"><strong>No relationship history yet.</strong><p>Ensemblis remembers recurring channel relationships without guessing identities across platforms.</p></div>}
       </section>
 
       <section className="audience-polish-queue">
-        <div className="audience-polish-heading">
-          <div><span className="section-label">Needs judgment</span><h2>{interactions.length ? `${interactions.length} conversation${interactions.length === 1 ? "" : "s"}` : "Inbox is clear"}</h2></div>
-          <span>{ready.length} safe draft{ready.length === 1 ? "" : "s"} prepared</span>
-        </div>
-
-        {ordered.length ? (
-          <div className="audience-thread-list">
-            {ordered.map((item) => (
-              <article className="audience-thread" id={`interaction-${item.id}`} key={item.id}>
-                <header>
-                  <div>
-                    <small>{readable(item.platform, "Channel")} · {shortDate(item.occurred_at)}</small>
-                    <strong>{item.author_name || item.author_handle || "Listener"}</strong>
-                  </div>
-                  <span>{readable(item.sentiment, "Unclassified")}</span>
-                </header>
-                <p className="audience-message">{item.body}</p>
-
-                {item.suggested_reply ? (
-                  <form action={approveAudienceReply} className="audience-draft">
-                    <input type="hidden" name="id" value={item.id} />
-                    <label><span>Ensemblis draft</span><textarea name="reply" defaultValue={item.suggested_reply} rows={3} maxLength={1000} required /></label>
-                    <div className="actions"><button className="button primary" type="submit">Approve & reply</button><button className="text-button" type="submit" formAction={ignoreAudienceInteraction}>Ignore</button></div>
-                  </form>
-                ) : (
-                  <form action={ignoreAudienceInteraction} className="audience-no-draft">
-                    <input type="hidden" name="id" value={item.id} />
-                    <span>No safe reply was drafted. Review the message itself rather than forcing automation.</span>
-                    <button className="text-button" type="submit">Ignore</button>
-                  </form>
-                )}
-              </article>
-            ))}
-          </div>
-        ) : (
-          <div className="v2-calm-state compact"><strong>No audience messages need you.</strong><p>Ensemblis will keep listening to connected channels for {artist.artistName} and surface only conversations worth a decision.</p></div>
-        )}
+        <div className="audience-polish-heading"><div><span className="section-label">Needs judgment</span><h2>{interactions.length ? `${interactions.length} conversation${interactions.length === 1 ? "" : "s"}` : "Inbox is clear"}</h2></div><span>{ready.length} safe draft{ready.length === 1 ? "" : "s"} prepared</span></div>
+        {ordered.length ? <div className="audience-thread-list">{ordered.map((item) => (
+          <article className="audience-thread" id={`interaction-${item.id}`} key={item.id}>
+            <header><div><small>{readable(item.platform, "Channel")} · {shortDate(item.occurred_at)}</small><strong>{item.author_name || item.author_handle || "Listener"}</strong></div><span>{readable(item.sentiment, "Unclassified")}</span></header>
+            <p className="audience-message">{item.body}</p>
+            {item.suggested_reply ? <form action={approveAudienceReply} className="audience-draft">
+              <input type="hidden" name="id" value={item.id} />
+              <label><span>Ensemblis draft</span><textarea name="reply" defaultValue={item.suggested_reply} rows={3} maxLength={1000} required /></label>
+              <div className="actions"><button className="button primary" type="submit">Approve & reply</button><button className="text-button" type="submit" formAction={ignoreAudienceInteraction}>Ignore</button></div>
+            </form> : <form action={ignoreAudienceInteraction} className="audience-no-draft"><input type="hidden" name="id" value={item.id} /><span>No safe reply was drafted. Review the message itself.</span><button className="text-button" type="submit">Ignore</button></form>}
+          </article>
+        ))}</div> : <div className="v2-calm-state compact"><strong>No audience messages need you.</strong><p>Only conversations worth a decision appear here.</p></div>}
       </section>
+
+      <details className="v2-advanced-disclosure">
+        <summary>Advanced data controls</summary>
+        <p className="v2-muted-copy">Use this only when you need an immediate conversation refresh.</p>
+        <form action={syncAudienceNow}><button className="button" type="submit">Refresh conversations now</button></form>
+      </details>
     </div>
   );
 }

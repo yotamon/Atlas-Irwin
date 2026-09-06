@@ -5,6 +5,7 @@ import { LyricsIntelligencePanel } from "@/components/studio/lyrics-intelligence
 import { MusicIntelligencePreview } from "@/components/studio/music-intelligence-preview";
 import { ObjectHeader } from "@/components/studio/object-header";
 import { StemIntelligencePanel } from "@/components/studio/stem-intelligence-panel";
+import { TrackPreview } from "@/components/studio/track-preview";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
@@ -123,33 +124,33 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
         <div className="track-object-primary">
           <span className="section-label">Source audio</span>
           <h2>{vaultTrack.audio_url ? "Canonical master" : "Master audio is still missing"}</h2>
-          {vaultTrack.notes ? <p>{vaultTrack.notes}</p> : <p>{vaultTrack.audio_url ? "This is the source Ensemblis uses to understand structure, energy and strongest moments." : "Ensemblis needs the actual mastered source before it can make music-aware creative recommendations."}</p>}
-          {vaultTrack.audio_url ? <audio controls preload="metadata" src={vaultTrack.audio_url} /> : null}
+          {vaultTrack.notes ? <p>{vaultTrack.notes}</p> : <p>{vaultTrack.audio_url ? "The source Ensemblis uses for structure, energy and strongest Moments." : "Ensemblis needs the mastered source before it can make music-aware recommendations."}</p>}
+          {vaultTrack.audio_url ? <TrackPreview src={vaultTrack.audio_url} label={`${vaultTrack.title} master`} /> : null}
         </div>
         <aside className="track-object-decision">
           <span className="section-label">Recommended next move</span>
           {intelligenceReady ? (
             <>
-              <strong>Create from the strongest moment</strong>
-              <p>Track Intelligence is ready. Start creative work from the musical evidence instead of choosing a random excerpt.</p>
+              <strong>Create from the strongest Moment</strong>
+              <p>Track Intelligence is ready. Start creative work from the musical evidence.</p>
               <Link href={createHref}>Create with this track →</Link>
             </>
           ) : analysisNeedsRecovery ? (
             <>
               <strong>Analysis needs attention</strong>
-              <p>The master is safe. Retry only the intelligence step; there is no need to upload it again.</p>
+              <p>The master is safe. Retry only the intelligence step.</p>
               <Link href="#recovery">Open recovery →</Link>
             </>
           ) : vaultTrack.audio_url ? (
             <>
               <strong>No action needed</strong>
-              <p>Ensemblis is preparing the musical understanding automatically. You can leave this screen.</p>
+              <p>Ensemblis is preparing the musical understanding automatically.</p>
               <Link href={href("/studio/music")}>Back to Music →</Link>
             </>
           ) : (
             <>
               <strong>Add the real master</strong>
-              <p>Music intelligence stays intentionally empty until Ensemblis has source audio to hear.</p>
+              <p>Music intelligence stays empty until Ensemblis has source audio to hear.</p>
               <Link href={href("/studio/music/import")}>Add mastered music →</Link>
             </>
           )}
@@ -160,7 +161,7 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
         <div className="v2-section-heading">
           <div>
             <span className="section-label">Track Intelligence</span>
-            <h2>{intelligenceReady ? "What Ensemblis hears in this track" : analysisNeedsRecovery ? "Understanding needs recovery" : "Ensemblis is understanding the track"}</h2>
+            <h2>{intelligenceReady ? "What Ensemblis hears" : analysisNeedsRecovery ? "Understanding needs recovery" : "Ensemblis is understanding the track"}</h2>
           </div>
         </div>
         {intelligenceReady ? (
@@ -168,7 +169,7 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
         ) : (
           <div className="v2-calm-state compact">
             <strong>{analysisNeedsRecovery ? "The source master is safe." : vaultTrack.audio_url ? "Nothing to fill in manually." : "No source audio yet."}</strong>
-            <p>{analysisNeedsRecovery ? "Use the recovery control below to retry Track Intelligence without changing the master." : vaultTrack.audio_url ? "Structure and strongest moments will appear here automatically when analysis completes." : "Add a master first. Ensemblis does not manufacture analysis without source audio."}</p>
+            <p>{analysisNeedsRecovery ? "Retry Track Intelligence below without changing the master." : vaultTrack.audio_url ? "Structure and strongest Moments appear here when analysis completes." : "Add a master first."}</p>
           </div>
         )}
 
@@ -185,7 +186,7 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
         {analysisNeedsRecovery ? (
           <details className="track-object-advanced" id="recovery">
             <summary>Analysis recovery</summary>
-            <p className="v2-muted-copy">Retry only when Track Intelligence failed or the worker was unavailable. The existing master remains untouched.</p>
+            <p className="v2-muted-copy">Retry only the intelligence step. The existing master remains untouched.</p>
             <form action={analyzeMusicTrack}>
               <input type="hidden" name="id" value={vaultTrack.id} />
               <button className="button" type="submit">Retry Track Intelligence</button>
@@ -196,18 +197,14 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
 
       {releaseTrack && release ? (
         <>
-          <div className="track-object-section" id="stems">
-            <StemIntelligencePanel releaseId={release.id} track={releaseTrack} />
-          </div>
-          <div className="track-object-section" id="lyrics">
-            <LyricsIntelligencePanel releaseId={release.id} track={releaseTrack} />
-          </div>
+          <div className="track-object-section" id="stems"><StemIntelligencePanel releaseId={release.id} track={releaseTrack} /></div>
+          <div className="track-object-section" id="lyrics"><LyricsIntelligencePanel releaseId={release.id} track={releaseTrack} /></div>
         </>
       ) : (
         <section className="track-object-section track-object-linked-context">
           <span className="section-label">Release context</span>
           <h2>Stems and lyrics attach when this track becomes a release.</h2>
-          <p>Ensemblis keeps the unreleased master independent until you make the release decision. Once linked, release stems, lyrics and campaign moments appear in this same musical context.</p>
+          <p>The unreleased master stays independent until you make the release decision.</p>
         </section>
       )}
     </div>
