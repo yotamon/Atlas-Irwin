@@ -1,0 +1,103 @@
+name: One-time canonical runtime contract cleanup
+
+on:
+  push:
+    branches:
+      - cleanup/ensemblis-legacy-purge
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cleanup/ensemblis-legacy-purge
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Canonicalize runtime scope and contracts
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+
+          function replaceExact(path, before, after) {
+            let source = fs.readFileSync(path, 'utf8');
+            if (!source.includes(before)) {
+              throw new Error(`Expected block not found in ${path}: ${before.slice(0, 100)}`);
+            }
+            source = source.replace(before, after);
+            fs.writeFileSync(path, source);
+          }
+
+          replaceExact(
+            'tests/ensemblis-sites-contract.test.mjs',
+            '    `.from("tracks")`,',
+            '    `.from("track_read_model")`,',
+          );
+
+          replaceExact(
+            'tests/ensemblis-sites-url-safety.test.mjs',
+            '    "artworkUrl: publicAsset(release.artwork_url)",',
+            '    "artworkUrl: publicAsset(release.cover_public_url)",',
+          );
+
+          replaceExact(
+            'lib/artist-operating/server.ts',
+            '.select("id,workspace_id,name,slug,project_type,status,avatar_url,accent_color,legacy_owner_id,created_at,updated_at")',
+            '.select("id,workspace_id,name,slug,project_type,status,avatar_url,accent_color,created_at,updated_at")',
+          );
+
+          replaceExact(
+            'lib/studio/media.ts',
+            'Atlas Irwin visual reference',
+            'Artist visual reference',
+          );
+          replaceExact(
+            'lib/studio/media.ts',
+            'Atlas Irwin logo / identity asset',
+            'Artist logo / identity asset',
+          );
+          replaceExact(
+            'lib/studio/media.ts',
+            'Atlas Irwin motion reference',
+            'Artist motion reference',
+          );
+
+          replaceExact(
+            'lib/marketing/next-best-action.ts',
+            `  const [artists, workspaces, audience, opportunities, publications, campaigns] = await Promise.all([\n    operating.from("artists").select("id,workspace_id,legacy_owner_id,status").eq("status", "active").limit(500),\n    operating.from("workspaces").select("id,created_by,legacy_owner_id").limit(500),\n    autonomy.from("audience_interactions").select("owner_id,artist_id").limit(500),\n    autonomy.from("marketing_opportunities").select("owner_id,artist_id").limit(500),\n    marketing.from("publication_jobs").select("owner_id,artist_id").limit(500),\n    marketing.from("campaigns").select("owner_id,artist_id").in("status", ["draft", "planned", "active"]).limit(500),\n  ]);\n  const error = artists.error || workspaces.error || audience.error || opportunities.error || publications.error || campaigns.error;\n  if (error) throw new Error(error.message);\n\n  const unique = new Map<string, AutonomyArtistScope>();\n  const workspaceOwner = new Map(\n    (workspaces.data ?? []).map((workspace) => [workspace.id, workspace.legacy_owner_id ?? workspace.created_by]),\n  );\n  for (const artist of artists.data ?? []) {\n    const ownerId = artist.legacy_owner_id ?? workspaceOwner.get(artist.workspace_id) ?? null;\n    if (!ownerId) continue;\n    unique.set(\\`${'${ownerId}:${artist.id}'}\\`, { ownerId, artistId: artist.id });\n  }`,
+            `  const [artists, memberships, audience, opportunities, publications, campaigns] = await Promise.all([\n    operating.from("artists").select("id,workspace_id,status").eq("status", "active").limit(500),\n    operating.from("workspace_memberships").select("workspace_id,profile_id,role,status").eq("role", "owner").eq("status", "active").limit(500),\n    autonomy.from("audience_interactions").select("owner_id,artist_id").limit(500),\n    autonomy.from("marketing_opportunities").select("owner_id,artist_id").limit(500),\n    marketing.from("publication_jobs").select("owner_id,artist_id").limit(500),\n    marketing.from("campaigns").select("owner_id,artist_id").in("status", ["draft", "planned", "active"]).limit(500),\n  ]);\n  const error = artists.error || memberships.error || audience.error || opportunities.error || publications.error || campaigns.error;\n  if (error) throw new Error(error.message);\n\n  const unique = new Map<string, AutonomyArtistScope>();\n  const workspaceOwner = new Map(\n    (memberships.data ?? []).map((membership) => [membership.workspace_id, membership.profile_id]),\n  );\n  for (const artist of artists.data ?? []) {\n    const ownerId = workspaceOwner.get(artist.workspace_id) ?? null;\n    if (!ownerId) continue;\n    unique.set(\\`${'${ownerId}:${artist.id}'}\\`, { ownerId, artistId: artist.id });\n  }`,
+          );
+
+          replaceExact(
+            'tests/no-legacy-runtime-contract.test.mjs',
+            `  assert.doesNotMatch(\n    migration,\n    /drop column if exists audio_url/,\n    "master audio stays temporarily until intelligence invalidation moves to media_links.master_audio",\n  );`,
+            `  const masterMigration = await readFile(\n    path.join(root, "supabase/migrations/20260906195000_master_audio_media_ssot.sql"),\n    "utf8",\n  );\n  assert.match(masterMigration, /alter table public\\.tracks drop column if exists audio_url/);\n  assert.match(masterMigration, /create trigger invalidate_track_master_dependents/);\n  assert.match(masterMigration, /on public\\.media_links/);\n  assert.match(masterMigration, /current_track_master_asset_id/);`,
+          );
+          NODE
+
+      - name: Validate cleanup
+        shell: bash
+        run: |
+          git diff --check
+          ! grep -R --line-number --exclude-dir=.git 'legacy_owner_id' app components lib
+          ! grep -R --line-number --exclude-dir=.git 'Atlas Irwin visual reference\|Atlas Irwin logo / identity asset\|Atlas Irwin motion reference' app components lib
+
+      - name: Remove one-time workflow and commit
+        shell: bash
+        run: |
+          rm .github/workflows/cleanup-canonical-runtime-contracts.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "refactor: canonicalize runtime scope contracts"
+          git push origin HEAD:cleanup/ensemblis-legacy-purge
