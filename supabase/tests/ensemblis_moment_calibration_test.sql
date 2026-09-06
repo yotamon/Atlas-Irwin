@@ -140,13 +140,25 @@ from public.moments
 where track_id = '59000000-0000-0000-0000-000000000001'::uuid
   and state in ('proposed','approved');
 
-update public.track_music_intelligence
-set analysis_version = 5,
-    source_audio_url = 'https://example.com/calibration-v2.wav',
-    audio_sha256 = 'calibration-sha-v2',
-    analysis = '{"source":"worker","version":5,"hook_candidates":[{"id":"hook-cal-v2","start_ms":12000,"end_ms":30000,"kind":"instant_hook","label":"Fresh Hook","score":0.9,"metrics":{"energy":0.8},"intent_scores":{"instant_hook":0.92}}]}'::jsonb
-where track_id = '59000000-0000-0000-0000-000000000001'::uuid;
-select pass('fresh Track Intelligence can materialize after a master replacement');
+-- Master replacement intentionally invalidates and deletes canonical Track Intelligence.
+-- A real re-analysis therefore inserts/upserts a fresh canonical row rather than updating the stale row.
+insert into public.track_music_intelligence(
+  track_id,owner_id,analysis_version,engine,quality,semantic_structure,
+  source_audio_url,audio_sha256,analysis
+) values (
+  '59000000-0000-0000-0000-000000000001','19000000-0000-0000-0000-000000000001',5,'test','full',true,
+  'https://example.com/calibration-v2.wav','calibration-sha-v2',
+  '{"source":"worker","version":5,"hook_candidates":[{"id":"hook-cal-v2","start_ms":12000,"end_ms":30000,"kind":"instant_hook","label":"Fresh Hook","score":0.9,"metrics":{"energy":0.8},"intent_scores":{"instant_hook":0.92}}]}'::jsonb
+);
+
+select ok(
+  count(*) = 1,
+  'fresh Track Intelligence can materialize after a master replacement'
+)
+from public.track_music_intelligence
+where track_id = '59000000-0000-0000-0000-000000000001'::uuid
+  and analysis_version = 5
+  and source_audio_url = 'https://example.com/calibration-v2.wav';
 
 select ok(
   count(*) = 1,
