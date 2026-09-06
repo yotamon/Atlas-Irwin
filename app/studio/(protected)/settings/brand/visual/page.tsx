@@ -33,7 +33,7 @@ function artistBrandAssets(assets: MediaAsset[], artistId: string) {
   const artistTag = `artist:${artistId}`.toLowerCase();
   return assets.filter((asset) => {
     if (!asset.mime_type?.startsWith("image/") || !asset.public_url) return false;
-    if (!["brand_reference", "brand_logo"].includes(asset.asset_type)) return false;
+    if (!["brand_reference", "brand_negative_reference", "brand_logo"].includes(asset.asset_type)) return false;
     return mediaMetadata(asset).tags.map((tag) => tag.toLowerCase()).includes(artistTag);
   });
 }
@@ -231,7 +231,7 @@ export default async function VisualBrandPage() {
               <Field label="What this brand is not" wide><textarea name="anti_style" rows={5} defaultValue={draftDna.antiStyle.join("\n")} /></Field>
             </div>
 
-            <div className="v2-section-heading"><div><span className="section-label">Canonical references</span><h3>Keep the strongest, diverse identity anchors</h3><p>These receive extra weight during future creative generation. Keep at least three.</p></div></div>
+            <div className="v2-section-heading"><div><span className="section-label">Canonical references</span><h3>Keep the strongest, diverse identity anchors</h3><p>These are the approved visual anchors saved with this identity version. Keep at least three.</p></div></div>
             <div className="media-grid">
               {draft.source_asset_ids.flatMap((assetId) => {
                 const asset = assetById.get(assetId);
