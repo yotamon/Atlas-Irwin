@@ -1,0 +1,110 @@
+name: One-time canonical read-model query migration
+
+on:
+  push:
+    branches:
+      - cleanup/ensemblis-legacy-purge
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cleanup/ensemblis-legacy-purge
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Move music reads to canonical projections
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+
+          const roots = ['app', 'lib', 'components'];
+          const extensions = new Set(['.ts', '.tsx']);
+
+          function walk(dir, files = []) {
+            if (!fs.existsSync(dir)) return files;
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+              const full = path.join(dir, entry.name);
+              if (entry.isDirectory()) walk(full, files);
+              else if (extensions.has(path.extname(entry.name))) files.push(full);
+            }
+            return files;
+          }
+
+          function rewriteSelectColumns(source, table, mapper) {
+            const pattern = new RegExp(`\\.from\\(\\"${table}\\"\\)([\\s\\S]{0,240}?)\\.select\\(\\"([^\\"]*)\\"\\)`, 'g');
+            return source.replace(pattern, (whole, between, columns) => {
+              const next = [];
+              for (const raw of columns.split(',')) {
+                const token = raw.trim();
+                const mapped = mapper(token);
+                if (Array.isArray(mapped)) next.push(...mapped);
+                else if (mapped) next.push(mapped);
+              }
+              return `.from("${table}")${between}.select("${[...new Set(next)].join(',')}")`;
+            });
+          }
+
+          const releaseColumn = (token) => {
+            if (token === 'artist') return 'artist_name';
+            if (token === 'artwork_url') return 'cover_public_url';
+            if (token === 'cover_asset') return 'cover_asset_id';
+            if (token === 'smart_link_url') return ['smart_link_site_id', 'smart_link_slug'];
+            if (token === 'public_release_path') return null;
+            return token;
+          };
+
+          const trackColumn = (token) => {
+            if (token === 'audio_url') {
+              return [
+                'master_audio_asset_id',
+                'master_audio_public_url',
+                'master_audio_bucket_name',
+                'master_audio_storage_path',
+              ];
+            }
+            return token;
+          };
+
+          let changed = 0;
+          for (const file of roots.flatMap((root) => walk(root))) {
+            const before = fs.readFileSync(file, 'utf8');
+            let after = before
+              .replace(/\.from\("releases"\)(\s*)\.select\(/g, '.from("release_read_model")$1.select(')
+              .replace(/\.from\("tracks"\)(\s*)\.select\(/g, '.from("track_read_model")$1.select(');
+
+            after = rewriteSelectColumns(after, 'release_read_model', releaseColumn);
+            after = rewriteSelectColumns(after, 'track_read_model', trackColumn);
+
+            if (after !== before) {
+              fs.writeFileSync(file, after);
+              changed += 1;
+            }
+          }
+
+          if (!changed) throw new Error('No read queries were migrated.');
+          console.log(`Migrated canonical read queries in ${changed} files.`);
+          NODE
+
+      - name: Commit migration and remove one-time workflow
+        shell: bash
+        run: |
+          git diff --check
+          rm .github/workflows/cleanup-read-model-queries.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "refactor: read music through canonical projections"
+          git push origin HEAD:cleanup/ensemblis-legacy-purge
