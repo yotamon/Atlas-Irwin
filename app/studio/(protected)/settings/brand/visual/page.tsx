@@ -3,11 +3,19 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { buildVisualBrandDraft, activateVisualBrandVersion, saveVisualBrandCalibration } from "@/app/studio/visual-brand-actions";
 import { setVisualBrandEvidenceRelationship } from "@/app/studio/visual-brand-evidence-actions";
+import {
+  approveVisualBrandReferencePack,
+  discardPreparedVisualBrandReferencePack,
+  prepareVisualBrandReferencePack,
+  refreshVisualBrandReferencePack,
+} from "@/app/studio/visual-brand-reference-actions";
 import { MediaUploader } from "@/components/studio/media-uploader";
 import { Field, PageHeader, Submit } from "@/components/studio/ui";
 import { loadActiveVisualBrand, loadLatestVisualBrandDraft } from "@/lib/brand/visual-brand-store";
 import { parseVisualBrandDna, type VisualBrandAnalysis } from "@/lib/brand/visual-brand-dna";
+import { VISUAL_BRAND_REFERENCE_PACK_SIZE, VISUAL_BRAND_REFERENCE_PURPOSE_PREFIX } from "@/lib/brand/visual-brand-reference-pack";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { asMarketingClient } from "@/lib/marketing/db";
 import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { mediaMetadata } from "@/lib/studio/media";
 import type { Json, MediaAsset } from "@/types/database";
@@ -48,6 +56,15 @@ function analysisFrom(value: Json | unknown): VisualBrandAnalysis | null {
   return source as unknown as VisualBrandAnalysis;
 }
 
+function stringValue(value: unknown) {
+  return typeof value === "string" ? value : "";
+}
+
+function latestReferencePack<T extends { input_context: Json }>(runs: T[]) {
+  const packId = runs.map((run) => stringValue(record(run.input_context).packId)).find(Boolean);
+  return packId ? { packId, runs: runs.filter((run) => record(run.input_context).packId === packId) } : null;
+}
+
 async function buildDraft(form: FormData) {
   "use server";
   await buildVisualBrandDraft(form);
@@ -57,6 +74,7 @@ async function buildDraft(form: FormData) {
 export default async function VisualBrandPage() {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveDefaultArtistContext(supabase, user);
+  const marketing = asMarketingClient(supabase);
   const [active, draft, assetResult] = await Promise.all([
     loadActiveVisualBrand({ db: supabase, ownerId: user.id, artistId: artist.artistId }),
     loadLatestVisualBrandDraft({ db: supabase, ownerId: user.id, artistId: artist.artistId }),
@@ -68,6 +86,24 @@ export default async function VisualBrandPage() {
   const draftDna = draft ? parseVisualBrandDna(draft.dna) : null;
   const draftAnalysis = draft ? analysisFrom(draft.analysis) : null;
   const evidenceCount = assets.filter((asset) => evidenceRelationship(asset) !== "avoid").length;
+
+  const referenceRunsResult = active
+    ? await marketing.from("generation_runs")
+      .select("id,status,provider,model,input_context,output,estimated_cost_usd,actual_cost_usd,error,created_at")
+      .eq("owner_id", user.id)
+      .eq("artist_id", artist.artistId)
+      .like("purpose", `${VISUAL_BRAND_REFERENCE_PURPOSE_PREFIX}${active.id}:%`)
+      .order("created_at", { ascending: false })
+      .limit(VISUAL_BRAND_REFERENCE_PACK_SIZE * 5)
+    : { data: [], error: null };
+  if (referenceRunsResult.error) throw new Error(referenceRunsResult.error.message);
+  const referencePack = latestReferencePack(referenceRunsResult.data ?? []);
+  const packRuns = referencePack?.runs ?? [];
+  const packPrepared = packRuns.length === VISUAL_BRAND_REFERENCE_PACK_SIZE && packRuns.every((run) => run.status === "queued" && record(run.output).stage === "prepared");
+  const packGenerating = packRuns.some((run) => run.status === "running");
+  const packCompleted = packRuns.filter((run) => run.status === "completed").length;
+  const packFailed = packRuns.filter((run) => run.status === "failed").length;
+  const packEstimate = packRuns.reduce((sum, run) => sum + (typeof run.estimated_cost_usd === "number" ? run.estimated_cost_usd : 0), 0);
 
   return (
     <div className="studio-v2-page">
@@ -92,7 +128,7 @@ export default async function VisualBrandPage() {
             </div>
           </div>
           <div className="media-tags">{active.dna.personality.map((trait) => <span key={trait}>{trait}</span>)}</div>
-          <div className="form-actions"><a className="button" href="#evidence">Evolve from new evidence</a></div>
+          <div className="form-actions"><a className="button" href="#evidence">Evolve from new evidence</a><a className="button" href="#reference-pack">Explore generated references</a></div>
         </section>
       ) : (
         <section className="studio-panel feature">
@@ -101,6 +137,102 @@ export default async function VisualBrandPage() {
           <p>Start from finished artwork, photography, posters, visual experiments and a small number of references that genuinely point toward the artist you want to become.</p>
         </section>
       )}
+
+      {active ? (
+        <section className="studio-panel feature" id="reference-pack">
+          <div className="panel-head">
+            <div>
+              <span className="section-label">Reference lab · active v{active.version}</span>
+              <h2>Expand the identity without silently changing it</h2>
+              <p>Ensemblis can prepare six deliberately different image studies from the active DNA and its canonical references. Generated images enter the evidence library as <strong>Exploring</strong>, never as approved identity.</p>
+            </div>
+          </div>
+
+          {!referencePack ? (
+            <>
+              <div className="identity-grid">
+                {[
+                  ["1:1", "Core world", "One iconic expression of the visual system."],
+                  ["4:5", active.dna.humanRepresentation.usage === "none" ? "Editorial environment" : "Editorial identity", "Portrait-oriented editorial interpretation."],
+                  ["9:16", "Vertical world", "Native short-form visual language."],
+                  ["16:9", "Cinematic world", "Wide spatial and lighting language."],
+                  ["1:1", "Material & texture", "A close material anchor for future work."],
+                  ["1:1", "Motif system", "A selective abstract study of signature motifs."],
+                ].map(([ratio, label, copy]) => <section className="studio-panel" key={`${ratio}-${label}`}><span className="section-label">{ratio}</span><h3>{label}</h3><p>{copy}</p></section>)}
+              </div>
+              <div className="studio-smart-defaults">
+                <strong>Preparing the pack does not spend money</strong>
+                <span>Ensemblis selects the connected balanced image route for each aspect ratio, obtains provider quotes, and shows the combined estimate before anything is submitted.</span>
+              </div>
+              <form action={prepareVisualBrandReferencePack} className="form-actions">
+                <input type="hidden" name="artist_id" value={artist.artistId} />
+                <Submit>Prepare 6-image reference pack</Submit>
+              </form>
+            </>
+          ) : (
+            <>
+              <div className="studio-smart-defaults">
+                <strong>
+                  {packPrepared
+                    ? `Ready for approval · estimated $${packEstimate.toFixed(2)} total`
+                    : packGenerating
+                      ? `Generating · ${packCompleted}/${packRuns.length} ready`
+                      : `${packCompleted}/${packRuns.length} generated${packFailed ? ` · ${packFailed} failed` : ""}`}
+                </strong>
+                <span>{packPrepared ? "This is one explicit spend approval for the whole pack. Image and monthly AI hard caps are checked again before the first provider submission." : "Completed images are saved in Media Library as Exploring references. Review them below before teaching them back into the next DNA version."}</span>
+              </div>
+
+              <div className="media-grid" aria-label="Generated Visual Brand reference pack">
+                {packRuns.map((run) => {
+                  const context = record(run.input_context);
+                  const output = record(run.output);
+                  const resultUrl = stringValue(output.resultUrl);
+                  const stage = stringValue(output.stage) || run.status;
+                  return (
+                    <article className="media-card" key={run.id}>
+                      {resultUrl ? <div className="media-thumb"><img src={resultUrl} alt="" /></div> : null}
+                      <div className="media-card-body">
+                        <span className="section-label">{stringValue(context.aspectRatio)} · {stage.replaceAll("_", " ")}</span>
+                        <h3>{stringValue(context.slotLabel) || "Visual reference"}</h3>
+                        <p>{stringValue(context.slotPurpose)}</p>
+                        <small>{run.provider} · {run.model}{typeof run.estimated_cost_usd === "number" ? ` · est. $${run.estimated_cost_usd.toFixed(3)}` : ""}</small>
+                        {run.error ? <p>{run.error}</p> : null}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+
+              {packPrepared && referencePack ? (
+                <div className="form-actions">
+                  <form action={approveVisualBrandReferencePack}>
+                    <input type="hidden" name="artist_id" value={artist.artistId} />
+                    <input type="hidden" name="pack_id" value={referencePack.packId} />
+                    <Submit>Approve up to ${packEstimate.toFixed(2)} & generate</Submit>
+                  </form>
+                  <form action={discardPreparedVisualBrandReferencePack}>
+                    <input type="hidden" name="artist_id" value={artist.artistId} />
+                    <input type="hidden" name="pack_id" value={referencePack.packId} />
+                    <button className="button" type="submit">Discard prepared pack</button>
+                  </form>
+                </div>
+              ) : null}
+
+              {!packPrepared && packGenerating && referencePack ? (
+                <form action={refreshVisualBrandReferencePack} className="form-actions">
+                  <input type="hidden" name="artist_id" value={artist.artistId} />
+                  <input type="hidden" name="pack_id" value={referencePack.packId} />
+                  <Submit>Refresh generation status</Submit>
+                </form>
+              ) : null}
+
+              {!packPrepared && !packGenerating && packRuns.length === VISUAL_BRAND_REFERENCE_PACK_SIZE ? (
+                <div className="form-actions"><a className="button primary" href="#evidence">Review generated references in Evidence</a></div>
+              ) : null}
+            </>
+          )}
+        </section>
+      ) : null}
 
       <section className="studio-panel feature" id="evidence">
         <div className="panel-head">
