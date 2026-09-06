@@ -17,6 +17,8 @@ const forbiddenRuntimeTokens = [
   "AtlasMusicInput",
   "asArtistScopedMusicClient",
   "artist-scoped-music-database",
+  "resolveDefaultArtistContext",
+  "resolveLegacyFallbackArtistContext",
   "creative-graph-v2",
   "atlas-generator",
   "catalog/legacy-media",
@@ -85,7 +87,7 @@ test("runtime source does not depend on deleted legacy contracts", async () => {
   );
 });
 
-test("canonical music schema drops denormalized release and track columns", async () => {
+test("canonical music schema drops denormalized release and platform-link columns", async () => {
   const migration = await readFile(
     path.join(root, "supabase/migrations/20260906193000_normalize_release_track_storage.sql"),
     "utf8",
@@ -104,7 +106,6 @@ test("canonical music schema drops denormalized release and track columns", asyn
     "youtube_url",
     "bandcamp_url",
     "smart_link_url",
-    "audio_url",
   ]) {
     assert.match(
       migration,
@@ -112,4 +113,10 @@ test("canonical music schema drops denormalized release and track columns", asyn
       `${column} must be removed by the canonical cleanup migration`,
     );
   }
+
+  assert.doesNotMatch(
+    migration,
+    /drop column if exists audio_url/,
+    "master audio stays temporarily until intelligence invalidation moves to media_links.master_audio",
+  );
 });
