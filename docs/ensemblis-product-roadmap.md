@@ -98,6 +98,7 @@ The original Atlas-specific architecture has been substantially transformed. `ma
 - Lyrics Intelligence, Stem Intelligence and Audio Scenes;
 - artist-facing Best Moments capped to a small curated set with complete musical boundaries and source lineage;
 - Moment-first and outcome-first Create with exact lineage;
+- durable artist-scoped Moment calibration with exact master/analysis provenance and bounded rank-only effects;
 - Marketing Intelligence v2 with artist-specific DNA, anti-slop gates, production cards and safe campaign rebuilds;
 - verified `Moment → creative → publication → metric → learning` closed-loop learning;
 - Structured Artist Memory foundations and bounded consumers;
@@ -115,7 +116,7 @@ The original Atlas-specific architecture has been substantially transformed. `ma
 
 The primary architectural transition delivered in PRs #153-#157 is that `I just want to make music` is now a real working relationship rather than a label. Ensemblis plans and prepares routine growth work, while consequential external effects remain governed by approval and autonomy contracts.
 
-The main remaining gaps are no longer broad missing product foundations. They are **last-mile completeness**: broader Mission coverage beyond releases, calibration closure, one fully unified Artist Memory lifecycle, complete first-party capture/CRM flows, complete autonomy resolution at every external boundary, provider-complete Paid Growth and Distribution, and full provenance/rights manifests.
+The main remaining gaps are no longer broad missing product foundations. They are **last-mile completeness**: broader Mission coverage beyond releases, one fully unified Artist Memory lifecycle, complete first-party capture/CRM flows, complete autonomy resolution at every external boundary, provider-complete Paid Growth and Distribution, and full provenance/rights manifests.
 
 ## 5. Product model
 
@@ -177,18 +178,20 @@ Remaining exit work:
 - make every specialist failure collapse into one artist-actionable Mission blocker where a Mission exists;
 - complete deterministic deep links for all Manager/Mission result types.
 
-#### P0.4 Moment-first creation + calibration - #109 - **Core creation shipped; calibration closure remains**
-Shipped:
-- approved Best Moments are the normal creative source;
-- Create is outcome-first and evidence-first;
-- exact Moment lineage survives into production and finishing;
+#### P0.4 Moment-first creation + calibration - #109 - **Complete**
+PRs #111, #141, #145 and #162 close the Moment-first creation and artist calibration contract:
+- approved Best Moments are the normal creative source and remain playable before specialist controls;
+- Create is outcome-first and evidence-first with exact Moment lineage into production and finishing;
 - weak candidates are not padded into artist-facing output;
-- Track Intelligence V4 improves complete phrase/section boundaries and short-form derivation.
+- Track Intelligence V4 improves complete phrase/section boundaries and short-form derivation;
+- artist reviews capture durable structured judgment, corrected timing, corrected semantic purpose, preferred cut length and explicit Moment preference;
+- calibration snapshots exact Moment/source fingerprint, analysis version, master audio hash and immutable source timing;
+- calibration is artist-scoped and can only affect ranking through a bounded ±0.20 interface; it never rewrites canonical Track/Lyrics/Stem Intelligence;
+- Artist Memory exposes calibration as explicit preference evidence rather than opaque prompt state;
+- master replacement supersedes old active Moments, invalidates stale Track Intelligence and proves old-master calibration cannot affect fresh lineage;
+- the private Track Intelligence benchmark includes artist-preference acceptance alongside boundary and preferred-window regression metrics.
 
-Remaining exit work:
-- complete the durable artist calibration loop for corrected timing, semantic purpose and preferred windows;
-- prove stale/master-mismatched calibration cannot influence a replacement master;
-- maintain the representative private real-track benchmark with top-1/top-3 preferred-window recall and boundary regression metrics.
+Database verification for #162 covers replay, function lint, review lineage, immutable source timing, ranking bounds, mutation permissions, master replacement, fresh re-analysis and stale-calibration isolation.
 
 #### P0.5 Closed-loop learning - #50 - **Complete**
 PR #113 closed the verified causal loop:
@@ -500,8 +503,8 @@ A roadmap issue may remain open after its core foundation ships when the issue's
 | Multi-artist architecture | P0 | **Complete** | #48 |
 | Moments / Best Moments | P0 | **Complete core** | #49 / #114 / #142 |
 | Manager / release Missions | P0 | **Core shipped; broader Mission coverage open** | #108 / #111 / #137 / #145 / #153-#157 |
-| Moment-first Create | P0 | **Core shipped** | #109 / #111 / #141 / #145 |
-| Moment calibration benchmark/evidence | P0 | **Remaining** | #109 |
+| Moment-first Create | P0 | **Complete** | #109 / #111 / #141 / #145 / #162 |
+| Moment calibration benchmark/evidence | P0 | **Complete** | #109 / #162 |
 | Closed-loop learning | P0 | **Complete** | #50 / #113 |
 | Adaptive Artist Operating System | P0 | **Core complete** | #153-#157 |
 | Structured Artist Memory | P1 | **Core foundation shipped; lifecycle open** | #51 / #136 / #143 |
@@ -521,14 +524,13 @@ A roadmap issue may remain open after its core foundation ships when the issue's
 The next work should close real last-mile gaps instead of opening another breadth program.
 
 1. **Broaden #108 Mission coverage** so non-release artist goals can become first-class semantic Mission projections over existing Growth, Scene, Audience and Distribution state.
-2. **Finish #109 calibration** with durable correction/preferences, master provenance safety and the private real-track ranking benchmark.
-3. **Finish #51 Structured Artist Memory** lifecycle and consumer traceability so strategy/creative can explain exactly which bounded memories influenced a result.
-4. **Finish #52 owned conversion/capture lifecycle** on top of existing Smart Links and Fan Graph without inferred identity or consent.
-5. **Finish #57 execution-boundary coverage** so every consequential external effect resolves/audits its active contract immediately before execution.
-6. **Finish #53 provider-complete Paid Growth** once #52/#57 last-mile contracts are closed.
-7. **Finish #56 canonical credits/provider ingestion** so Distribution can operate entirely from the normal Release workspace.
-8. **Finish #55 CRM completeness** for consented acquisition, reusable segments and repeat-engagement journeys.
-9. **Finish #54 full provenance/trust** with track/media provenance, evidence references, disclosure compatibility and exportable manifests.
+2. **Finish #51 Structured Artist Memory** lifecycle and consumer traceability so strategy/creative can explain exactly which bounded memories influenced a result, including the completed Moment calibration evidence from #162.
+3. **Finish #52 owned conversion/capture lifecycle** on top of existing Smart Links and Fan Graph without inferred identity or consent.
+4. **Finish #57 execution-boundary coverage** so every consequential external effect resolves/audits its active contract immediately before execution.
+5. **Finish #53 provider-complete Paid Growth** once #52/#57 last-mile contracts are closed.
+6. **Finish #56 canonical credits/provider ingestion** so Distribution can operate entirely from the normal Release workspace.
+7. **Finish #55 CRM completeness** for consented acquisition, reusable segments and repeat-engagement journeys.
+8. **Finish #54 full provenance/trust** with track/media provenance, evidence references, disclosure compatibility and exportable manifests.
 
 Do not add a new primary navigation area for these. Extend the existing Manager, Mission, Music, Create, Grow, Audience, Release, Library and Settings surfaces.
 
@@ -542,6 +544,7 @@ As of 2026-09-06:
 - public site publication uses immutable versions with preview/publish/rollback;
 - domain-aware canonical metadata, robots, sitemap and manifest are active;
 - Track Intelligence V4 and Mastering Inspector are production foundations;
+- Best Moments now have durable artist calibration with exact provenance, bounded ranking influence and stale-master isolation;
 - the verified Moment-to-learning loop is implemented;
 - native Smart Links, Fan Graph, Paid Growth foundations, autonomy contracts v1 and Distribution last-mile foundations exist;
 - Adaptive Artist Operating Profile and safe goal-aware Manager preparation are implemented;
