@@ -58,6 +58,16 @@ export function ActiveMasteringControls({
     return () => window.clearInterval(timer);
   }, [hasActive, router]);
 
+  async function createCandidate(formData: FormData) {
+    await createActiveMaster(formData);
+    router.refresh();
+  }
+
+  async function promoteCandidate(formData: FormData) {
+    await promoteActiveMaster(formData);
+    router.refresh();
+  }
+
   const completed = jobs.filter((job) => job.status === "completed" && job.outputUrl);
   const latestActive = jobs.find((job) => ["planned", "queued", "running"].includes(job.status));
 
@@ -74,7 +84,7 @@ export function ActiveMasteringControls({
 
       <div className={styles.presets}>
         {presets.map((preset) => (
-          <form action={createActiveMaster} className={styles.preset} key={preset.id}>
+          <form action={createCandidate} className={styles.preset} key={preset.id}>
             <input type="hidden" name="track_id" value={trackId} />
             <input type="hidden" name="preset" value={preset.id} />
             <strong>{preset.title}</strong>
@@ -127,7 +137,7 @@ export function ActiveMasteringControls({
                   <div className={styles.actionButtons}>
                     <a className="button" href={job.outputUrl || "#"} download>Download 24-bit WAV</a>
                     {checks.pass === true ? (
-                      <form action={promoteActiveMaster}>
+                      <form action={promoteCandidate}>
                         <input type="hidden" name="job_id" value={job.id} />
                         <button className="button primary" type="submit">Use as canonical master</button>
                       </form>
