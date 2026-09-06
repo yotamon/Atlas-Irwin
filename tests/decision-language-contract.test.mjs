@@ -46,11 +46,14 @@ test("primary decision surfaces use the shared Required / Needs attention / Clea
   assert.match(paid, /Needs You|approval|Stop/i);
 });
 
-test("provider complexity stays behind advanced disclosure on artist-owned workflows", async () => {
-  const [distributionRoute, grow] = await Promise.all([
+test("provider and specialist complexity stays behind advanced disclosure on artist-owned workflows", async () => {
+  const [distributionRoute, grow, release] = await Promise.all([
     read("app/studio/(protected)/releases/[id]/distribution/page.tsx"),
     read("app/studio/(protected)/growth/page.tsx"),
+    read("components/studio/release-workspace-v2.tsx"),
   ]);
   assert.match(distributionRoute, /<details[\s\S]*Advanced provider tools/);
-  assert.match(grow, /<details[\s\S]*Advanced planning tools/);
+  assert.match(grow, /<details[\s\S]*Advanced growth tools/);
+  assert.match(release, /Advanced campaign controls/);
+  assert.match(release, /Advanced view/);
 });
