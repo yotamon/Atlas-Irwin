@@ -51,12 +51,13 @@ select set_config(
 
 select set_config('request.jwt.claim.sub','19000000-0000-0000-0000-000000000001',true);
 set local role authenticated;
-select lives_ok(
-  $$select public.review_moment_with_calibration(
+select isnt(
+  public.review_moment_with_calibration(
     current_setting('test.moment_a')::uuid,
     '49000000-0000-0000-0000-000000000001','approve',11000,20000,'Artist favorite hook',
     'best'::public.moment_calibration_judgment,null,15,null,'{"source":"pgtap"}'::jsonb
-  )$$,
+  ),
+  null::uuid,
   'artist can approve a Moment and append calibration atomically'
 );
 reset role;
@@ -85,14 +86,15 @@ select is(
 
 select set_config('request.jwt.claim.sub','19000000-0000-0000-0000-000000000001',true);
 set local role authenticated;
-select lives_ok(
-  $$select public.review_moment_with_calibration(
+select isnt(
+  public.review_moment_with_calibration(
     current_setting('test.moment_b')::uuid,
     '49000000-0000-0000-0000-000000000001','approve',40000,56000,'Useful but second choice',
     'useful'::public.moment_calibration_judgment,'groove support',30,
     current_setting('test.moment_a')::uuid,
     '{"source":"pgtap"}'::jsonb
-  )$$,
+  ),
+  null::uuid,
   'artist can explicitly prefer another active Moment from the same track'
 );
 reset role;
@@ -126,15 +128,13 @@ select is(
   'master replacement supersedes calibrated old-Master Moments'
 );
 
-select lives_ok(
-  $$update public.track_music_intelligence
-    set analysis_version=5,
-        source_audio_url='https://example.com/calibration-v2.wav',
-        audio_sha256='calibration-sha-v2',
-        analysis='{"source":"worker","version":5,"hook_candidates":[{"id":"hook-cal-v2","start_ms":12000,"end_ms":30000,"kind":"instant_hook","label":"Fresh Hook","score":0.9,"metrics":{"energy":0.8},"intent_scores":{"instant_hook":0.92}}]}'::jsonb
-    where track_id='59000000-0000-0000-0000-000000000001'$$,
-  'fresh Track Intelligence can materialize after a master replacement'
-);
+update public.track_music_intelligence
+set analysis_version=5,
+    source_audio_url='https://example.com/calibration-v2.wav',
+    audio_sha256='calibration-sha-v2',
+    analysis='{"source":"worker","version":5,"hook_candidates":[{"id":"hook-cal-v2","start_ms":12000,"end_ms":30000,"kind":"instant_hook","label":"Fresh Hook","score":0.9,"metrics":{"energy":0.8},"intent_scores":{"instant_hook":0.92}}]}'::jsonb
+where track_id='59000000-0000-0000-0000-000000000001';
+select pass('fresh Track Intelligence can materialize after a master replacement');
 
 select is(
   (select count(*)::integer from public.moments where track_id='59000000-0000-0000-0000-000000000001' and state='proposed' and source_candidate_id='hook-cal-v2'),
