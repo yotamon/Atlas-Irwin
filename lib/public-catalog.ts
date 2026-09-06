@@ -13,6 +13,7 @@ import {
   getPublicCatalogOwnerId,
 } from "@/lib/supabase/service";
 import type {
+  Artist,
   HomepagePlacement,
   MediaAsset,
   MediaLink,
@@ -24,6 +25,7 @@ import type {
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 
 type CatalogBundle = {
+  artist: Artist;
   releases: DbRelease[];
   tracks: Track[];
   placements: HomepagePlacement[];
@@ -51,12 +53,12 @@ async function resolveCatalogArtistId() {
 
 async function loadCatalogBundle(
   ownerId: string,
-  artistId?: string,
+  artistId: string,
 ): Promise<CatalogBundle> {
   const supabase = createCatalogClient();
-  const resolvedArtistId = artistId ?? await resolveCatalogArtistId();
 
   const [
+    artistResult,
     releasesResult,
     placementsResult,
     tracksResult,
@@ -65,10 +67,15 @@ async function loadCatalogBundle(
     externalTrackIdsResult,
   ] = await Promise.all([
     supabase
+      .from("artists")
+      .select("*")
+      .eq("id", artistId)
+      .single(),
+    supabase
       .from("releases")
       .select("*")
       .eq("owner_id", ownerId)
-      .eq("artist_id", resolvedArtistId)
+      .eq("artist_id", artistId)
       .eq("is_public", true)
       .eq("publish_state", "live")
       .eq("is_archived", false),
@@ -76,32 +83,33 @@ async function loadCatalogBundle(
       .from("homepage_placements")
       .select("*")
       .eq("owner_id", ownerId)
-      .eq("artist_id", resolvedArtistId)
+      .eq("artist_id", artistId)
       .eq("enabled", true)
       .order("display_order", { ascending: true }),
     supabase
       .from("tracks")
       .select("*")
       .eq("owner_id", ownerId)
-      .eq("artist_id", resolvedArtistId),
+      .eq("artist_id", artistId),
     supabase
       .from("media_links")
       .select("*")
       .eq("owner_id", ownerId)
-      .eq("artist_id", resolvedArtistId),
+      .eq("artist_id", artistId),
     supabase
       .from("release_external_links")
       .select("*")
       .eq("owner_id", ownerId)
-      .eq("artist_id", resolvedArtistId),
+      .eq("artist_id", artistId),
     supabase
       .from("track_external_ids")
       .select("*")
       .eq("owner_id", ownerId)
-      .eq("artist_id", resolvedArtistId),
+      .eq("artist_id", artistId),
   ]);
 
   for (const result of [
+    artistResult,
     releasesResult,
     placementsResult,
     tracksResult,
@@ -110,6 +118,10 @@ async function loadCatalogBundle(
     externalTrackIdsResult,
   ]) {
     if (result.error) throw new Error(result.error.message);
+  }
+
+  if (!artistResult.data) {
+    throw new Error(`Public catalog artist ${artistId} does not exist.`);
   }
 
   const releaseIds = new Set((releasesResult.data ?? []).map((release) => release.id));
@@ -138,6 +150,7 @@ async function loadCatalogBundle(
         ).data ?? [];
 
   return {
+    artist: artistResult.data,
     releases: releasesResult.data ?? [],
     tracks,
     placements,
@@ -152,7 +165,7 @@ async function loadCatalogBundle(
   };
 }
 
-function primaryMedia(
+function primaryMediaEntry(
   bundle: CatalogBundle,
   options: { releaseId?: string; trackId?: string; role: string },
 ) {
@@ -171,9 +184,16 @@ function primaryMedia(
 
   for (const link of links) {
     const asset = bundle.mediaAssets.find((item) => item.id === link.media_asset_id);
-    if (asset) return asset;
+    if (asset) return { asset, link };
   }
   return null;
+}
+
+function primaryMedia(
+  bundle: CatalogBundle,
+  options: { releaseId?: string; trackId?: string; role: string },
+) {
+  return primaryMediaEntry(bundle, options)?.asset ?? null;
 }
 
 function trackLinks(track: Track, bundle: CatalogBundle): ReleaseLink[] {
@@ -256,11 +276,11 @@ function mapRelease(
     tracks[0] = { ...tracks[0], active: true };
   }
 
-  const coverAsset = primaryMedia(bundle, {
+  const coverMedia = primaryMediaEntry(bundle, {
     releaseId: release.id,
     role: "cover",
   });
-  if (!coverAsset?.public_url) {
+  if (!coverMedia?.asset.public_url) {
     throw new Error(
       `Published release "${release.title}" is missing a public cover media asset.`,
     );
@@ -276,13 +296,13 @@ function mapRelease(
     slug: release.slug,
     title: release.title,
     type: release.release_type,
-    artist: release.artist,
+    artist: bundle.artist.name,
     description: release.story || undefined,
     releaseDate: release.release_date || undefined,
     releaseDateLabel: formatReleaseDateLabel(release.release_date),
     featured: release.is_featured || placement?.placement_type === "featured",
-    coverUrl: coverAsset.public_url,
-    coverAlt: release.cover_alt || `${release.title} cover art`,
+    coverUrl: coverMedia.asset.public_url,
+    coverAlt: coverMedia.link.alt_text || `${release.title} cover art`,
     canvasVideoUrl,
     ctaLabel: release.cta_label || undefined,
     ctaHref: release.cta_href || releaseLinks[0]?.href || tracks[0]?.url,
