@@ -127,7 +127,6 @@ export function MasteringInspectorPanel({
 
   const status = statusCopy(asString(inspector.status));
   const loudness = asRecord(inspector.loudness);
-  const peaks = asRecord(inspector.peaks);
   const dynamics = asRecord(inspector.dynamics);
   const stereo = asRecord(inspector.stereo);
   const format = asRecord(inspector.format);
@@ -290,7 +289,7 @@ export function MasteringInspectorPanel({
             </div>
             <p className={styles.muted}>Catalog differences are loudness-independent spectral/dynamic comparisons. They are never treated as defects by themselves.</p>
           </>
-        ) : <p className={styles.muted}>When more analyzed masters exist for this artist, Ensemblis will compare this master against the artist's own released/unreleased mastering profile instead of using generic genre targets.</p>}
+        ) : <p className={styles.muted}>When more analyzed masters exist for this artist, Ensemblis will compare this master against the artist’s own released/unreleased mastering profile instead of using generic genre targets.</p>}
       </section>
     </div>
   );
