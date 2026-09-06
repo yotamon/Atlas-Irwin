@@ -31,7 +31,7 @@ test("an explicitly selected Best Moment remains the exact creative source", asy
   ]);
   assert.ok(create.includes("moment?: string"));
   assert.ok(create.includes("const requestedMoment = params.moment"));
-  assert.ok(create.includes("requestedMoment ? [requestedMoment]"));
+  assert.match(create, /const requestedMoments = requestedMoment\s*\? \[requestedMoment\]/);
   assert.ok(create.includes("Your selected Moment"));
   assert.ok(moments.includes('href={`/studio/create?release=${releaseId}&moment=${moment.id}`}'));
   assert.equal(moments.includes("&track=${moment.track_id}"), false, "Create from this Moment must not fall back to a track-level re-selection");
