@@ -3,12 +3,16 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadArtistCreativeMemory } from "@/lib/creative-memory/server";
 import { asMarketingClient } from "@/lib/marketing/db";
+import { latestExactCalibrationByMoment } from "@/lib/studio/moment-calibration";
+import { asMomentsClient } from "@/lib/studio/moments-db";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 import type { Database } from "@/types/database";
+import type { Moment, MomentCalibrationEvent } from "@/types/moments-database";
 import {
   artistMemoryForConsumer,
   brandSettingMemoryItem,
   creativePreferenceMemoryItems,
+  momentCalibrationMemoryItem,
   summarizeArtistMemory,
   verifiedLearningMemoryItem,
   type ArtistMemoryConsumer,
@@ -52,6 +56,10 @@ function expiredAt(expiresAt: string | null | undefined, now: number) {
   return Number.isFinite(parsed) && parsed <= now;
 }
 
+function missingCalibrationTable(error: { code?: string } | null) {
+  return error?.code === "42P01" || error?.code === "PGRST205";
+}
+
 export async function loadArtistMemory(input: {
   db: DatabaseClient;
   ownerId: string;
@@ -59,7 +67,8 @@ export async function loadArtistMemory(input: {
 }): Promise<ArtistMemorySnapshot> {
   const operational = asArtistScopedOperationalClient(input.db);
   const marketing = asMarketingClient(input.db);
-  const [brandResult, learningsResult, creativeMemory] = await Promise.all([
+  const moments = asMomentsClient(input.db);
+  const [brandResult, learningsResult, creativeMemory, calibrationResult] = await Promise.all([
     operational
       .from("brand_settings")
       .select("*")
@@ -79,10 +88,20 @@ export async function loadArtistMemory(input: {
       artistId: input.artistId,
       recommendationLimit: 8,
     }),
+    moments
+      .from("moment_calibration_events")
+      .select("*")
+      .eq("owner_id", input.ownerId)
+      .eq("artist_id", input.artistId)
+      .order("created_at", { ascending: false })
+      .limit(100),
   ]);
 
   const firstError = brandResult.error ?? learningsResult.error;
   if (firstError) throw new Error(firstError.message);
+  if (calibrationResult.error && !missingCalibrationTable(calibrationResult.error)) {
+    throw new Error(calibrationResult.error.message);
+  }
 
   const items: ArtistMemoryItem[] = [];
   for (const row of (brandResult.data ?? []) as unknown as BrandSettingRow[]) {
@@ -100,6 +119,41 @@ export async function loadArtistMemory(input: {
     negative: creativeMemory.preferences.negative,
     evidenceCount: creativeMemory.eventCount,
   }));
+
+  const calibrationEvents = calibrationResult.error
+    ? []
+    : (calibrationResult.data ?? []) as unknown as MomentCalibrationEvent[];
+  if (calibrationEvents.length) {
+    const referencedMomentIds = [...new Set(calibrationEvents.flatMap((event) => [
+      event.moment_id,
+      ...(event.preferred_moment_id ? [event.preferred_moment_id] : []),
+    ]))];
+    const { data: momentRows, error: momentError } = await moments
+      .from("moments")
+      .select("*")
+      .eq("owner_id", input.ownerId)
+      .eq("artist_id", input.artistId)
+      .in("id", referencedMomentIds);
+    if (momentError) throw new Error(momentError.message);
+    const currentMoments = (momentRows ?? []) as unknown as Moment[];
+    const momentMap = new Map(currentMoments.map((moment) => [moment.id, moment]));
+    const latest = latestExactCalibrationByMoment(currentMoments, calibrationEvents);
+    for (const event of [...latest.values()].sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at)).slice(0, 12)) {
+      const moment = momentMap.get(event.moment_id);
+      if (!moment || moment.state === "superseded") continue;
+      const preferred = event.preferred_moment_id ? momentMap.get(event.preferred_moment_id) : null;
+      items.push(momentCalibrationMemoryItem({
+        eventId: event.id,
+        releaseId: event.release_id,
+        momentLabel: moment.label,
+        judgment: event.judgment,
+        correctedPurpose: event.corrected_purpose,
+        preferredCutSeconds: event.preferred_cut_seconds,
+        preferredMomentLabel: preferred?.label ?? null,
+        observedAt: event.created_at,
+      }));
+    }
+  }
 
   const now = Date.now();
   for (const row of (learningsResult.data ?? []) as unknown as LearningRow[]) {

@@ -15,7 +15,7 @@ test("Artist Memory is structured, source-backed and bounded by consumer", async
     '"performance_learning"',
     '"strategic_constraint"',
     '"provenance_compliance"',
-    'kind: "brand_setting" | "creative_memory" | "verified_learning"',
+    'kind: "brand_setting" | "creative_memory" | "moment_calibration" | "verified_learning"',
     "consumers: ArtistMemoryConsumer[]",
     'label: "explicit"',
     'lifecycle: input.expired ? "expired" : "active"',

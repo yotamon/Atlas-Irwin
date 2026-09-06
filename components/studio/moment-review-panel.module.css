@@ -248,8 +248,11 @@
   font-size: var(--en-text-sm);
 }
 
-.reviewForm input {
+.reviewForm input,
+.reviewForm select,
+.reviewForm textarea {
   width: 100%;
+  min-height: 42px;
   padding: var(--en-space-2);
   border: 1px solid var(--en-line);
   border-radius: var(--en-radius-sm);
@@ -258,7 +261,13 @@
   font: inherit;
 }
 
-.reviewForm input:focus { outline: none; border-color: var(--en-accent); box-shadow: var(--en-focus-ring); }
+.reviewForm input:focus,
+.reviewForm select:focus,
+.reviewForm textarea:focus {
+  outline: none;
+  border-color: var(--en-accent);
+  box-shadow: var(--en-focus-ring);
+}
 
 .timeFields {
   display: grid;
