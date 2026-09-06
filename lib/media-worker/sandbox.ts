@@ -4,8 +4,8 @@ import { createHash, randomBytes } from "node:crypto";
 import { Sandbox } from "@vercel/sandbox";
 
 export const MEDIA_WORKER_CALLBACK_HASH_KEY = "__atlas_callback_token_sha256";
-const MEDIA_WORKER_RUNTIME_VERSION = 8;
-const MEDIA_WORKER_BOOTSTRAP_VERSION = 5;
+const MEDIA_WORKER_RUNTIME_VERSION = 9;
+const MEDIA_WORKER_BOOTSTRAP_VERSION = 6;
 const MEDIA_WORKER_PYTHON_VERSION = "3.13.14";
 const MEDIA_WORKER_SANDBOX_IMAGE = "vercel/sandbox/universal@sha256:0e3e3617e824397f170fc7c43ccaa565dd7ac36518e83ead3d41e077cd9f6ec7";
 const HOBBY_MAX_SANDBOX_MS = 45 * 60 * 1000;
@@ -175,7 +175,13 @@ root = Path(root_value)
 files = {
     "app/main.py": f"{base}/app/main.py",
     "app/music_intelligence.py": f"{base}/app/music_intelligence.py",
+    "app/music_intelligence_v4.py": f"{base}/app/music_intelligence_v4.py",
+    "app/music_intelligence_v4_runtime.py": f"{base}/app/music_intelligence_v4_runtime.py",
+    "app/audio_intelligence_providers.py": f"{base}/app/audio_intelligence_providers.py",
+    "app/mastering_inspector.py": f"{base}/app/mastering_inspector.py",
+    "app/mastering_processor.py": f"{base}/app/mastering_processor.py",
     "app/stem_intelligence.py": f"{base}/app/stem_intelligence.py",
+    "app/stem_intelligence_v3.py": f"{base}/app/stem_intelligence_v3.py",
     "app/social_finishing.py": f"{base}/app/social_finishing.py",
     "app/runner.py": f"{base}/app/runner.py",
     "requirements.txt": f"{base}/requirements.txt",
@@ -214,9 +220,10 @@ import bz2
 import allin1_infer
 import imageio_ffmpeg
 from PIL import Image
+from app.mastering_processor import MasteringWorkerRequest
 from app.stem_intelligence import ANALYSIS_VERSION
 from app.social_finishing import SocialWorkerRequest
-print("Atlas Media Worker ready", imageio_ffmpeg.get_ffmpeg_exe(), "stem-analysis", ANALYSIS_VERSION, "social-finishing", SocialWorkerRequest.__name__)
+print("Atlas Media Worker ready", imageio_ffmpeg.get_ffmpeg_exe(), "stem-analysis", ANALYSIS_VERSION, "mastering", MasteringWorkerRequest.__name__, "social-finishing", SocialWorkerRequest.__name__)
 PY
 }
 
@@ -244,6 +251,7 @@ export async function dispatchMediaWorkerJob(input: {
     | "render_promo"
     | "render_hook"
     | "render_audio_scene"
+    | "master_audio"
     | "finish_social_video";
   payload: Record<string, unknown>;
   callbackUrl: string;
@@ -302,7 +310,16 @@ export function scheduleMediaWorkerSandboxCleanup() {
       const result = await kickMediaWorkerQueue();
       dispatched = result.dispatched;
     } catch {
-      // Existing queue work is durable. Give marketing finishing a chance below.
+      // Existing queue work is durable. Give Active Mastering a chance below.
+    }
+    if (!dispatched) {
+      try {
+        const { kickMasteringQueue } = await import("@/lib/mastering/jobs");
+        const result = await kickMasteringQueue();
+        dispatched = result.dispatched;
+      } catch {
+        // Mastering work is durable. Give marketing finishing a chance below.
+      }
     }
     if (!dispatched) {
       try {

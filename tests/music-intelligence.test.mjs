@@ -162,6 +162,7 @@ test("production Media Worker remains self-bootstrapping, zero-idle and Sandbox-
   assert.ok(runner.includes("request_path.unlink"));
   assert.ok(runner.includes("shutil.rmtree(LOCK_PATH"));
   assert.ok(runner.includes("finish_social_video"));
+  assert.ok(runner.includes('payload.get("job_type") == "master_audio"'));
   assert.ok(socialFinishing.includes("finish_social_video_job"));
   assert.ok(bridge.includes("vercel/sandbox/universal@sha256:"));
   assert.ok(bridge.includes('MEDIA_WORKER_PYTHON_VERSION = "3.13.14"'));
@@ -171,8 +172,10 @@ test("production Media Worker remains self-bootstrapping, zero-idle and Sandbox-
   assert.ok(bridge.includes("detached: true"));
   assert.ok(bridge.includes("MEDIA_WORKER_CALLBACK_HASH_KEY"));
   assert.ok(bridge.includes("atlas-media-worker-${environmentName()}"));
-  assert.ok(bridge.includes("MEDIA_WORKER_RUNTIME_VERSION = 8"));
-  assert.ok(bridge.includes("MEDIA_WORKER_BOOTSTRAP_VERSION = 5"));
+  assert.ok(bridge.includes("MEDIA_WORKER_RUNTIME_VERSION = 9"));
+  assert.ok(bridge.includes("MEDIA_WORKER_BOOTSTRAP_VERSION = 6"));
+  assert.ok(bridge.includes('"app/mastering_processor.py"'));
+  assert.ok(bridge.includes("MasteringWorkerRequest"));
   assert.ok(bridge.includes('uv python install "$PYTHON_VERSION"'));
   assert.ok(bridge.includes('uv venv --python "$PYTHON_VERSION"'));
   assert.ok(bridge.includes('uv pip install --python "$WORKDIR/.venv/bin/python"'));
