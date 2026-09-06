@@ -187,7 +187,6 @@ export async function prepareVisualBrandReferencePack(form: FormData) {
   const { error: insertError } = await marketing.from("generation_runs").insert(rows);
   if (insertError) throw new Error(insertError.message);
   revalidateVisualBrand();
-  return { packId };
 }
 
 async function packRuns(marketing: ReturnType<typeof asMarketingClient>, ownerId: string, artistId: string, packId: string) {
