@@ -104,3 +104,57 @@ test("brand evidence remains media-library-native and artist-local", async () =>
   assert.ok(evidenceActions.includes('asset_type: nextAssetType'));
   assert.ok(!creativeContext.includes('"brand_negative_reference"'));
 });
+
+test("generated reference packs are diverse, approval-gated and never mutate identity automatically", async () => {
+  await requireSnippets("lib/brand/visual-brand-reference-pack.ts", [
+    "VISUAL_BRAND_REFERENCE_PACK_SIZE = 6",
+    'aspectRatio: "1:1"',
+    'aspectRatio: "4:5"',
+    'aspectRatio: "9:16"',
+    'aspectRatio: "16:9"',
+    "material_study",
+    "motif_study",
+    "Use supplied references as visual lineage, not as compositions to copy",
+  ]);
+  const actions = await requireSnippets("app/studio/visual-brand-reference-actions.ts", [
+    "provider.quote(route.request)",
+    "approvalRequiredBeforeSpend: true",
+    "assertSpecialistMediaSpendAllowed",
+    "estimatedUsd: estimatedTotal",
+    "provider.submit(request",
+    "submission_ambiguous",
+    "automaticIdentityMutation: false",
+  ]);
+  const persistence = await requireSnippets("lib/brand/visual-brand-reference-generation.ts", [
+    'asset_type: "brand_reference"',
+    '"brand:experimental"',
+    '"approval-required"',
+    "visual_brand_generation_run_id",
+    'stage: "awaiting_review"',
+    "automaticIdentityMutation: false",
+  ]);
+  const page = await requireSnippets("app/studio/(protected)/settings/brand/visual/page.tsx", [
+    "Preparing the pack does not spend money",
+    "Approve up to $",
+    "Review generated references in Evidence",
+    "Generated images enter the evidence library as",
+  ]);
+  assert.ok(actions.indexOf("provider.quote(route.request)") < actions.indexOf("provider.submit(request"));
+  assert.ok(persistence.includes('"visual-brand-reference-pack"'));
+  assert.ok(page.includes("packEstimate.toFixed(2)"));
+});
+
+test("Visual Brand reference generation reuses the shared creative router and callback path", async () => {
+  const router = await requireSnippets("lib/marketing/creative-router.ts", [
+    "aspectRatio?: CreativeAspectRatio",
+    "input.aspectRatio ?? inferredAspectRatio",
+    "Ensemblis selected the next",
+  ]);
+  const webhook = await requireSnippets("app/api/studio/marketing/higgsfield/webhook/route.ts", [
+    "applyMarketingCreativeProviderStatus",
+    "applyVisualBrandReferenceProviderStatus",
+    'if ("ignored" in marketingResult',
+  ]);
+  assert.ok(!router.includes("so Atlas selected"));
+  assert.ok(webhook.includes("runId"));
+});
