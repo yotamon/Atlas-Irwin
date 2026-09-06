@@ -4,14 +4,13 @@ import { cookies } from "next/headers";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { ENSEMBLIS_ACTIVE_ARTIST_COOKIE } from "@/lib/ensemblis-product";
-import type { Database } from "@/types/database";
 import type {
   Artist,
-  EnsemblisDatabase,
+  Database,
   Workspace,
   WorkspaceMembership,
   WorkspaceRole,
-} from "@/types/ensemblis-database";
+} from "@/types/database";
 
 type StudioIdentity = {
   id: string;
@@ -48,27 +47,17 @@ export class ArtistContextError extends Error {
     | "artist_context_forbidden"
     | "artist_context_invalid";
 
-  constructor(
-    code: ArtistContextError["code"],
-    message: string,
-  ) {
+  constructor(code: ArtistContextError["code"], message: string) {
     super(message);
     this.name = "ArtistContextError";
     this.code = code;
   }
 }
 
-function asEnsemblisClient(client: SupabaseClient<Database>) {
-  return client as unknown as SupabaseClient<EnsemblisDatabase>;
-}
-
-async function loadWorkspace(
-  db: SupabaseClient<EnsemblisDatabase>,
-  workspaceId: string,
-) {
+async function loadWorkspace(db: SupabaseClient<Database>, workspaceId: string) {
   const { data, error } = await db
     .from("workspaces")
-    .select("id,name,slug,kind,created_by,created_at,updated_at")
+    .select("id,name,slug,kind,created_by,timezone,locale,currency,created_at,updated_at")
     .eq("id", workspaceId)
     .maybeSingle();
 
@@ -83,7 +72,7 @@ async function loadWorkspace(
 }
 
 async function loadMembership(
-  db: SupabaseClient<EnsemblisDatabase>,
+  db: SupabaseClient<Database>,
   userId: string,
   workspaceId: string,
 ) {
@@ -106,7 +95,7 @@ async function loadMembership(
 }
 
 async function buildContext(
-  db: SupabaseClient<EnsemblisDatabase>,
+  db: SupabaseClient<Database>,
   identity: StudioIdentity,
   artist: Artist,
 ): Promise<ArtistContext> {
@@ -127,14 +116,12 @@ async function buildContext(
   };
 }
 
-/** Resolve one explicitly requested artist and validate active workspace membership. */
 export async function resolveArtistContext(
   client: SupabaseClient<Database>,
   identity: StudioIdentity,
   artistId: string,
 ): Promise<ArtistContext> {
-  const db = asEnsemblisClient(client);
-  const { data, error } = await db
+  const { data, error } = await client
     .from("artists")
     .select("id,workspace_id,name,slug,project_type,status,avatar_url,accent_color,created_at,updated_at")
     .eq("id", artistId)
@@ -149,16 +136,14 @@ export async function resolveArtistContext(
     );
   }
 
-  return buildContext(db, identity, data as Artist);
+  return buildContext(client, identity, data as Artist);
 }
 
-/** Return every active artist available through the user's active workspace memberships. */
 export async function listAccessibleArtists(
   client: SupabaseClient<Database>,
   identity: StudioIdentity,
 ): Promise<AccessibleArtist[]> {
-  const db = asEnsemblisClient(client);
-  const membershipsResult = await db
+  const membershipsResult = await client
     .from("workspace_memberships")
     .select("workspace_id,profile_id,role,status,created_at,updated_at")
     .eq("profile_id", identity.id)
@@ -173,11 +158,11 @@ export async function listAccessibleArtists(
 
   const workspaceIds = Array.from(new Set(memberships.map((membership) => membership.workspace_id)));
   const [workspacesResult, artistsResult] = await Promise.all([
-    db
+    client
       .from("workspaces")
-      .select("id,name,slug,kind,created_by,created_at,updated_at")
+      .select("id,name,slug,kind,created_by,timezone,locale,currency,created_at,updated_at")
       .in("id", workspaceIds),
-    db
+    client
       .from("artists")
       .select("id,workspace_id,name,slug,project_type,status,avatar_url,accent_color,created_at,updated_at")
       .in("workspace_id", workspaceIds)
@@ -222,7 +207,6 @@ export async function listAccessibleArtists(
     );
 }
 
-/** Use the only accessible artist when no explicit preference has been persisted yet. */
 async function resolveUnambiguousArtistContext(
   client: SupabaseClient<Database>,
   identity: StudioIdentity,
@@ -243,7 +227,6 @@ async function resolveUnambiguousArtistContext(
   return resolveArtistContext(client, identity, artists[0].artistId);
 }
 
-/** Resolve the explicit request or persisted artist preference. */
 export async function resolveActiveArtistContext(
   client: SupabaseClient<Database>,
   identity: StudioIdentity,

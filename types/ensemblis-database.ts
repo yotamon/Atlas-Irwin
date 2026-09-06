@@ -1,4 +1,4 @@
-import type { Json } from "@/types/database";
+import type { Json } from "./database-core";
 
 type Table<Row> = {
   Row: Row;
@@ -32,7 +32,6 @@ export type Workspace = {
   slug: string;
   kind: WorkspaceKind;
   created_by: string | null;
-  legacy_owner_id: string | null;
   timezone: string | null;
   locale: string | null;
   currency: string | null;
@@ -58,7 +57,6 @@ export type Artist = {
   status: ArtistStatus;
   avatar_url: string | null;
   accent_color: string | null;
-  legacy_owner_id: string | null;
   created_at: string;
   updated_at: string;
 };
