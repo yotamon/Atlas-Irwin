@@ -41,8 +41,9 @@ test("Distribution portfolio and release surfaces are scoped to one ArtistContex
   const lifecycle = await source("app/studio/(protected)/releases/[id]/distribution/release-distribution-lifecycle.tsx");
 
   for (const file of [hub, operations, release, lifecycle]) {
-    assert.match(file, /resolveDefaultArtistContext/);
+    assert.match(file, /resolveActiveArtistContext/);
     assert.match(file, /\.eq\("artist_id", artist\.artistId\)/);
+    assert.doesNotMatch(file, /resolveDefaultArtistContext/);
   }
   assert.match(release, /name="artist_id" value=\{artist\.artistId\}/);
   assert.match(lifecycle, /name="artist_id" value=\{artist\.artistId\}/);
