@@ -72,6 +72,16 @@ type WindowSeed = {
   provenance: CreativeGraphProvenance;
 };
 
+type CompleteMomentHook = MusicHookCandidate & {
+  musical_completeness?: number;
+  boundary_confidence?: number;
+  unit_kind?: string;
+  metrics: MusicHookCandidate["metrics"] & {
+    musical_completeness?: number;
+    boundary_confidence?: number;
+  };
+};
+
 function clamp01(value: number) {
   if (!Number.isFinite(value)) return 0;
   return Math.max(0, Math.min(1, value));
@@ -93,6 +103,58 @@ function overlapMs(a: { startMs: number; endMs: number }, b: { startMs: number; 
 
 function overlapRatio(a: { startMs: number; endMs: number }, b: { startMs: number; endMs: number }) {
   return overlapMs(a, b) / Math.max(1, Math.min(a.endMs - a.startMs, b.endMs - b.startMs));
+}
+
+function completeMomentScore(hook: MusicHookCandidate) {
+  const extended = hook as CompleteMomentHook;
+  return numeric(
+    extended.musical_completeness,
+    numeric(extended.metrics?.musical_completeness, 0),
+  );
+}
+
+function boundaryConfidence(hook: MusicHookCandidate) {
+  const extended = hook as CompleteMomentHook;
+  return numeric(
+    extended.boundary_confidence,
+    numeric(extended.metrics?.boundary_confidence, 0),
+  );
+}
+
+function anchorHighlightsToCompleteMusicalMoments(
+  highlights: CreativeGraphHighlight[],
+  hooks: MusicHookCandidate[],
+) {
+  const completeMoments = hooks
+    .filter((hook) => completeMomentScore(hook) >= 0.72)
+    .sort((a, b) => b.score - a.score);
+
+  return highlights.map((highlight) => {
+    const anchor = completeMoments
+      .filter((hook) => overlapRatio(
+        { startMs: highlight.startMs, endMs: highlight.endMs },
+        { startMs: hook.start_ms, endMs: hook.end_ms },
+      ) >= 0.42)
+      .sort((a, b) => {
+        const aScore = completeMomentScore(a) * 0.55 + boundaryConfidence(a) * 0.25 + a.score * 0.2;
+        const bScore = completeMomentScore(b) * 0.55 + boundaryConfidence(b) * 0.25 + b.score * 0.2;
+        return bScore - aScore;
+      })[0];
+    if (!anchor) return highlight;
+
+    const reasons = Array.isArray(anchor.reasons) ? anchor.reasons.slice(0, 2) : [];
+    return {
+      ...highlight,
+      startMs: anchor.start_ms,
+      endMs: anchor.end_ms,
+      hookIds: [...new Set([anchor.id, ...highlight.hookIds])],
+      rationale: [...new Set([
+        ...reasons,
+        "Timing anchored to a complete Track Intelligence V4 musical phrase.",
+        ...highlight.rationale,
+      ])].slice(0, 5),
+    };
+  });
 }
 
 function stemTimelineConfidence(stem: TrackStem) {
@@ -300,11 +362,15 @@ export function buildTrackCreativeIntelligenceGraph(input: {
   ];
   const stemConfidences = currentStems.map(stemTimelineConfidence).filter((value) => Number.isFinite(value));
   const analysisConfidence = musicMap.analysis?.confidence;
+  const highlights = anchorHighlightsToCompleteMusicalMoments(
+    clusterSeeds(seeds, currentStems),
+    hooks,
+  );
   return {
     version: 1,
     durationMs: musicMap.duration_ms,
     bpm: musicMap.bpm,
-    highlights: clusterSeeds(seeds, currentStems),
+    highlights,
     sections: sectionGraph(musicMap.sections, lyrics, currentScenes, hooks, currentStems),
     confidence: {
       masterOverall: typeof analysisConfidence?.overall === "number" ? clamp01(analysisConfidence.overall) : null,
