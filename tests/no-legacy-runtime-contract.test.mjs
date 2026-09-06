@@ -87,6 +87,29 @@ test("runtime source does not depend on deleted legacy contracts", async () => {
   );
 });
 
+test("runtime music reads use canonical projections instead of storage entities", async () => {
+  const files = (
+    await Promise.all(runtimeRoots.map((runtimeRoot) => collectSourceFiles(runtimeRoot)))
+  ).flat();
+
+  const violations = [];
+  for (const relativePath of files) {
+    const source = await readFile(path.join(root, relativePath), "utf8");
+    for (const table of ["releases", "tracks"]) {
+      const directRead = new RegExp(`\\.from\\(["']${table}["']\\)\\s*\\.select\\(`);
+      if (directRead.test(source)) {
+        violations.push(`${relativePath}: direct SELECT from ${table}`);
+      }
+    }
+  }
+
+  assert.deepEqual(
+    violations,
+    [],
+    `Canonical read-model bypass detected:\n${violations.join("\n")}`,
+  );
+});
+
 test("canonical music schema drops denormalized release and platform-link columns", async () => {
   const migration = await readFile(
     path.join(root, "supabase/migrations/20260906193000_normalize_release_track_storage.sql"),
