@@ -13,6 +13,7 @@ export const CREATIVE_MEDIA_KINDS = ["auto", "image", "video"] as const;
 export type CreativeMediaKindPreference = (typeof CREATIVE_MEDIA_KINDS)[number];
 
 type CreativeAspectRatio = CreativeGenerationRequest["aspectRatio"];
+type CreativeRouteReferenceContext = Pick<CreativeReferenceContext, "imageReferences" | "videoReferences" | "audioReferenceUrl">;
 
 export type CreativeRouteInput = {
   platform: string;
@@ -24,7 +25,7 @@ export type CreativeRouteInput = {
   aspectRatio?: CreativeAspectRatio;
   audioStart?: number | null;
   audioEnd?: number | null;
-  context: CreativeReferenceContext;
+  context: CreativeRouteReferenceContext;
 };
 
 export type CreativeRoute = {
