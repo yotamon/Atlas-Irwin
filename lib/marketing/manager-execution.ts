@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { prepareOwnedAudienceOpportunity } from "@/lib/audience/owned-audience-preparation";
 import { materializeSceneGrowthOpportunities } from "@/lib/artist-operating/growth-opportunities";
 import type { ArtistSceneRelationship } from "@/lib/artist-operating/domain";
 import { usableSceneRelationships } from "@/lib/artist-operating/scene-intelligence";
@@ -15,6 +16,7 @@ const SAFE_MANAGER_ACTIONS: Record<string, {
   targetCountKey?: "liveTargetCount" | "labelTargetCount";
   growthKinds?: GrowthOpportunityKind[];
   releasePlan?: boolean;
+  ownedAudience?: boolean;
 }> = {
   advance_gig_strategy: {
     relationshipTypes: ["promoter", "venue", "festival"],
@@ -35,10 +37,13 @@ const SAFE_MANAGER_ACTIONS: Record<string, {
     growthKinds: ["release_risk", "release_candidate"],
     releasePlan: true,
   },
+  advance_owned_audience: {
+    ownedAudience: true,
+  },
 };
 
 type PreparationSource = {
-  source: "scene" | "growth_scan" | "release_plan";
+  source: "scene" | "growth_scan" | "release_plan" | "owned_audience";
   prepared: number;
   reason: string;
 };
@@ -75,7 +80,7 @@ function eligibleManagerAction(action: {
   if (payload.managerOwned !== true) return false;
   if (retryBlocked(payload, now)) return false;
 
-  const internalEngineAvailable = Boolean(config.releasePlan || config.growthKinds?.length);
+  const internalEngineAvailable = Boolean(config.releasePlan || config.growthKinds?.length || config.ownedAudience);
   if (!internalEngineAvailable && config.targetCountKey) {
     return Number(payload[config.targetCountKey] ?? 0) > 0;
   }
@@ -212,6 +217,19 @@ async function executeManagerPreparation(action: {
       respectAutoplan: true,
     });
     sources.push({ source: "release_plan", prepared: release.prepared, reason: release.reason });
+  }
+
+  if (config.ownedAudience) {
+    const ownedAudience = await prepareOwnedAudienceOpportunity({
+      client,
+      ownerId: action.owner_id,
+      artistId: action.artist_id,
+    });
+    sources.push({
+      source: "owned_audience",
+      prepared: ownedAudience.prepared,
+      reason: ownedAudience.reason,
+    });
   }
 
   const prepared = sources.reduce((sum, source) => sum + source.prepared, 0);
