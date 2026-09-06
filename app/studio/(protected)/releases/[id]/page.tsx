@@ -22,6 +22,14 @@ function missingCalibrationTable(error: { code?: string } | null) {
   return error?.code === "42P01" || error?.code === "PGRST205";
 }
 
+function artistFacingReleaseStage(stage: string) {
+  if (stage === "plan") return "promotion";
+  if (stage === "create") return "content";
+  if (stage === "publish") return "distribution";
+  if (stage === "learn") return "results";
+  return stage;
+}
+
 export default async function ReleaseDetail({
   params,
   searchParams,
@@ -31,6 +39,7 @@ export default async function ReleaseDetail({
 }) {
   const { id } = await params;
   const { tab = "overview", stage = "overview", view } = await searchParams;
+  const simpleStage = artistFacingReleaseStage(stage);
   const advanced = view === "advanced";
   const renderedAt = new Date().toISOString();
   const { supabase, user } = await requireStudioAdmin();
@@ -139,8 +148,8 @@ export default async function ReleaseDetail({
 
   if (!advanced) {
     return <>
-      <ReleaseWorkspaceV2 release={release} tracks={tracks ?? []} mediaLinks={mediaLinks ?? []} mediaAssets={mediaAssets ?? []} contentItems={contentItems ?? []} metrics={metrics ?? []} campaign={campaignResult.data} stage={stage} renderedAt={renderedAt} playbookTasks={playbookTasks ?? []} providerScheduledCount={providerScheduledCount ?? 0} vaultTrack={vaultResult.data} />
-      {stage === "create" ? <MomentReviewPanel releaseId={release.id} moments={momentCuration.curated} historicalMoments={momentCuration.historical} rawCandidateCount={momentCuration.raw_active_count} suppressedCount={momentCuration.suppressed_count} tracks={(tracks ?? []).map((track) => ({ id: track.id, title: track.title, audio_url: track.audio_url }))} performance={momentPerformance ?? []} lyricSources={lyricSources ?? []} calibrationEvents={calibrationEvents} /> : null}
+      <ReleaseWorkspaceV2 release={release} tracks={tracks ?? []} mediaLinks={mediaLinks ?? []} mediaAssets={mediaAssets ?? []} contentItems={contentItems ?? []} metrics={metrics ?? []} campaign={campaignResult.data} stage={simpleStage} renderedAt={renderedAt} playbookTasks={playbookTasks ?? []} providerScheduledCount={providerScheduledCount ?? 0} vaultTrack={vaultResult.data} />
+      {simpleStage === "music" ? <MomentReviewPanel releaseId={release.id} moments={momentCuration.curated} historicalMoments={momentCuration.historical} rawCandidateCount={momentCuration.raw_active_count} suppressedCount={momentCuration.suppressed_count} tracks={(tracks ?? []).map((track) => ({ id: track.id, title: track.title, audio_url: track.audio_url }))} performance={momentPerformance ?? []} lyricSources={lyricSources ?? []} calibrationEvents={calibrationEvents} /> : null}
     </>;
   }
 
