@@ -15,6 +15,13 @@ function decisionTone(value: string): SemanticTone {
   return "neutral";
 }
 
+function missionTone(status: string): SemanticTone {
+  if (status === "blocked") return "danger";
+  if (status === "needs_attention") return "attention";
+  if (status === "on_track") return "success";
+  return "accent";
+}
+
 export default async function TodayPage() {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveDefaultArtistContext(supabase, user);
@@ -26,7 +33,7 @@ export default async function TodayPage() {
   const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
   const {
     activeRelease,
-    activeMission,
+    artistMission,
     needsYou,
     topDecision,
     nextAction,
@@ -42,37 +49,24 @@ export default async function TodayPage() {
   } = snapshot;
 
   const handsOff = operatingContext.profile.marketingInvolvement === "just_make_music";
-  const missionAction = activeMission?.nextAction ?? null;
+  const missionAction = artistMission.nextAction;
   const visibleMissionAction = handsOff ? null : missionAction;
   const actionableNext = handsOff ? humanNextAction : nextAction;
   const actionableNextHref = handsOff ? humanNextActionHref : nextActionHref;
   const managerLead = managerPlan[0] ?? null;
 
-  const heroTitle = topDecision?.title
-    || visibleMissionAction?.title
-    || actionableNext?.title
-    || (handsOff ? "Keep making music. Ensemblis is managing the next moves." : strategy.recommendedMission.title)
-    || "Ensemblis can keep moving without interrupting you";
+  const heroTitle = topDecision?.title || artistMission.title;
   const heroDetail = topDecision?.detail
-    || (visibleMissionAction ? activeMission?.summary : null)
-    || actionableNext?.rationale
+    || artistMission.summary
     || (handsOff ? managerLead?.detail || strategy.humanIntervention : strategy.recommendedMission.rationale);
   const heroStatus = topDecision
     ? (topDecision.severity === "required" ? "Required" : "Needs attention")
-    : visibleMissionAction
-      ? activeMission?.label || "Recommended"
-      : actionableNext
-        ? "Recommended"
-        : handsOff
-          ? "Manager active"
-          : "Clear";
+    : artistMission.label;
   const heroTone: SemanticTone = topDecision?.severity === "required"
     ? "danger"
     : topDecision
       ? "attention"
-      : visibleMissionAction || actionableNext
-        ? "accent"
-        : "success";
+      : missionTone(artistMission.status);
   const heroPrimary = topDecision
     ? { href: href(topDecision.href), label: "Resolve this" }
     : visibleMissionAction
@@ -81,29 +75,25 @@ export default async function TodayPage() {
         ? { href: actionableNextHref, label: "Act on this" }
         : handsOff
           ? { href: "#manager-plan", label: "View manager plan" }
-          : { href: href(strategy.recommendedMission.href), label: "Open recommended Mission" };
+          : { href: href(artistMission.href), label: "Open Mission" };
   const decisionPreview = needsYou.slice(0, 3);
 
   return <div className="studio-v2-page ensemblis-today-page">
     <PageHeader title="Today" description={`What matters now for ${artist.artistName}.`} />
 
     <PriorityHero
-      eyebrow={activeRelease && activeMission && !handsOff
-        ? `${activeRelease.title} · ${activeMission.label}`
-        : handsOff
-          ? "Manager mode"
-          : "Recommended next move"}
+      eyebrow={topDecision ? "Needs You" : `Current Mission · ${artistMission.label}`}
       title={heroTitle}
       description={heroDetail}
       status={heroStatus}
       tone={heroTone}
       actions={<>
         <Link className="button primary" href={heroPrimary.href}>{heroPrimary.label}</Link>
-        {activeRelease && !handsOff
+        {artistMission.kind === "release" && activeRelease
           ? <Link href={href(`/studio/releases/${activeRelease.id}`)}>View release Mission</Link>
           : topDecision
             ? <Link href={href("/studio/needs-you")}>Open decision queue</Link>
-            : <Link href={href("/studio/growth/strategy")}>Why this strategy?</Link>}
+            : <Link href={href("/studio/growth/strategy")}>Why this Mission?</Link>}
       </>}
     />
 

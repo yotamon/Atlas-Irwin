@@ -11,6 +11,8 @@ import { releaseLifecycle } from "@/lib/marketing/release-lifecycle";
 import { loadPaidGrowthWorkspace, paidGrowthNeedsYou } from "@/lib/paid-growth/server";
 import type { Database } from "@/types/database";
 import type { ArtistContext } from "./artist-context";
+import { deriveArtistMission } from "./artist-mission";
+import { asGrowthClient } from "./growth-db";
 import { asArtistScopedMusicClient } from "./music-db";
 import { deriveNeedsYouQueue } from "./needs-you";
 import {
@@ -74,6 +76,7 @@ function nextBestActionPath(action: { action_type: string }) {
   if (["repair_publication", "derive_winner_content"].includes(action.action_type)) return "/studio/production";
   if (action.action_type === "advance_release_strategy") return "/studio/releases";
   if (["advance_gig_strategy", "advance_label_strategy"].includes(action.action_type)) return "/studio/growth/strategy";
+  if (action.action_type === "advance_owned_audience") return "/studio/audience";
   return "/studio/growth";
 }
 
@@ -127,6 +130,7 @@ export async function loadArtistOperatingSnapshot({
   const operational = asArtistScopedOperationalClient(db);
   const music = asArtistScopedMusicClient(db);
   const marketing = asMarketingClient(db);
+  const growth = asGrowthClient(db);
   const autonomy = createAutonomyServiceClient();
   const preferencesPromise = loadWorkspaceOperatingPreferences(db, artist.workspaceId);
   const operatingContextPromise = loadArtistOperatingContext({ db, artist });
@@ -152,6 +156,7 @@ export async function loadArtistOperatingSnapshot({
     soundCloudPendingResult,
     spotifyPendingResult,
     outreachDraftsResult,
+    growthOpportunitiesResult,
     paidWorkspace,
   ] = await Promise.all([
     preferencesPromise,
@@ -169,6 +174,7 @@ export async function loadArtistOperatingSnapshot({
     db.from("soundcloud_tracks").select("id,linked_track_id").eq("owner_id", userId).eq("reconcile_status", "pending"),
     db.from("spotify_tracks").select("id,linked_track_id").eq("owner_id", userId).eq("reconcile_status", "pending"),
     marketing.from("outreach_messages").select("id").eq("owner_id", userId).eq("artist_id", artist.artistId).is("sent_at", null).eq("response_status", "Draft"),
+    growth.from("growth_opportunities").select("id,kind,title,rationale,priority,status,recommended_action").eq("owner_id", userId).eq("artist_id", artist.artistId).in("status", ["new", "accepted"]).order("priority", { ascending: false }).limit(30),
     loadPaidGrowthWorkspace({ db, ownerId: userId, artistId: artist.artistId }),
   ]);
 
@@ -186,6 +192,7 @@ export async function loadArtistOperatingSnapshot({
     soundCloudPendingResult,
     spotifyPendingResult,
     outreachDraftsResult,
+    growthOpportunitiesResult,
   ].find((result) => result.error)?.error;
   if (firstError) throw new Error(firstError.message);
 
@@ -321,6 +328,18 @@ export async function loadArtistOperatingSnapshot({
     });
   }
 
+  const artistMission = deriveArtistMission({
+    profile: operatingContext.profile,
+    strategy,
+    releaseMission: activeMission,
+    releaseTitle: activeRelease?.title ?? null,
+    opportunities: growthOpportunitiesResult.data ?? [],
+    managerActions: [
+      ...completedManagerActions.map((action) => ({ actionType: action.action_type, status: action.status })),
+      ...nextActions.filter(managerOwned).map((action) => ({ actionType: action.action_type, status: action.status })),
+    ],
+  });
+
   return {
     generatedAt: now.toISOString(),
     preferences,
@@ -328,6 +347,7 @@ export async function loadArtistOperatingSnapshot({
     strategy,
     activeRelease,
     activeMission,
+    artistMission,
     needsYou,
     topDecision: needsYou[0] ?? null,
     nextAction,
