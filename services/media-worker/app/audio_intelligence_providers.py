@@ -335,7 +335,7 @@ def run_clap_audio_semantics(
             return {"status": "failed", "provider": "clap", "reason": "empty_audio"}
 
         selected_windows = [window for window in windows[:8] if isinstance(window, dict)]
-        excerpts: list[np.ndarray[Any, Any]] = []
+        excerpts: list[Any] = []
         normalized_windows: list[dict[str, Any]] = []
         max_samples = int(CLAP_SAMPLE_RATE * CLAP_MAX_WINDOW_SECONDS)
         for window in selected_windows:
@@ -366,7 +366,7 @@ def run_clap_audio_semantics(
             return {"status": "not_applicable", "provider": "clap", "reason": "windows_too_short"}
 
         with torch.no_grad():
-            audio_inputs = processor(audios=excerpts, sampling_rate=CLAP_SAMPLE_RATE, return_tensors="pt", padding=True)
+            audio_inputs = processor(audio=excerpts, sampling_rate=CLAP_SAMPLE_RATE, return_tensors="pt", padding=True)
             text_inputs = processor(text=list(prompts), return_tensors="pt", padding=True)
             audio_features = model.get_audio_features(**audio_inputs)
             text_features = model.get_text_features(**text_inputs)
