@@ -38,11 +38,22 @@ select is(
   'Track Intelligence materializes two calibration candidates'
 );
 
+select set_config(
+  'test.moment_a',
+  (select id::text from public.moments where source_candidate_id='hook-cal-a'),
+  true
+);
+select set_config(
+  'test.moment_b',
+  (select id::text from public.moments where source_candidate_id='hook-cal-b'),
+  true
+);
+
 select set_config('request.jwt.claim.sub','19000000-0000-0000-0000-000000000001',true);
 set local role authenticated;
 select lives_ok(
   $$select public.review_moment_with_calibration(
-    (select id from public.moments where source_candidate_id='hook-cal-a'),
+    current_setting('test.moment_a')::uuid,
     '49000000-0000-0000-0000-000000000001','approve',11000,20000,'Artist favorite hook',
     'best'::public.moment_calibration_judgment,null,15,null,'{"source":"pgtap"}'::jsonb
   )$$,
@@ -52,7 +63,7 @@ reset role;
 
 select is(
   (select concat(state::text,':',start_ms,':',end_ms,':',source_start_ms,':',source_end_ms)
-   from public.moments where source_candidate_id='hook-cal-a'),
+   from public.moments where id=current_setting('test.moment_a')::uuid),
   'approved:11000:20000:10000:18000',
   'artist timing changes effective window without rewriting immutable source timing'
 );
@@ -60,15 +71,14 @@ select is(
 select is(
   (select concat(moment_source_fingerprint,':',moment_track_analysis_version,':',moment_track_analysis_audio_sha256,':',preferred_cut_seconds)
    from public.moment_calibration_events e
-   join public.moments m on m.id=e.moment_id
-   where m.source_candidate_id='hook-cal-a'),
+   where e.moment_id=current_setting('test.moment_a')::uuid),
   (select concat(source_fingerprint,':',track_analysis_version,':',track_analysis_audio_sha256,':15)
-   from public.moments where source_candidate_id='hook-cal-a'),
+   from public.moments where id=current_setting('test.moment_a')::uuid),
   'calibration snapshots exact Moment, analyzer and master provenance'
 );
 
 select is(
-  (select round(private.moment_calibration_delta(id),2) from public.moments where source_candidate_id='hook-cal-a'),
+  round(private.moment_calibration_delta(current_setting('test.moment_a')::uuid),2),
   0.18::numeric,
   'Best Moment judgment contributes the bounded direct preference boost'
 );
@@ -77,10 +87,10 @@ select set_config('request.jwt.claim.sub','19000000-0000-0000-0000-000000000001'
 set local role authenticated;
 select lives_ok(
   $$select public.review_moment_with_calibration(
-    (select id from public.moments where source_candidate_id='hook-cal-b'),
+    current_setting('test.moment_b')::uuid,
     '49000000-0000-0000-0000-000000000001','approve',40000,56000,'Useful but second choice',
     'useful'::public.moment_calibration_judgment,'groove support',30,
-    (select id from public.moments where source_candidate_id='hook-cal-a'),
+    current_setting('test.moment_a')::uuid,
     '{"source":"pgtap"}'::jsonb
   )$$,
   'artist can explicitly prefer another active Moment from the same track'
@@ -88,13 +98,13 @@ select lives_ok(
 reset role;
 
 select is(
-  (select round(private.moment_calibration_delta(id),2) from public.moments where source_candidate_id='hook-cal-b'),
+  round(private.moment_calibration_delta(current_setting('test.moment_b')::uuid),2),
   0.02::numeric,
   'Useful source Moment is reduced when the artist explicitly prefers another Moment'
 );
 
 select is(
-  (select round(private.moment_calibration_delta(id),2) from public.moments where source_candidate_id='hook-cal-a'),
+  round(private.moment_calibration_delta(current_setting('test.moment_a')::uuid),2),
   0.20::numeric,
   'incoming preference plus favorite judgment is capped at the calibration ceiling'
 );
