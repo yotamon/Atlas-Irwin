@@ -68,7 +68,7 @@ async function loadWorkspace(
 ) {
   const { data, error } = await db
     .from("workspaces")
-    .select("id,name,slug,kind,created_by,legacy_owner_id,created_at,updated_at")
+    .select("id,name,slug,kind,created_by,created_at,updated_at")
     .eq("id", workspaceId)
     .maybeSingle();
 
@@ -136,7 +136,7 @@ export async function resolveArtistContext(
   const db = asEnsemblisClient(client);
   const { data, error } = await db
     .from("artists")
-    .select("id,workspace_id,name,slug,project_type,status,avatar_url,accent_color,legacy_owner_id,created_at,updated_at")
+    .select("id,workspace_id,name,slug,project_type,status,avatar_url,accent_color,created_at,updated_at")
     .eq("id", artistId)
     .eq("status", "active")
     .maybeSingle();
@@ -175,11 +175,11 @@ export async function listAccessibleArtists(
   const [workspacesResult, artistsResult] = await Promise.all([
     db
       .from("workspaces")
-      .select("id,name,slug,kind,created_by,legacy_owner_id,created_at,updated_at")
+      .select("id,name,slug,kind,created_by,created_at,updated_at")
       .in("id", workspaceIds),
     db
       .from("artists")
-      .select("id,workspace_id,name,slug,project_type,status,avatar_url,accent_color,legacy_owner_id,created_at,updated_at")
+      .select("id,workspace_id,name,slug,project_type,status,avatar_url,accent_color,created_at,updated_at")
       .in("workspace_id", workspaceIds)
       .eq("status", "active")
       .order("name", { ascending: true }),
@@ -222,81 +222,16 @@ export async function listAccessibleArtists(
     );
 }
 
-/**
- * Last-resort transitional fallback for accounts that have not persisted an active
- * artist yet. This function must remain internal so product callers cannot bypass
- * the active-artist preference by asking for the legacy/default artist directly.
- */
-async function resolveLegacyFallbackArtistContext(
+/** Use the only accessible artist when no explicit preference has been persisted yet. */
+async function resolveUnambiguousArtistContext(
   client: SupabaseClient<Database>,
   identity: StudioIdentity,
 ): Promise<ArtistContext> {
-  const db = asEnsemblisClient(client);
-
-  const legacyResult = await db
-    .from("artists")
-    .select("id,workspace_id,name,slug,project_type,status,avatar_url,accent_color,legacy_owner_id,created_at,updated_at")
-    .eq("legacy_owner_id", identity.id)
-    .eq("status", "active")
-    .limit(2);
-
-  if (legacyResult.error) {
-    throw new ArtistContextError("artist_context_invalid", legacyResult.error.message);
-  }
-
-  const legacyArtists = (legacyResult.data ?? []) as Artist[];
-  if (legacyArtists.length === 1) {
-    return buildContext(db, identity, legacyArtists[0]);
-  }
-  if (legacyArtists.length > 1) {
-    throw new ArtistContextError(
-      "artist_context_invalid",
-      "More than one legacy artist mapping exists for this account.",
-    );
-  }
-
-  const membershipResult = await db
-    .from("workspace_memberships")
-    .select("workspace_id,profile_id,role,status,created_at,updated_at")
-    .eq("profile_id", identity.id)
-    .eq("status", "active")
-    .limit(2);
-
-  if (membershipResult.error) {
-    throw new ArtistContextError("artist_context_invalid", membershipResult.error.message);
-  }
-
-  const memberships = (membershipResult.data ?? []) as WorkspaceMembership[];
-  if (!memberships.length) {
-    throw new ArtistContextError(
-      "artist_context_missing",
-      "No Ensemblis workspace is available for this account yet.",
-    );
-  }
-  if (memberships.length > 1) {
-    throw new ArtistContextError(
-      "artist_context_ambiguous",
-      "Select a workspace before continuing.",
-    );
-  }
-
-  const artistResult = await db
-    .from("artists")
-    .select("id,workspace_id,name,slug,project_type,status,avatar_url,accent_color,legacy_owner_id,created_at,updated_at")
-    .eq("workspace_id", memberships[0].workspace_id)
-    .eq("status", "active")
-    .order("created_at", { ascending: true })
-    .limit(2);
-
-  if (artistResult.error) {
-    throw new ArtistContextError("artist_context_invalid", artistResult.error.message);
-  }
-
-  const artists = (artistResult.data ?? []) as Artist[];
+  const artists = await listAccessibleArtists(client, identity);
   if (!artists.length) {
     throw new ArtistContextError(
       "artist_context_missing",
-      "This workspace does not contain an active artist yet.",
+      "No Ensemblis artist is available for this account yet.",
     );
   }
   if (artists.length > 1) {
@@ -305,11 +240,10 @@ async function resolveLegacyFallbackArtistContext(
       "Select an artist before continuing.",
     );
   }
-
-  return buildContext(db, identity, artists[0]);
+  return resolveArtistContext(client, identity, artists[0].artistId);
 }
 
-/** Resolve the validated request preference, falling back only when a persisted choice is stale. */
+/** Resolve the explicit request or persisted artist preference. */
 export async function resolveActiveArtistContext(
   client: SupabaseClient<Database>,
   identity: StudioIdentity,
@@ -330,18 +264,7 @@ export async function resolveActiveArtistContext(
     }
   }
 
-  return resolveLegacyFallbackArtistContext(client, identity);
-}
-
-/**
- * @deprecated Existing callers receive the active artist for safety. New product code
- * should use resolveActiveArtistContext or requireArtistContext explicitly.
- */
-export async function resolveDefaultArtistContext(
-  client: SupabaseClient<Database>,
-  identity: StudioIdentity,
-): Promise<ArtistContext> {
-  return resolveActiveArtistContext(client, identity);
+  return resolveUnambiguousArtistContext(client, identity);
 }
 
 export async function requireArtistContext(artistId?: string): Promise<ArtistContext> {
