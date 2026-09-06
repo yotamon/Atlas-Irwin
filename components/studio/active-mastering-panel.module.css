@@ -28,7 +28,7 @@
 .preset p,
 .actions span,
 .candidateHead small {
-  color: var(--muted-foreground, #6b7280);
+  color: var(--en-muted);
 }
 
 .running {
@@ -64,7 +64,7 @@
 
 .error {
   padding: 0.85rem 1rem;
-  border: 1px solid color-mix(in srgb, #b91c1c 35%, transparent);
+  border: 1px solid color-mix(in srgb, var(--en-danger) 35%, transparent);
   border-radius: 0.8rem;
 }
 
