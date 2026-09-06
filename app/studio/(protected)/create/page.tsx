@@ -24,7 +24,7 @@ function deliverableLabel(platform: string, format: string) {
   return `${platform} ${format}`.replace(/Instagram Instagram/i, "Instagram");
 }
 
-export default async function CreatePage({ searchParams }: { searchParams: Promise<{ track?: string; release?: string }> }) {
+export default async function CreatePage({ searchParams }: { searchParams: Promise<{ track?: string; release?: string; moment?: string }> }) {
   const params = await searchParams;
   const artist = await requireArtistContext();
   const supabase = await createClient();
@@ -45,15 +45,24 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
   const tracks = tracksResult.data ?? [];
   const releaseById = new Map(releases.map((release) => [release.id, release]));
   const trackById = new Map(tracks.map((track) => [track.id, track]));
-  const requestedTrack = params.track ? trackById.get(params.track) ?? null : null;
-  const requestedReleaseId = params.release ?? requestedTrack?.release_id ?? null;
+  const curation = curateReleaseMoments({ moments: momentsResult.data ?? [] });
+  const requestedMoment = params.moment ? curation.curated.find((moment) => moment.id === params.moment) ?? null : null;
+  const requestedTrack = params.track
+    ? trackById.get(params.track) ?? null
+    : requestedMoment
+      ? trackById.get(requestedMoment.track_id) ?? null
+      : null;
+  const requestedReleaseId = params.release ?? requestedMoment?.release_id ?? requestedTrack?.release_id ?? null;
   const activeRelease = (requestedReleaseId ? releases.find((release) => release.id === requestedReleaseId) : null)
     ?? releases.find((release) => release.active_release)
     ?? releases.find((release) => release.release_date && release.release_date >= new Date().toISOString().slice(0, 10))
     ?? releases[0]
     ?? null;
-  const curation = curateReleaseMoments({ moments: momentsResult.data ?? [] });
-  const requestedMoments = params.track ? curation.curated.filter((moment) => moment.track_id === params.track) : curation.curated;
+  const requestedMoments = requestedMoment
+    ? [requestedMoment]
+    : requestedTrack
+      ? curation.curated.filter((moment) => moment.track_id === requestedTrack.id)
+      : curation.curated;
   const directionMoments = requestedMoments.length ? requestedMoments : curation.curated;
   const directions = recommendCreativeDirections({ moments: directionMoments, activeReleaseId: activeRelease?.id ?? null });
   const sourceHierarchy = creativeSourceHierarchy(operatingContext.profile);
@@ -90,7 +99,7 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
           <div>
             <span className="section-label">Creating for</span>
             <strong>{activeRelease.title}</strong>
-            <small>{requestedTrack ? requestedTrack.title : "Best approved musical Moments"}</small>
+            <small>{requestedMoment ? `${requestedTrack?.title || "Track"} · ${requestedMoment.label}` : requestedTrack ? requestedTrack.title : "Best approved musical Moments"}</small>
           </div>
           <Link href={href(`/studio/releases/${activeRelease.id}?stage=music#moments`)}>Review source Moments</Link>
         </section>
@@ -102,7 +111,7 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
             <div>
               <span className="section-label">Recommended for this music</span>
               <h2>What do you want to make?</h2>
-              <p>Three strong options, already paired with the musical Moment most likely to make each one work.</p>
+              <p>{requestedMoment ? "This is the exact musical Moment you selected. Choose how you want to use it." : "Three strong options, already paired with the musical Moment most likely to make each one work."}</p>
             </div>
           </div>
 
@@ -124,7 +133,7 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
                   <p>{direction.outcome.description}</p>
 
                   <div className="create-source-preview">
-                    <span className="section-label">Ensemblis picked</span>
+                    <span className="section-label">{requestedMoment ? "Your selected Moment" : "Ensemblis picked"}</span>
                     <strong>{moment.label}</strong>
                     <small>{track?.title || "Track"} · {momentTime(moment.start_ms)}–{momentTime(moment.end_ms)}</small>
                     {track?.audio_url ? <TrackPreview src={track.audio_url} startSeconds={startSeconds} endSeconds={endSeconds} label={moment.label} compact /> : null}
