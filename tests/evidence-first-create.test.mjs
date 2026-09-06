@@ -6,12 +6,13 @@ async function source(path) {
   return readFile(new URL(`../${path}`, import.meta.url), "utf8");
 }
 
-test("Create explains recommended Moments with evidence instead of pseudo-precise percentages", async () => {
+test("Create explains recommended deliverables with evidence instead of pseudo-precise percentages", async () => {
   const create = await source("app/studio/(protected)/create/page.tsx");
   assert.ok(create.includes("momentEvidenceSummary"));
-  assert.ok(create.includes("<strong>Recommended</strong>"));
-  assert.ok(create.includes("Why: {evidence}"));
-  assert.ok(create.includes("evidence-backed musical starting point"));
+  assert.ok(create.includes("Best next option"));
+  assert.ok(create.includes("Why this source?"));
+  assert.ok(create.includes("strongest complete musical passages"));
+  assert.ok(create.includes("Your selected Moment"));
   assert.equal(create.includes("Math.round(moment.confidence * 100)"), false);
 });
 
