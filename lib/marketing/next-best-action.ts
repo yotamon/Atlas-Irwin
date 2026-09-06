@@ -1,8 +1,10 @@
 import "server-only";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Json } from "@/types/database";
+import type { EnsemblisDatabase } from "@/types/ensemblis-database";
 import { createAutonomyServiceClient } from "./autonomy-db";
 import { createMarketingServiceClient } from "./db";
-import type { Json } from "@/types/database";
 
 export type AutonomyArtistScope = { ownerId: string; artistId: string };
 
@@ -14,18 +16,37 @@ function dayKey() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function operatingSchemaMissing(message: string) {
+  const normalized = message.toLowerCase();
+  return normalized.includes("artist_operating_profiles")
+    || normalized.includes("artist_scene_relationships")
+    || (normalized.includes("schema cache") && normalized.includes("artist_"));
+}
+
 async function artistScopes() {
   const autonomy = createAutonomyServiceClient();
   const marketing = createMarketingServiceClient();
-  const [audience, opportunities, publications, campaigns] = await Promise.all([
+  const operating = autonomy as unknown as SupabaseClient<EnsemblisDatabase>;
+  const [artists, workspaces, audience, opportunities, publications, campaigns] = await Promise.all([
+    operating.from("artists").select("id,workspace_id,legacy_owner_id,status").eq("status", "active").limit(500),
+    operating.from("workspaces").select("id,created_by,legacy_owner_id").limit(500),
     autonomy.from("audience_interactions").select("owner_id,artist_id").limit(500),
     autonomy.from("marketing_opportunities").select("owner_id,artist_id").limit(500),
     marketing.from("publication_jobs").select("owner_id,artist_id").limit(500),
     marketing.from("campaigns").select("owner_id,artist_id").in("status", ["draft", "planned", "active"]).limit(500),
   ]);
-  const error = audience.error || opportunities.error || publications.error || campaigns.error;
+  const error = artists.error || workspaces.error || audience.error || opportunities.error || publications.error || campaigns.error;
   if (error) throw new Error(error.message);
+
   const unique = new Map<string, AutonomyArtistScope>();
+  const workspaceOwner = new Map(
+    (workspaces.data ?? []).map((workspace) => [workspace.id, workspace.legacy_owner_id ?? workspace.created_by]),
+  );
+  for (const artist of artists.data ?? []) {
+    const ownerId = artist.legacy_owner_id ?? workspaceOwner.get(artist.workspace_id) ?? null;
+    if (!ownerId) continue;
+    unique.set(`${ownerId}:${artist.id}`, { ownerId, artistId: artist.id });
+  }
   for (const row of [
     ...(audience.data ?? []),
     ...(opportunities.data ?? []),
@@ -67,10 +88,90 @@ async function propose(scope: AutonomyArtistScope, input: {
   if (error) throw new Error(error.message);
 }
 
+function managerGoalAction(input: {
+  primaryGoal: string;
+  marketingInvolvement: string;
+  liveTargetCount: number;
+  labelTargetCount: number;
+}) {
+  const managerOwned = input.marketingInvolvement === "just_make_music";
+  const common = {
+    sourceType: "artist_operating_profile",
+    managerOwned,
+    score: managerOwned ? 74 : 69,
+  };
+
+  if (input.primaryGoal === "get_gigs") {
+    return {
+      ...common,
+      actionType: "advance_gig_strategy",
+      title: input.liveTargetCount
+        ? `Work the ${input.liveTargetCount} strongest live-scene target${input.liveTargetCount === 1 ? "" : "s"}`
+        : "Build a real live-scene target map",
+      rationale: input.liveTargetCount
+        ? "Verified promoters, venues or festivals already fit this artist. Prioritize the strongest evidence before broad outreach."
+        : "The goal is gigs, but there are not yet enough verified live-scene relationships. Ensemblis should improve the target map before asking the artist to cold-message strangers.",
+    };
+  }
+  if (input.primaryGoal === "find_labels") {
+    return {
+      ...common,
+      actionType: "advance_label_strategy",
+      title: input.labelTargetCount
+        ? `Work the ${input.labelTargetCount} strongest label target${input.labelTargetCount === 1 ? "" : "s"}`
+        : "Build an evidence-backed label shortlist",
+      rationale: input.labelTargetCount
+        ? "There are verified label relationships worth prioritizing. Fit evidence should drive outreach order, not a generic label directory."
+        : "The artist wants label or partner discovery. Ensemblis should establish real scene evidence before producing an outreach list.",
+    };
+  }
+  if (input.primaryGoal === "release_music") {
+    return {
+      ...common,
+      actionType: "advance_release_strategy",
+      title: "Advance the next release mission",
+      rationale: "Keep release readiness, creative preparation, distribution and launch work moving as one mission instead of making the artist manage separate tools.",
+    };
+  }
+  if (input.primaryGoal === "build_owned_audience") {
+    return {
+      ...common,
+      actionType: "advance_owned_audience",
+      title: "Strengthen the owned-audience path",
+      rationale: "Prioritize listener capture and repeat contact over adding more disconnected reach. Ensemblis should turn current attention into an audience the artist can reach again.",
+    };
+  }
+  if (input.primaryGoal === "grow_fans") {
+    return {
+      ...common,
+      actionType: "advance_fan_growth",
+      title: "Turn current listeners into repeat fans",
+      rationale: "Favor the strongest proven listener-to-follow, save and repeat-engagement path rather than increasing posting volume for its own sake.",
+    };
+  }
+  return {
+    ...common,
+    actionType: "advance_discovery",
+    title: "Focus discovery on the strongest current signal",
+    rationale: "The primary goal is to get heard. Ensemblis should concentrate on the best-supported music, audience and scene signal instead of spreading effort across generic channels.",
+  };
+}
+
 async function actionsForArtist(scope: AutonomyArtistScope) {
   const autonomy = createAutonomyServiceClient();
   const marketing = createMarketingServiceClient();
-  const [audienceResult, opportunityResult, failedResult, overdueResult] = await Promise.all([
+  const operating = autonomy as unknown as SupabaseClient<EnsemblisDatabase>;
+  const [profileResult, relationshipsResult, audienceResult, opportunityResult, failedResult, overdueResult] = await Promise.all([
+    operating.from("artist_operating_profiles")
+      .select("artist_id,marketing_involvement,primary_goal")
+      .eq("artist_id", scope.artistId)
+      .maybeSingle(),
+    operating.from("artist_scene_relationships")
+      .select("id,relationship_type,fit_score,confidence,status")
+      .eq("artist_id", scope.artistId)
+      .in("status", ["verified", "contacted"])
+      .order("fit_score", { ascending: false })
+      .limit(40),
     autonomy.from("audience_interactions")
       .select("*")
       .eq("owner_id", scope.ownerId)
@@ -102,7 +203,9 @@ async function actionsForArtist(scope: AutonomyArtistScope) {
       .order("scheduled_at", { ascending: true })
       .limit(5),
   ]);
-  const error = audienceResult.error || opportunityResult.error || failedResult.error || overdueResult.error;
+  const profileError = profileResult.error && !operatingSchemaMissing(profileResult.error.message) ? profileResult.error : null;
+  const relationshipsError = relationshipsResult.error && !operatingSchemaMissing(relationshipsResult.error.message) ? relationshipsResult.error : null;
+  const error = profileError || relationshipsError || audienceResult.error || opportunityResult.error || failedResult.error || overdueResult.error;
   if (error) throw new Error(error.message);
 
   let created = 0;
@@ -172,6 +275,64 @@ async function actionsForArtist(scope: AutonomyArtistScope) {
       expiresAt: opportunity.expires_at,
     });
     created += 1;
+  }
+
+  const profile = profileResult.error ? null : profileResult.data;
+  if (profile) {
+    const managerKey = `manager-goal:${profile.primary_goal}`;
+    const managerIdempotencyKey = `${dayKey()}:${managerKey}`;
+    const { data: existingManager, error: existingManagerError } = await autonomy.from("next_best_actions")
+      .select("id,status")
+      .eq("owner_id", scope.ownerId)
+      .eq("artist_id", scope.artistId)
+      .eq("idempotency_key", managerIdempotencyKey)
+      .maybeSingle();
+    if (existingManagerError) throw new Error(existingManagerError.message);
+
+    const { error: retireError } = await autonomy.from("next_best_actions")
+      .update({ status: "expired" })
+      .eq("owner_id", scope.ownerId)
+      .eq("artist_id", scope.artistId)
+      .eq("status", "proposed")
+      .eq("source_type", "artist_operating_profile")
+      .neq("idempotency_key", managerIdempotencyKey);
+    if (retireError) throw new Error(retireError.message);
+
+    const terminalOrInFlight = existingManager
+      && ["approved", "executing", "completed", "dismissed"].includes(existingManager.status);
+    if (!terminalOrInFlight) {
+      const trustedRelationships = (relationshipsResult.error ? [] : relationshipsResult.data ?? []).filter((relationship) =>
+        Number(relationship.fit_score) >= 60 && Number(relationship.confidence) >= 0.35,
+      );
+      const liveTargetCount = trustedRelationships.filter((relationship) =>
+        ["promoter", "venue", "festival"].includes(relationship.relationship_type),
+      ).length;
+      const labelTargetCount = trustedRelationships.filter((relationship) => relationship.relationship_type === "label").length;
+      const manager = managerGoalAction({
+        primaryGoal: profile.primary_goal,
+        marketingInvolvement: profile.marketing_involvement,
+        liveTargetCount,
+        labelTargetCount,
+      });
+      await propose(scope, {
+        actionType: manager.actionType,
+        title: manager.title,
+        rationale: manager.rationale,
+        score: manager.score,
+        sourceType: manager.sourceType,
+        sourceId: scope.artistId,
+        payload: {
+          managerOwned: manager.managerOwned,
+          primaryGoal: profile.primary_goal,
+          marketingInvolvement: profile.marketing_involvement,
+          liveTargetCount,
+          labelTargetCount,
+        },
+        key: managerKey,
+        expiresAt: new Date(Date.now() + 36 * 60 * 60 * 1000).toISOString(),
+      });
+      created += 1;
+    }
   }
 
   return created;

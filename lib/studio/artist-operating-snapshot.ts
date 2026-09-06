@@ -37,6 +37,20 @@ export type OperatingComingUpItem = {
   href: string;
 };
 
+export type OperatingManagerPlanItem = {
+  id: string;
+  title: string;
+  detail: string;
+  status: "Queued" | "Working" | "Publishing" | "Planned" | "Scheduled";
+  href: string;
+};
+
+const ARTIST_DECISION_ACTION_TYPES = new Set([
+  "reply_to_listener",
+  "approve_publication",
+  "repair_publication",
+]);
+
 function dateDistance(value: string | null | undefined, now: Date) {
   if (!value) return "Date not set";
   const target = new Date(value.length === 10 ? `${value}T12:00:00Z` : value).getTime();
@@ -52,7 +66,13 @@ function nextBestActionPath(action: { action_type: string }) {
   if (action.action_type === "reply_to_listener") return "/studio/audience";
   if (["approve_publication", "publish_overdue"].includes(action.action_type)) return "/studio/inbox";
   if (["repair_publication", "derive_winner_content"].includes(action.action_type)) return "/studio/production";
+  if (action.action_type === "advance_release_strategy") return "/studio/releases";
+  if (["advance_gig_strategy", "advance_label_strategy"].includes(action.action_type)) return "/studio/growth/strategy";
   return "/studio/growth";
+}
+
+function needsArtistJudgment(action: { action_type: string }) {
+  return ARTIST_DECISION_ACTION_TYPES.has(action.action_type);
 }
 
 function humanizeJobType(value: string | null | undefined) {
@@ -122,7 +142,7 @@ export async function loadArtistOperatingSnapshot({
     marketing.from("publication_jobs").select("id,campaign_id,content_item_id,platform,status,approval_status,scheduled_at").eq("owner_id", userId).eq("artist_id", artist.artistId).not("status", "in", '("published","failed","cancelled")').order("scheduled_at", { ascending: true }).limit(40),
     marketing.from("content_items").select("id,title,platform,status,asset_url,scheduled_at,release_id").eq("owner_id", userId).eq("artist_id", artist.artistId).not("status", "eq", "Archived").order("scheduled_at", { ascending: true }).limit(100),
     marketing.from("marketing_learnings").select("id,status").eq("owner_id", userId).eq("artist_id", artist.artistId).eq("status", "proposed").limit(20),
-    autonomy.from("next_best_actions").select("id,title,rationale,action_type,score,status").eq("owner_id", userId).eq("artist_id", artist.artistId).eq("status", "proposed").order("score", { ascending: false }).limit(8),
+    autonomy.from("next_best_actions").select("id,title,rationale,action_type,score,status,source_type,payload").eq("owner_id", userId).eq("artist_id", artist.artistId).eq("status", "proposed").order("score", { ascending: false }).limit(8),
     db.from("soundcloud_tracks").select("id,linked_track_id").eq("owner_id", userId).eq("reconcile_status", "pending"),
     db.from("spotify_tracks").select("id,linked_track_id").eq("owner_id", userId).eq("reconcile_status", "pending"),
     marketing.from("outreach_messages").select("id").eq("owner_id", userId).eq("artist_id", artist.artistId).is("sent_at", null).eq("response_status", "Draft"),
@@ -151,7 +171,9 @@ export async function loadArtistOperatingSnapshot({
   const content = contentResult.data ?? [];
   const automation = automationResult.data ?? [];
   const publications = publicationResult.data ?? [];
-  const nextAction = nextActionsResult.data?.[0] ?? null;
+  const nextActions = nextActionsResult.data ?? [];
+  const nextAction = nextActions[0] ?? null;
+  const humanNextAction = nextActions.find(needsArtistJudgment) ?? null;
   const activeRelease = releases.find((release) => release.active_release)
     ?? releases.find((release) => release.release_date && release.release_date >= now.toISOString().slice(0, 10))
     ?? releases[0]
@@ -239,17 +261,48 @@ export async function loadArtistOperatingSnapshot({
     })),
   ].sort((left, right) => Date.parse(left.scheduledAt) - Date.parse(right.scheduledAt)).slice(0, 7);
 
+  const strategy = buildArtistStrategy(operatingContext);
+  const managerPlan: OperatingManagerPlanItem[] = [
+    ...working.map((item) => ({ ...item })),
+    ...nextActions.filter((action) => !needsArtistJudgment(action)).slice(0, 3).map((action) => ({
+      id: `manager-action-${action.id}`,
+      title: action.title,
+      detail: action.rationale,
+      status: "Planned" as const,
+      href: href(nextBestActionPath(action)),
+    })),
+    ...comingUp.slice(0, 2).map((item) => ({
+      id: `manager-upcoming-${item.id}`,
+      title: item.title,
+      detail: item.detail,
+      status: "Scheduled" as const,
+      href: item.href,
+    })),
+  ].slice(0, 5);
+  if (!managerPlan.length) {
+    managerPlan.push({
+      id: "manager-strategy-focus",
+      title: strategy.recommendedMission.title,
+      detail: strategy.recommendedMission.rationale,
+      status: "Planned",
+      href: href(strategy.recommendedMission.href),
+    });
+  }
+
   return {
     generatedAt: now.toISOString(),
     preferences,
     operatingContext,
-    strategy: buildArtistStrategy(operatingContext),
+    strategy,
     activeRelease,
     activeMission,
     needsYou,
     topDecision: needsYou[0] ?? null,
     nextAction,
     nextActionHref: nextAction ? href(nextBestActionPath(nextAction)) : null,
+    humanNextAction,
+    humanNextActionHref: humanNextAction ? href(nextBestActionPath(humanNextAction)) : null,
+    managerPlan,
     working,
     comingUp,
   };
