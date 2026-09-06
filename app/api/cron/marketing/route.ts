@@ -4,6 +4,7 @@ import { syncAudienceInteractions } from "@/lib/marketing/audience";
 import { processAutonomousCreativeSpend } from "@/lib/marketing/autonomous-creative-spend";
 import { authorizeMarketingCron } from "@/lib/marketing/cron-auth";
 import { processApprovedCreativeDerivativeEvents } from "@/lib/marketing/creative-derivative-events";
+import { executeSafeManagerActions } from "@/lib/marketing/manager-execution";
 import { kickMarketingMediaWorkerQueue } from "@/lib/marketing/media-worker-queue";
 import { refreshNextBestActions } from "@/lib/marketing/next-best-action";
 import { processDueOutreachEnrollments } from "@/lib/marketing/outreach";
@@ -65,6 +66,10 @@ export async function GET(request: Request) {
   const radar = await runStep("marketing radar", () => refreshMarketingRadarIfDue());
   const nextBestActions = await runStep("next best actions", () => refreshNextBestActions());
 
+  // Manager execution is intentionally narrower than planning. It may only perform allowlisted,
+  // deterministic $0 internal preparation. It cannot publish, contact anyone or spend money.
+  const managerExecution = await runStep("safe manager execution", () => executeSafeManagerActions());
+
   const results = {
     mediaWorker,
     marketingMediaWorker,
@@ -77,6 +82,7 @@ export async function GET(request: Request) {
     audience,
     radar,
     nextBestActions,
+    managerExecution,
   };
   const failures = Object.entries(results)
     .filter(([, result]) => !result.ok)

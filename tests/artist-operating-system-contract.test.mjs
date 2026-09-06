@@ -36,10 +36,10 @@ test("onboarding understands music before asking working preferences and does no
 });
 
 test("scene intelligence refuses invented targets and reuses the Growth opportunity queue", async () => {
-  const [migration, scene, actions, strategy] = await Promise.all([
+  const [migration, scene, materializer, strategy] = await Promise.all([
     read("supabase/migrations/20260906150000_artist_operating_system.sql"),
     read("lib/artist-operating/scene-intelligence.ts"),
-    read("app/studio/artist-operating-actions.ts"),
+    read("lib/artist-operating/growth-opportunities.ts"),
     read("lib/artist-operating/strategy.ts"),
   ]);
   assert.match(migration, /artist_scene_relationships/);
@@ -47,9 +47,9 @@ test("scene intelligence refuses invented targets and reuses the Growth opportun
   assert.match(migration, /scene_fit.*outreach_target.*gig_fit.*label_fit.*playlist_fit.*channel_fit/s);
   assert.match(scene, /hasUsableSceneEvidence/);
   assert.match(scene, /confidence < 0\.35/);
-  assert.match(actions, /growth_opportunities/);
-  assert.match(actions, /sceneRelationshipOpportunityKind/);
-  assert.match(actions, /does not yet have enough evidence to name labels, playlists, channels, promoters or festivals/);
+  assert.match(materializer, /growth_opportunities/);
+  assert.match(materializer, /sceneRelationshipOpportunityKind/);
+  assert.match(materializer, /does not yet have enough evidence to name labels, playlists, channels, promoters or festivals/);
   assert.match(strategy, /Do not manufacture scene credibility, named targets or audience facts without evidence/);
 });
 
@@ -95,4 +95,39 @@ test("Manager planning reaches quiet artists and follows the configured working 
   assert.match(today, /const handsOff = operatingContext\.profile\.marketingInvolvement === "just_make_music"/);
   assert.match(today, /View manager plan/);
   assert.match(today, /Keep making music\. Ensemblis is managing the next moves\./);
+});
+
+test("hands-off Manager executes only safe internal evidence-backed preparation", async () => {
+  const [executor, materializer, actions, cron, snapshot] = await Promise.all([
+    read("lib/marketing/manager-execution.ts"),
+    read("lib/artist-operating/growth-opportunities.ts"),
+    read("app/studio/artist-operating-actions.ts"),
+    read("app/api/cron/marketing/route.ts"),
+    read("lib/studio/artist-operating-snapshot.ts"),
+  ]);
+
+  assert.match(executor, /SAFE_MANAGER_ACTIONS/);
+  assert.match(executor, /advance_gig_strategy/);
+  assert.match(executor, /advance_label_strategy/);
+  assert.match(executor, /payload\.managerOwned !== true/);
+  assert.match(executor, /liveTargetCount|labelTargetCount/);
+  assert.match(executor, /relationship\.fitScore >= 60/);
+  assert.match(executor, /relationship\.confidence >= 0\.35/);
+  assert.match(executor, /status: "executing"/);
+  assert.match(executor, /status: "completed"/);
+  assert.match(executor, /retryAfter/);
+  assert.doesNotMatch(executor, /processDuePublicationJobs|processDueOutreachEnrollments|processAutonomousCreativeSpend/);
+
+  assert.match(materializer, /TERMINAL_GROWTH_STATUSES/);
+  assert.match(materializer, /accepted.*dismissed.*completed/);
+  assert.match(materializer, /actionablePrepared/);
+  assert.match(materializer, /includeSceneMapFallback = true/);
+  assert.match(materializer, /usedSceneMapFallback/);
+  assert.match(actions, /materializeSceneGrowthOpportunities/);
+
+  assert.match(cron, /executeSafeManagerActions/);
+  assert.match(cron, /deterministic \$0 internal preparation/);
+  assert.match(snapshot, /status: "Prepared"/);
+  assert.match(snapshot, /completedManagerActions/);
+  assert.match(snapshot, /execution\.prepared/);
 });

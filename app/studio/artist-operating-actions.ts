@@ -2,12 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { materializeSceneGrowthOpportunities } from "@/lib/artist-operating/growth-opportunities";
 import { buildArtistStrategy } from "@/lib/artist-operating/strategy";
 import { loadArtistOperatingContext } from "@/lib/artist-operating/server";
-import { sceneRelationshipOpportunityKind } from "@/lib/artist-operating/scene-intelligence";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
-import { asGrowthClient } from "@/lib/studio/growth-db";
 import type { Database, Json } from "@/types/database";
 import type { EnsemblisDatabase } from "@/types/ensemblis-database";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -87,62 +86,15 @@ async function syncSceneGrowthOpportunities(
   artist: Awaited<ReturnType<typeof resolveActiveArtistContext>>,
 ) {
   const context = await loadArtistOperatingContext({ db: client, artist });
-  const growth = asGrowthClient(client);
-
-  const rows = context.relationships.map((relationship) => ({
-    owner_id: ownerId,
-    artist_id: artist.artistId,
-    kind: sceneRelationshipOpportunityKind(relationship.type),
-    title: `${relationship.targetName} may fit ${context.artist.name}`,
-    rationale: `This ${relationship.type.replaceAll("_", " ")} relationship is backed by stored scene evidence. Review the fit before any outreach or external action.`,
-    priority: relationship.fitScore,
-    confidence: relationship.confidence,
-    evidence: json({ scene_relationship_id: relationship.id, ...relationship.evidence }),
-    recommended_action: json({ type: "review_scene_relationship", relationship_id: relationship.id, href: "/studio/growth/strategy" }),
-    dedupe_key: `artist:${artist.artistId}:scene:${relationship.id}`,
-    status: "new" as const,
-  }));
-
-  if (!rows.length && context.scene.primaryScene) {
-    rows.push({
-      owner_id: ownerId,
-      artist_id: artist.artistId,
-      kind: "scene_fit",
-      title: `Map the ${context.scene.primaryScene} ecosystem`,
-      rationale: "The artist has explicitly identified this scene, but Ensemblis does not yet have enough evidence to name labels, playlists, channels, promoters or festivals. Research should happen before outreach.",
-      priority: 65,
-      confidence: Math.max(0.5, context.scene.confidence),
-      evidence: json({ source: "artist_scene_profile", scene: context.scene.primaryScene, evidence: context.scene.evidence }),
-      recommended_action: json({ type: "research_scene", href: "/studio/growth/strategy" }),
-      dedupe_key: `artist:${artist.artistId}:scene-map:${context.scene.primaryScene.toLowerCase()}`,
-      status: "new" as const,
-    });
-  }
-
-  for (const row of rows) {
-    const { data: existing, error: lookupError } = await growth
-      .from("growth_opportunities")
-      .select("id")
-      .eq("owner_id", ownerId)
-      .eq("artist_id", artist.artistId)
-      .eq("dedupe_key", row.dedupe_key)
-      .maybeSingle();
-    if (lookupError) throw new Error(lookupError.message);
-
-    if (existing) {
-      const { error } = await growth
-        .from("growth_opportunities")
-        .update(row)
-        .eq("id", existing.id)
-        .eq("owner_id", ownerId)
-        .eq("artist_id", artist.artistId);
-      if (error) throw new Error(error.message);
-      continue;
-    }
-
-    const { error } = await growth.from("growth_opportunities").insert(row);
-    if (error) throw new Error(error.message);
-  }
+  return materializeSceneGrowthOpportunities({
+    client,
+    ownerId,
+    artistId: artist.artistId,
+    artistName: context.artist.name,
+    relationships: context.relationships,
+    scene: context.scene,
+    includeSceneMapFallback: true,
+  });
 }
 
 export async function saveArtistOperatingProfileAction(form: FormData) {
