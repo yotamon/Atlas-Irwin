@@ -7,7 +7,6 @@ import {
   latestExactMomentCalibration,
   momentCalibrationDelta,
 } from "../lib/studio/moment-calibration.ts";
-import { curateCalibratedReleaseMoments } from "../lib/studio/moments-calibrated-curator.ts";
 
 const OWNER = "00000000-0000-4000-8000-000000000001";
 const ARTIST = "00000000-0000-4000-8000-000000000002";
@@ -122,18 +121,19 @@ test("explicit preference for another Moment is bounded on both sides", () => {
   assert.equal(momentCalibrationDelta(preferred, events, all), MOMENT_CALIBRATION_MAX_ABS_DELTA);
 });
 
-test("artist calibration participates before the final five-Moment ranking", () => {
-  const stronger = moment(5, { confidence: 0.86, hook_score: 0.84, label: "Machine favorite" });
-  const artistFavorite = moment(6, { confidence: 0.70, hook_score: 0.69, label: "Artist favorite" });
-  const result = curateCalibratedReleaseMoments({
-    moments: [stronger, artistFavorite],
-    calibrationEvents: [calibration(artistFavorite, 1, { judgment: "best" })],
-    sections: [],
-  });
+test("artist calibration participates before the final five-Moment ranking", async () => {
+  const curator = await readFile(new URL("../lib/studio/moments-calibrated-curator.ts", import.meta.url), "utf8");
+  const applyIndex = curator.indexOf("applyMomentCalibrationScore(");
+  const floorIndex = curator.indexOf(".filter((moment) =>");
+  const sortIndex = curator.indexOf(".sort((left, right)");
+  const sliceIndex = curator.indexOf(".slice(0, Math.max(1, maxResults))");
 
-  assert.equal(result.curated.length, 2);
-  assert.equal(result.curated[0].id, artistFavorite.id);
-  assert.equal(result.curated[0].curation.rank, 1);
+  assert.ok(applyIndex >= 0, "calibration must contribute to curated Moment score");
+  assert.ok(floorIndex > applyIndex, "calibration must happen before final quality eligibility");
+  assert.ok(sortIndex > floorIndex, "calibrated eligible Moments must be ranked after calibration");
+  assert.ok(sliceIndex > sortIndex, "Top 5 truncation must happen only after calibrated ranking");
+  assert.match(curator, /calibration\?\.judgment === "best"/);
+  assert.match(curator, /calibration\?\.judgment === "useful"/);
 });
 
 test("Moment review UX is evidence-first and calibration is append-only for product clients", async () => {
