@@ -16,6 +16,7 @@ export type Json =
 export type Release = {
   id: string;
   owner_id: string;
+  artist_id: string;
   title: string;
   slug: string;
   release_type: string;
@@ -64,6 +65,7 @@ export type Track = {
   id: string;
   release_id: string;
   owner_id: string;
+  artist_id: string;
   title: string;
   version: string | null;
   duration: number | null;
@@ -350,6 +352,7 @@ export type MediaAsset = {
 export type MediaLink = {
   id: string;
   owner_id: string;
+  artist_id: string | null;
   media_asset_id: string;
   release_id: string | null;
   track_id: string | null;
@@ -366,6 +369,7 @@ export type MediaLink = {
 export type TrackExternalId = {
   id: string;
   owner_id: string;
+  artist_id: string;
   track_id: string;
   provider: string;
   external_id: string;
@@ -379,6 +383,7 @@ export type TrackExternalId = {
 export type ReleaseExternalLink = {
   id: string;
   owner_id: string;
+  artist_id: string;
   release_id: string;
   provider: string;
   external_id: string | null;
@@ -393,6 +398,7 @@ export type ReleaseExternalLink = {
 export type HomepagePlacement = {
   id: string;
   owner_id: string;
+  artist_id: string;
   release_id: string;
   enabled: boolean;
   display_order: number;
@@ -556,11 +562,19 @@ type Table<Row> = {
   Update: Partial<Row>;
   Relationships: [];
 };
+
+type ArtistScopedTable<Row extends { artist_id: string }> = {
+  Row: Row;
+  Insert: Partial<Row> & Pick<Row, "artist_id">;
+  Update: Partial<Row>;
+  Relationships: [];
+};
+
 export type Database = {
   public: {
     Tables: {
-      releases: Table<Release>;
-      tracks: Table<Track>;
+      releases: ArtistScopedTable<Release>;
+      tracks: ArtistScopedTable<Track>;
       content_items: Table<ContentItem>;
       outreach_contacts: Table<OutreachContact>;
       outreach_messages: Table<OutreachMessage>;
@@ -576,9 +590,9 @@ export type Database = {
       tasks: Table<Task>;
       media_assets: Table<MediaAsset>;
       media_links: Table<MediaLink>;
-      track_external_ids: Table<TrackExternalId>;
-      release_external_links: Table<ReleaseExternalLink>;
-      homepage_placements: Table<HomepagePlacement>;
+      track_external_ids: ArtistScopedTable<TrackExternalId>;
+      release_external_links: ArtistScopedTable<ReleaseExternalLink>;
+      homepage_placements: ArtistScopedTable<HomepagePlacement>;
       music_video_projects: Table<MusicVideoProject>;
       music_video_concepts: Table<MusicVideoConcept>;
       music_video_scenes: Table<MusicVideoScene>;
