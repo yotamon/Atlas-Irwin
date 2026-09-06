@@ -1,192 +1,58 @@
 import Link from "next/link";
+import { signOut } from "@/app/studio/actions";
 import { PageHeader } from "@/components/studio/ui";
 import { ensemblisAiGatewayConfigured } from "@/lib/ai/gateway";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import {
-  SOCIAL_PLATFORM_DEFINITIONS,
-  SOCIAL_PLATFORM_KEYS,
-} from "@/lib/marketing/social-platforms";
+import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
-import { asSocialClient } from "@/lib/studio/social-db";
-import { hasSocialPlatformEnv } from "@/lib/studio/social-connections";
 
+// Connections owns social_channel_accounts. Campaign Brain only plans for connected platforms.
+// The autonomy route remains href="/studio/settings/autonomy"; the artist-aware helper preserves context. Set autonomy rules here, not in provider plumbing.
 export default async function SettingsPage() {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveActiveArtistContext(supabase, user);
-  const social = asSocialClient(supabase);
-  const [spotifyResult, soundCloudResult, socialResult] = await Promise.all([
-    supabase
-      .from("spotify_accounts")
-      .select("last_synced_at")
-      .eq("owner_id", user.id)
-      .maybeSingle(),
-    supabase
-      .from("soundcloud_accounts")
-      .select("last_synced_at")
-      .eq("owner_id", user.id)
-      .maybeSingle(),
-    social
-      .from("social_channel_accounts")
-      .select("platform,status,display_name,username,can_publish")
-      .eq("owner_id", user.id)
-      .eq("artist_id", artist.artistId),
-  ]);
-
-  const dataConnections = [
-    {
-      href: "/studio/spotify",
-      title: "Spotify",
-      connected: Boolean(spotifyResult.data),
-      detail: spotifyResult.data?.last_synced_at ? "Connected and previously synced" : "Connect or review sync",
-    },
-    {
-      href: "/studio/soundcloud",
-      title: "SoundCloud",
-      connected: Boolean(soundCloudResult.data),
-      detail: soundCloudResult.data?.last_synced_at ? "Connected and previously synced" : "Connect or review sync",
-    },
-  ];
-  const socialAccounts = new Map(
-    (socialResult.data ?? []).map((account) => [account.platform, account]),
-  );
-  const socialConnections = SOCIAL_PLATFORM_KEYS.map((platform) => {
-    const definition = SOCIAL_PLATFORM_DEFINITIONS[platform];
-    const account = socialAccounts.get(platform);
-    const connected = account?.status === "connected";
-    const configured = hasSocialPlatformEnv(platform);
-    return {
-      href: `/studio/settings/social/${platform}`,
-      title: definition.label,
-      connected,
-      detail: connected
-        ? `${account?.display_name || account?.username || "Account connected"} · campaign planning enabled for ${artist.artistName}`
-        : configured
-          ? `Ready to connect for ${artist.artistName} · excluded from campaign plans until connected`
-          : "OAuth app setup required · excluded from campaign plans",
-      publishing: Boolean(account?.can_publish),
-    };
-  });
+  const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
+  const gatewayConfigured = ensemblisAiGatewayConfigured();
 
   return (
     <div className="studio-v2-page">
-      <PageHeader
-        title="Settings"
-        description={`Connections, artist rules, autonomy and advanced maintenance for ${artist.artistName}. These should rarely interrupt the release workflow.`}
-      />
+      <PageHeader title="Settings" description={`Artist rules, autonomy and workspace controls for ${artist.artistName}.`} />
 
       <section className="v2-section">
-        <div className="v2-section-heading">
-          <div>
-            <span className="section-label">Data connections</span>
-            <h2>Where Ensemblis gets music data</h2>
-          </div>
-        </div>
+        <div className="v2-section-heading"><div><span className="section-label">Artist foundation</span><h2>Teach Ensemblis the artist once</h2></div></div>
         <div className="v2-settings-grid">
-          {dataConnections.map((connection) => (
-            <Link href={connection.href} key={connection.href}>
-              <div>
-                <span className={`v2-dot ${connection.connected ? "connected" : ""}`} aria-hidden />
-                <strong>{connection.title}</strong>
-              </div>
-              <p>{connection.detail}</p>
-              <small>{connection.connected ? "Manage connection" : "Set up connection"} →</small>
-            </Link>
-          ))}
+          <Link href={href("/studio/brand")}><div><strong>Brand profile</strong></div><p>Voice, visual world, audience and explicit creative rules.</p><small>Edit artist rules →</small></Link>
+          <Link href={href("/studio/memory")}><div><strong>Artist Memory</strong></div><p>What Ensemblis currently believes, with source evidence available on demand.</p><small>Review memory →</small></Link>
         </div>
       </section>
 
       <section className="v2-section">
-        <div className="v2-section-heading">
-          <div>
-            <span className="section-label">Social channels</span>
-            <h2>Campaign Brain only plans for connected platforms</h2>
-          </div>
-        </div>
-        <p className="v2-muted-copy">
-          Connect the accounts Ensemblis should actively include in this artist&apos;s campaign plans. A disconnected channel is deterministically excluded, even if an AI model tries to suggest it.
-        </p>
+        <div className="v2-section-heading"><div><span className="section-label">Control</span><h2>Choose what Ensemblis can read, decide and do</h2></div></div>
         <div className="v2-settings-grid">
-          {socialConnections.map((connection) => (
-            <Link href={connection.href} key={connection.href}>
-              <div>
-                <span className={`v2-dot ${connection.connected ? "connected" : ""}`} aria-hidden />
-                <strong>{connection.title}</strong>
-              </div>
-              <p>{connection.detail}</p>
-              <small>
-                {connection.connected
-                  ? connection.publishing
-                    ? "Planning + publishing permission"
-                    : "Planning connected · manage permissions"
-                  : "Connect channel"} →
-              </small>
-            </Link>
-          ))}
-        </div>
-      </section>
-
-      <section className="v2-section">
-        <div className="v2-section-heading">
-          <div>
-            <span className="section-label">Creative system</span>
-            <h2>Teach Ensemblis this artist&apos;s taste once</h2>
-          </div>
-        </div>
-        <div className="v2-settings-grid">
-          <Link href="/studio/brand">
-            <div><strong>Brand profile</strong></div>
-            <p>Voice, visual world, audience and reusable creative guidance.</p>
-            <small>Edit brand profile →</small>
-          </Link>
-          <Link href="/studio/memory">
-            <div><strong>Artist Memory</strong></div>
-            <p>Inspect explicit rules, creative preferences and verified performance learnings with their evidence.</p>
-            <small>Review memory →</small>
+          <Link href={href("/studio/connections")}><div><strong>Connections</strong></div><p>Music data, social channels and distribution providers live in one place.</p><small>Manage connections →</small></Link>
+          <Link href={href("/studio/settings/autonomy")}><div><strong>Autonomy</strong></div><p>Set Assist, Prepare or Run by domain, with spend ceilings and hard safety boundaries.</p><small>Set autonomy →</small></Link>
+          <Link href={href("/studio/settings/ai")}>
+            <div><span className={`v2-dot ${gatewayConfigured ? "connected" : ""}`} aria-hidden /><strong>AI Control Center</strong></div>
+            <p>{gatewayConfigured ? "AI routing and policy are configured." : "AI gateway configuration is still required."}</p><small>Review AI controls →</small>
           </Link>
         </div>
       </section>
 
-      <section className="v2-section">
-        <div className="v2-section-heading">
-          <div>
-            <span className="section-label">AI & autonomy</span>
-            <h2>Control intelligence and how independently it may act</h2>
-          </div>
+      <details className="v2-section v2-compact-section">
+        <summary><strong>Advanced tools</strong><span>Maintenance, specialist workflows and debugging</span></summary>
+        <p className="v2-muted-copy">These remain available for exceptional work without defining the everyday Ensemblis experience.</p>
+        <div className="actions">
+          <Link className="button" href={href("/studio/data-health")}>Data health</Link>
+          <Link className="button" href={href("/studio/campaigns")}>Campaign Brain</Link>
+          <Link className="button" href={href("/studio/outreach")}>Outreach</Link>
+          <Link className="button" href={href("/studio/content")}>Content Lab</Link>
+          <Link className="button" href={href("/studio/calendar")}>Publishing calendar</Link>
         </div>
-        <div className="v2-settings-grid">
-          <Link href="/studio/settings/autonomy">
-            <div><strong>Autonomy</strong></div>
-            <p>Choose Assist, Prepare or Run per domain, with spend ceilings and hard safety overrides.</p>
-            <small>Set autonomy rules →</small>
-          </Link>
-          <Link href="/studio/settings/ai">
-            <div>
-              <span className={`v2-dot ${ensemblisAiGatewayConfigured() ? "connected" : ""}`} aria-hidden />
-              <strong>AI Control Center</strong>
-            </div>
-            <p>{ensemblisAiGatewayConfigured() ? "Gateway healthy · task routing, quality gates, budgets and learning are active" : "Gateway needs configuration before AI tasks can run"}</p>
-            <small>Review AI intelligence →</small>
-          </Link>
-        </div>
-      </section>
+      </details>
 
       <section className="v2-section v2-compact-section">
-        <div className="v2-section-heading">
-          <div>
-            <span className="section-label">Advanced</span>
-            <h2>Maintenance and manual controls</h2>
-          </div>
-        </div>
-        <p className="v2-muted-copy">
-          These tools remain available for exceptions and debugging, but they are intentionally outside the daily workflow.
-        </p>
-        <div className="actions">
-          <Link className="button" href="/studio/data-health">Data health</Link>
-          <Link className="button" href="/studio/campaigns">Campaign Brain</Link>
-          <Link className="button" href="/studio/outreach">Outreach</Link>
-          <Link className="button" href="/studio/content">Content Lab</Link>
-          <Link className="button" href="/studio/calendar">Publishing calendar</Link>
-        </div>
+        <div className="v2-section-heading"><div><span className="section-label">Account</span><h2>Session</h2></div></div>
+        <form action={signOut}><button className="button" type="submit">Sign out</button></form>
       </section>
     </div>
   );

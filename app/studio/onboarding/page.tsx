@@ -1,27 +1,20 @@
 import Link from "next/link";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { confirmArtistIdentityAction, dismissOnboardingAction } from "./actions";
-import { promoteVaultTrack } from "@/app/studio/growth-actions";
-import { EnsemblisMark } from "@/components/ensemblis-logo";
-import { OnboardingVisitTracker } from "@/components/studio/onboarding-visit-tracker";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asGrowthClient } from "@/lib/studio/growth-db";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
+import { promoteVaultTrack } from "@/app/studio/growth-actions";
+import { confirmArtistIdentityAction, dismissOnboardingAction } from "./actions";
+import { EnsemblisMark } from "@/components/ensemblis-logo";
+import { OnboardingVisitTracker } from "@/components/studio/onboarding-visit-tracker";
 import type { Json } from "@/types/database";
 import type { ArtistActivationEvent, OnboardingDatabase } from "@/types/onboarding-database";
 
 type Db = SupabaseClient<OnboardingDatabase>;
-
 type StepState = "done" | "current" | "waiting" | "future";
-
-type ActivationStep = {
-  key: string;
-  label: string;
-  detail: string;
-  state: StepState;
-};
+type ActivationStep = { key: string; label: string; detail: string; state: StepState };
 
 function object(value: Json | null | undefined): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -105,7 +98,7 @@ export default async function ArtistOnboardingPage() {
           <h1>{current === "complete" ? `${artist.artistName} is ready to move` : "Start with the music, not the setup"}</h1>
           <p>{current === "complete"
             ? "Ensemblis has enough real artist and music context to recommend work from the song outward."
-            : "You do not need to configure providers, brand rules or automation first. Give Ensemblis one real track and it will earn the right to ask for anything else."}</p>
+            : "Give Ensemblis one real track first. Everything else can follow when it becomes useful."}</p>
         </div>
 
         <ol className="ensemblis-onboarding-steps" aria-label="Activation progress">
@@ -127,19 +120,19 @@ export default async function ArtistOnboardingPage() {
 
           {current === "music" ? <>
             <span className="section-label">One input</span><h2>Add one mastered track</h2>
-            <p>Use the actual master you care about. Title is optional. Structure, hooks, energy and useful musical sections are analyzed automatically.</p>
+            <p>Use the actual master you care about. Structure, hooks, energy and useful musical sections are analyzed automatically.</p>
             <Link className="button primary" href={href("/studio/music/import?onboarding=1")}>Add mastered music</Link>
           </> : null}
 
           {current === "analysis" ? <>
             <span className="section-label">Working</span><h2>Ensemblis is understanding the track</h2>
-            <p>You do not need to score hooks or fill in marketing fields. When Track Intelligence is ready, the release decision will appear here.</p>
+            <p>You do not need to score hooks or fill in marketing fields. The next useful decision will appear when the analysis is ready.</p>
             <div className="actions"><Link className="button primary" href={href("/studio/music")}>See Track Intelligence</Link><Link className="button" href={href("/studio")}>Continue elsewhere</Link></div>
           </> : null}
 
           {current === "mission" && candidate ? <>
             <span className="section-label">First recommendation</span><h2>Turn {candidate.title} into a Release Mission</h2>
-            <p>Its Track Intelligence is ready. Starting a Mission keeps the master and analysis, creates the canonical release track and materializes the strongest reusable Moments.</p>
+            <p>Its Track Intelligence is ready. Starting a Mission keeps the master and analysis connected to the release.</p>
             <form action={promoteVaultTrack}><input type="hidden" name="id" value={candidate.id} /><button className="button primary" type="submit">Start Release Mission</button></form>
           </> : null}
 
@@ -149,19 +142,19 @@ export default async function ArtistOnboardingPage() {
 
           {current === "moments" && mission && missionMoments.length ? <>
             <span className="section-label">Your judgment</span><h2>Choose the musical Moments worth using</h2>
-            <p>Ensemblis curated the strongest complete sections. Approve only the parts you would actually put in front of a listener. Those decisions become authoritative downstream.</p>
-            <Link className="button primary" href={href(`/studio/releases/${mission.id}`)}>Review {missionMoments.length} curated Moment{missionMoments.length === 1 ? "" : "s"}</Link>
+            <p>Approve only the complete musical sections you would actually put in front of a listener.</p>
+            <Link className="button primary" href={href(`/studio/releases/${mission.id}?stage=create#moments`)}>Review {missionMoments.length} curated Moment{missionMoments.length === 1 ? "" : "s"}</Link>
           </> : null}
 
           {current === "moments" && mission && !missionMoments.length ? <>
             <span className="section-label">Working</span><h2>Curating the strongest musical sections</h2>
             <p>The Release Mission exists and its Track Intelligence is being normalized into reusable Moments. No extra setup is required.</p>
-            <Link className="button primary" href={href(`/studio/releases/${mission.id}`)}>Open Release Mission</Link>
+            <Link className="button primary" href={href(`/studio/releases/${mission.id}?stage=create#moments`)}>Open Release Mission</Link>
           </> : null}
 
           {current === "complete" ? <>
             <span className="section-label">Activated</span><h2>Choose what the music should accomplish</h2>
-            <p>Your approved Moment can now drive creation, release marketing, owned attribution and learning without re-entering the same context.</p>
+            <p>Your approved Moment can now drive creation, release marketing and learning without re-entering the same context.</p>
             <div className="actions"><Link className="button primary" href={href("/studio/create")}>Create from a Moment</Link><Link className="button" href={href("/studio")}>Go to Today</Link></div>
           </> : null}
         </section>

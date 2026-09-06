@@ -18,8 +18,8 @@ export function StudioContextBar({
 
       <nav className="ensemblis-context-actions" aria-label="Global workspace actions">
         <CommandPalette artistId={artistId} />
-        <Link className="ensemblis-context-link" href={ensemblisArtistHref("/studio/inbox", artistId)}>
-          Needs you
+        <Link className="ensemblis-context-link" href={ensemblisArtistHref("/studio/needs-you", artistId)}>
+          Needs You
         </Link>
         <Link className="button primary" href={ensemblisArtistHref("/studio/create", artistId)}>
           Create

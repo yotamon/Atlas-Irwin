@@ -1,77 +1,211 @@
-/* Narrow-screen shell behavior after the primary Ensemblis IA stabilized. */
+/* Responsive Ensemblis shell. Desktop keeps the full sidebar; narrow screens use
+   a persistent app-style bottom navigation instead of an icon-only sidebar.
+   Legacy contract note: .studio-root .studio-nav-text remains a desktop/sidebar concern. */
+
+.ensemblis-mobile-navigation {
+  display: none;
+}
 
 @media (max-width: 900px) {
   .studio-root .studio-shell {
-    grid-template-columns: 4.8rem minmax(0, 1fr);
+    display: block;
+    min-width: 0;
   }
 
-  .studio-root .studio-sidebar-section-label,
-  .studio-root .studio-nav-text,
-  .studio-root .ensemblis-artist-switcher-heading,
-  .studio-root .ensemblis-artist-workspace {
+  .studio-root .studio-sidebar {
     display: none;
   }
 
-  .studio-root .studio-sidebar nav {
-    padding-block: 0.35rem;
+  .studio-root .ensemblis-workspace-shell {
+    min-width: 0;
   }
 
-  .studio-root .studio-sidebar nav a,
-  .studio-root .studio-sidebar-foot a,
-  .studio-root .studio-sidebar-foot button {
-    justify-content: center;
-    min-height: 2.75rem;
-    padding: 0.7rem;
+  .studio-root .studio-main {
+    padding-bottom: calc(6.6rem + env(safe-area-inset-bottom));
   }
 
-  .studio-root .studio-sidebar nav a svg,
-  .studio-root .studio-sidebar-foot a svg,
-  .studio-root .studio-sidebar-foot button svg {
-    width: 1.18rem;
-    height: 1.18rem;
+  .studio-root .ensemblis-mobile-navigation {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 90;
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 0.15rem;
+    padding: 0.38rem max(0.4rem, env(safe-area-inset-right)) calc(0.38rem + env(safe-area-inset-bottom)) max(0.4rem, env(safe-area-inset-left));
+    border-top: 1px solid var(--en-line);
+    background: color-mix(in srgb, var(--en-bg) 96%, transparent);
+    box-shadow: 0 -16px 46px rgba(0, 0, 0, 0.28);
+    backdrop-filter: blur(22px) saturate(118%);
   }
 
-  .studio-root .studio-sidebar nav a.is-active::after,
-  .studio-root .studio-sidebar-foot a.is-active::after {
-    right: 0.38rem;
+  .studio-root .ensemblis-mobile-navigation > a,
+  .studio-root .ensemblis-mobile-more > summary {
+    position: relative;
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 0.26rem;
+    min-width: 0;
+    min-height: 3.8rem;
+    padding: 0.38rem 0.18rem;
+    border: 0;
+    border-radius: 0.7rem;
+    background: transparent;
+    color: var(--en-subtle);
+    font-size: 0.56rem;
+    font-weight: 660;
+    line-height: 1;
+    text-decoration: none;
+    cursor: pointer;
   }
 
-  .studio-root .studio-sidebar-foot {
-    padding: 0.55rem 0.25rem;
+  .studio-root .ensemblis-mobile-navigation > a svg {
+    width: 1.12rem;
+    height: 1.12rem;
   }
 
-  .studio-root .studio-sidebar-foot form {
+  .studio-root .ensemblis-mobile-navigation > a.is-active,
+  .studio-root .ensemblis-mobile-more.is-active > summary,
+  .studio-root .ensemblis-mobile-more[open] > summary {
+    background: var(--en-accent-soft);
+    color: var(--en-accent);
+  }
+
+  .studio-root .ensemblis-mobile-navigation > a.is-active::before,
+  .studio-root .ensemblis-mobile-more.is-active > summary::before {
+    content: "";
+    position: absolute;
+    top: 0.22rem;
+    width: 1.25rem;
+    height: 2px;
+    border-radius: 999px;
+    background: var(--en-accent);
+  }
+
+  .studio-root .ensemblis-mobile-more {
+    min-width: 0;
+  }
+
+  .studio-root .ensemblis-mobile-more > summary {
+    list-style: none;
+  }
+
+  .studio-root .ensemblis-mobile-more > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .studio-root .ensemblis-mobile-more-icon {
+    display: grid;
+    place-items: center;
+    min-height: 1.12rem;
+    font-size: 0.82rem;
+    letter-spacing: 0.08em;
+  }
+
+  .studio-root .ensemblis-mobile-more-sheet {
+    position: fixed;
+    right: max(0.7rem, env(safe-area-inset-right));
+    bottom: calc(5rem + env(safe-area-inset-bottom));
+    left: max(0.7rem, env(safe-area-inset-left));
+    z-index: 92;
+    display: grid;
+    max-height: min(70vh, 36rem);
+    gap: 0.75rem;
+    overflow-y: auto;
+    padding: 0.85rem;
+    border: 1px solid var(--en-line-strong);
+    border-radius: 1rem;
+    background: color-mix(in srgb, var(--en-surface) 98%, black);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+    overscroll-behavior: contain;
+  }
+
+  .studio-root .ensemblis-mobile-sheet-heading {
+    display: flex;
+    gap: 1rem;
+    align-items: end;
+    justify-content: space-between;
+    padding: 0.2rem 0.2rem 0;
+  }
+
+  .studio-root .ensemblis-mobile-sheet-heading > div {
+    display: grid;
+    gap: 0.12rem;
+  }
+
+  .studio-root .ensemblis-mobile-sheet-heading span,
+  .studio-root .ensemblis-mobile-sheet-heading small {
+    color: var(--en-subtle);
+    font-size: 0.56rem;
+  }
+
+  .studio-root .ensemblis-mobile-sheet-heading strong {
+    font-size: 0.88rem;
+  }
+
+  .studio-root .ensemblis-mobile-more-sheet .ensemblis-artist-switcher {
     margin: 0;
   }
 
-  .studio-root .ensemblis-artist-switcher {
-    margin: 0.5rem;
-    padding: 0.35rem;
+  .studio-root .ensemblis-mobile-needs-you {
+    display: grid;
+    gap: 0.22rem;
+    padding: 0.8rem;
+    border: 1px solid color-mix(in srgb, var(--en-accent) 32%, var(--en-line));
+    border-radius: var(--en-radius);
+    background: var(--en-accent-soft);
+    color: var(--en-ink);
   }
 
-  .studio-root .ensemblis-artist-switcher select {
-    min-height: 2.55rem;
-    padding: 0.35rem 0.1rem;
-    font-size: 0.58rem;
-    text-align: center;
+  .studio-root .ensemblis-mobile-needs-you strong {
+    color: var(--en-accent);
+    font-size: 0.76rem;
+  }
+
+  .studio-root .ensemblis-mobile-needs-you span {
+    color: var(--en-muted);
+    font-size: 0.62rem;
+  }
+
+  .studio-root .ensemblis-mobile-more-links {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.42rem;
+  }
+
+  .studio-root .ensemblis-mobile-more-links a {
+    display: flex;
+    gap: 0.55rem;
+    align-items: center;
+    min-width: 0;
+    min-height: 2.8rem;
+    padding: 0.65rem 0.7rem;
+    border: 1px solid var(--en-line);
+    border-radius: var(--en-radius-sm);
+    background: color-mix(in srgb, var(--en-surface-raised) 58%, transparent);
+    color: var(--en-muted);
+    font-size: 0.65rem;
+    font-weight: 650;
+  }
+
+  .studio-root .ensemblis-mobile-more-links a.is-active {
+    border-color: color-mix(in srgb, var(--en-accent) 42%, var(--en-line));
+    background: var(--en-accent-soft);
+    color: var(--en-accent);
+  }
+
+  .studio-root .ensemblis-mobile-more-links svg {
+    flex: 0 0 auto;
+    width: 1rem;
+    height: 1rem;
   }
 }
 
 @media (max-width: 620px) {
-  .studio-root .studio-shell {
-    grid-template-columns: 4.35rem minmax(0, 1fr);
-  }
-
   .studio-root .studio-main {
     padding-inline: clamp(0.75rem, 3vw, 1rem);
-  }
-
-  .studio-root .studio-sidebar nav a,
-  .studio-root .studio-sidebar-foot a,
-  .studio-root .studio-sidebar-foot button {
-    min-height: 2.9rem;
-    margin-inline: 0.25rem;
-    width: calc(100% - 0.5rem);
   }
 
   .studio-root .ensemblis-context-bar {
@@ -94,13 +228,46 @@
     gap: 0.35rem;
   }
 
-  .studio-root .ensemblis-context-link {
+  .studio-root .ensemblis-context-link,
+  .studio-root .ensemblis-context-actions .button.primary {
     display: none;
   }
 
-  .studio-root .ensemblis-context-actions .button,
   .studio-root .ensemblis-command-trigger {
     min-height: 2.55rem;
+  }
+
+  .studio-root .ensemblis-mobile-navigation {
+    gap: 0;
+    padding-inline: 0.2rem;
+  }
+
+  .studio-root .ensemblis-mobile-navigation > a,
+  .studio-root .ensemblis-mobile-more > summary {
+    min-height: 3.65rem;
+    padding-inline: 0.08rem;
+    font-size: 0.52rem;
+  }
+
+  .studio-root .ensemblis-mobile-more-sheet {
+    right: max(0.45rem, env(safe-area-inset-right));
+    left: max(0.45rem, env(safe-area-inset-left));
+  }
+}
+
+@media (max-width: 410px) {
+  .studio-root .ensemblis-mobile-navigation > a,
+  .studio-root .ensemblis-mobile-more > summary {
+    font-size: 0.49rem;
+  }
+
+  .studio-root .ensemblis-mobile-navigation > a svg {
+    width: 1.02rem;
+    height: 1.02rem;
+  }
+
+  .studio-root .ensemblis-mobile-more-links {
+    grid-template-columns: 1fr;
   }
 }
 
