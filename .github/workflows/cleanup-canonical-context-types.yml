@@ -53,7 +53,7 @@ jobs:
 
           function addDatabaseTypeImports(source, names) {
             if (!names.length) return source;
-            const importPattern = /import\s+type\s*\{([\s\S]*?)\}\s*from\s*["']@\/types\/database["'];?/m;
+            const importPattern = /import\s+type\s*\{([^}]*)\}\s*from\s*["']@\/types\/database["'];?/m;
             const match = source.match(importPattern);
             if (match) {
               const existing = match[1]
@@ -74,7 +74,7 @@ jobs:
 
             source = source.replaceAll('resolveDefaultArtistContext', 'resolveActiveArtistContext');
 
-            const oldImportPattern = /import\s+type\s*\{([\s\S]*?)\}\s*from\s*["']@\/types\/artist-scoped-music-database["'];?\s*/gm;
+            const oldImportPattern = /import\s+type\s*\{([^}]*)\}\s*from\s*["']@\/types\/artist-scoped-music-database["'];?\s*/gm;
             const required = [];
             source = source.replace(oldImportPattern, (match, specifiers) => {
               for (const raw of specifiers.split(',')) {
@@ -106,10 +106,6 @@ jobs:
 
           const contractPath = 'tests/studio-v2-contract.test.mjs';
           let contract = fs.readFileSync(contractPath, 'utf8');
-          contract = contract.replace(
-            '  assert.ok(context.includes("resolveDefaultArtistContext"));\n',
-            '',
-          );
           contract = contract.replace(
             '  assert.ok(context.includes("resolveArtistContext(client, identity, preferredArtistId)"));\n  assert.ok(context.includes("resolveLegacyFallbackArtistContext"));\n  assert.ok(context.includes("return resolveActiveArtistContext(client, identity);"));\n  assert.equal(context.includes("return resolveDefaultArtistContext(client, identity);"), false);',
             '  assert.ok(context.includes("resolveArtistContext(client, identity, preferredArtistId)"));\n  assert.equal(context.includes("resolveLegacyFallbackArtistContext"), false);\n  assert.ok(context.includes("resolveUnambiguousArtistContext"));\n  assert.equal(context.includes("resolveDefaultArtistContext"), false);',
