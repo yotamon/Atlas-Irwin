@@ -30,7 +30,9 @@ export type Track = Omit<CoreTrack, LegacyTrackColumn>;
 export type ReleaseReadModel = Release & {
   artist_name: string;
   cover_asset_id: string | null;
-  cover_url: string | null;
+  cover_public_url: string | null;
+  cover_bucket_name: string | null;
+  cover_storage_path: string | null;
   cover_alt: string | null;
   spotify_url: string | null;
   apple_music_url: string | null;
@@ -43,7 +45,7 @@ export type ReleaseReadModel = Release & {
 
 export type TrackReadModel = Track & {
   master_audio_asset_id: string | null;
-  master_audio_url: string | null;
+  master_audio_public_url: string | null;
   master_audio_bucket_name: string | null;
   master_audio_storage_path: string | null;
   spotify_url: string | null;
