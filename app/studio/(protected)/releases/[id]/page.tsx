@@ -7,7 +7,7 @@ import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 import { asMomentsClient } from "@/lib/studio/moments-db";
-import { curateReleaseMoments } from "@/lib/studio/moments-curator";
+import { curateCalibratedReleaseMoments } from "@/lib/studio/moments-calibrated-curator";
 import { getPublicReleases } from "@/lib/public-catalog";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { asGrowthClient } from "@/lib/studio/growth-db";
@@ -17,6 +17,10 @@ import { ReleaseCampaignBridge } from "@/components/studio/release-campaign-brid
 import { ReleaseWorkspaceV2 } from "@/components/studio/release-workspace-v2";
 import type { MusicVideoProject } from "@/types/database";
 import type { LyricsDatabase } from "@/types/lyrics-database";
+
+function missingCalibrationTable(error: { code?: string } | null) {
+  return error?.code === "42P01" || error?.code === "PGRST205";
+}
 
 export default async function ReleaseDetail({
   params,
@@ -85,12 +89,19 @@ export default async function ReleaseDetail({
     : { count: 0, error: null };
   if (providerScheduleError) throw new Error(providerScheduleError.message);
 
-  const [{ data: moments, error: momentsError }, { data: momentPerformance, error: performanceError }] = await Promise.all([
+  const [
+    { data: moments, error: momentsError },
+    { data: momentPerformance, error: performanceError },
+    { data: calibrationRows, error: calibrationError },
+  ] = await Promise.all([
     momentsDb.from("moments").select("*").eq("release_id", id).eq("artist_id", artist.artistId).order("confidence", { ascending: false }).order("start_ms", { ascending: true }),
     momentsDb.from("moment_performance_rollups").select("*").eq("release_id", id).eq("artist_id", artist.artistId),
+    momentsDb.from("moment_calibration_events").select("*").eq("release_id", id).eq("artist_id", artist.artistId).order("created_at", { ascending: false }).limit(250),
   ]);
   if (momentsError) throw new Error(momentsError.message);
   if (performanceError) throw new Error(performanceError.message);
+  if (calibrationError && !missingCalibrationTable(calibrationError)) throw new Error(calibrationError.message);
+  const calibrationEvents = calibrationError ? [] : calibrationRows ?? [];
 
   const { data: trackLyrics, error: trackLyricsError } = trackIds.length
     ? await lyricsDb.from("track_lyrics").select("id,track_id").eq("artist_id", artist.artistId).in("track_id", trackIds)
@@ -109,8 +120,9 @@ export default async function ReleaseDetail({
   if (lyricSourcesError) throw new Error(lyricSourcesError.message);
 
   const trackByLyricsId = new Map((trackLyrics ?? []).map((lyrics) => [lyrics.id, lyrics.track_id]));
-  const momentCuration = curateReleaseMoments({
+  const momentCuration = curateCalibratedReleaseMoments({
     moments: moments ?? [],
+    calibrationEvents,
     sections: (lyricSections ?? []).map((section) => ({
       id: section.id,
       track_id: trackByLyricsId.get(section.lyrics_id) ?? "",
@@ -128,7 +140,7 @@ export default async function ReleaseDetail({
   if (!advanced) {
     return <>
       <ReleaseWorkspaceV2 release={release} tracks={tracks ?? []} mediaLinks={mediaLinks ?? []} mediaAssets={mediaAssets ?? []} contentItems={contentItems ?? []} metrics={metrics ?? []} campaign={campaignResult.data} stage={stage} renderedAt={renderedAt} playbookTasks={playbookTasks ?? []} providerScheduledCount={providerScheduledCount ?? 0} vaultTrack={vaultResult.data} />
-      {stage === "create" ? <MomentReviewPanel releaseId={release.id} moments={momentCuration.curated} historicalMoments={momentCuration.historical} rawCandidateCount={momentCuration.raw_active_count} suppressedCount={momentCuration.suppressed_count} tracks={(tracks ?? []).map((track) => ({ id: track.id, title: track.title, audio_url: track.audio_url }))} performance={momentPerformance ?? []} lyricSources={lyricSources ?? []} /> : null}
+      {stage === "create" ? <MomentReviewPanel releaseId={release.id} moments={momentCuration.curated} historicalMoments={momentCuration.historical} rawCandidateCount={momentCuration.raw_active_count} suppressedCount={momentCuration.suppressed_count} tracks={(tracks ?? []).map((track) => ({ id: track.id, title: track.title, audio_url: track.audio_url }))} performance={momentPerformance ?? []} lyricSources={lyricSources ?? []} calibrationEvents={calibrationEvents} /> : null}
     </>;
   }
 
