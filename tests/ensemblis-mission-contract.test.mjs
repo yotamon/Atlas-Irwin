@@ -29,7 +29,8 @@ test("Today and Release consume the same release Mission model through the Manag
   assert.ok(snapshot.includes("deriveReleaseMission"));
   assert.ok(release.includes("deriveReleaseMission"));
   assert.ok(today.includes("loadArtistOperatingSnapshot"));
-  assert.ok(today.includes("Active release Mission"));
+  assert.ok(today.includes("activeMission?.nextAction"));
+  assert.ok(today.includes("activeRelease && activeMission"));
   assert.ok(today.includes("View release Mission"));
   assert.ok(snapshot.includes('select("id,title,release_date,active_release,artwork_url,cover_asset,primary_hook,smart_link_url,spotify_url,soundcloud_url,youtube_url,status,is_archived")'));
   assert.ok(snapshot.includes('select("id,release_id,audio_url,is_primary")'));
