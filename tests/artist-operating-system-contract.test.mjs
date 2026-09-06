@@ -92,9 +92,12 @@ test("Manager planning reaches quiet artists and follows the configured working 
   assert.match(nextBest, /"approved", "executing", "completed", "dismissed"/);
   assert.match(snapshot, /humanNextAction/);
   assert.match(snapshot, /managerPlan/);
+  assert.match(snapshot, /artistMission/);
   assert.match(today, /const handsOff = operatingContext\.profile\.marketingInvolvement === "just_make_music"/);
+  assert.match(today, /const visibleMissionAction = handsOff \? null : missionAction/);
+  assert.match(today, /Current Mission/);
   assert.match(today, /View manager plan/);
-  assert.match(today, /Keep making music\. Ensemblis is managing the next moves\./);
+  assert.doesNotMatch(today, /Keep making music\. Ensemblis is managing the next moves\./);
 });
 
 test("hands-off Manager executes only safe internal evidence-backed preparation", async () => {
