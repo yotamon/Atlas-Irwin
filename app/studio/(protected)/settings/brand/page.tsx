@@ -2,7 +2,7 @@ import Link from "next/link";
 import { saveBrandProfileV2 } from "@/app/studio/brand-actions-v2";
 import { Field, PageHeader, Submit } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 
 const defaults = {
@@ -24,7 +24,7 @@ function rowText(content: unknown) {
 
 export default async function BrandProfilePage() {
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const operational = asArtistScopedOperationalClient(supabase);
   const { data, error } = await operational.from("brand_settings")
     .select("section,content")

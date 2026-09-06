@@ -7,7 +7,7 @@ import {
   saveContact,
   updateOutreachResponse,
 } from "@/app/studio/outreach-actions";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 import { CONTACT_TYPES, RELATIONSHIP_STATUSES } from "@/lib/studio/constants";
 
@@ -18,7 +18,7 @@ export default async function ContactDetail({
 }) {
   const { id } = await params;
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const operational = asArtistScopedOperationalClient(supabase);
   const [{ data: contact, error: contactError }, { data: messages, error: messagesError }] = await Promise.all([
     operational.from("outreach_contacts").select("*")

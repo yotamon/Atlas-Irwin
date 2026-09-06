@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createMediaPreviewMap } from "@/lib/studio/media-previews";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 import { asMomentsClient } from "@/lib/studio/moments-db";
 import { curateCalibratedReleaseMoments } from "@/lib/studio/moments-calibrated-curator";
@@ -33,7 +33,7 @@ export default async function ReleaseDetail({
   const advanced = view === "advanced";
   const renderedAt = new Date().toISOString();
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const music = supabase;
   const operational = asArtistScopedOperationalClient(supabase);
   const momentsDb = asMomentsClient(supabase);

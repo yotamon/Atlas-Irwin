@@ -4,7 +4,7 @@ import { isSocialPlatformKey } from "@/lib/marketing/social-platforms";
 import { createAutomationSocialAuthorizeUrl } from "@/lib/marketing/social-oauth";
 import {
   resolveArtistContext,
-  resolveDefaultArtistContext,
+  resolveActiveArtistContext,
 } from "@/lib/studio/artist-context";
 
 function requestOrigin(request: NextRequest) {
@@ -28,7 +28,7 @@ export async function GET(
     const requestedArtistId = new URL(request.url).searchParams.get("artist_id")?.trim() || null;
     const artist = requestedArtistId
       ? await resolveArtistContext(supabase, user, requestedArtistId)
-      : await resolveDefaultArtistContext(supabase, user);
+      : await resolveActiveArtistContext(supabase, user);
     const oauth = createAutomationSocialAuthorizeUrl(platform, requestOrigin(request));
     const state = `${oauth.state}.${artist.artistId}`;
     oauth.url.searchParams.set("state", state);

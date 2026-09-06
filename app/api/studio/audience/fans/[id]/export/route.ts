@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveArtistContext, resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { fanExportPayload, loadFanDetail } from "@/lib/audience/fan-graph-server";
 import type { FanGraphDatabase } from "@/types/fan-graph-database";
 
@@ -13,7 +13,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const requestedArtistId = request.nextUrl.searchParams.get("artist_id")?.trim() || undefined;
   const artist = requestedArtistId
     ? await resolveArtistContext(supabase, user, requestedArtistId)
-    : await resolveDefaultArtistContext(supabase, user);
+    : await resolveActiveArtistContext(supabase, user);
   const detail = await loadFanDetail(supabase, user.id, artist.artistId, id);
   if (!detail) return NextResponse.json({ error: "Fan relationship not found." }, { status: 404 });
 

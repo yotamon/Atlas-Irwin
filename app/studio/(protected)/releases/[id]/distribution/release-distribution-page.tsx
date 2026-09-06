@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import {
   calculateDistributionReadiness,
   normalizeAiProvenance,
@@ -125,7 +125,7 @@ export default async function ReleaseDistributionPage({
   const { id } = await params;
   const feedback = await searchParams;
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const db = supabase as unknown as Db;
   const [releaseResult, tracksResult, configResult, accountResult, profilesResult, issuesResult, deliveriesResult, submissionsResult, metadataResult, writersResult, contributorsResult, operationsResult] = await Promise.all([
     db.from("releases").select("*").eq("id", id).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),

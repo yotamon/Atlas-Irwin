@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveArtistContext, resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import type { DistributionDatabase } from "@/types/distribution-database";
 import * as actions from "./distribution-actions";
 
@@ -24,7 +24,7 @@ async function validateReleaseArtistScope(form: FormData) {
   const requestedArtistId = String(form.get("artist_id") ?? "").trim();
   const artist = requestedArtistId
     ? await resolveArtistContext(supabase, user, requestedArtistId)
-    : await resolveDefaultArtistContext(supabase, user);
+    : await resolveActiveArtistContext(supabase, user);
   const db = supabase as unknown as SupabaseClient<DistributionDatabase>;
 
   const { data: release, error } = await db

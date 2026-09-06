@@ -88,9 +88,9 @@ test("Ensemblis persists and validates active artist context across primary navi
   assert.ok(context.includes("listAccessibleArtists"));
   assert.ok(context.includes("resolveActiveArtistContext"));
   assert.ok(context.includes("resolveArtistContext(client, identity, preferredArtistId)"));
-  assert.ok(context.includes("resolveLegacyFallbackArtistContext"));
-  assert.ok(context.includes("return resolveActiveArtistContext(client, identity);"));
-  assert.equal(context.includes("return resolveDefaultArtistContext(client, identity);"), false);
+  assert.equal(context.includes("resolveLegacyFallbackArtistContext"), false);
+  assert.ok(context.includes("resolveUnambiguousArtistContext"));
+  assert.equal(context.includes("resolveDefaultArtistContext"), false);
   assert.ok(switcher.includes('params.set("artist", artistId)'));
   assert.ok(sidebar.includes("ensemblisArtistHref(href, artistId)"));
   assert.ok(proxy.includes("selectedArtistFromRequest(request)"));

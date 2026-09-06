@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveArtistContext, resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import type { FanGraphDatabase, FanPermissionPurpose, FanPermissionStatus, FanRelationshipState } from "@/types/fan-graph-database";
 
 function value(form: FormData, key: string) { return String(form.get(key) ?? "").trim(); }
@@ -14,7 +14,7 @@ async function context(form: FormData) {
   const requestedArtistId = value(form, "artist_id");
   const artist = requestedArtistId
     ? await resolveArtistContext(supabase, user, requestedArtistId)
-    : await resolveDefaultArtistContext(supabase, user);
+    : await resolveActiveArtistContext(supabase, user);
   return { db: supabase as unknown as SupabaseClient<FanGraphDatabase>, ownerId: user.id, artistId: artist.artistId };
 }
 

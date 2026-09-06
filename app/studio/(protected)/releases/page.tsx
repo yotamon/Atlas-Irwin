@@ -1,16 +1,12 @@
+import type { HomepagePlacement, Release } from "@/types/database";
 import Link from "next/link";
 import { ReleaseCatalog } from "@/components/studio/release-catalog";
 import { EmptyState, PageHeader } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
-import type {
-  ArtistScopedHomepagePlacement,
-  ArtistScopedRelease,
-} from "@/types/artist-scoped-music-database";
-
-type ReleaseWithPlacement = ArtistScopedRelease & {
-  homepage_placements: ArtistScopedHomepagePlacement[];
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
+type ReleaseWithPlacement = Release & {
+  homepage_placements: HomepagePlacement[];
 };
 
 export default async function ReleasesPage({
@@ -25,7 +21,7 @@ export default async function ReleasesPage({
   }>;
 }) {
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const db = supabase;
   const params = await searchParams;
   const href = (path: string) => ensemblisArtistHref(path, artist.artistId);

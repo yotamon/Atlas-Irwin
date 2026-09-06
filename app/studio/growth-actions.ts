@@ -7,7 +7,7 @@ import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { OBJECTIVE_KPIS } from "@/lib/marketing/domain";
 import { plannerPlatformsFromConnections } from "@/lib/marketing/social-platforms";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asGrowthClient } from "@/lib/studio/growth-db";
 import {
   detectGrowthOpportunities,
@@ -42,7 +42,7 @@ function slugify(input: string) {
 
 async function getGrowthActionContext() {
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   return {
     supabase,
     user,

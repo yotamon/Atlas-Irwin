@@ -2,7 +2,7 @@ import Link from "next/link";
 import { EmptyState, PageHeader, Status } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMarketingClient } from "@/lib/marketing/db";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 
 function startOfDay(date: Date) {
   const copy = new Date(date);
@@ -34,7 +34,7 @@ export default async function CalendarPage({
   const params = await searchParams;
   const view = params.view === "week" || params.view === "list" ? params.view : "month";
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const marketing = asMarketingClient(supabase);
   const anchor = params.month ? new Date(`${params.month}-01T12:00:00`) : new Date();
 

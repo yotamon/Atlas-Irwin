@@ -4,8 +4,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { conciseLyricsPromptContext, EMPTY_LYRICS_CONTEXT, loadTrackLyricsContext, type TrackLyricsContext } from "@/lib/lyrics-intelligence/context";
 import { mediaKind, mediaMetadata } from "@/lib/studio/media";
 import type { ArtistScopedCoreOperationalDatabase } from "@/types/artist-scoped-operational-database";
-import type { ArtistScopedMusicDatabase } from "@/types/artist-scoped-music-database";
-import type { Json, MediaAsset, MediaLink } from "@/types/database";
+import type {
+  Database,
+  Json,
+  MediaAsset,
+  MediaLink,
+} from "@/types/database";
 import type { LyricsDatabase } from "@/types/lyrics-database";
 import type { AudioScene, StemDatabase } from "@/types/stem-database";
 import type { VideoDatabase } from "@/types/video-database";
@@ -249,7 +253,7 @@ function lyricSceneContext(lyrics: TrackLyricsContext, contentText: string) {
 }
 
 export async function loadCreativeReferenceContext({ db, ownerId, artistId, releaseId, contentItemId }: ContextInput): Promise<CreativeReferenceContext> {
-  const musicDb = db as unknown as SupabaseClient<ArtistScopedMusicDatabase>;
+  const musicDb = db as unknown as SupabaseClient<Database>;
   const operationalDb = db as unknown as SupabaseClient<ArtistScopedCoreOperationalDatabase>;
   const stemDb = db as unknown as SupabaseClient<StemDatabase>;
   const lyricsDb = db as unknown as SupabaseClient<LyricsDatabase>;

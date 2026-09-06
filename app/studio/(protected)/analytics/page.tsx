@@ -5,7 +5,7 @@ import { EmptyState, Field, PageHeader, Panel, Status, Submit } from "@/componen
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { aggregateMetrics, formatRate, metricSignals, primarySignalValue } from "@/lib/marketing/domain";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { PLATFORMS } from "@/lib/studio/constants";
 import { buildGrowthFunnel, diagnoseGrowthFunnel } from "@/lib/studio/growth";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
@@ -17,7 +17,7 @@ function percent(value: number) {
 
 export default async function AnalyticsPage() {
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const marketing = asMarketingClient(supabase);
   const music = supabase;
   const operational = asArtistScopedOperationalClient(supabase);

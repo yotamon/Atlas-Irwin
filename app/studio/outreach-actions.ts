@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveArtistContext, resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 
 const required = z.string().trim().min(1).max(300);
@@ -25,7 +25,7 @@ async function outreachContext(form: FormData) {
   const requestedArtistId = value(form, "artist_id");
   const artist = requestedArtistId
     ? await resolveArtistContext(supabase, user, z.uuid().parse(requestedArtistId))
-    : await resolveDefaultArtistContext(supabase, user);
+    : await resolveActiveArtistContext(supabase, user);
   return {
     artist,
     operational: asArtistScopedOperationalClient(supabase),

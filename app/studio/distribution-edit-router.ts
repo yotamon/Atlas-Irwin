@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveArtistContext, resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import * as core from "./distribution-core-actions";
 import type { Json } from "@/types/database";
 import type { DistributionDatabase, ReleaseDistributionConfig } from "@/types/distribution-database";
@@ -65,7 +65,7 @@ async function editableContext(form: FormData) {
   const requestedArtistId = text(form, "artist_id");
   const artist = requestedArtistId
     ? await resolveArtistContext(supabase, user, requestedArtistId)
-    : await resolveDefaultArtistContext(supabase, user);
+    : await resolveActiveArtistContext(supabase, user);
   const db = supabase as unknown as Db;
 
   const [releaseResult, configResult] = await Promise.all([

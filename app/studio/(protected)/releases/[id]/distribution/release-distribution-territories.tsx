@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { saveDistributionTerritories } from "@/app/studio/distribution-territory-actions";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import type { Json } from "@/types/database";
 import type { DistributionDatabase } from "@/types/distribution-database";
 
@@ -14,7 +14,7 @@ function object(value: Json | null | undefined): Record<string, unknown> {
 export default async function ReleaseDistributionTerritories({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const db = supabase as unknown as Db;
   const { data: config, error } = await db.from("release_distribution_configs")
     .select("state,territories")

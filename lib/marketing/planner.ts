@@ -1,7 +1,7 @@
 import "server-only";
 
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveArtistContext, resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asSocialClient } from "@/lib/studio/social-db";
 import type { Release } from "@/types/database";
 import { generateStructured, marketingAiConfigured } from "./ai";
@@ -220,7 +220,7 @@ async function resolvePlanningContext(
   const { supabase, user } = await requireStudioAdmin();
   const artist = artistId
     ? await resolveArtistContext(supabase, user, artistId)
-    : await resolveDefaultArtistContext(supabase, user);
+    : await resolveActiveArtistContext(supabase, user);
   const { data, error } = await asSocialClient(supabase)
     .from("social_channel_accounts")
     .select("platform,status")

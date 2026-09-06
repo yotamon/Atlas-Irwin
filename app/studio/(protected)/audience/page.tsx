@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { loadFanGraphSummary } from "@/lib/audience/fan-graph-server";
 import { createAutonomyServiceClient } from "@/lib/marketing/autonomy-db";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 
 function shortDate(value: string) {
   return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Berlin" }).format(new Date(value));
@@ -21,7 +21,7 @@ function percent(value: number) {
 
 export default async function AudiencePage() {
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const db = createAutonomyServiceClient();
   const [interactionsResult, fanGraph] = await Promise.all([
     db.from("audience_interactions").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).not("status", "in", "(ignored,replied)").order("occurred_at", { ascending: false }).limit(100),

@@ -16,7 +16,7 @@ import { requireStudioAdmin } from "@/lib/auth/studio";
 import { loadCreativeReferenceContext } from "@/lib/marketing/creative-context";
 import { AI_PRICING_AS_OF, CREATIVE_PRESETS } from "@/lib/marketing/creative-provider-catalog";
 import { creativeProviderReadiness } from "@/lib/marketing/creative-providers";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { CONTENT_FORMATS, GOALS, PLATFORMS } from "@/lib/studio/constants";
 import { creativeContextQualityLabel, momentEvidenceSummary } from "@/lib/studio/evidence-labels";
 import { asMomentAwareMarketingClient, asMomentsClient } from "@/lib/studio/moments-db";
@@ -87,7 +87,7 @@ export default async function ProductionPage({
 }) {
   const params = await searchParams;
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const music = supabase;
   const marketing = asMomentAwareMarketingClient(supabase);
   const momentsDb = asMomentsClient(supabase);

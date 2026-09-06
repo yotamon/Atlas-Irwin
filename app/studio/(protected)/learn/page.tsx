@@ -6,7 +6,7 @@ import { asMarketingClient } from "@/lib/marketing/db";
 import { aggregateMetrics, formatRate, metricSignals, objectivePerformanceScore, primarySignalValue } from "@/lib/marketing/domain";
 import { describeLearningEffect } from "@/lib/marketing/learning-contract";
 import { asLearningEvidenceClient } from "@/lib/marketing/learning-db";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 
 type LearningRow = {
   id: string;
@@ -39,7 +39,7 @@ function isExpired(learning: LearningRow, now: number) {
 
 export default async function LearnPage() {
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const marketing = asMarketingClient(supabase);
   const learningEvidence = asLearningEvidenceClient(supabase);
   const [metricsResult, contentResult, learningsResult, campaignsResult, evidenceResult] = await Promise.all([

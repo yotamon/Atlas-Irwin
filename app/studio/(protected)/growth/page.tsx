@@ -11,7 +11,7 @@ import { PageHeader } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { asMarketingClient } from "@/lib/marketing/db";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { evidenceStrengthLabel } from "@/lib/studio/evidence-labels";
 import { asGrowthClient } from "@/lib/studio/growth-db";
 import { buildGrowthFunnel, diagnoseGrowthFunnel, rankVaultTracks } from "@/lib/studio/growth";
@@ -54,7 +54,7 @@ export default async function GrowthPage({ searchParams }: { searchParams: Promi
     ? params.view as GrowthView
     : "overview";
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
   const growth = asGrowthClient(supabase);
   const music = supabase;

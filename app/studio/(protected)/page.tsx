@@ -5,7 +5,7 @@ import { GOAL_LABELS, MARKETING_INVOLVEMENT_LABELS } from "@/lib/artist-operatin
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { loadArtistOperatingSnapshot } from "@/lib/studio/artist-operating-snapshot";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { needsYouTone } from "@/lib/studio/needs-you";
 import { formatOperatingDateTime } from "@/lib/studio/operating-preferences";
 
@@ -17,7 +17,7 @@ function decisionTone(value: string): SemanticTone {
 
 export default async function TodayPage() {
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const snapshot = await loadArtistOperatingSnapshot({
     db: supabase,
     userId: user.id,

@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { distributionProviderConfigured } from "@/lib/distribution/provider";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { linkDistributionProviderRelease } from "@/app/studio/distribution-actions-safe";
 import type { DistributionDatabase } from "@/types/distribution-database";
 
@@ -21,7 +21,7 @@ export default async function DistributionOperations({
 }) {
   const feedback = await searchParams;
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const db = supabase as unknown as Db;
   const [releasesResult, configsResult, submissionsResult, issuesResult, eventsResult, operationsResult] = await Promise.all([
     db.from("releases").select("id,title,artist,release_date").eq("owner_id", user.id).eq("artist_id", artist.artistId).eq("is_archived", false).order("updated_at", { ascending: false }),

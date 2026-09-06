@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveArtistContext, resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import type { CreativeSpendDatabase } from "@/types/creative-spend-database";
 
 const uuid = z.uuid();
@@ -23,7 +23,7 @@ async function actionContext(form: FormData) {
   const requestedArtistId = value(form, "artist_id");
   const artist = requestedArtistId
     ? await resolveArtistContext(supabase, user, uuid.parse(requestedArtistId))
-    : await resolveDefaultArtistContext(supabase, user);
+    : await resolveActiveArtistContext(supabase, user);
   return {
     user,
     artist,

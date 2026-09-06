@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { distributionProviderConfigured } from "@/lib/distribution/provider";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { saveDistributionAccount } from "@/app/studio/distribution-actions-safe";
 import type { DistributionDatabase } from "@/types/distribution-database";
 
@@ -19,7 +19,7 @@ export default async function DistributionHub({
 }) {
   const feedback = await searchParams;
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const db = supabase as unknown as SupabaseClient<DistributionDatabase>;
   const [accountResult, releasesResult, configsResult, issuesResult, deliveriesResult] = await Promise.all([
     db.from("distribution_accounts").select("*").eq("owner_id", user.id).eq("provider", "revelator").maybeSingle(),

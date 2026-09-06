@@ -16,7 +16,7 @@ import {
 } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMarketingClient } from "@/lib/marketing/db";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { CONTACT_TYPES, RELATIONSHIP_STATUSES } from "@/lib/studio/constants";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 
@@ -27,7 +27,7 @@ export default async function OutreachPage({
 }) {
   const p = await searchParams;
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const marketing = asMarketingClient(supabase);
   const operational = asArtistScopedOperationalClient(supabase);
   const music = supabase;

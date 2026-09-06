@@ -18,7 +18,7 @@ import { directContentCreative } from "@/lib/marketing/creative-treatment";
 import { creativeProvider, isCreativeDefiniteRejection } from "@/lib/marketing/creative-providers";
 import { CREATIVE_PROVIDER_IDS, type CreativeGenerationRequest, type CreativeProviderId } from "@/lib/marketing/creative-provider-types";
 import { getSiteUrl } from "@/lib/site-url";
-import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveArtistContext, resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { Json } from "@/types/database";
 
@@ -46,7 +46,7 @@ async function actionContext(form: FormData) {
   const requestedArtistId = value(form, "artist_id");
   const artist = requestedArtistId
     ? await resolveArtistContext(supabase, user, uuid.parse(requestedArtistId))
-    : await resolveDefaultArtistContext(supabase, user);
+    : await resolveActiveArtistContext(supabase, user);
   return { supabase, artist, marketing: asMarketingClient(supabase) };
 }
 

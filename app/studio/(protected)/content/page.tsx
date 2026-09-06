@@ -2,7 +2,7 @@ import { CopyButton } from "@/components/studio/copy-button";
 import { Field, EmptyState, PageHeader, Status, Submit } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { CONTENT_FORMATS, CONTENT_STATUSES, GOALS, PLATFORMS } from "@/lib/studio/constants";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { deleteStudioRecord, duplicateContent, saveContent, updateContentStatus } from "@/app/studio/content-actions";
 
@@ -11,7 +11,7 @@ export default async function ContentPage({ searchParams }: {
 }) {
   const params = await searchParams;
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const marketing = asMarketingClient(supabase);
   let query = marketing.from("content_items").select("*")
     .eq("owner_id", user.id).eq("artist_id", artist.artistId)

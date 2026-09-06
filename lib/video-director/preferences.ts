@@ -2,8 +2,10 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { recordCreativeMemoryEvent, upsertCreativeAssetProfile } from "@/lib/creative-memory/server";
-import type { ArtistScopedMusicDatabase } from "@/types/artist-scoped-music-database";
-import type { Database, Json } from "@/types/database";
+import type {
+  Database,
+  Json,
+} from "@/types/database";
 import type { VideoDatabase } from "@/types/video-database";
 import { parseVideoCreativeBrief } from "./domain";
 
@@ -32,7 +34,7 @@ export async function recordDirectorPreference(input: {
     .single();
   if (projectError || !project) throw new Error(projectError?.message || "Video project not found for Creative Memory.");
 
-  const musicDb = input.db as unknown as SupabaseClient<ArtistScopedMusicDatabase>;
+  const musicDb = input.db as unknown as SupabaseClient<Database>;
   let releaseQuery = musicDb.from("releases")
     .select("artist_id")
     .eq("id", input.releaseId ?? project.release_id)

@@ -4,7 +4,7 @@ import { deleteArtistBrandSetting, saveArtistBrandSetting } from "@/app/studio/b
 import { MediaUploader } from "@/components/studio/media-uploader";
 import { Field, PageHeader, Submit } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 import { mediaMetadata, mediaTypeLabel } from "@/lib/studio/media";
 
@@ -43,7 +43,7 @@ const seed: Record<string, string> = {
 
 export default async function BrandPage() {
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const operational = asArtistScopedOperationalClient(supabase);
   const [settingsResult, assetsResult] = await Promise.all([
     operational.from("brand_settings").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId),

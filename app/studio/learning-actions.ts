@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMarketingClient } from "@/lib/marketing/db";
-import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveArtistContext, resolveActiveArtistContext } from "@/lib/studio/artist-context";
 
 const uuid = z.uuid();
 const reviewStatus = z.enum(["approved", "rejected"]);
@@ -18,7 +18,7 @@ export async function reviewLearning(form: FormData) {
   const requestedArtistId = value(form, "artist_id");
   const artist = requestedArtistId
     ? await resolveArtistContext(supabase, user, uuid.parse(requestedArtistId))
-    : await resolveDefaultArtistContext(supabase, user);
+    : await resolveActiveArtistContext(supabase, user);
   const learningId = uuid.parse(value(form, "learning_id"));
   const status = reviewStatus.parse(value(form, "status"));
   const marketing = asMarketingClient(supabase);

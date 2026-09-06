@@ -9,7 +9,7 @@ import { processDueOutreachEnrollments } from "@/lib/marketing/outreach";
 import { processDuePublicationJobs } from "@/lib/marketing/publications";
 import {
   resolveArtistContext,
-  resolveDefaultArtistContext,
+  resolveActiveArtistContext,
   type ArtistContext,
 } from "@/lib/studio/artist-context";
 function value(form: FormData, key: string) {
@@ -30,7 +30,7 @@ async function runtimeContext(form: FormData) {
   const requestedArtistId = optionalUuid(form, "artist_id");
   const artist = requestedArtistId
     ? await resolveArtistContext(supabase, user, requestedArtistId)
-    : await resolveDefaultArtistContext(supabase, user);
+    : await resolveActiveArtistContext(supabase, user);
   return { supabase, user, artist };
 }
 

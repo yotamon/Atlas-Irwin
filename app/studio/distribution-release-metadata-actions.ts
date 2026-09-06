@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveArtistContext, resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import type { DistributionDatabase } from "@/types/distribution-database";
 
 function value(form: FormData, key: string) {
@@ -24,7 +24,7 @@ export async function saveDistributionReleaseMetadata(form: FormData) {
   const requestedArtistId = value(form, "artist_id");
   const artist = requestedArtistId
     ? await resolveArtistContext(supabase, user, requestedArtistId)
-    : await resolveDefaultArtistContext(supabase, user);
+    : await resolveActiveArtistContext(supabase, user);
   const db = supabase as unknown as SupabaseClient<DistributionDatabase>;
 
   const { data: release, error: releaseError } = await db.from("releases")

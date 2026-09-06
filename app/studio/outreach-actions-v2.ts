@@ -5,7 +5,7 @@ import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { deliverOutreach } from "@/lib/marketing/outreach-delivery";
-import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveArtistContext, resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 
 function ids(form: FormData, key: string) {
@@ -20,7 +20,7 @@ async function outreachContext(form: FormData) {
   const requested = value(form, "artist_id");
   const artist = requested
     ? await resolveArtistContext(supabase, user, z.uuid().parse(requested))
-    : await resolveDefaultArtistContext(supabase, user);
+    : await resolveActiveArtistContext(supabase, user);
   return {
     artist,
     marketing: asMarketingClient(supabase),

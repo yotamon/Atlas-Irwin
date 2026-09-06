@@ -1,3 +1,4 @@
+import type { Database } from "@/types/database";
 import "server-only";
 
 import { createHash } from "node:crypto";
@@ -5,7 +6,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createMarketingServiceClient } from "@/lib/marketing/db";
 import { deriveContentStatus } from "@/features/studio-v2/policy.mjs";
 import type { CreativeReferenceContext } from "./creative-context";
-import type { ArtistScopedMusicDatabase } from "@/types/artist-scoped-music-database";
 import type { VideoDatabase } from "@/types/video-database";
 
 const MAX_REMOTE_ASSET_BYTES = 150 * 1024 * 1024;
@@ -77,7 +77,7 @@ export async function storeRemoteMarketingAsset(input: {
   if (input.context.artistId !== input.artistId) {
     throw new Error("Generated asset context does not match its artist lineage.");
   }
-  const musicDb = input.db as unknown as SupabaseClient<ArtistScopedMusicDatabase>;
+  const musicDb = input.db as unknown as SupabaseClient<Database>;
   let asset = await findGeneratedAsset(input.db, input.ownerId, input.artistId, input.generationRunId);
   if (!asset) {
     const { buffer, contentType } = await generatedBytes({

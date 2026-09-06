@@ -1,7 +1,7 @@
 "use server";
 
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asStemClient } from "@/lib/music-intelligence/stem-scenes";
 import * as actions from "./stem-actions";
 
@@ -11,7 +11,7 @@ function formValue(form: FormData, key: string) {
 
 async function assertActiveArtistStemTarget(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const music = supabase;
   const stems = asStemClient(supabase);
 

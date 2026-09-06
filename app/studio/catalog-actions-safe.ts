@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { revalidatePublicCatalog } from "@/lib/studio/catalog";
 import * as actions from "./catalog-actions";
 
@@ -13,7 +13,7 @@ function formValue(form: FormData, key: string) {
 
 async function assertActiveArtistTargets(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const db = supabase;
 
   const releaseIds = new Set(

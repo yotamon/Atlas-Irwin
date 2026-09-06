@@ -20,7 +20,7 @@ import {
 } from "@/lib/marketing/domain";
 import { planCampaign, type CampaignPlanningContext } from "@/lib/marketing/planner";
 import { releaseRelativeTimestamp } from "@/lib/marketing/schedule";
-import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveArtistContext, resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 import type { Json } from "@/types/database";
 import type {
@@ -42,7 +42,7 @@ async function actionContext(form?: FormData) {
   const requestedArtistId = form ? value(form, "artist_id") : "";
   const artist = requestedArtistId
     ? await resolveArtistContext(supabase, user, uuid.parse(requestedArtistId))
-    : await resolveDefaultArtistContext(supabase, user);
+    : await resolveActiveArtistContext(supabase, user);
   return {
     supabase,
     user,

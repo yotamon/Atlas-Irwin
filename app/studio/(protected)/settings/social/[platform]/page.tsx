@@ -7,7 +7,7 @@ import {
   SOCIAL_PLATFORM_DEFINITIONS,
   isSocialPlatformKey,
 } from "@/lib/marketing/social-platforms";
-import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveArtistContext, resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asSocialClient } from "@/lib/studio/social-db";
 import { hasSocialPlatformEnv } from "@/lib/studio/social-connections";
 
@@ -24,7 +24,7 @@ export default async function SocialConnectionPage({
   const { supabase, user } = await requireStudioAdmin();
   const artist = query.artist_id
     ? await resolveArtistContext(supabase, user, query.artist_id)
-    : await resolveDefaultArtistContext(supabase, user);
+    : await resolveActiveArtistContext(supabase, user);
   const social = asSocialClient(supabase);
   const { data: account, error } = await social
     .from("social_channel_accounts")

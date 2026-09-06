@@ -7,7 +7,7 @@ import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { releaseLifecycle } from "@/lib/marketing/release-lifecycle";
 import { loadPaidGrowthWorkspace, paidGrowthNeedsYou } from "@/lib/paid-growth/server";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { deriveNeedsYouQueue, needsYouTone } from "@/lib/studio/needs-you";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 import { deriveReleaseMission } from "@/lib/studio/release-mission";
@@ -37,7 +37,7 @@ function decisionTone(value: string): SemanticTone {
 
 export default async function NeedsYouPage() {
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const operational = asArtistScopedOperationalClient(supabase);
   const music = supabase;
   const marketing = asMarketingClient(supabase);

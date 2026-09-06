@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asMarketingClient } from "@/lib/marketing/db";
 import {
   OBJECTIVE_KPIS,
@@ -227,7 +227,7 @@ async function shiftReleasePlan({
 
 export async function saveReleaseV2(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const db = supabase;
   const id = value(form, "id");
   const title = required.parse(value(form, "title"));

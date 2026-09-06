@@ -5,9 +5,11 @@ import { loadArtistCreativeMemory } from "@/lib/creative-memory/server";
 import { loadTrackLyricsContext } from "@/lib/lyrics-intelligence/context";
 import { conciseCreativeGraphContext, type TrackCreativeIntelligenceGraph } from "@/lib/music-intelligence/creative-graph";
 import { loadTrackCreativeIntelligenceGraph } from "@/lib/music-intelligence/creative-graph-loader";
-import type { ArtistScopedMusicDatabase } from "@/types/artist-scoped-music-database";
 import type { ArtistScopedCoreOperationalDatabase } from "@/types/artist-scoped-operational-database";
-import type { Database, Json } from "@/types/database";
+import type {
+  Database,
+  Json,
+} from "@/types/database";
 import type { LyricsDatabase } from "@/types/lyrics-database";
 import type { AudioScene, StemDatabase } from "@/types/stem-database";
 import type { ExtendedMusicVideoProject, VideoDatabase } from "@/types/video-database";
@@ -59,7 +61,7 @@ export async function loadVideoProjectContext(
     .single();
   if (projectError || !project) throw new Error(projectError?.message || "Music video project not found.");
 
-  const musicDb = db as unknown as SupabaseClient<ArtistScopedMusicDatabase>;
+  const musicDb = db as unknown as SupabaseClient<Database>;
   const operationalDb = db as unknown as SupabaseClient<ArtistScopedCoreOperationalDatabase>;
   const stemDb = db as unknown as SupabaseClient<StemDatabase>;
   const lyricsDb = db as unknown as SupabaseClient<LyricsDatabase>;
@@ -184,7 +186,7 @@ export async function resolveProjectAudioUrl(
   ownerId: string,
   artistId?: string | null,
 ) {
-  const musicDb = db as unknown as SupabaseClient<ArtistScopedMusicDatabase>;
+  const musicDb = db as unknown as SupabaseClient<Database>;
   let trackQuery = musicDb.from("tracks")
     .select("audio_url")
     .eq("id", project.track_id)

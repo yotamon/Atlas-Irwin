@@ -7,7 +7,7 @@ import { attachMediaAsset } from "@/app/studio/catalog-actions";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { zonedDateTimeToUtc } from "@/lib/marketing/schedule";
-import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveArtistContext, resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asMomentAwareMarketingClient, asMomentsClient } from "@/lib/studio/moments-db";
 import { deriveContentStatus } from "@/features/studio-v2/policy.mjs";
 
@@ -29,7 +29,7 @@ async function productionContext(form: FormData) {
   const requestedArtistId = value(form, "artist_id") || null;
   const artist = requestedArtistId
     ? await resolveArtistContext(supabase, user, uuid.parse(requestedArtistId))
-    : await resolveDefaultArtistContext(supabase, user);
+    : await resolveActiveArtistContext(supabase, user);
   return { supabase, user, artist };
 }
 

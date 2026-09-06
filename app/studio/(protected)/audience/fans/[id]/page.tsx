@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { PageHeader } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { loadFanDetail } from "@/lib/audience/fan-graph-server";
 import {
   addVerifiedFanIdentity,
@@ -39,7 +39,7 @@ function permissionPurposes(channel: FanChannel): FanPermissionPurpose[] {
 export default async function FanRelationshipPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const detail = await loadFanDetail(supabase, user.id, artist.artistId, id);
   if (!detail) notFound();
 

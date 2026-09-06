@@ -6,7 +6,7 @@ import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { processDuePublicationJobs } from "@/lib/marketing/publications";
 import { runMarketingAutomationCycle } from "@/lib/marketing/automation";
-import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveArtistContext, resolveActiveArtistContext } from "@/lib/studio/artist-context";
 
 const SAFE_INTERNAL_AUTOMATION = new Set(["generate_winner_derivatives", "evaluate_experiment", "collect_metrics"]);
 
@@ -22,7 +22,7 @@ async function inboxContext(form: FormData) {
   const requested = value(form, "artist_id");
   const artist = requested
     ? await resolveArtistContext(supabase, user, z.uuid().parse(requested))
-    : await resolveDefaultArtistContext(supabase, user);
+    : await resolveActiveArtistContext(supabase, user);
   return { artist, marketing: asMarketingClient(supabase) };
 }
 

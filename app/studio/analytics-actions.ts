@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMarketingClient } from "@/lib/marketing/db";
-import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveArtistContext, resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 import type { MarketingMetricSnapshot } from "@/types/marketing-database";
 
@@ -24,7 +24,7 @@ async function analyticsContext(form: FormData) {
   const requestedArtistId = value(form, "artist_id") || null;
   const artist = requestedArtistId
     ? await resolveArtistContext(supabase, user, z.uuid().parse(requestedArtistId))
-    : await resolveDefaultArtistContext(supabase, user);
+    : await resolveActiveArtistContext(supabase, user);
   return { supabase, artist };
 }
 

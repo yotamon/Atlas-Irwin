@@ -1,7 +1,9 @@
 import "server-only";
 
-import type { Json } from "@/types/database";
-import type { ArtistScopedMusicDatabase } from "@/types/artist-scoped-music-database";
+import type {
+  Database,
+  Json,
+} from "@/types/database";
 import type { Moment, MomentsDatabase } from "@/types/moments-database";
 import type { ExtendedMusicVideoProject, ExtendedMusicVideoShot, VideoDatabase } from "@/types/video-database";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -80,7 +82,7 @@ async function approvedMoments(
   ownerId: string,
   project: ExtendedMusicVideoProject,
 ) {
-  const musicDb = db as unknown as SupabaseClient<ArtistScopedMusicDatabase>;
+  const musicDb = db as unknown as SupabaseClient<Database>;
   const { data: release } = await musicDb.from("releases")
     .select("artist_id")
     .eq("id", project.release_id)

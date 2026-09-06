@@ -17,7 +17,7 @@ import { asMarketingClient } from "@/lib/marketing/db";
 import { asPaidGrowthClient } from "@/lib/paid-growth/db";
 import { paidGrowthEvidenceSummary } from "@/lib/paid-growth/server";
 import { loadPaidGrowthWorkspace } from "@/lib/paid-growth/server";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 
 export const metadata = { title: "Paid experiments" };
 
@@ -39,7 +39,7 @@ function human(value: string) {
 export default async function PaidGrowthPage({ searchParams }: { searchParams: Promise<{ experiment?: string; notice?: string }> }) {
   const params = await searchParams;
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
   const paid = asPaidGrowthClient(supabase);
   const marketing = asMarketingClient(supabase);

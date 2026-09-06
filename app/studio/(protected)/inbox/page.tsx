@@ -7,7 +7,7 @@ import { requireStudioAdmin } from "@/lib/auth/studio";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { outreachCapability } from "@/lib/marketing/outreach-delivery";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 
 const SAFE_INTERNAL_AUTOMATION = new Set(["generate_winner_derivatives", "evaluate_experiment", "collect_metrics"]);
@@ -24,7 +24,7 @@ function readable(value: string | null | undefined) {
 
 export default async function InboxPage() {
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
   const marketing = asMarketingClient(supabase);
   const operational = asArtistScopedOperationalClient(supabase);

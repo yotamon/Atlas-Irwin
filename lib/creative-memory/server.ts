@@ -2,9 +2,12 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { mediaKind, mediaMetadata } from "@/lib/studio/media";
-import type { ArtistScopedMusicDatabase } from "@/types/artist-scoped-music-database";
 import type { CreativeAssetProfile, CreativeMemoryDatabase, CreativeMemoryEvent, CreativeMemoryEventType } from "@/types/creative-memory-database";
-import type { Database, Json, MediaAsset } from "@/types/database";
+import type {
+  Database,
+  Json,
+  MediaAsset,
+} from "@/types/database";
 import { performanceEvidenceScore, scoreCreativeAsset, summarizeCreativeMemory, type CreativeMemoryPreferenceSummary } from "./domain";
 
 type DatabaseClient = SupabaseClient<Database>;
@@ -59,7 +62,7 @@ function asMemory(client: DatabaseClient) {
 }
 
 function asMusic(client: DatabaseClient) {
-  return client as unknown as SupabaseClient<ArtistScopedMusicDatabase>;
+  return client;
 }
 
 function record(value: Json | unknown): Record<string, Json | undefined> {

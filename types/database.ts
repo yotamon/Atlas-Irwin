@@ -13,10 +13,13 @@ type LegacyReleaseColumn =
   | "artwork_url"
   | "cover_asset"
   | "cover_alt"
+  | "canvas_video_url"
   | "public_release_path"
   | "spotify_url"
+  | "apple_music_url"
   | "soundcloud_url"
   | "youtube_url"
+  | "bandcamp_url"
   | "smart_link_url";
 
 type LegacyTrackColumn = "audio_url" | "spotify_url" | "soundcloud_url";

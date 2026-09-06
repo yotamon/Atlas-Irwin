@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { updateModeFromProviderMetadata } from "@/lib/distribution/update-safety";
 import { beginDistributionUpdate, requestDistributionTakedown, syncDistributionStatus } from "@/app/studio/distribution-actions-safe";
 import type { DistributionDatabase } from "@/types/distribution-database";
@@ -10,7 +10,7 @@ type Db = SupabaseClient<DistributionDatabase>;
 export default async function ReleaseDistributionLifecycle({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const db = supabase as unknown as Db;
   const [releaseResult, configResult, deliveriesResult, operationsResult] = await Promise.all([
     db.from("releases").select("id").eq("id", id).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),

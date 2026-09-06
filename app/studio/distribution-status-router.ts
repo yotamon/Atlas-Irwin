@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveArtistContext, resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { getProviderCatalogIdentity } from "@/lib/distribution/provider-catalog-identity";
 import { syncDistributionStatus as syncProviderDistributionStatus } from "./distribution-status-action";
 import type { Json } from "@/types/database";
@@ -36,7 +36,7 @@ export async function syncDistributionStatus(form: FormData) {
   const requestedArtistId = text(form, "artist_id");
   const artist = requestedArtistId
     ? await resolveArtistContext(supabase, user, requestedArtistId)
-    : await resolveDefaultArtistContext(supabase, user);
+    : await resolveActiveArtistContext(supabase, user);
   const db = supabase as unknown as Db;
   const [releaseResult, configResult, accountResult, tracksResult, metadataResult] = await Promise.all([
     db.from("releases").select("id,upc").eq("id", releaseId).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),

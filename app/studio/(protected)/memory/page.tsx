@@ -4,7 +4,7 @@ import { requireStudioAdmin } from "@/lib/auth/studio";
 import { loadArtistMemory } from "@/lib/artist-memory/server";
 import type { ArtistMemoryClass, ArtistMemoryItem } from "@/lib/artist-memory/domain";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 
 const CLASS_LABELS: Record<ArtistMemoryClass, string> = {
   identity: "Identity",
@@ -31,7 +31,7 @@ function confidence(item: ArtistMemoryItem) {
 
 export default async function ArtistMemoryPage() {
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const memory = await loadArtistMemory({ db: supabase, ownerId: user.id, artistId: artist.artistId });
   const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
   const active = memory.items.filter((item) => item.lifecycle === "active");
