@@ -1,4 +1,4 @@
-import { formatVisualBrandPrompt, type VisualBrandDna } from "./visual-brand-dna";
+import { formatVisualBrandPrompt, toVisualBrandPromptContext, type VisualBrandDna } from "./visual-brand-dna";
 import type { CreativeGenerationRequest } from "@/lib/marketing/creative-provider-types";
 import type { CreativeReference } from "@/lib/marketing/creative-context";
 
@@ -60,31 +60,14 @@ export function visualBrandReferenceSlots(dna: VisualBrandDna): VisualBrandRefer
       label: "Motif system",
       aspectRatio: "1:1",
       purpose: "An abstract/graphic exploration of the signature visual motifs without becoming a logo exercise.",
-      direction: `Explore the signature motifs as one coherent visual system: ${dna.motifs.signature.map((motif) => `${motif.name} (${motif.guidance})`).join("; ")}. Use selective variation and rhythm. Do not place readable typography, logos or brand marks unless they are already intrinsic to the evidence.`
+      direction: `Explore the signature motifs as one coherent visual system: ${dna.motifs.signature.map((motif) => `${motif.name} (${motif.guidance})`).join("; ")}. Use selective variation and rhythm. Do not place readable typography, logos or brand marks unless they are already intrinsic to the evidence.`,
     },
   ];
 }
 
 export function visualBrandReferencePrompt(dna: VisualBrandDna, slot: VisualBrandReferenceSlot) {
   return [
-    formatVisualBrandPrompt({
-      thesis: dna.thesis,
-      palette: dna.colors.map((color) => `${color.name} ${color.hex} (${color.role}: ${color.usage})`),
-      signatureMotifs: dna.motifs.signature.map((motif) => `${motif.name}: ${motif.guidance}`),
-      supportingMotifs: dna.motifs.supporting.map((motif) => `${motif.name}: ${motif.guidance}`),
-      textures: [...dna.textures.primary, ...dna.textures.secondary],
-      materials: dna.materials,
-      composition: [dna.composition.focalStrategy, dna.composition.density, dna.composition.negativeSpace, dna.composition.depth].filter(Boolean).join(" "),
-      lighting: dna.lighting,
-      humanTreatment: [
-        dna.humanRepresentation.usage !== "none" ? `People: ${dna.humanRepresentation.usage}.` : "Do not introduce people by default.",
-        ...dna.humanRepresentation.treatment,
-        ...dna.humanRepresentation.avoid.map((item) => `Avoid ${item}`),
-      ],
-      antiStyle: dna.antiStyle,
-      continuityRules: dna.continuityRules,
-      creativeFreedom: dna.creativeFreedom,
-    }),
+    formatVisualBrandPrompt(toVisualBrandPromptContext(dna)),
     `Reference-pack role: ${slot.label}. ${slot.purpose}`,
     `Specific direction: ${slot.direction}`,
     "Create an original image that belongs to the identity. Use supplied references as visual lineage, not as compositions to copy. Do not reproduce a source image, recognizable third-party artwork, watermarks or unrelated logos.",
