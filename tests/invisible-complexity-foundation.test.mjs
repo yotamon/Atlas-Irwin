@@ -51,8 +51,11 @@ test("Needs You is a projection over canonical state rather than a second task s
   assert.ok(domain.includes("input.activeMission?.blockers"));
   assert.ok(domain.includes('severity: "required"'));
   assert.ok(domain.includes('source: { kind: "mission"'));
-  assert.ok(page.includes("The queue is derived from source state rather than maintained as a second task system."));
-  assert.ok(page.includes("One queue, no duplicate tasks"));
+  assert.ok(page.includes("<DecisionQueue"));
+  assert.ok(page.includes("Blocking decisions"));
+  assert.ok(page.includes("Everything else"));
+  assert.equal(page.includes("second task system"), false, "internal projection architecture should not be exposed as artist-facing copy");
+  assert.equal(page.includes("One queue, no duplicate tasks"), false, "internal dedupe architecture should not compete with decisions");
   assert.equal(domain.includes("completed: boolean"), false, "Needs You items must not own duplicate completion state");
 });
 

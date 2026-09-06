@@ -57,7 +57,7 @@ test("Today is the operational command center and Autopilot is behavior", () => 
   const snapshot = read("lib/studio/artist-operating-snapshot.ts");
   assert.doesNotMatch(sidebar, /\/studio\/autopilot/);
   assert.match(autopilot, /redirect\("\/studio"\)/);
-  for (const surface of ["Recommended next move", "Needs you", "Working", "Coming up"]) {
+  for (const surface of ["Recommended next move", "Needs You", "Working", "Coming up"]) {
     assert.match(today, new RegExp(surface));
   }
   assert.match(today, /loadArtistOperatingSnapshot/);

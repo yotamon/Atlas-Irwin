@@ -15,6 +15,15 @@ export const ENSEMBLIS_WORK_NAV = [
   { href: "/studio/growth", label: "Grow", icon: "analytics" },
 ] as const;
 
+/* Mobile keeps four direct workflow destinations plus More. Grow remains a
+   first-class destination inside More so the tab bar can never wrap. */
+export const ENSEMBLIS_MOBILE_WORK_NAV = [
+  ENSEMBLIS_WORK_NAV[0],
+  ENSEMBLIS_WORK_NAV[1],
+  ENSEMBLIS_WORK_NAV[2],
+  ENSEMBLIS_WORK_NAV[3],
+] as const;
+
 export const ENSEMBLIS_MORE_NAV = [
   { href: "/studio/audience", label: "Audience", icon: "outreach" },
   { href: "/studio/library", label: "Library", icon: "media" },
@@ -22,6 +31,11 @@ export const ENSEMBLIS_MORE_NAV = [
   { href: "/studio/sites", label: "Sites", icon: "sites" },
   { href: "/studio/distribution", label: "Distribution", icon: "distribution" },
   { href: "/studio/connections", label: "Connections", icon: "distribution" },
+] as const;
+
+export const ENSEMBLIS_MOBILE_MORE_NAV = [
+  ENSEMBLIS_WORK_NAV[4],
+  ...ENSEMBLIS_MORE_NAV,
 ] as const;
 
 // Compatibility alias while older callers still use the previous Manage name.
