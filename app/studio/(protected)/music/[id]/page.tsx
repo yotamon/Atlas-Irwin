@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { analyzeMusicTrack } from "@/app/studio/growth-media-actions-safe";
+import { ActiveMasteringPanel } from "@/components/studio/active-mastering-panel";
 import { LyricsIntelligencePanel } from "@/components/studio/lyrics-intelligence-panel";
 import { MasteringInspectorPanel } from "@/components/studio/mastering-inspector-panel";
 import { MusicIntelligencePreview } from "@/components/studio/music-intelligence-preview";
@@ -230,15 +231,18 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
         <div className="v2-section-heading">
           <div>
             <span className="section-label">Mastering</span>
-            <h2>Release-quality and beat-stability check</h2>
+            <h2>Improve, verify and prepare the track for release</h2>
           </div>
         </div>
         {intelligenceReady ? (
-          <MasteringInspectorPanel
-            audioUrl={vaultTrack.audio_url}
-            musicMap={vaultTrack.audio_profile}
-            catalogProfiles={catalogProfiles}
-          />
+          <>
+            <ActiveMasteringPanel trackId={vaultTrack.id} sourceAudioUrl={vaultTrack.audio_url} />
+            <MasteringInspectorPanel
+              audioUrl={vaultTrack.audio_url}
+              musicMap={vaultTrack.audio_profile}
+              catalogProfiles={catalogProfiles}
+            />
+          </>
         ) : (
           <div className="v2-calm-state compact">
             <strong>{vaultTrack.audio_url ? "Mastering checks are part of the same analysis." : "No master to inspect yet."}</strong>
