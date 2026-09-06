@@ -65,11 +65,14 @@ test("Today is a thin Manager renderer over one canonical operating snapshot", a
   assert.ok(today.includes("loadArtistOperatingSnapshot"));
   assert.ok(today.includes('href={href("/studio/needs-you")}'));
   assert.ok(today.includes("needsYouTone(item)"));
-  assert.ok(today.includes("Recommended next move"));
+  assert.ok(today.includes("artistMission"));
+  assert.ok(today.includes("Current Mission"));
+  assert.ok(today.includes('topDecision ? "Needs You"'));
   assert.ok(today.includes('topDecision.severity === "required" ? "Required" : "Needs attention"'));
   assert.equal(today.includes('from("releases")'), false, "Today page should not own cross-domain data fan-out");
   assert.ok(snapshot.includes("deriveNeedsYouQueue"));
   assert.ok(snapshot.includes("deriveReleaseMission"));
+  assert.ok(snapshot.includes("deriveArtistMission"));
   assert.ok(snapshot.includes("loadDistributionArtistState"));
   assert.ok(snapshot.includes("loadPaidGrowthWorkspace"));
   assert.ok(snapshot.includes("loadWorkspaceOperatingPreferences"));
