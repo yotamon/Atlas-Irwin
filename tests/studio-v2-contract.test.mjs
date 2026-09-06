@@ -79,6 +79,10 @@ test("Ensemblis persists and validates active artist context across primary navi
   const layout = await readFile("app/studio/(protected)/layout.tsx", "utf8");
 
   assert.ok(product.includes('ENSEMBLIS_ACTIVE_ARTIST_COOKIE = "ensemblis_active_artist"'));
+  assert.ok(product.includes('const hashIndex = href.indexOf("#")'));
+  assert.ok(product.includes("href.slice(0, hashIndex)"));
+  assert.ok(product.includes("href.slice(hashIndex)"));
+  assert.ok(product.includes('`${base}${separator}artist=${encodeURIComponent(artistId)}${fragment}`'));
   assert.ok(context.includes("listAccessibleArtists"));
   assert.ok(context.includes("resolveActiveArtistContext"));
   assert.ok(context.includes("resolveArtistContext(client, identity, preferredArtistId)"));
