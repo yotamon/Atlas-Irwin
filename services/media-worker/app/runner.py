@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from . import main as worker_main
+from .mastering_processor import MasteringWorkerRequest, execute_mastering
 from .music_intelligence_v4_runtime import analyze_music as analyze_music_v4
 from .social_finishing import SocialWorkerRequest, execute_social
 from .stem_intelligence_v3 import analyze_stem as analyze_stem_v3
@@ -32,6 +33,9 @@ def main() -> None:
         if payload.get("job_type") == "finish_social_video":
             request = SocialWorkerRequest.model_validate(payload)
             executor = execute_social
+        elif payload.get("job_type") == "master_audio":
+            request = MasteringWorkerRequest.model_validate(payload)
+            executor = execute_mastering
         else:
             request = WorkerRequest.model_validate(payload)
             executor = execute
