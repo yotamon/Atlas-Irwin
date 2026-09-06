@@ -39,8 +39,15 @@ test("Today and Release share release truth while Today projects the artist's pr
   assert.ok(snapshot.includes("releaseMission: activeMission"));
   assert.ok(snapshot.includes("proposedActions: nextActions"));
   assert.ok(snapshot.includes("completedActions: completedManagerActions"));
-  assert.ok(snapshot.includes('select("id,title,release_date,active_release,artwork_url,cover_asset,primary_hook,smart_link_url,spotify_url,soundcloud_url,youtube_url,status,is_archived")'));
-  assert.ok(snapshot.includes('select("id,release_id,audio_url,is_primary")'));
+  assert.ok(snapshot.includes('from("release_read_model")'));
+  assert.ok(snapshot.includes("cover_asset_id"));
+  assert.ok(snapshot.includes("smart_link_site_id"));
+  assert.ok(snapshot.includes("smart_link_slug"));
+  assert.ok(snapshot.includes("spotify_url"));
+  assert.ok(snapshot.includes("soundcloud_url"));
+  assert.ok(snapshot.includes("youtube_url"));
+  assert.ok(snapshot.includes('from("track_read_model")'));
+  assert.ok(snapshot.includes("master_audio_asset_id"));
   assert.ok(snapshot.includes('select("id,release_id,status")'));
   assert.ok(release.includes('label: "Release mission"'));
   assert.equal(release.includes("Workflow readiness"), false);
