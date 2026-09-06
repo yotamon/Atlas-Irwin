@@ -10,6 +10,7 @@ import { asMarketingClient } from "@/lib/marketing/db";
 import { releaseLifecycle } from "@/lib/marketing/release-lifecycle";
 import { loadPaidGrowthWorkspace, paidGrowthNeedsYou } from "@/lib/paid-growth/server";
 import type { Database } from "@/types/database";
+import { deriveArtistMission } from "./artist-mission";
 import type { ArtistContext } from "./artist-context";
 import { asArtistScopedMusicClient } from "./music-db";
 import { deriveNeedsYouQueue } from "./needs-you";
@@ -287,6 +288,15 @@ export async function loadArtistOperatingSnapshot({
   ].sort((left, right) => Date.parse(left.scheduledAt) - Date.parse(right.scheduledAt)).slice(0, 7);
 
   const strategy = buildArtistStrategy(operatingContext);
+  const primaryMission = deriveArtistMission({
+    primaryGoal: operatingContext.profile.primaryGoal,
+    strategy,
+    activeReleaseTitle: activeRelease?.title ?? null,
+    activeReleaseHref: activeRelease ? `/studio/releases/${activeRelease.id}` : null,
+    releaseMission: activeMission,
+    proposedActions: nextActions,
+    completedActions: completedManagerActions,
+  });
   const managerPlan: OperatingManagerPlanItem[] = [
     ...working.map((item) => ({ ...item })),
     ...completedManagerActions.slice(0, 2).map((action) => ({
@@ -328,6 +338,7 @@ export async function loadArtistOperatingSnapshot({
     strategy,
     activeRelease,
     activeMission,
+    primaryMission,
     needsYou,
     topDecision: needsYou[0] ?? null,
     nextAction,
