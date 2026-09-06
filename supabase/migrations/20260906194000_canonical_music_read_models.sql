@@ -44,7 +44,9 @@ select
   r.updated_at,
   a.name as artist_name,
   cover.media_asset_id as cover_asset_id,
-  cover.public_url as cover_url,
+  cover.public_url as cover_public_url,
+  cover.bucket_name as cover_bucket_name,
+  cover.storage_path as cover_storage_path,
   cover.alt_text as cover_alt,
   links.spotify_url,
   links.apple_music_url,
@@ -59,6 +61,8 @@ left join lateral (
   select
     ml.media_asset_id,
     ma.public_url,
+    ma.bucket_name,
+    ma.storage_path,
     ml.alt_text
   from public.media_links ml
   join public.media_assets ma on ma.id = ml.media_asset_id
@@ -106,7 +110,7 @@ select
   t.created_at,
   t.updated_at,
   master.media_asset_id as master_audio_asset_id,
-  master.public_url as master_audio_url,
+  master.public_url as master_audio_public_url,
   master.bucket_name as master_audio_bucket_name,
   master.storage_path as master_audio_storage_path,
   ids.spotify_url,
