@@ -8,7 +8,6 @@ import {
   formatTotalDurationLabel,
   trackNumber,
 } from "@/lib/catalog/format";
-import { resolveLegacyCanvasVideoUrl } from "@/lib/catalog/legacy-media";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import {
   createCatalogClient,
@@ -23,7 +22,6 @@ import type {
   Track,
   TrackExternalId,
 } from "@/types/database";
-import { adminEmails } from "@/lib/auth/studio";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 
 type CatalogBundle = {
@@ -36,155 +34,29 @@ type CatalogBundle = {
   externalTrackIds: TrackExternalId[];
 };
 
-type PostgrestErrorLike = {
-  code?: string | null;
-  message?: string | null;
-};
-
-const NO_PUBLIC_ARTIST = Symbol("no-public-artist");
-type CatalogArtistId = string | null | typeof NO_PUBLIC_ARTIST;
-
-function emptyCatalogBundle(): CatalogBundle {
-  return {
-    releases: [],
-    tracks: [],
-    placements: [],
-    mediaAssets: [],
-    mediaLinks: [],
-    externalLinks: [],
-    externalTrackIds: [],
-  };
-}
-
-function isPreEnsemblisSchemaError(error: PostgrestErrorLike | null) {
-  return error?.code === "PGRST204"
-    || /Could not find the ['\"]artist_id['\"] column of ['\"]releases['\"] in the schema cache/i.test(
-      error?.message ?? "",
-    );
-}
-
 async function resolveCatalogOwnerId() {
-  const explicit = getPublicCatalogOwnerId();
-  if (explicit) return explicit;
-
-  const supabase = createCatalogClient();
-  const emails = adminEmails();
-  if (emails.length) {
-    const { data } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("email", emails[0])
-      .maybeSingle();
-    if (data?.id) return data.id;
+  const ownerId = getPublicCatalogOwnerId();
+  if (!ownerId) {
+    throw new Error("PUBLIC_CATALOG_OWNER_ID is required for the public catalog.");
   }
-
-  const { data: admin } = await supabase
-    .from("profiles")
-    .select("id")
-    .eq("is_admin", true)
-    .limit(1)
-    .maybeSingle();
-  if (!admin?.id) {
-    throw new Error(
-      "No public catalog owner found. Set PUBLIC_CATALOG_OWNER_ID or STUDIO_ADMIN_EMAILS.",
-    );
-  }
-  return admin.id;
+  return ownerId;
 }
 
-/**
- * Resolve the public catalog Artist without granting anon access to the private
- * Ensemblis artists table.
- *
- * The only safe low-privilege source is the already-public release catalog. Before
- * artist_id existed, a missing-column response identifies the legacy single-artist
- * schema and owner scope remains valid. Once artist_id exists, zero public releases
- * fails closed to an empty catalog, while multiple public artists require an explicit
- * PUBLIC_CATALOG_ARTIST_ID instead of silently combining artist data.
- */
-async function resolveCatalogArtistId(ownerId: string): Promise<CatalogArtistId> {
-  const explicitArtistId = process.env.PUBLIC_CATALOG_ARTIST_ID?.trim();
-  if (explicitArtistId) return explicitArtistId;
-
-  const supabase = createCatalogClient();
-  const music = asArtistScopedMusicClient(supabase);
-  const { data, error } = await music
-    .from("releases")
-    .select("artist_id")
-    .eq("owner_id", ownerId)
-    .eq("is_public", true)
-    .eq("publish_state", "live")
-    .eq("is_archived", false);
-
-  if (error) {
-    if (isPreEnsemblisSchemaError(error)) return null;
-    throw new Error(error.message);
+async function resolveCatalogArtistId() {
+  const artistId = process.env.PUBLIC_CATALOG_ARTIST_ID?.trim();
+  if (!artistId) {
+    throw new Error("PUBLIC_CATALOG_ARTIST_ID is required for the public catalog.");
   }
-
-  const artistIds = [...new Set(
-    (data ?? [])
-      .map((release) => release.artist_id)
-      .filter((artistId): artistId is string => Boolean(artistId)),
-  )];
-
-  if (artistIds.length === 0) return NO_PUBLIC_ARTIST;
-  if (artistIds.length > 1) {
-    throw new Error(
-      "The public catalog owner has multiple live public artists. Set PUBLIC_CATALOG_ARTIST_ID explicitly.",
-    );
-  }
-  return artistIds[0];
+  return artistId;
 }
 
 async function loadCatalogBundle(
   ownerId: string,
-  artistId?: CatalogArtistId,
+  artistId?: string,
 ): Promise<CatalogBundle> {
   const supabase = createCatalogClient();
   const music = asArtistScopedMusicClient(supabase);
-  const resolvedArtistId = artistId === undefined
-    ? await resolveCatalogArtistId(ownerId)
-    : artistId;
-
-  if (resolvedArtistId === NO_PUBLIC_ARTIST) {
-    return emptyCatalogBundle();
-  }
-
-  let releasesQuery = music
-    .from("releases")
-    .select("*")
-    .eq("owner_id", ownerId)
-    .eq("is_public", true)
-    .eq("publish_state", "live")
-    .eq("is_archived", false);
-  let placementsQuery = music
-    .from("homepage_placements")
-    .select("*")
-    .eq("owner_id", ownerId)
-    .eq("enabled", true)
-    .order("display_order", { ascending: true });
-  let tracksQuery = music
-    .from("tracks")
-    .select("*")
-    .eq("owner_id", ownerId);
-  let externalLinksQuery = music
-    .from("release_external_links")
-    .select("*")
-    .eq("owner_id", ownerId);
-  let externalTrackIdsQuery = music
-    .from("track_external_ids")
-    .select("*")
-    .eq("owner_id", ownerId);
-
-  // Do not mention artist_id to PostgREST until the Ensemblis schema actually exists.
-  // This keeps old Atlas production and new Ensemblis code deployable in either order.
-  if (resolvedArtistId) {
-    releasesQuery = releasesQuery.eq("artist_id", resolvedArtistId);
-    placementsQuery = placementsQuery.eq("artist_id", resolvedArtistId);
-    tracksQuery = tracksQuery.eq("artist_id", resolvedArtistId);
-    externalLinksQuery = externalLinksQuery.eq("artist_id", resolvedArtistId);
-    externalTrackIdsQuery = externalTrackIdsQuery.eq("artist_id", resolvedArtistId);
-  }
+  const resolvedArtistId = artistId ?? await resolveCatalogArtistId();
 
   const [
     releasesResult,
@@ -194,12 +66,41 @@ async function loadCatalogBundle(
     externalLinksResult,
     externalTrackIdsResult,
   ] = await Promise.all([
-    releasesQuery,
-    placementsQuery,
-    tracksQuery,
-    supabase.from("media_links").select("*").eq("owner_id", ownerId),
-    externalLinksQuery,
-    externalTrackIdsQuery,
+    music
+      .from("releases")
+      .select("*")
+      .eq("owner_id", ownerId)
+      .eq("artist_id", resolvedArtistId)
+      .eq("is_public", true)
+      .eq("publish_state", "live")
+      .eq("is_archived", false),
+    music
+      .from("homepage_placements")
+      .select("*")
+      .eq("owner_id", ownerId)
+      .eq("artist_id", resolvedArtistId)
+      .eq("enabled", true)
+      .order("display_order", { ascending: true }),
+    music
+      .from("tracks")
+      .select("*")
+      .eq("owner_id", ownerId)
+      .eq("artist_id", resolvedArtistId),
+    music
+      .from("media_links")
+      .select("*")
+      .eq("owner_id", ownerId)
+      .eq("artist_id", resolvedArtistId),
+    music
+      .from("release_external_links")
+      .select("*")
+      .eq("owner_id", ownerId)
+      .eq("artist_id", resolvedArtistId),
+    music
+      .from("track_external_ids")
+      .select("*")
+      .eq("owner_id", ownerId)
+      .eq("artist_id", resolvedArtistId),
   ]);
 
   for (const result of [
@@ -213,12 +114,12 @@ async function loadCatalogBundle(
     if (result.error) throw new Error(result.error.message);
   }
 
-  const releaseIds = new Set((releasesResult.data ?? []).map((r) => r.id));
-  const placements = (placementsResult.data ?? []).filter((p) =>
-    releaseIds.has(p.release_id),
+  const releaseIds = new Set((releasesResult.data ?? []).map((release) => release.id));
+  const placements = (placementsResult.data ?? []).filter((placement) =>
+    releaseIds.has(placement.release_id),
   );
-  const tracks = (tracksResult.data ?? []).filter((t) =>
-    releaseIds.has(t.release_id),
+  const tracks = (tracksResult.data ?? []).filter((track) =>
+    releaseIds.has(track.release_id),
   );
   const trackIds = new Set(tracks.map((track) => track.id));
   const mediaLinks = (mediaLinksResult.data ?? []).filter(
@@ -253,60 +154,57 @@ async function loadCatalogBundle(
   };
 }
 
-function primaryMediaUrl(
+function primaryMedia(
   bundle: CatalogBundle,
-  releaseId: string,
-  role: MediaAsset["asset_type"],
+  options: { releaseId?: string; trackId?: string; role: string },
 ) {
   const links = bundle.mediaLinks
-    .filter((link) => link.release_id === releaseId && link.role === role)
-    .sort((a, b) => Number(b.is_primary) - Number(a.is_primary) || a.display_order - b.display_order);
+    .filter(
+      (link) =>
+        link.role === options.role &&
+        (options.releaseId === undefined || link.release_id === options.releaseId) &&
+        (options.trackId === undefined || link.track_id === options.trackId),
+    )
+    .sort(
+      (a, b) =>
+        Number(b.is_primary) - Number(a.is_primary) ||
+        a.display_order - b.display_order,
+    );
+
   for (const link of links) {
     const asset = bundle.mediaAssets.find((item) => item.id === link.media_asset_id);
-    if (asset?.public_url) return asset.public_url;
+    if (asset) return asset;
   }
   return null;
 }
 
 function trackLinks(track: Track, bundle: CatalogBundle): ReleaseLink[] {
-  const links: ReleaseLink[] = [];
-  if (track.spotify_url) {
-    links.push({
-      platform: "Spotify",
-      href: track.spotify_url,
-      label: "Spotify",
-    });
-  }
-  for (const external of bundle.externalTrackIds.filter(
-    (item) => item.track_id === track.id,
-  )) {
-    if (external.external_url) {
-      links.push({
-        platform: external.provider,
-        href: external.external_url,
-        label: external.provider,
-      });
-    }
-  }
-  return links;
+  return bundle.externalTrackIds
+    .filter((item) => item.track_id === track.id && Boolean(item.external_url))
+    .map((item) => ({
+      platform: item.provider,
+      href: item.external_url as string,
+      label: item.provider,
+    }));
 }
 
-function albumLinks(releaseId: string, release: DbRelease, bundle: CatalogBundle) {
-  const links: ReleaseLink[] = [];
-  const push = (platform: string, href?: string | null, label?: string | null) => {
-    if (!href) return;
-    links.push({ platform, href, label: label || platform });
-  };
-  push("Spotify", release.spotify_url);
-  push("SoundCloud", release.soundcloud_url);
-  push("YouTube", release.youtube_url);
-  push("Smart Link", release.smart_link_url, release.cta_label || "Listen");
-  for (const external of bundle.externalLinks.filter(
-    (item) => item.release_id === releaseId,
-  )) {
-    push(external.label || external.provider, external.external_url, external.label || external.provider);
-  }
-  return links;
+function externalTrackUrl(trackId: string, provider: string, bundle: CatalogBundle) {
+  return bundle.externalTrackIds.find(
+    (item) =>
+      item.track_id === trackId &&
+      item.provider.toLowerCase() === provider.toLowerCase() &&
+      Boolean(item.external_url),
+  )?.external_url ?? null;
+}
+
+function albumLinks(releaseId: string, bundle: CatalogBundle): ReleaseLink[] {
+  return bundle.externalLinks
+    .filter((item) => item.release_id === releaseId && Boolean(item.external_url))
+    .map((item) => ({
+      platform: item.provider,
+      href: item.external_url,
+      label: item.label || item.provider,
+    }));
 }
 
 function mapTrack(
@@ -315,16 +213,14 @@ function mapTrack(
   bundle: CatalogBundle,
   activeTrackId?: string | null,
 ): ReleaseTrack {
-  const soundcloudUrl = track.soundcloud_url;
-  const previewLink = bundle.mediaLinks
-    .filter((link) => link.track_id === track.id && link.role === "audio_preview")
-    .sort((a, b) => Number(b.is_primary) - Number(a.is_primary) || a.display_order - b.display_order)[0];
-  const previewAsset = previewLink
-    ? bundle.mediaAssets.find((asset) => asset.id === previewLink.media_asset_id)
-    : null;
-  const localUrl = previewAsset?.public_url || track.audio_url;
+  const previewAsset = primaryMedia(bundle, {
+    trackId: track.id,
+    role: "audio_preview",
+  });
+  const soundcloudUrl = externalTrackUrl(track.id, "soundcloud", bundle);
+  const url = soundcloudUrl || previewAsset?.public_url || "";
   const source = soundcloudUrl ? "soundcloud" : "local";
-  const url = soundcloudUrl || localUrl || "";
+
   return {
     number: trackNumber(index, track.track_number),
     title: track.title,
@@ -361,34 +257,43 @@ function mapRelease(
   if (tracks.length && !tracks.some((track) => track.active)) {
     tracks[0] = { ...tracks[0], active: true };
   }
-  const coverUrl =
-    primaryMediaUrl(bundle, release.id, "cover") ||
-    release.artwork_url ||
-    "/atlas-cover.png";
-  const canvasVideoUrl =
-    primaryMediaUrl(bundle, release.id, "canvas_video") ||
-    resolveLegacyCanvasVideoUrl(release.slug) ||
-    undefined;
+
+  const coverAsset = primaryMedia(bundle, {
+    releaseId: release.id,
+    role: "cover",
+  });
+  if (!coverAsset?.public_url) {
+    throw new Error(
+      `Published release "${release.title}" is missing a public cover media asset.`,
+    );
+  }
+
+  const canvasVideoUrl = primaryMedia(bundle, {
+    releaseId: release.id,
+    role: "canvas_video",
+  })?.public_url ?? undefined;
+  const releaseLinks = albumLinks(release.id, bundle);
+
   return {
     slug: release.slug,
     title: release.title,
     type: release.release_type,
-    artist: release.artist || "Atlas Irwin",
+    artist: release.artist,
     description: release.story || undefined,
     releaseDate: release.release_date || undefined,
     releaseDateLabel: formatReleaseDateLabel(release.release_date),
     featured: release.is_featured || placement?.placement_type === "featured",
-    coverUrl,
+    coverUrl: coverAsset.public_url,
     coverAlt: release.cover_alt || `${release.title} cover art`,
     canvasVideoUrl,
     ctaLabel: release.cta_label || undefined,
-    ctaHref: release.cta_href || release.smart_link_url || tracks[0]?.url,
+    ctaHref: release.cta_href || releaseLinks[0]?.href || tracks[0]?.url,
     genre: release.genre || undefined,
     subgenre: release.subgenre || undefined,
     label: release.label || undefined,
     upc: release.upc || undefined,
     artistLinks: [],
-    albumLinks: albumLinks(release.id, release, bundle),
+    albumLinks: releaseLinks,
     partners: [],
     trackCount: tracks.length,
     totalDurationLabel: formatTotalDurationLabel(
@@ -405,12 +310,12 @@ async function fetchPublicReleasesUncached(): Promise<Release[]> {
   }
 
   const ownerId = await resolveCatalogOwnerId();
-  const artistId = await resolveCatalogArtistId(ownerId);
+  const artistId = await resolveCatalogArtistId();
   const bundle = await loadCatalogBundle(ownerId, artistId);
   const placementByRelease = new Map(
     bundle.placements.map((placement) => [placement.release_id, placement]),
   );
-  const orderedReleaseIds = bundle.placements.map((p) => p.release_id);
+  const orderedReleaseIds = bundle.placements.map((placement) => placement.release_id);
   const releases = bundle.releases
     .filter((release) => placementByRelease.has(release.id))
     .sort((a, b) => {
