@@ -105,13 +105,15 @@ export default async function TodayPage() {
     <PageHeader title="Today" description={`What matters now for ${artist.artistName}.`} />
 
     <PriorityHero
-      eyebrow={primaryMission
-        ? primaryMission.kind === "release" && activeRelease
-          ? `${activeRelease.title} · ${primaryMission.label}`
-          : `Primary Mission · ${primaryMission.label}`
-        : handsOff
-          ? "Manager mode"
-          : "Recommended next move"}
+      eyebrow={topDecision
+        ? "Needs You"
+        : primaryMission
+          ? primaryMission.kind === "release" && activeRelease
+            ? `${activeRelease.title} · ${primaryMission.label}`
+            : `Primary Mission · ${primaryMission.label}`
+          : handsOff
+            ? "Manager mode"
+            : "Recommended next move"}
       title={heroTitle}
       description={heroDetail}
       status={heroStatus}
