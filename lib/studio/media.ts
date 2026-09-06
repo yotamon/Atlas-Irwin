@@ -30,9 +30,9 @@ export type MediaKind = "image" | "video" | "audio" | "archive" | "unknown";
 export const MEDIA_TYPE_LABELS: Record<MediaType, string> = {
   cover: "Release artwork / thumbnail",
   alternate_artwork: "Alternate artwork",
-  brand_reference: "Atlas Irwin visual reference",
-  brand_logo: "Atlas Irwin logo / identity asset",
-  brand_motion_reference: "Atlas Irwin motion reference",
+  brand_reference: "Artist visual reference",
+  brand_logo: "Artist logo / identity asset",
+  brand_motion_reference: "Artist motion reference",
   canvas_video: "Canvas / cover-art video",
   visualizer: "Visualizer",
   audio_preview: "Audio preview",
