@@ -3,10 +3,12 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { analyzeVaultTrack } from "@/app/studio/growth-media-actions";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMasteringClient, kickMasteringQueue, masteringOutputPath } from "@/lib/mastering/jobs";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asGrowthClient } from "@/lib/studio/growth-db";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import type { Json } from "@/types/database";
 import type { MasteringPreset, TrackMasteringJob } from "@/types/mastering-database";
 
@@ -122,4 +124,75 @@ export async function createActiveMaster(form: FormData) {
   await kickMasteringQueue().catch(() => undefined);
   revalidatePath(`/studio/music/${track.id}`);
   return { jobId: id, deduplicated: false };
+}
+
+export async function promoteActiveMaster(form: FormData) {
+  const { supabase, user } = await requireStudioAdmin();
+  const artist = await resolveActiveArtistContext(supabase, user);
+  const growth = asGrowthClient(supabase);
+  const mastering = asMasteringClient(supabase);
+  const music = asArtistScopedMusicClient(supabase);
+  const jobId = z.uuid().parse(String(form.get("job_id") ?? ""));
+
+  const jobResult = await mastering.from("track_mastering_jobs")
+    .select("*")
+    .eq("id", jobId)
+    .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId)
+    .eq("status", "completed")
+    .single();
+  if (jobResult.error || !jobResult.data) throw new Error(jobResult.error?.message || "Mastering candidate not found.");
+  const job = jobResult.data as TrackMasteringJob;
+  const request = record(job.request_payload);
+  const result = record(job.result_payload);
+  const checks = record(result.final_checks);
+  const publicUrl = typeof request.public_url === "string" ? request.public_url : "";
+  if (!job.output_asset_id || !publicUrl) throw new Error("This mastering candidate has no registered output asset.");
+  if (checks.pass !== true) throw new Error("Only a fully verified mastering candidate can become the canonical master.");
+
+  const trackResult = await growth.from("track_vault")
+    .select("id,audio_url,linked_release_id")
+    .eq("id", job.track_vault_id)
+    .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId)
+    .single();
+  if (trackResult.error || !trackResult.data) throw new Error(trackResult.error?.message || "Track not found.");
+  if (trackResult.data.audio_url !== job.source_audio_url) {
+    throw new Error("The canonical master changed after this candidate was created. Render a fresh candidate from the current source.");
+  }
+
+  const updated = await growth.from("track_vault").update({
+    audio_url: publicUrl,
+    media_asset_id: job.output_asset_id,
+    audio_profile: json({}),
+    analysis: json({ status: "pending", requested_from: "active_mastering_promotion" }),
+    updated_at: new Date().toISOString(),
+  }).eq("id", job.track_vault_id).eq("owner_id", user.id).eq("artist_id", artist.artistId);
+  if (updated.error) throw new Error(updated.error.message);
+
+  if (trackResult.data.linked_release_id) {
+    const releaseTracks = await music.from("tracks")
+      .select("id,is_primary")
+      .eq("release_id", trackResult.data.linked_release_id)
+      .eq("owner_id", user.id)
+      .eq("artist_id", artist.artistId)
+      .order("is_primary", { ascending: false })
+      .order("display_order", { ascending: true });
+    if (releaseTracks.error) throw new Error(releaseTracks.error.message);
+    const canonical = (releaseTracks.data ?? []).find((track) => track.is_primary) ?? releaseTracks.data?.[0] ?? null;
+    if (canonical) {
+      const releaseUpdate = await music.from("tracks").update({ audio_url: publicUrl })
+        .eq("id", canonical.id)
+        .eq("owner_id", user.id)
+        .eq("artist_id", artist.artistId);
+      if (releaseUpdate.error) throw new Error(releaseUpdate.error.message);
+    }
+  }
+
+  const analysisForm = new FormData();
+  analysisForm.set("id", job.track_vault_id);
+  await analyzeVaultTrack(analysisForm);
+  revalidatePath(`/studio/music/${job.track_vault_id}`);
+  if (trackResult.data.linked_release_id) revalidatePath(`/studio/releases/${trackResult.data.linked_release_id}`);
+  return { promoted: true, trackId: job.track_vault_id };
 }
