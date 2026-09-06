@@ -4,13 +4,17 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { materializeSceneGrowthOpportunities } from "@/lib/artist-operating/growth-opportunities";
 import type { ArtistSceneRelationship } from "@/lib/artist-operating/domain";
 import { usableSceneRelationships } from "@/lib/artist-operating/scene-intelligence";
+import { prepareDetectedGrowthOpportunities, prepareReleaseGrowthPlan } from "@/lib/studio/growth-preparation";
 import type { Database, Json } from "@/types/database";
 import type { ArtistSceneRelationshipType, EnsemblisDatabase } from "@/types/ensemblis-database";
+import type { GrowthOpportunityKind } from "@/types/growth-database";
 import { createAutonomyServiceClient } from "./autonomy-db";
 
 const SAFE_MANAGER_ACTIONS: Record<string, {
-  relationshipTypes: ArtistSceneRelationshipType[];
-  targetCountKey: "liveTargetCount" | "labelTargetCount";
+  relationshipTypes?: ArtistSceneRelationshipType[];
+  targetCountKey?: "liveTargetCount" | "labelTargetCount";
+  growthKinds?: GrowthOpportunityKind[];
+  releasePlan?: boolean;
 }> = {
   advance_gig_strategy: {
     relationshipTypes: ["promoter", "venue", "festival"],
@@ -20,15 +24,29 @@ const SAFE_MANAGER_ACTIONS: Record<string, {
     relationshipTypes: ["label"],
     targetCountKey: "labelTargetCount",
   },
+  advance_discovery: {
+    relationshipTypes: ["playlist", "channel"],
+    growthKinds: ["catalog_revival", "content_breakout"],
+  },
+  advance_fan_growth: {
+    growthKinds: ["funnel_bottleneck", "content_breakout", "catalog_revival"],
+  },
+  advance_release_strategy: {
+    growthKinds: ["release_risk", "release_candidate"],
+    releasePlan: true,
+  },
 };
 
-type ScenePreparationResult = {
+type PreparationSource = {
+  source: "scene" | "growth_scan" | "release_plan";
   prepared: number;
-  synced: number;
-  inserted: number;
-  updated: number;
-  lifecyclePreserved: number;
-  reason: "unsupported_manager_action" | "artist_not_active" | "no_verified_targets" | "growth_opportunities_prepared" | "targets_already_resolved";
+  reason: string;
+};
+
+type ManagerPreparationResult = {
+  prepared: number;
+  sources: PreparationSource[];
+  reason: "manager_preparation_completed" | "no_actionable_work";
 };
 
 function record(value: unknown): Record<string, unknown> {
@@ -56,11 +74,12 @@ function eligibleManagerAction(action: {
   const payload = record(action.payload);
   if (payload.managerOwned !== true) return false;
   if (retryBlocked(payload, now)) return false;
-  return Number(payload[config.targetCountKey] ?? 0) > 0;
-}
 
-function emptyResult(reason: ScenePreparationResult["reason"]): ScenePreparationResult {
-  return { prepared: 0, synced: 0, inserted: 0, updated: 0, lifecyclePreserved: 0, reason };
+  const internalEngineAvailable = Boolean(config.releasePlan || config.growthKinds?.length);
+  if (!internalEngineAvailable && config.targetCountKey) {
+    return Number(payload[config.targetCountKey] ?? 0) > 0;
+  }
+  return true;
 }
 
 function mappedRelationship(row: {
@@ -107,14 +126,13 @@ async function claimAction(action: {
   return data;
 }
 
-async function executeScenePreparation(action: {
-  owner_id: string;
-  artist_id: string;
-  action_type: string;
-}): Promise<ScenePreparationResult> {
-  const config = SAFE_MANAGER_ACTIONS[action.action_type];
-  if (!config) return emptyResult("unsupported_manager_action");
-
+async function prepareSceneTargets({
+  action,
+  relationshipTypes,
+}: {
+  action: { owner_id: string; artist_id: string };
+  relationshipTypes: ArtistSceneRelationshipType[];
+}): Promise<PreparationSource> {
   const autonomy = createAutonomyServiceClient();
   const operating = autonomy as unknown as SupabaseClient<EnsemblisDatabase>;
   const [artistResult, relationshipsResult] = await Promise.all([
@@ -132,9 +150,9 @@ async function executeScenePreparation(action: {
   ]);
   if (artistResult.error) throw new Error(artistResult.error.message);
   if (relationshipsResult.error) throw new Error(relationshipsResult.error.message);
-  if (!artistResult.data) return emptyResult("artist_not_active");
+  if (!artistResult.data) return { source: "scene", prepared: 0, reason: "artist_not_active" };
 
-  const allowedTypes = new Set<ArtistSceneRelationshipType>(config.relationshipTypes);
+  const allowedTypes = new Set<ArtistSceneRelationshipType>(relationshipTypes);
   const relationships = usableSceneRelationships(
     (relationshipsResult.data ?? []).map(mappedRelationship),
   ).filter((relationship) =>
@@ -143,8 +161,7 @@ async function executeScenePreparation(action: {
     && relationship.fitScore >= 60
     && relationship.confidence >= 0.35,
   );
-
-  if (!relationships.length) return emptyResult("no_verified_targets");
+  if (!relationships.length) return { source: "scene", prepared: 0, reason: "no_verified_targets" };
 
   const result = await materializeSceneGrowthOpportunities({
     client: autonomy as unknown as SupabaseClient<Database>,
@@ -155,12 +172,53 @@ async function executeScenePreparation(action: {
     includeSceneMapFallback: false,
   });
   return {
+    source: "scene",
     prepared: result.actionablePrepared,
-    synced: result.synced,
-    inserted: result.inserted,
-    updated: result.updated,
-    lifecyclePreserved: result.lifecyclePreserved,
-    reason: result.actionablePrepared > 0 ? "growth_opportunities_prepared" : "targets_already_resolved",
+    reason: result.actionablePrepared > 0 ? "scene_opportunities_prepared" : "scene_targets_already_resolved",
+  };
+}
+
+async function executeManagerPreparation(action: {
+  owner_id: string;
+  artist_id: string;
+  action_type: string;
+}): Promise<ManagerPreparationResult> {
+  const config = SAFE_MANAGER_ACTIONS[action.action_type];
+  if (!config) return { prepared: 0, sources: [], reason: "no_actionable_work" };
+  const autonomy = createAutonomyServiceClient();
+  const client = autonomy as unknown as SupabaseClient<Database>;
+  const sources: PreparationSource[] = [];
+
+  if (config.relationshipTypes?.length) {
+    sources.push(await prepareSceneTargets({ action, relationshipTypes: config.relationshipTypes }));
+  }
+
+  if (config.growthKinds?.length) {
+    const growth = await prepareDetectedGrowthOpportunities({
+      client,
+      ownerId: action.owner_id,
+      artistId: action.artist_id,
+      kinds: config.growthKinds,
+      respectCatalogEngine: true,
+    });
+    sources.push({ source: "growth_scan", prepared: growth.prepared, reason: growth.reason });
+  }
+
+  if (config.releasePlan) {
+    const release = await prepareReleaseGrowthPlan({
+      client,
+      ownerId: action.owner_id,
+      artistId: action.artist_id,
+      respectAutoplan: true,
+    });
+    sources.push({ source: "release_plan", prepared: release.prepared, reason: release.reason });
+  }
+
+  const prepared = sources.reduce((sum, source) => sum + source.prepared, 0);
+  return {
+    prepared,
+    sources,
+    reason: prepared > 0 ? "manager_preparation_completed" : "no_actionable_work",
   };
 }
 
@@ -179,7 +237,8 @@ export async function executeSafeManagerActions(limit = 20) {
   const eligible = (proposed ?? []).filter((action) => eligibleManagerAction(action, now));
   let claimed = 0;
   let completed = 0;
-  let deferred = 0;
+  let prepared = 0;
+  let noOp = 0;
   let failed = 0;
 
   for (const candidate of eligible) {
@@ -189,44 +248,29 @@ export async function executeSafeManagerActions(limit = 20) {
     const payload = record(action.payload);
 
     try {
-      const result = await executeScenePreparation(action);
+      const result = await executeManagerPreparation(action);
       const completedAt = new Date().toISOString();
-      if (result.prepared <= 0) {
-        const { error: expireError } = await autonomy.from("next_best_actions").update({
-          status: "expired",
-          payload: asJson({
-            ...payload,
-            managerExecution: {
-              outcome: result.reason,
-              completedAt,
-              prepared: 0,
-              synced: result.synced,
-              lifecyclePreserved: result.lifecyclePreserved,
-            },
-          }),
-        }).eq("id", action.id).eq("owner_id", action.owner_id).eq("artist_id", action.artist_id).eq("status", "executing");
-        if (expireError) throw new Error(expireError.message);
-        deferred += 1;
-        continue;
-      }
-
+      const finalStatus = result.prepared > 0 ? "completed" as const : "dismissed" as const;
       const { error: completeError } = await autonomy.from("next_best_actions").update({
-        status: "completed",
+        status: finalStatus,
         payload: asJson({
           ...payload,
           managerExecution: {
             outcome: result.reason,
             completedAt,
             prepared: result.prepared,
-            synced: result.synced,
-            inserted: result.inserted,
-            updated: result.updated,
-            lifecyclePreserved: result.lifecyclePreserved,
+            sources: result.sources,
+            systemNoOp: result.prepared === 0,
           },
         }),
       }).eq("id", action.id).eq("owner_id", action.owner_id).eq("artist_id", action.artist_id).eq("status", "executing");
       if (completeError) throw new Error(completeError.message);
-      completed += 1;
+      if (result.prepared > 0) {
+        completed += 1;
+        prepared += result.prepared;
+      } else {
+        noOp += 1;
+      }
     } catch (executionError) {
       const retryAfter = new Date(Date.now() + 60 * 60 * 1000).toISOString();
       const { error: restoreError } = await autonomy.from("next_best_actions").update({
@@ -251,7 +295,8 @@ export async function executeSafeManagerActions(limit = 20) {
     eligible: eligible.length,
     claimed,
     completed,
-    deferred,
+    prepared,
+    noOp,
     failed,
   };
 }

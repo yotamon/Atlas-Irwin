@@ -114,7 +114,6 @@ test("hands-off Manager executes only safe internal evidence-backed preparation"
   assert.match(executor, /relationship\.fitScore >= 60/);
   assert.match(executor, /relationship\.confidence >= 0\.35/);
   assert.match(executor, /status: "executing"/);
-  assert.match(executor, /status: "completed"/);
   assert.match(executor, /retryAfter/);
   assert.doesNotMatch(executor, /processDuePublicationJobs|processDueOutreachEnrollments|processAutonomousCreativeSpend/);
 
@@ -130,4 +129,34 @@ test("hands-off Manager executes only safe internal evidence-backed preparation"
   assert.match(snapshot, /status: "Prepared"/);
   assert.match(snapshot, /completedManagerActions/);
   assert.match(snapshot, /execution\.prepared/);
+});
+
+test("Manager reuses deterministic Growth engines for release, discovery and fan growth", async () => {
+  const [executor, preparation] = await Promise.all([
+    read("lib/marketing/manager-execution.ts"),
+    read("lib/studio/growth-preparation.ts"),
+  ]);
+
+  assert.match(executor, /advance_discovery/);
+  assert.match(executor, /advance_fan_growth/);
+  assert.match(executor, /advance_release_strategy/);
+  assert.match(executor, /playlist.*channel/s);
+  assert.match(executor, /catalog_revival.*content_breakout/s);
+  assert.match(executor, /funnel_bottleneck/);
+  assert.match(executor, /release_risk.*release_candidate/s);
+  assert.match(executor, /prepareDetectedGrowthOpportunities/);
+  assert.match(executor, /prepareReleaseGrowthPlan/);
+  assert.doesNotMatch(executor, /advance_owned_audience/);
+  assert.match(executor, /finalStatus = result\.prepared > 0 \? "completed" as const : "dismissed" as const/);
+  assert.match(executor, /systemNoOp: result\.prepared === 0/);
+
+  assert.match(preparation, /planReleaseQueue/);
+  assert.match(preparation, /detectGrowthOpportunities/);
+  assert.match(preparation, /PRESERVED_OPPORTUNITY_STATUSES/);
+  assert.match(preparation, /accepted.*dismissed.*completed/);
+  assert.match(preparation, /committedTrackIds/);
+  assert.match(preparation, /autoplan_disabled/);
+  assert.match(preparation, /catalog_engine_disabled/);
+  assert.match(preparation, /status: "proposed" as const/);
+  assert.match(preparation, /status = preserveLifecycle \? previous!\.status : "new"/);
 });
