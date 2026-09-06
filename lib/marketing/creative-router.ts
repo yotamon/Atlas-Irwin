@@ -21,6 +21,7 @@ export type CreativeRouteInput = {
   prompt: string;
   quality: CreativeQualityProfile;
   mediaKind: CreativeMediaKindPreference;
+  aspectRatio?: CreativeAspectRatio;
   audioStart?: number | null;
   audioEnd?: number | null;
   context: CreativeReferenceContext;
@@ -42,7 +43,7 @@ function autoOutputKind(format: string): "image" | "video" {
   return "image";
 }
 
-function aspectRatio(platform: string, format: string, outputKind: "image" | "video"): CreativeAspectRatio {
+function inferredAspectRatio(platform: string, format: string, outputKind: "image" | "video"): CreativeAspectRatio {
   const normalized = `${platform} ${format}`.toLowerCase();
   if (normalized.includes("newsletter") || normalized.includes("outreach")) return "1:1";
   if (outputKind === "image" && (
@@ -143,13 +144,13 @@ function higgsfieldParams(model: string, input: CreativeRouteInput) {
 
 export function routeMarketingCreative(input: CreativeRouteInput): CreativeRoute {
   const outputKind = input.mediaKind === "auto" ? autoOutputKind(input.format) : input.mediaKind;
-  const ratio = aspectRatio(input.platform, input.format, outputKind);
+  const ratio = input.aspectRatio ?? inferredAspectRatio(input.platform, input.format, outputKind);
   const selected = chooseCandidate(input.quality, outputKind, ratio);
   let model = selected.candidate.model;
   if (selected.candidate.provider === "higgsfield" && model === "auto_premium") model = higgsfieldPremiumModel(input);
   const provider = selected.candidate.provider;
   const fallbackPrefix = selected.fallbackUsed
-    ? `${selected.preferred.label} is not connected, so Atlas selected the next ${input.quality} route: `
+    ? `${selected.preferred.label} is not connected, so Ensemblis selected the next ${input.quality} route: `
     : selected.configured
       ? ""
       : `${selected.preferred.label} is the preferred route but is not connected yet. `;
