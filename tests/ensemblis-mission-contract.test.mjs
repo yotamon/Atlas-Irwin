@@ -33,7 +33,7 @@ test("Today and Release share release truth while Today projects the artist's pr
   assert.ok(today.includes("primaryMission?.nextAction"));
   assert.ok(today.includes("primaryMission?.title"));
   assert.ok(today.includes("Primary Mission ·"));
-  assert.ok(today.includes('topDecision\n          ? "Needs You"') || today.includes('topDecision\n          ? "Needs You"'));
+  assert.ok(today.includes('topDecision\n          ? "Needs You"'));
   assert.ok(today.includes("View release Mission"));
   assert.ok(snapshot.includes("primaryGoal: operatingContext.profile.primaryGoal"));
   assert.ok(snapshot.includes("releaseMission: activeMission"));
