@@ -3,9 +3,9 @@ import type {
   HomepagePlacement,
   MediaAsset,
   MediaLink,
-  Release,
   ReleaseExternalLink,
-  Track,
+  ReleaseReadModel,
+  TrackReadModel,
 } from "@/types/database";
 
 export type ReadinessItem = {
@@ -28,8 +28,8 @@ export type ReleaseReadiness = {
 };
 
 type ReadinessInput = {
-  release: Release;
-  tracks: Track[];
+  release: ReleaseReadModel;
+  tracks: TrackReadModel[];
   placement?: HomepagePlacement | null;
   mediaAssets?: MediaAsset[];
   mediaLinks?: MediaLink[];
@@ -53,16 +53,16 @@ export function calculateReleaseReadiness({
     const asset = mediaAssets.find((item) => item.id === link.media_asset_id);
     return link.role === "cover" && asset?.visibility === "public";
   });
-  const hasArtwork = Boolean(release.artwork_url || publicCover);
+  const hasArtwork = Boolean(release.cover_public_url || publicCover);
   const orderedTracks = tracks.length > 0 && tracks.every((track) => track.display_order >= 0);
   const hasListeningDestination = tracks.some(
-    (track) => track.audio_url || track.soundcloud_url || track.spotify_url,
+    (track) => track.master_audio_asset_id || track.soundcloud_url || track.spotify_url,
   ) || externalLinks.some((link) => Boolean(link.external_url));
   const hasPlatformLink = Boolean(
     release.spotify_url ||
       release.soundcloud_url ||
       release.youtube_url ||
-      release.smart_link_url ||
+      (release.smart_link_site_id && release.smart_link_slug) ||
       externalLinks.length,
   );
   const intendsHomepage = Boolean(placement?.enabled || release.homepage_eligible);
@@ -81,7 +81,7 @@ export function calculateReleaseReadiness({
       id: "identity",
       label: "Release identity",
       detail: "Title, type, artist, and release date are complete.",
-      complete: Boolean(release.title && release.release_type && release.artist && release.release_date),
+      complete: Boolean(release.title && release.release_type && release.artist_name && release.release_date),
       blocking: true,
       href: `${base}?tab=overview#identity`,
     },
