@@ -36,7 +36,7 @@ jobs:
             fs.writeFileSync(path, source.replace(before, after));
           }
 
-          replaceExact('tests/ensemblis-sites-contract.test.mjs', '    `.from("tracks")`,', '    `.from("track_read_model")`,');
+          replaceExact('tests/ensemblis-sites-contract.test.mjs', '    \' .from("tracks")\',' .replace(' \' ', '\''), '    \' .from("track_read_model")\',' .replace(' \' ', '\''));
           replaceExact('tests/ensemblis-sites-url-safety.test.mjs', '    "artworkUrl: publicAsset(release.artwork_url)",', '    "artworkUrl: publicAsset(release.cover_public_url)",');
           replaceExact(
             'lib/artist-operating/server.ts',
