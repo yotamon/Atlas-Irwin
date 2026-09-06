@@ -43,7 +43,7 @@ export default async function BrandProfilePage() {
 
       <div className="studio-smart-defaults">
         <strong>Visual identity is evidence-first</strong>
-        <span>Use Visual Brand DNA to let Ensemblis learn palette, motifs, texture, composition, human treatment and anti-style directly from the artist's real images. The fields below remain the concise human-editable profile, not a second visual system.</span>
+        <span>Use Visual Brand DNA to let Ensemblis learn palette, motifs, texture, composition, human treatment and anti-style directly from real artist images. The fields below remain the concise human-editable profile, not a second visual system.</span>
       </div>
 
       <form action={saveBrandProfileV2} className="studio-form v2-brand-profile">
