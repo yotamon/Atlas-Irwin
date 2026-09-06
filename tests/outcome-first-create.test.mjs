@@ -24,6 +24,19 @@ test("Create recommends three deliverables grounded in the strongest musical Mom
   assert.equal(create.includes('href={href(`/studio/production?release=${moment.release_id}&moment=${moment.id}`)}'), false);
 });
 
+test("an explicitly selected Best Moment remains the exact creative source", async () => {
+  const [create, moments] = await Promise.all([
+    source("app/studio/(protected)/create/page.tsx"),
+    source("components/studio/moment-review-panel.tsx"),
+  ]);
+  assert.ok(create.includes("moment?: string"));
+  assert.ok(create.includes("const requestedMoment = params.moment"));
+  assert.ok(create.includes("requestedMoment ? [requestedMoment]"));
+  assert.ok(create.includes("Your selected Moment"));
+  assert.ok(moments.includes('href={`/studio/create?release=${releaseId}&moment=${moment.id}`}'));
+  assert.equal(moments.includes("&track=${moment.track_id}"), false, "Create from this Moment must not fall back to a track-level re-selection");
+});
+
 test("creative direction ranking is bounded, active-release aware and keeps outcome diversity", async () => {
   const directions = await source("lib/studio/creative-directions.ts");
   for (const phrase of [
