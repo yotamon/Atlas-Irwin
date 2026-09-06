@@ -20,7 +20,7 @@ export function ReleaseSmartLink({
   smartLink: SmartLinkRuntime;
   searchParams: Record<string, string | string[] | undefined>;
 }) {
-  const artistName = site.viewModel.artist.name || smartLink.release.artist || "Artist";
+  const artistName = site.viewModel.artist.name || smartLink.release.artist_name || "Artist";
   const query = new URLSearchParams();
   for (const key of TRACKED_KEYS) {
     const raw = searchParams[key];
@@ -46,7 +46,7 @@ export function ReleaseSmartLink({
       <section className={styles.card}>
         <a className={styles.artist} href={site.primaryHostname ? `https://${site.primaryHostname}` : `/sites/${site.site.slug}`}>{artistName}</a>
         <div className={styles.artwork}>
-          {smartLink.release.artwork_url ? <img src={smartLink.release.artwork_url} alt={smartLink.release.cover_alt || `${smartLink.release.title} artwork`} /> : <span>{smartLink.release.title.slice(0, 1)}</span>}
+          {smartLink.release.cover_public_url ? <img src={smartLink.release.cover_public_url} alt={smartLink.release.cover_alt || `${smartLink.release.title} artwork`} /> : <span>{smartLink.release.title.slice(0, 1)}</span>}
         </div>
         <div className={styles.copy}>
           <span>{smartLink.mode === "pre_release" ? `Coming ${dateLabel(smartLink.release.release_date) || "soon"}` : "Out now"}</span>
