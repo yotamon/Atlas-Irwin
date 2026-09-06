@@ -146,7 +146,7 @@ test("Manager reuses deterministic Growth engines for release, discovery and fan
   assert.match(executor, /release_risk.*release_candidate/s);
   assert.match(executor, /prepareDetectedGrowthOpportunities/);
   assert.match(executor, /prepareReleaseGrowthPlan/);
-  assert.doesNotMatch(executor, /advance_owned_audience/);
+  assert.match(executor, /advance_owned_audience/);
   assert.match(executor, /finalStatus = result\.prepared > 0 \? "completed" as const : "dismissed" as const/);
   assert.match(executor, /systemNoOp: result\.prepared === 0/);
 
@@ -159,4 +159,32 @@ test("Manager reuses deterministic Growth engines for release, discovery and fan
   assert.match(preparation, /catalog_engine_disabled/);
   assert.match(preparation, /status: "proposed" as const/);
   assert.match(preparation, /status = preserveLifecycle \? previous!\.status : "new"/);
+});
+
+test("owned-audience Manager preparation is consent-first and never invents contact permission", async () => {
+  const [executor, preparation, migration, growthTypes] = await Promise.all([
+    read("lib/marketing/manager-execution.ts"),
+    read("lib/audience/owned-audience-preparation.ts"),
+    read("supabase/migrations/20260906165000_owned_audience_growth_opportunity.sql"),
+    read("types/growth-database.ts"),
+  ]);
+
+  assert.match(executor, /advance_owned_audience/);
+  assert.match(executor, /prepareOwnedAudienceOpportunity/);
+  assert.match(executor, /source: "owned_audience"/);
+  assert.match(preparation, /verified_email/);
+  assert.match(preparation, /verified_phone/);
+  assert.match(preparation, /email_marketing/);
+  assert.match(preparation, /sms_marketing/);
+  assert.match(preparation, /permission\.evidence_at/);
+  assert.match(preparation, /validPermissionExpiry/);
+  assert.match(preparation, /relationshipGap/);
+  assert.match(preparation, /smart_link_readback/);
+  assert.match(preparation, /externalContactRequiresApproval: true/);
+  assert.match(preparation, /Never infer a new purpose, channel or identity/);
+  assert.doesNotMatch(preparation, /fetch\(|processDuePublicationJobs|outreach_messages|MailerLite|MAILERLITE/);
+  assert.match(preparation, /owned_audience_lifecycle_preserved/);
+  assert.match(preparation, /owned_audience_already_prepared/);
+  assert.match(migration, /owned_audience/);
+  assert.match(growthTypes, /\| "owned_audience"/);
 });

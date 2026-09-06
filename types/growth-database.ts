@@ -89,7 +89,8 @@ export type GrowthOpportunityKind =
   | "gig_fit"
   | "label_fit"
   | "playlist_fit"
-  | "channel_fit";
+  | "channel_fit"
+  | "owned_audience";
 
 export type GrowthOpportunity = {
   id: string;
