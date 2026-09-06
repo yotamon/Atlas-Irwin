@@ -45,9 +45,14 @@ export async function setVisualBrandEvidenceRelationship(form: FormData) {
     ...record(asset.metadata),
     tags: Array.from(new Set(tags.map((tag) => tag.trim()).filter(Boolean))),
   } as Json;
+  const nextAssetType = asset.asset_type === "brand_logo"
+    ? "brand_logo"
+    : relationship === "avoid"
+      ? "brand_negative_reference"
+      : "brand_reference";
   const { error: updateError } = await supabase
     .from("media_assets")
-    .update({ metadata: nextMetadata })
+    .update({ metadata: nextMetadata, asset_type: nextAssetType })
     .eq("id", assetId)
     .eq("owner_id", user.id);
   if (updateError) throw new Error(updateError.message);
