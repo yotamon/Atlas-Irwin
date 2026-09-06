@@ -67,6 +67,8 @@ test("Today is a thin Manager renderer over one canonical operating snapshot", a
   assert.ok(today.includes("needsYouTone(item)"));
   assert.ok(today.includes("Recommended next move"));
   assert.ok(today.includes('topDecision.severity === "required" ? "Required" : "Needs attention"'));
+  assert.ok(today.includes("Ensemblis is handling"));
+  assert.equal(today.includes("Artist operating mode"), false, "configuration belongs to Settings, not the everyday manager loop");
   assert.equal(today.includes('from("releases")'), false, "Today page should not own cross-domain data fan-out");
   assert.ok(snapshot.includes("deriveNeedsYouQueue"));
   assert.ok(snapshot.includes("deriveReleaseMission"));
@@ -77,15 +79,27 @@ test("Today is a thin Manager renderer over one canonical operating snapshot", a
   assert.equal(snapshot.includes("/100 signal"), false, "Manager should not expose pseudo-precise ranking scores as artist truth");
 });
 
-test("primary navigation stays at five outcomes while secondary capabilities remain available under More", async () => {
+test("primary navigation exposes five outcomes and internal domains are owned contextually", async () => {
   const product = await source("lib/ensemblis-product.ts");
   const sidebar = await source("components/studio/sidebar.tsx");
+  const grow = await source("app/studio/(protected)/growth/page.tsx");
+  const settings = await source("app/studio/(protected)/settings/page.tsx");
+  const release = await source("components/studio/release-workspace-v2.tsx");
   const workStart = product.indexOf("export const ENSEMBLIS_WORK_NAV");
   const moreStart = product.indexOf("export const ENSEMBLIS_MORE_NAV");
+  const mobileMoreStart = product.indexOf("export const ENSEMBLIS_MOBILE_MORE_NAV");
   const workSource = product.slice(workStart, moreStart);
+  const moreSource = product.slice(moreStart, mobileMoreStart);
+
   for (const label of ["Today", "Music", "Releases", "Create", "Grow"]) assert.ok(workSource.includes(`label: "${label}"`));
   for (const label of ["Audience", "Library", "Memory", "Sites", "Distribution", "Connections"]) assert.equal(workSource.includes(`label: "${label}"`), false, `${label} must not compete in primary navigation`);
-  assert.ok(product.includes("ENSEMBLIS_MORE_NAV"));
+  for (const label of ["Library", "Sites"]) assert.ok(moreSource.includes(`label: "${label}"`), `${label} remains a cross-workflow utility`);
+  for (const label of ["Audience", "Memory", "Distribution", "Connections"]) assert.equal(moreSource.includes(`label: "${label}"`), false, `${label} must be owned by its parent workflow rather than More`);
+
+  assert.ok(grow.includes('label: "Audience"'));
+  assert.ok(settings.includes("Artist Memory"));
+  assert.ok(settings.includes("Connections"));
+  assert.ok(release.includes('"Distribution"'));
   assert.ok(sidebar.includes("<details"));
   assert.ok(sidebar.includes(">More</summary>"));
   assert.ok(sidebar.includes('href={ensemblisArtistHref("/studio/needs-you", artistId)}'));
