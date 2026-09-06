@@ -71,7 +71,8 @@ test("Today stays a thin Manager renderer while the snapshot owns artist operati
   assert.match(today, /Keep making music/);
   assert.match(today, /Ensemblis is handling/);
   assert.doesNotMatch(today, /MARKETING_INVOLVEMENT_LABELS|Artist operating mode/);
-  assert.match(create, /Real artist material comes first/);
+  assert.match(create, /creativeSourceHierarchy\(operatingContext\.profile\)/);
+  assert.match(create, /Artist creative policy/);
   assert.match(create, /AI music creation is disabled for this artist/);
   assert.match(createActions, /artistCreativePolicyBrief/);
   assert.match(server, /profileConfigured/);
