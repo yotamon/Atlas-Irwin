@@ -156,8 +156,8 @@ export function Disclosure({
   return <details className={className}><summary>{label}</summary>{children}</details>;
 }
 
-export function Submit({ children = "Save changes" }: { children?: ReactNode }) {
-  return <SubmitButton>{children}</SubmitButton>;
+export function Submit({ children = "Save changes", disabled = false }: { children?: ReactNode; disabled?: boolean }) {
+  return <SubmitButton disabled={disabled}>{children}</SubmitButton>;
 }
 
 export function FormatTime({ seconds }: { seconds: number | null }) {
