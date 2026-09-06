@@ -1,0 +1,251 @@
+import "server-only";
+
+import { createHash } from "node:crypto";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { createMarketingServiceClient } from "@/lib/marketing/db";
+import { createServiceClient } from "@/lib/supabase/service";
+import type { CreativeProviderStatus } from "@/lib/marketing/creative-provider-types";
+import type { Json } from "@/types/database";
+import type { VideoDatabase } from "@/types/video-database";
+import { VISUAL_BRAND_REFERENCE_PURPOSE_PREFIX } from "./visual-brand-reference-pack";
+
+const MAX_REFERENCE_BYTES = 35 * 1024 * 1024;
+
+function record(value: Json | unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function json(value: unknown) {
+  return value as Json;
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" ? value : "";
+}
+
+function numberValue(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function extensionFor(contentType: string) {
+  if (contentType.includes("webp")) return "webp";
+  if (contentType.includes("jpeg") || contentType.includes("jpg")) return "jpg";
+  return "png";
+}
+
+async function generatedImageBytes(input: {
+  remoteUrl?: string;
+  dataBase64?: string;
+  mimeType?: string;
+  fetchHeaders?: Record<string, string>;
+}) {
+  if (input.dataBase64) {
+    const buffer = Buffer.from(input.dataBase64, "base64");
+    if (!buffer.length || buffer.length > MAX_REFERENCE_BYTES) throw new Error("Generated visual reference is empty or too large.");
+    return { buffer, contentType: input.mimeType || "image/png" };
+  }
+  if (!input.remoteUrl) throw new Error("Generated visual reference has no media payload.");
+  const response = await fetch(input.remoteUrl, { headers: input.fetchHeaders, cache: "no-store" });
+  if (!response.ok) throw new Error(`Could not import generated visual reference (${response.status}).`);
+  const length = Number(response.headers.get("content-length") || 0);
+  if (length > MAX_REFERENCE_BYTES) throw new Error("Generated visual reference exceeds the Media Library import limit.");
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (!buffer.length || buffer.length > MAX_REFERENCE_BYTES) throw new Error("Generated visual reference is empty or too large.");
+  return {
+    buffer,
+    contentType: response.headers.get("content-type")?.split(";")[0] || input.mimeType || "image/png",
+  };
+}
+
+async function existingReference(db: SupabaseClient<VideoDatabase>, ownerId: string, artistId: string, runId: string) {
+  const { data, error } = await db.from("media_assets")
+    .select("*")
+    .eq("owner_id", ownerId)
+    .contains("metadata", { visual_brand_generation_run_id: runId, artist_id: artistId })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+async function storeVisualBrandReference(input: {
+  ownerId: string;
+  artistId: string;
+  runId: string;
+  versionId: string;
+  slotKey: string;
+  slotLabel: string;
+  aspectRatio: string;
+  provider: string;
+  model: string;
+  prompt: string;
+  referenceAssetIds: string[];
+  remoteUrl?: string;
+  dataBase64?: string;
+  mimeType?: string;
+  fetchHeaders?: Record<string, string>;
+  actualCostUsd?: number | null;
+}) {
+  const db = createServiceClient() as unknown as SupabaseClient<VideoDatabase>;
+  let asset = await existingReference(db, input.ownerId, input.artistId, input.runId);
+  if (asset) return asset;
+
+  const { buffer, contentType } = await generatedImageBytes({
+    remoteUrl: input.remoteUrl,
+    dataBase64: input.dataBase64,
+    mimeType: input.mimeType,
+    fetchHeaders: input.fetchHeaders,
+  });
+  if (!contentType.startsWith("image/")) throw new Error("Visual Brand reference provider returned a non-image result.");
+  const extension = extensionFor(contentType);
+  const bucket = "public-media";
+  const path = `${input.ownerId}/library/visual-brand/${input.artistId}/${input.versionId}/${input.runId}.${extension}`;
+  const { error: uploadError } = await db.storage.from(bucket).upload(path, buffer, {
+    contentType,
+    cacheControl: "31536000",
+    upsert: false,
+  });
+  if (uploadError && !uploadError.message.toLowerCase().includes("already exists")) throw new Error(uploadError.message);
+  const publicUrl = db.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+  const hash = createHash("sha256").update(buffer).digest("hex");
+  const { data, error } = await db.from("media_assets").insert({
+    owner_id: input.ownerId,
+    bucket_name: bucket,
+    storage_path: path,
+    public_url: publicUrl,
+    asset_type: "brand_reference",
+    mime_type: contentType,
+    file_size: buffer.length,
+    content_hash: hash,
+    visibility: "public",
+    metadata: {
+      original_name: `visual-brand-${input.slotKey}.${extension}`,
+      title: input.slotLabel,
+      description: "Generated by Ensemblis from the active Visual Brand DNA as an exploratory identity reference. It does not change the active identity until the artist deliberately promotes and rebuilds from it.",
+      tags: [
+        `artist:${input.artistId}`,
+        "ensemblis-generated",
+        "visual-brand-reference-pack",
+        "brand:experimental",
+        "approval-required",
+      ],
+      artist_id: input.artistId,
+      upload_source: input.provider,
+      source_kind: "generated",
+      provider: input.provider,
+      model: input.model,
+      provider_source_url: input.remoteUrl ?? null,
+      visual_brand_generation_run_id: input.runId,
+      visual_brand_version_id: input.versionId,
+      visual_brand_slot_key: input.slotKey,
+      aspect_ratio: input.aspectRatio,
+      prompt: input.prompt,
+      reference_asset_ids: input.referenceAssetIds,
+      actual_cost_usd: input.actualCostUsd ?? null,
+    },
+  }).select("*").single();
+  if (error) {
+    if (error.code === "23505") {
+      asset = await existingReference(db, input.ownerId, input.artistId, input.runId);
+      if (asset) return asset;
+    }
+    throw new Error(error.message);
+  }
+  return data;
+}
+
+export async function applyVisualBrandReferenceProviderStatus(input: {
+  runId: string;
+  artistId?: string;
+  status: CreativeProviderStatus;
+}) {
+  const marketing = createMarketingServiceClient();
+  let query = marketing.from("generation_runs").select("*").eq("id", input.runId);
+  if (input.artistId) query = query.eq("artist_id", input.artistId);
+  const { data: run, error } = await query.maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!run || !run.purpose.startsWith(VISUAL_BRAND_REFERENCE_PURPOSE_PREFIX)) {
+    return { ignored: true as const, reason: "not_visual_brand_reference" };
+  }
+  if (!run.artist_id) throw new Error("Visual Brand reference generation is missing artist lineage.");
+  const context = record(run.input_context);
+  if (context.artistId !== run.artist_id) throw new Error("Visual Brand reference generation has inconsistent artist lineage.");
+  const versionId = stringValue(context.visualBrandVersionId);
+  const slotKey = stringValue(context.slotKey);
+  const slotLabel = stringValue(context.slotLabel);
+  const aspectRatio = stringValue(context.aspectRatio);
+  const prompt = stringValue(context.prompt);
+  const referenceAssetIds = Array.isArray(context.referenceAssetIds)
+    ? context.referenceAssetIds.filter((item): item is string => typeof item === "string")
+    : [];
+  if (!versionId || !slotKey || !slotLabel || !aspectRatio || !prompt) throw new Error("Stored Visual Brand reference lineage is incomplete.");
+
+  const output = record(run.output);
+  const providerRequestId = input.status.requestId || run.provider_request_id;
+  if (input.status.status === "queued" || input.status.status === "in_progress") {
+    const { error: updateError } = await marketing.from("generation_runs").update({
+      status: "running",
+      provider_request_id: providerRequestId,
+      output: json({ ...output, stage: "generating", providerStatus: input.status.status, providerRaw: input.status.raw }),
+      error: null,
+    }).eq("id", run.id).eq("artist_id", run.artist_id);
+    if (updateError) throw new Error(updateError.message);
+    return { completed: false as const, status: input.status.status };
+  }
+
+  if (input.status.status === "failed" || input.status.status === "nsfw") {
+    const actualCostUsd = numberValue(input.status.actualCostUsd);
+    const { error: updateError } = await marketing.from("generation_runs").update({
+      status: "failed",
+      provider_request_id: providerRequestId,
+      actual_cost_usd: actualCostUsd,
+      output: json({ ...output, stage: "failed", providerStatus: input.status.status, providerRaw: input.status.raw }),
+      error: input.status.status === "nsfw" ? `${run.provider} rejected this reference during safety review.` : `${run.provider} reported that this reference generation failed.`,
+    }).eq("id", run.id).eq("artist_id", run.artist_id);
+    if (updateError) throw new Error(updateError.message);
+    return { completed: false as const, status: input.status.status };
+  }
+
+  if (!input.status.resultUrl && !input.status.resultBase64) throw new Error(`${run.provider} reported completion without an image result.`);
+  const providerActual = numberValue(input.status.actualCostUsd);
+  const actualCostUsd = providerActual ?? numberValue(run.estimated_cost_usd);
+  const asset = await storeVisualBrandReference({
+    ownerId: run.owner_id,
+    artistId: run.artist_id,
+    runId: run.id,
+    versionId,
+    slotKey,
+    slotLabel,
+    aspectRatio,
+    provider: run.provider,
+    model: run.model,
+    prompt,
+    referenceAssetIds,
+    remoteUrl: input.status.resultUrl,
+    dataBase64: input.status.resultBase64,
+    mimeType: input.status.resultMimeType,
+    fetchHeaders: input.status.resultFetchHeaders,
+    actualCostUsd,
+  });
+  if (!asset.public_url) throw new Error("Generated Visual Brand reference was stored without a public URL.");
+  const { error: updateError } = await marketing.from("generation_runs").update({
+    status: "completed",
+    provider_request_id: providerRequestId,
+    actual_cost_usd: actualCostUsd,
+    completed_at: new Date().toISOString(),
+    output: json({
+      ...output,
+      stage: "awaiting_review",
+      providerStatus: "completed",
+      providerRaw: input.status.raw,
+      mediaAssetId: asset.id,
+      resultUrl: asset.public_url,
+      actualCostUsd,
+      reviewRelationship: "experimental",
+      automaticIdentityMutation: false,
+    }),
+    error: null,
+  }).eq("id", run.id).eq("artist_id", run.artist_id);
+  if (updateError) throw new Error(updateError.message);
+  return { completed: true as const, mediaAssetId: asset.id, assetUrl: asset.public_url };
+}

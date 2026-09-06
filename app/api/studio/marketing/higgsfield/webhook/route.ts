@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
+import { applyVisualBrandReferenceProviderStatus } from "@/lib/brand/visual-brand-reference-generation";
 import { applyMarketingCreativeProviderStatus } from "@/lib/marketing/creative-generation";
 import type { ProviderStatus } from "@/lib/video-providers/types";
 
@@ -45,15 +46,19 @@ export async function POST(request: Request) {
     raw: payload,
   };
   try {
-    const result = await applyMarketingCreativeProviderStatus({
+    const marketingResult = await applyMarketingCreativeProviderStatus({
       runId,
       providerRequestId: requestId,
       status,
     });
-    return NextResponse.json({ ok: true, result });
+    if ("ignored" in marketingResult && marketingResult.ignored && runId) {
+      const brandResult = await applyVisualBrandReferenceProviderStatus({ runId, status });
+      return NextResponse.json({ ok: true, result: brandResult });
+    }
+    return NextResponse.json({ ok: true, result: marketingResult });
   } catch (error) {
     return NextResponse.json({
-      error: error instanceof Error ? error.message : "Marketing creative callback reconciliation failed",
+      error: error instanceof Error ? error.message : "Creative callback reconciliation failed",
     }, { status: 500 });
   }
 }

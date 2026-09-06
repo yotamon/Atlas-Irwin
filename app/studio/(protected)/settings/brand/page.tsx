@@ -38,8 +38,13 @@ export default async function BrandProfilePage() {
       <PageHeader
         title="Brand profile"
         description={`Teach Ensemblis the core taste of ${artist.artistName} once. Prompt guidance is derived from this artist profile instead of becoming another set of fields to maintain.`}
-        action={<Link className="button" href="/studio/brand">Advanced brand system</Link>}
+        action={<Link className="button primary" href="/studio/settings/brand/visual">Build Visual Brand DNA</Link>}
       />
+
+      <div className="studio-smart-defaults">
+        <strong>Visual identity is evidence-first</strong>
+        <span>Use Visual Brand DNA to let Ensemblis learn palette, motifs, texture, composition, human treatment and anti-style directly from real artist images. The fields below remain the concise human-editable profile, not a second visual system.</span>
+      </div>
 
       <form action={saveBrandProfileV2} className="studio-form v2-brand-profile">
         <input type="hidden" name="artist_id" value={artist.artistId} />
@@ -63,9 +68,9 @@ export default async function BrandProfilePage() {
 
         <div className="studio-smart-defaults">
           <strong>Ensemblis derives the operational guidance</strong>
-          <span>Saving this profile regenerates caption guidance, visual prompt guidance, outreach guidance and AI narrative rules deterministically for this artist. No paid model call is required.</span>
+          <span>Saving this profile regenerates caption guidance, visual prompt guidance, outreach guidance and AI narrative rules deterministically for this artist. An active Visual Brand DNA version remains the richer visual source of truth.</span>
         </div>
-        <div className="form-actions"><Submit>Save brand profile</Submit></div>
+        <div className="form-actions"><Submit>Save brand profile</Submit><Link className="button" href="/studio/brand">Advanced brand system</Link></div>
       </form>
     </div>
   );
