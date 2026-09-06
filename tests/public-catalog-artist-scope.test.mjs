@@ -9,14 +9,11 @@ async function source(path) {
 test("public catalog requires explicit canonical owner and artist scope", async () => {
   const text = await source("lib/public-catalog.ts");
 
-  assert.doesNotMatch(
-    text,
-    /\.from\("artists"\)/,
-    "The public catalog must not infer scope by querying the private artists table",
-  );
   assert.match(text, /PUBLIC_CATALOG_OWNER_ID is required/);
   assert.match(text, /PUBLIC_CATALOG_ARTIST_ID is required/);
-  assert.match(text, /\.eq\("artist_id", resolvedArtistId\)/);
+  assert.match(text, /\.from\("artists"\)/);
+  assert.match(text, /\.eq\("id", artistId\)/);
+  assert.match(text, /\.eq\("artist_id", artistId\)/);
   assert.doesNotMatch(text, /NO_PUBLIC_ARTIST/);
   assert.doesNotMatch(text, /isPreEnsemblisSchemaError/);
   assert.doesNotMatch(text, /resolveLegacyCanvasVideoUrl/);
@@ -24,14 +21,18 @@ test("public catalog requires explicit canonical owner and artist scope", async 
   assert.doesNotMatch(text, /atlas-cover\.png/);
 });
 
-test("public catalog reads media and external links from canonical normalized tables", async () => {
+test("public catalog reads identity, media, and external links from canonical tables", async () => {
   const text = await source("lib/public-catalog.ts");
 
+  assert.match(text, /artist: bundle\.artist\.name/);
+  assert.match(text, /coverMedia\.link\.alt_text/);
   assert.match(text, /\.from\("media_links"\)/);
   assert.match(text, /\.from\("media_assets"\)/);
   assert.match(text, /\.from\("release_external_links"\)/);
   assert.match(text, /\.from\("track_external_ids"\)/);
 
+  assert.doesNotMatch(text, /release\.artist/);
+  assert.doesNotMatch(text, /release\.cover_alt/);
   assert.doesNotMatch(text, /release\.artwork_url/);
   assert.doesNotMatch(text, /release\.spotify_url/);
   assert.doesNotMatch(text, /release\.soundcloud_url/);
