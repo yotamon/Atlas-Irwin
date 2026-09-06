@@ -15,6 +15,10 @@ function record(value: Json | unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
+function json(value: unknown) {
+  return value as Json;
+}
+
 function stringValue(value: unknown) {
   return typeof value === "string" ? value : "";
 }
@@ -182,7 +186,7 @@ export async function applyVisualBrandReferenceProviderStatus(input: {
     const { error: updateError } = await marketing.from("generation_runs").update({
       status: "running",
       provider_request_id: providerRequestId,
-      output: { ...output, stage: "generating", providerStatus: input.status.status, providerRaw: input.status.raw },
+      output: json({ ...output, stage: "generating", providerStatus: input.status.status, providerRaw: input.status.raw }),
       error: null,
     }).eq("id", run.id).eq("artist_id", run.artist_id);
     if (updateError) throw new Error(updateError.message);
@@ -195,7 +199,7 @@ export async function applyVisualBrandReferenceProviderStatus(input: {
       status: "failed",
       provider_request_id: providerRequestId,
       actual_cost_usd: actualCostUsd,
-      output: { ...output, stage: "failed", providerStatus: input.status.status, providerRaw: input.status.raw },
+      output: json({ ...output, stage: "failed", providerStatus: input.status.status, providerRaw: input.status.raw }),
       error: input.status.status === "nsfw" ? `${run.provider} rejected this reference during safety review.` : `${run.provider} reported that this reference generation failed.`,
     }).eq("id", run.id).eq("artist_id", run.artist_id);
     if (updateError) throw new Error(updateError.message);
@@ -229,7 +233,7 @@ export async function applyVisualBrandReferenceProviderStatus(input: {
     provider_request_id: providerRequestId,
     actual_cost_usd: actualCostUsd,
     completed_at: new Date().toISOString(),
-    output: {
+    output: json({
       ...output,
       stage: "awaiting_review",
       providerStatus: "completed",
@@ -239,7 +243,7 @@ export async function applyVisualBrandReferenceProviderStatus(input: {
       actualCostUsd,
       reviewRelationship: "experimental",
       automaticIdentityMutation: false,
-    },
+    }),
     error: null,
   }).eq("id", run.id).eq("artist_id", run.artist_id);
   if (updateError) throw new Error(updateError.message);
