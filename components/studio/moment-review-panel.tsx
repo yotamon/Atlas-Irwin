@@ -262,7 +262,7 @@ export function MomentReviewPanel({
               {decisionForm(moment, "poor", "reject", "Not for me")}
             </>
           ) : null}
-          {moment.state === "approved" ? <Link className="button primary" href={`/studio/create?release=${releaseId}&track=${moment.track_id}`}>Create from this Moment →</Link> : null}
+          {moment.state === "approved" ? <Link className="button primary" href={`/studio/create?release=${releaseId}&moment=${moment.id}`}>Create from this Moment →</Link> : null}
         </div>
 
         <details className={styles.evidenceDetails}>
