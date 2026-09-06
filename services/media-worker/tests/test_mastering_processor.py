@@ -1,8 +1,18 @@
 from __future__ import annotations
 
+import sys
+import types
 import unittest
+from unittest.mock import patch
 
-from app.mastering_processor import build_mastering_target, build_processing_plan
+# Planning tests intentionally avoid importing the heavyweight canonical analyzer stack.
+# Production imports the real app.main helpers after the worker bootstrap installs them.
+fake_main = types.ModuleType("app.main")
+fake_main.download = lambda *args, **kwargs: None
+fake_main.upload_file = lambda *args, **kwargs: None
+fake_main.sha256_file = lambda *args, **kwargs: "test"
+with patch.dict(sys.modules, {"app.main": fake_main}):
+    from app.mastering_processor import build_mastering_target, build_processing_plan
 
 
 def _inspector(*, lufs: float = -7.5, true_peak: float = -0.1, plr: float = 9.0, crest: float = 8.5):
