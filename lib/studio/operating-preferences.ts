@@ -2,7 +2,6 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
-import type { EnsemblisDatabase } from "@/types/ensemblis-database";
 
 export type WorkspaceOperatingPreferences = {
   timeZone: string;
@@ -10,13 +9,7 @@ export type WorkspaceOperatingPreferences = {
   currency: string;
 };
 
-const LEGACY_OPERATING_DEFAULTS: WorkspaceOperatingPreferences = {
-  timeZone: "Europe/Berlin",
-  locale: "en",
-  currency: "EUR",
-};
-
-const NEW_WORKSPACE_DEFAULTS: WorkspaceOperatingPreferences = {
+const DEFAULT_OPERATING_PREFERENCES: WorkspaceOperatingPreferences = {
   timeZone: "UTC",
   locale: "en",
   currency: "EUR",
@@ -46,33 +39,21 @@ function validCurrency(value: string | null | undefined) {
   return currency && /^[A-Z]{3}$/.test(currency) ? currency : null;
 }
 
-function schemaDoesNotHaveOperatingPreferences(message: string) {
-  const value = message.toLowerCase();
-  return value.includes("column") && ["timezone", "locale", "currency"].some((field) => value.includes(field));
-}
-
 export async function loadWorkspaceOperatingPreferences(
   client: SupabaseClient<Database>,
   workspaceId: string,
 ): Promise<WorkspaceOperatingPreferences> {
-  const db = client as unknown as SupabaseClient<EnsemblisDatabase>;
-  const { data, error } = await db
+  const { data, error } = await client
     .from("workspaces")
-    .select("timezone,locale,currency,legacy_owner_id")
+    .select("timezone,locale,currency")
     .eq("id", workspaceId)
-    .maybeSingle();
-
-  // Deploys and database migrations are intentionally decoupled. During the short
-  // compatibility window where application code reaches production first, preserve
-  // the Atlas-era timezone instead of making Today unavailable.
-  if (error && schemaDoesNotHaveOperatingPreferences(error.message)) return LEGACY_OPERATING_DEFAULTS;
+    .single();
   if (error) throw new Error(error.message);
 
-  const defaults = data?.legacy_owner_id ? LEGACY_OPERATING_DEFAULTS : NEW_WORKSPACE_DEFAULTS;
   return {
-    timeZone: validTimeZone(data?.timezone) ?? defaults.timeZone,
-    locale: validLocale(data?.locale) ?? defaults.locale,
-    currency: validCurrency(data?.currency) ?? defaults.currency,
+    timeZone: validTimeZone(data.timezone) ?? DEFAULT_OPERATING_PREFERENCES.timeZone,
+    locale: validLocale(data.locale) ?? DEFAULT_OPERATING_PREFERENCES.locale,
+    currency: validCurrency(data.currency) ?? DEFAULT_OPERATING_PREFERENCES.currency,
   };
 }
 
