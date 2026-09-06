@@ -31,8 +31,8 @@ function dateDistance(value: string | null | undefined) {
 }
 
 function decisionTone(value: string): SemanticTone {
-  if (value === "warning") return "danger";
-  if (value === "important") return "attention";
+  if (value === "important") return "danger";
+  if (value === "warning") return "attention";
   return "neutral";
 }
 

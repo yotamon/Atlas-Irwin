@@ -15,6 +15,7 @@ export function SectionHeading({
   action,
   compact = false,
   className,
+  id,
 }: {
   eyebrow?: ReactNode;
   title: ReactNode;
@@ -22,12 +23,13 @@ export function SectionHeading({
   action?: ReactNode;
   compact?: boolean;
   className?: string;
+  id?: string;
 }) {
   return (
     <div className={classes(`en-section-heading${compact ? " is-compact" : ""}`, className)}>
       <div className="en-section-heading-copy">
         {eyebrow ? <span className="en-eyebrow">{eyebrow}</span> : null}
-        <h2>{title}</h2>
+        <h2 id={id}>{title}</h2>
         {description ? <p>{description}</p> : null}
       </div>
       {action ? <div className="en-section-heading-action">{action}</div> : null}

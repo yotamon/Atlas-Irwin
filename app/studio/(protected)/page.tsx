@@ -9,8 +9,8 @@ import { needsYouTone } from "@/lib/studio/needs-you";
 import { formatOperatingDateTime } from "@/lib/studio/operating-preferences";
 
 function decisionTone(value: string): SemanticTone {
-  if (value === "warning") return "danger";
-  if (value === "important") return "attention";
+  if (value === "important") return "danger";
+  if (value === "warning") return "attention";
   return "neutral";
 }
 
@@ -82,6 +82,7 @@ export default async function TodayPage() {
 
       <section className="today-v3-section" aria-labelledby="today-working-heading">
         <SectionHeading
+          id="today-working-heading"
           eyebrow="Autonomous work"
           title="Working"
           compact
@@ -97,7 +98,7 @@ export default async function TodayPage() {
     </div>
 
     <section className="today-v3-section today-v3-upcoming" aria-labelledby="today-coming-up-heading">
-      <SectionHeading eyebrow="Next 7 days" title="Coming up" compact action={<Link href={href("/studio/growth")}>Open Grow</Link>} />
+      <SectionHeading id="today-coming-up-heading" eyebrow="Next 7 days" title="Coming up" compact action={<Link href={href("/studio/growth")}>Open Grow</Link>} />
       {comingUp.length ? <div className="today-v3-list">{comingUp.map((item) =>
         <Link className="today-v3-upcoming-row" href={item.href} key={item.id}>
           <time dateTime={item.scheduledAt}>{formatOperatingDateTime(item.scheduledAt, preferences)}</time>

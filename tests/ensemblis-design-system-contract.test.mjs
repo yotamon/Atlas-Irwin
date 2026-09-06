@@ -92,6 +92,7 @@ test("canonical React UI API exposes primitives plus semantic product patterns",
   for (const exported of ["Button", "ButtonLink", "IconButton", "PageHeader", "Panel", "Surface", "EmptyState", "Status", "Field", "Tabs", "Disclosure", "Submit"]) assert.ok(ui.includes(`export function ${exported}`), `${exported} is missing from the Studio UI API`);
   const patterns = await source("components/studio/patterns.tsx");
   for (const exported of ["SectionHeading", "PriorityHero", "DecisionQueue", "DecisionRow", "MetricStrip", "CalmState"]) assert.ok(patterns.includes(`export function ${exported}`), `${exported} is missing from the semantic component API`);
+  assert.ok(patterns.includes("<h2 id={id}>") && patterns.includes("id?: string"), "SectionHeading must support real labelled-region relationships");
 });
 
 test("mobile navigation is structurally limited to four direct destinations plus More", async () => {
@@ -107,12 +108,20 @@ test("mobile navigation is structurally limited to four direct destinations plus
   assert.ok(compositions.includes("white-space: nowrap"));
 });
 
-test("Today uses semantic hierarchy and previews rather than dumping the whole decision queue", async () => {
+test("Today uses semantic hierarchy, accessible region labels and a bounded decision preview", async () => {
   const today = await source("app/studio/(protected)/page.tsx");
   const needsYou = await source("app/studio/(protected)/needs-you/page.tsx");
   assert.ok(today.includes("<PriorityHero"));
   assert.ok(today.includes("<DecisionQueue"));
   assert.ok(today.includes("needsYou.slice(0, 3)"));
+  for (const id of ["today-working-heading", "today-coming-up-heading"]) {
+    assert.ok(today.includes(`aria-labelledby=\"${id}\"`));
+    assert.ok(today.includes(`id=\"${id}\"`));
+  }
+  for (const page of [today, needsYou]) {
+    assert.ok(page.includes('if (value === "important") return "danger";'));
+    assert.ok(page.includes('if (value === "warning") return "attention";'));
+  }
   assert.ok(needsYou.includes("Blocking decisions"));
   assert.ok(needsYou.includes("Everything else"));
   assert.equal(needsYou.includes("One queue, no duplicate tasks"), false, "internal architecture copy must not compete with the user's decisions");
