@@ -170,7 +170,7 @@ test("release workspace uses one Mission object with six artist-facing facets", 
   assert.ok(mission.includes('status: "on_track"'));
   for (const stage of ["Overview", "Music", "Content", "Promotion", "Distribution", "Results"]) assert.ok(release.includes(stage), `release object lost ${stage}`);
   for (const alias of ['stage === "plan"', 'stage === "create"', 'stage === "publish"', 'stage === "learn"']) assert.ok(release.includes(alias), `legacy release alias lost ${alias}`);
-  assert.ok(releasePage.includes('simpleStage === "music"'));
+  assert.ok(releasePage.includes('simpleStage === "music" || stage === "create"'));
   assert.ok(releasePage.includes("<MomentReviewPanel"));
   assert.equal(/\bAtlas\b/.test(release), false, "Atlas product language leaked into the Ensemblis release workspace");
 });
