@@ -1,0 +1,102 @@
+name: One-time canonical music client codemod
+
+on:
+  push:
+    branches:
+      - cleanup/ensemblis-legacy-purge
+
+permissions:
+  contents: write
+
+jobs:
+  codemod:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cleanup/ensemblis-legacy-purge
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Remove artist-scoped client compatibility wrapper
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+
+          const roots = ['app', 'components', 'lib'];
+          const extensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs']);
+
+          function filesIn(dir) {
+            const out = [];
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+              const full = path.join(dir, entry.name);
+              if (entry.isDirectory()) out.push(...filesIn(full));
+              else if (extensions.has(path.extname(entry.name))) out.push(full);
+            }
+            return out;
+          }
+
+          const files = roots.flatMap(filesIn);
+          let changed = 0;
+          const unresolved = [];
+
+          for (const file of files) {
+            let source = fs.readFileSync(file, 'utf8');
+            if (!source.includes('asArtistScopedMusicClient')) continue;
+            const before = source;
+
+            source = source.replace(
+              /import\s*\{([^}]*)\}\s*from\s*["']@\/lib\/studio\/music-db["'];?\s*/g,
+              (match, rawSpecifiers) => {
+                const specifiers = rawSpecifiers
+                  .split(',')
+                  .map((value) => value.trim())
+                  .filter(Boolean)
+                  .filter((value) => value !== 'asArtistScopedMusicClient');
+                return specifiers.length
+                  ? `import { ${specifiers.join(', ')} } from "@/lib/studio/music-db";\n`
+                  : '';
+              },
+            );
+
+            source = source.replace(
+              /asArtistScopedMusicClient\(\s*([A-Za-z_$][\w$]*)\s*\)/g,
+              '$1',
+            );
+
+            if (source.includes('asArtistScopedMusicClient')) {
+              unresolved.push(file);
+              continue;
+            }
+
+            if (source !== before) {
+              fs.writeFileSync(file, source);
+              changed += 1;
+            }
+          }
+
+          if (unresolved.length) {
+            console.error('Unresolved asArtistScopedMusicClient usages:');
+            for (const file of unresolved) console.error(`- ${file}`);
+            process.exit(1);
+          }
+
+          console.log(`Updated ${changed} runtime source files.`);
+          NODE
+
+      - name: Remove one-time workflow and commit codemod
+        shell: bash
+        run: |
+          rm .github/workflows/cleanup-artist-scoped-client.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "refactor: remove artist-scoped client compatibility"
+          git push origin HEAD:cleanup/ensemblis-legacy-purge
