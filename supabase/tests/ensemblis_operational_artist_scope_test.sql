@@ -109,6 +109,15 @@ update public.campaigns
 set mode='autopilot'
 where id in ('55000000-0000-0000-0000-000000000001','55000000-0000-0000-0000-000000000002');
 
+-- This fixture intentionally exercises paid generative image spend, so both otherwise-human
+-- test artists explicitly opt in. The default-policy tests separately verify that human artists
+-- stay source-first until this consent exists.
+insert into public.artist_operating_profiles(artist_id,ai_visuals_allowed)
+values
+ ('35000000-0000-0000-0000-000000000001',true),
+ ('35000000-0000-0000-0000-000000000002',true)
+on conflict(artist_id) do update set ai_visuals_allowed=excluded.ai_visuals_allowed;
+
 insert into public.generation_runs(id,owner_id,artist_id,campaign_id,release_id,purpose,provider,model,status,estimated_cost_usd)
 values
  ('85000000-0000-0000-0000-000000000001','15000000-0000-0000-0000-000000000001','35000000-0000-0000-0000-000000000001','55000000-0000-0000-0000-000000000001','45000000-0000-0000-0000-000000000001','content_asset:65000000-0000-0000-0000-000000000002','test','test','queued',1),

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { createServiceClient } from "@/lib/supabase/service";
 import { loadVideoProjectContext, resolveProjectAudioUrl } from "@/lib/video-director/context";
 import { fallbackMusicMap, mediaWorkerReadiness, queueMediaWorkerJob } from "@/lib/video-director/worker";
@@ -46,10 +47,11 @@ function refresh(projectId: string, releaseId?: string) {
 }
 
 async function authenticatedProject(projectId: string) {
-  const { user } = await requireStudioAdmin();
+  const { supabase, user } = await requireStudioAdmin();
+  const artist = await resolveActiveArtistContext(supabase, user);
   const db = createServiceClient();
-  const context = await loadVideoProjectContext(db, projectId, user.id);
-  return { user, db, context };
+  const context = await loadVideoProjectContext(db, projectId, user.id, artist.artistId);
+  return { user, artist, db, context };
 }
 
 async function projectById(

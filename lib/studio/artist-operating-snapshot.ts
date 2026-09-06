@@ -1,6 +1,8 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { loadArtistOperatingContext } from "@/lib/artist-operating/server";
+import { buildArtistStrategy } from "@/lib/artist-operating/strategy";
 import { loadDistributionArtistState } from "@/lib/distribution/server";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { createAutonomyServiceClient } from "@/lib/marketing/autonomy-db";
@@ -88,12 +90,14 @@ export async function loadArtistOperatingSnapshot({
   const marketing = asMarketingClient(db);
   const autonomy = createAutonomyServiceClient();
   const preferencesPromise = loadWorkspaceOperatingPreferences(db, artist.workspaceId);
+  const operatingContextPromise = loadArtistOperatingContext({ db, artist });
   const sevenDays = new Date(now);
   sevenDays.setDate(sevenDays.getDate() + 7);
   const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
 
   const [
     preferences,
+    operatingContext,
     releasesResult,
     tracksResult,
     campaignsResult,
@@ -109,6 +113,7 @@ export async function loadArtistOperatingSnapshot({
     paidWorkspace,
   ] = await Promise.all([
     preferencesPromise,
+    operatingContextPromise,
     music.from("releases").select("id,title,release_date,active_release,artwork_url,cover_asset,primary_hook,smart_link_url,spotify_url,soundcloud_url,youtube_url,status,is_archived").eq("owner_id", userId).eq("artist_id", artist.artistId).order("updated_at", { ascending: false }),
     music.from("tracks").select("id,release_id,audio_url,is_primary").eq("owner_id", userId).eq("artist_id", artist.artistId),
     marketing.from("campaigns").select("id,release_id,status").eq("owner_id", userId).eq("artist_id", artist.artistId).not("status", "eq", "archived"),
@@ -237,6 +242,8 @@ export async function loadArtistOperatingSnapshot({
   return {
     generatedAt: now.toISOString(),
     preferences,
+    operatingContext,
+    strategy: buildArtistStrategy(operatingContext),
     activeRelease,
     activeMission,
     needsYou,

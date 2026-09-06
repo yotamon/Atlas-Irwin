@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { MusicGenerator } from "@/components/studio/music-generator";
 import { MusicWorkspaceOverview } from "@/components/studio/music-workspace-overview";
-import { PageHeader } from "@/components/studio/ui";
+import { PageHeader, Status } from "@/components/studio/ui";
+import { loadArtistOperatingContext } from "@/lib/artist-operating/server";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { miniMaxGenerationCost } from "@/lib/music/generator";
@@ -18,6 +19,8 @@ export default async function MusicPage({
   const { view } = await searchParams;
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveActiveArtistContext(supabase, user);
+  const operatingContext = await loadArtistOperatingContext({ db: supabase, artist });
+  const aiMusicAllowed = operatingContext.profile.aiPolicy.musicAllowed;
   const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
 
   if (view === "add") {
@@ -25,7 +28,9 @@ export default async function MusicPage({
       <div className="studio-v2-page music-workspace-page">
         <PageHeader
           title="Add music"
-          description={`Start with the actual music for ${artist.artistName}. Bring in an existing master or release first; AI generation is available when you genuinely want to create something new.`}
+          description={aiMusicAllowed
+            ? `Start with the actual music for ${artist.artistName}. Bring in an existing master or release first; AI generation is available only because this artist explicitly allows it.`
+            : `Start with the actual music for ${artist.artistName}. Bring in the existing master or release; Ensemblis will work from the artist's real source material.`}
           action={<Link className="button" href={href("/studio/music")}>Back to music</Link>}
         />
 
@@ -50,15 +55,15 @@ export default async function MusicPage({
             <b>Add release →</b>
           </Link>
 
-          <Link className="create-intent-row" href={href("/studio/music?view=generate")}>
+          {aiMusicAllowed ? <Link className="create-intent-row" href={href("/studio/music?view=generate")}>
             <span className="create-intent-index">03</span>
             <span className="create-intent-copy">
-              <small>AI music</small>
+              <small>Optional AI music</small>
               <strong>Create something new</strong>
-              <span>Generate a new musical draft when that is the creative job. Provider and model settings stay secondary to the idea.</span>
+              <span>Generate a musical draft only when that is part of this artist&apos;s chosen creative process. Provider and model settings stay secondary to the idea.</span>
             </span>
             <b>Create music →</b>
-          </Link>
+          </Link> : null}
         </section>
 
         <aside className="create-next-action-callout">
@@ -68,6 +73,32 @@ export default async function MusicPage({
             <p>Once a real master exists, Ensemblis can analyze it, propose Moments and use that evidence throughout release, creative and growth decisions.</p>
           </div>
         </aside>
+      </div>
+    );
+  }
+
+  if (view === "generate" && !aiMusicAllowed) {
+    return (
+      <div className="studio-v2-page music-workspace-page">
+        <PageHeader
+          title="AI music is off for this artist"
+          description={`${artist.artistName} is configured to use existing music rather than AI music generation. This is enforced on the server, not only hidden in the interface.`}
+          action={<Link className="button" href={href("/studio/music?view=add")}>Back to add music</Link>}
+        />
+        <section className="v2-section v2-compact-section">
+          <div className="v2-section-heading compact">
+            <div>
+              <span className="section-label">Artist capability policy</span>
+              <h2>Keep the creative process source-first</h2>
+              <p>Upload the artist&apos;s mastered track and Ensemblis can still analyze, market, distribute and grow it. AI does not need to be part of the music-making identity.</p>
+            </div>
+            <Status>Disabled</Status>
+          </div>
+          <div className="actions">
+            <Link className="button primary" href={href("/studio/music/import")}>Add mastered music</Link>
+            <Link className="button" href={href("/studio/settings/artist")}>Artist Profile</Link>
+          </div>
+        </section>
       </div>
     );
   }
@@ -110,7 +141,7 @@ export default async function MusicPage({
       <div className="studio-v2-page music-workspace-page">
         <PageHeader
           title="Create music"
-          description={`Describe the musical idea for ${artist.artistName}. Ensemblis keeps the default path simple and exposes provider, timing and prompt controls only when you need them.`}
+          description={`Describe the musical idea for ${artist.artistName}. AI music is enabled explicitly for this artist; Ensemblis still keeps the creative intent ahead of provider controls.`}
           action={<Link className="button" href={href("/studio/music?view=add")}>Back to add music</Link>}
         />
         <MusicGenerator

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ArtistAiCapabilityDisabledError, assertArtistAiCapability } from "@/lib/artist-operating/capability-guard";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import {
   MUSIC_PROVIDER_IDS,
@@ -11,6 +12,7 @@ import {
   generateMiniMax,
   providerErrorResponse,
 } from "@/lib/music/providers";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,9 +43,11 @@ const inputSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  await requireStudioAdmin();
+  const { supabase, user } = await requireStudioAdmin();
 
   try {
+    const artist = await resolveActiveArtistContext(supabase, user);
+    await assertArtistAiCapability({ artistId: artist.artistId, capability: "music" });
     const parsed = inputSchema.parse(await request.json());
     const input: MusicGenerationInput = {
       provider: parsed.provider,
@@ -82,6 +86,9 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
+    if (error instanceof ArtistAiCapabilityDisabledError) {
+      return Response.json({ error: error.message, capability: error.capability }, { status: 403 });
+    }
     if (error instanceof z.ZodError) {
       return Response.json({ error: error.issues[0]?.message || "Invalid generation request." }, { status: 400 });
     }

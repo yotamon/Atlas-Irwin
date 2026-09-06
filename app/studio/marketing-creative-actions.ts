@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { assertSpecialistMediaSpendAllowed } from "@/lib/ai/control-plane";
+import { assertArtistAiCapability } from "@/lib/artist-operating/capability-guard";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { buildCohesiveVisualPrompt, loadCreativeReferenceContext } from "@/lib/marketing/creative-context";
@@ -77,6 +78,7 @@ function webhookUrl(provider: CreativeProviderId, runId: string) {
 
 export async function prepareContentCreativeGeneration(form: FormData) {
   const { artist, marketing } = await actionContext(form);
+  await assertArtistAiCapability({ artistId: artist.artistId, capability: "visuals" });
   const contentItemId = uuid.parse(value(form, "content_item_id"));
   const quality = qualitySchema.parse(value(form, "quality") || "balanced");
   const mediaKind = mediaKindSchema.parse(value(form, "media_kind") || "auto");
@@ -205,6 +207,7 @@ export async function prepareContentCreativeGeneration(form: FormData) {
 
 export async function approvePreparedCreativeGeneration(form: FormData) {
   const { artist, marketing } = await actionContext(form);
+  await assertArtistAiCapability({ artistId: artist.artistId, capability: "visuals" });
   const runId = uuid.parse(value(form, "generation_run_id"));
   const { data: run, error: runError } = await marketing.from("generation_runs")
     .select("*")
