@@ -33,7 +33,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     return {
       title: `${smartLink.release.title} · ${runtime.viewModel.artist.name}`,
       description: smartLink.mode === "pre_release" ? `Pre-save ${smartLink.release.title}.` : `Listen to ${smartLink.release.title}.`,
-      openGraph: { images: smartLink.release.artwork_url ? [smartLink.release.artwork_url] : undefined },
+      openGraph: { images: smartLink.release.cover_public_url ? [smartLink.release.cover_public_url] : undefined },
     };
   }
   if (path.length) return { robots: { index: false, follow: false } };
