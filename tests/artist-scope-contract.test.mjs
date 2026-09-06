@@ -16,7 +16,7 @@ async function requireSnippets(path, snippets) {
 
 test("Today resolves one ArtistContext and scopes operational state through the Manager boundary", async () => {
   const page = await requireSnippets("app/studio/(protected)/page.tsx", [
-    "resolveDefaultArtistContext",
+    "resolveActiveArtistContext",
     "loadArtistOperatingSnapshot",
     "artist,",
   ]);
@@ -37,7 +37,7 @@ test("Today resolves one ArtistContext and scopes operational state through the 
 test("Campaign mutations resolve a validated artist before writes", async () => {
   const text = await requireSnippets("app/studio/marketing-actions.ts", [
     "resolveArtistContext",
-    "resolveDefaultArtistContext",
+    "resolveActiveArtistContext",
     "async function actionContext",
     "artist_id: artist.artistId",
     '.eq("artist_id", artist.artistId)',
@@ -48,13 +48,13 @@ test("Campaign mutations resolve a validated artist before writes", async () => 
 
 test("Production and paid creative require explicit artist lineage", async () => {
   await requireSnippets("app/studio/(protected)/production/page.tsx", [
-    "resolveDefaultArtistContext",
+    "resolveActiveArtistContext",
     '.eq("artist_id", artist.artistId)',
     'name="artist_id" value={artist.artistId}',
   ]);
   await requireSnippets("app/studio/marketing-creative-actions.ts", [
     "resolveArtistContext",
-    "resolveDefaultArtistContext",
+    "resolveActiveArtistContext",
     "async function actionContext",
     "artistId: artist.artistId",
     '.eq("artist_id", artist.artistId)',
@@ -100,7 +100,7 @@ test("Audience and social OAuth carry owner plus artist", async () => {
 test("manual and background external-effect execution preserve artist scope", async () => {
   await requireSnippets("app/studio/marketing-runtime-actions.ts", [
     "resolveArtistContext",
-    "resolveDefaultArtistContext",
+    "resolveActiveArtistContext",
     "async function runtimeContext",
     '.eq("artist_id", artist.artistId)',
     "artistId: artist.artistId",
