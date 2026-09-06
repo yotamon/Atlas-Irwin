@@ -9,10 +9,22 @@ import type { AudioScene, TrackStem } from "@/types/stem-database";
 
 export type { TrackCreativeIntelligenceGraph } from "@/lib/music-intelligence/creative-graph";
 
+type SemanticDescriptor = {
+  text?: string;
+  similarity?: number;
+};
+
 type V4MusicHookCandidate = MusicHookCandidate & {
   musical_completeness?: number;
   boundary_confidence?: number;
   unit_kind?: string;
+  semantic_descriptors?: SemanticDescriptor[];
+  semantic_embedding_ref?: {
+    provider?: string;
+    model?: string;
+    revision?: string;
+    window_id?: string;
+  };
   metrics: MusicHookCandidate["metrics"] & {
     musical_completeness?: number;
     boundary_confidence?: number;
@@ -51,10 +63,25 @@ function boundaryConfidence(hook: MusicHookCandidate) {
   );
 }
 
+function semanticRationale(hook: MusicHookCandidate) {
+  const descriptors = asV4Hook(hook).semantic_descriptors;
+  if (!Array.isArray(descriptors)) return [];
+  return descriptors
+    .filter((descriptor) => typeof descriptor?.text === "string" && descriptor.text.trim().length > 0)
+    .slice(0, 2)
+    .map((descriptor) => {
+      const score = typeof descriptor.similarity === "number" && Number.isFinite(descriptor.similarity)
+        ? ` (${descriptor.similarity.toFixed(2)} similarity)`
+        : "";
+      return `Cross-modal audio evidence: ${descriptor.text!.trim()}${score}.`;
+    });
+}
+
 /**
  * V2 keeps the existing multimodal graph but makes the canonical V4 Musical Moment
- * the timing anchor. Lyrics, stems and Audio Scenes can strengthen a highlight;
- * they must not average a clean phrase boundary back into an arbitrary timestamp.
+ * the timing anchor. Lyrics, stems, Audio Scenes and optional semantic audio evidence
+ * can strengthen a highlight; they must not average a clean phrase boundary back into
+ * an arbitrary timestamp or replace deterministic MIR as the timing source of truth.
  */
 export function buildTrackCreativeIntelligenceGraph(input: {
   musicMap: MusicMap | null;
@@ -83,6 +110,7 @@ export function buildTrackCreativeIntelligenceGraph(input: {
     if (!anchor) return highlight;
 
     const reasons = Array.isArray(anchor.reasons) ? anchor.reasons.slice(0, 2) : [];
+    const semanticReasons = semanticRationale(anchor);
     return {
       ...highlight,
       startMs: anchor.start_ms,
@@ -90,6 +118,7 @@ export function buildTrackCreativeIntelligenceGraph(input: {
       hookIds: [...new Set([anchor.id, ...highlight.hookIds])],
       rationale: [...new Set([
         ...reasons,
+        ...semanticReasons,
         "Timing anchored to a complete Track Intelligence V4 musical phrase.",
         ...highlight.rationale,
       ])].slice(0, 5),
