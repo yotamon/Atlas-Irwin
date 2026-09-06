@@ -124,9 +124,9 @@ test("explicit preference for another Moment is bounded on both sides", () => {
 test("artist calibration participates before the final five-Moment ranking", async () => {
   const curator = await readFile(new URL("../lib/studio/moments-calibrated-curator.ts", import.meta.url), "utf8");
   const applyIndex = curator.indexOf("applyMomentCalibrationScore(");
-  const floorIndex = curator.indexOf(".filter((moment) =>");
-  const sortIndex = curator.indexOf(".sort((left, right)");
-  const sliceIndex = curator.indexOf(".slice(0, Math.max(1, maxResults))");
+  const floorIndex = curator.indexOf(".filter((moment) =>", applyIndex);
+  const sortIndex = curator.indexOf(".sort((left, right)", floorIndex);
+  const sliceIndex = curator.indexOf(".slice(0, Math.max(1, maxResults))", sortIndex);
 
   assert.ok(applyIndex >= 0, "calibration must contribute to curated Moment score");
   assert.ok(floorIndex > applyIndex, "calibration must happen before final quality eligibility");
