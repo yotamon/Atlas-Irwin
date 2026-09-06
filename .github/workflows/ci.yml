@@ -48,7 +48,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: typecheck-diagnostics
-          path: .ci/typecheck.log
+          path: |
+            .ci/typecheck.log
+            app
+            components
+            lib
+            types
+            supabase/tests
           if-no-files-found: ignore
           retention-days: 3
 
