@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { PageHeader, Status } from "@/components/studio/ui";
+import { CalmState, DecisionQueue, DecisionRow, PriorityHero, type SemanticTone } from "@/components/studio/patterns";
+import { PageHeader } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { loadDistributionArtistState } from "@/lib/distribution/server";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
@@ -27,6 +28,12 @@ function dateDistance(value: string | null | undefined) {
   if (days > 1) return `In ${days} days`;
   const ago = Math.abs(days);
   return `${ago} day${ago === 1 ? "" : "s"} ago`;
+}
+
+function decisionTone(value: string): SemanticTone {
+  if (value === "warning") return "danger";
+  if (value === "important") return "attention";
+  return "neutral";
 }
 
 export default async function NeedsYouPage() {
@@ -102,19 +109,36 @@ export default async function NeedsYouPage() {
     dueTasks: dueTasks.map((task) => ({ id: task.id, title: task.title, priority: task.priority, dueLabel: dateDistance(task.due_at) })),
     proposedLearningCount: learningsResult.data?.length ?? 0,
   });
+  const required = queue.filter((item) => item.severity === "required");
+  const review = queue.filter((item) => item.severity !== "required");
+  const renderDecision = (entry: (typeof queue)[number]) => (
+    <DecisionRow
+      href={href(entry.href)}
+      key={entry.id}
+      meta={`${entry.category} · ${entry.severity}`}
+      title={entry.title}
+      description={entry.detail}
+      tone={decisionTone(needsYouTone(entry))}
+    />
+  );
 
   return (
-    <div className="studio-v2-page ensemblis-today-v3">
-      <PageHeader title="Needs You" description={`Every decision that genuinely requires ${artist.artistName}'s judgment, gathered from canonical Mission, distribution, paid experiments, approval, creative, catalog and learning state.`} action={<Link className="button" href={href("/studio")}>Back to Today</Link>} />
+    <div className="studio-v2-page needs-you-page">
+      <PageHeader title="Needs You" description={`Only decisions that genuinely require ${artist.artistName}'s judgment.`} action={<Link className="button" href={href("/studio")}>Back to Today</Link>} />
 
-      <section className="today-v3-next"><div className="today-v3-section-heading"><div><span className="section-label">Universal decision queue</span><h2>{queue.length ? `${queue.length} decision${queue.length === 1 ? "" : "s"} worth interrupting you for` : "Ensemblis can keep moving"}</h2></div><Status>{queue.some((item) => item.severity === "required") ? "Blocked" : queue.length ? "Needs attention" : "Clear"}</Status></div><p>{queue.length ? "Required Mission, distribution and paid-spend stop conditions come first, then external-effect decisions, ambiguity and review work. The queue is derived from source state rather than maintained as a second task system." : "Nothing currently needs human judgment. Safe internal work can continue without manufacturing tasks."}</p></section>
+      <PriorityHero
+        eyebrow="Decision queue"
+        title={queue.length ? `${queue.length} decision${queue.length === 1 ? "" : "s"} worth your attention` : "Ensemblis can keep moving"}
+        description={queue.length ? "Release blockers and spend stop conditions come first, then external effects, ambiguity and review work. Resolve the source action and the queue updates automatically." : "Nothing currently needs human judgment. Safe internal work can continue without manufacturing tasks."}
+        status={required.length ? "Blocked" : queue.length ? "Needs attention" : "Clear"}
+        tone={required.length ? "danger" : queue.length ? "attention" : "success"}
+      />
 
-      <section className="today-v3-section" aria-labelledby="needs-you-list-heading">
-        <div className="today-v3-section-heading compact"><div><span className="section-label">Decisions</span><h2 id="needs-you-list-heading">Needs you</h2></div><span className={`today-v3-count${queue.length ? " has-items" : ""}`}>{queue.length}</span></div>
-        {queue.length ? <div className="today-v3-list">{queue.map((entry) => <Link className={`today-v3-row ${needsYouTone(entry)}`} href={href(entry.href)} key={entry.id}><span className="today-v3-row-copy"><small>{entry.category} · {entry.severity}</small><strong>{entry.title}</strong><span>{entry.detail}</span></span><span className="today-v3-arrow" aria-hidden>→</span></Link>)}</div> : <div className="today-v3-calm-state"><strong>Nothing needs your judgment right now.</strong><p>Approvals, ambiguity, release blockers and trustworthy learning decisions will appear here automatically.</p></div>}
-      </section>
+      {required.length ? <DecisionQueue eyebrow="Required now" title="Blocking decisions" count={required.length}>{required.map(renderDecision)}</DecisionQueue> : null}
 
-      <section className="v2-section v2-compact-section"><div className="v2-section-heading"><div><span className="section-label">Contract</span><h2>One queue, no duplicate tasks</h2></div></div><p className="v2-muted-copy">Needs You is a projection over canonical product state. Resolving the source action removes the item. Ensemblis does not create a second checklist that can drift away from Releases, Distribution, Paid Growth, publishing, catalog reconciliation or learning evidence.</p></section>
+      {review.length ? <DecisionQueue eyebrow={required.length ? "Then review" : "Decisions"} title={required.length ? "Everything else" : "Needs you"} count={review.length}>{review.map(renderDecision)}</DecisionQueue> : null}
+
+      {!queue.length ? <CalmState title="Nothing needs your judgment right now." body="Approvals, ambiguity, release blockers and trustworthy learning decisions will appear here automatically." /> : null}
     </div>
   );
 }

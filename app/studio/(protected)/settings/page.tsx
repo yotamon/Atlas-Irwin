@@ -15,7 +15,7 @@ export default async function SettingsPage() {
   const gatewayConfigured = ensemblisAiGatewayConfigured();
 
   return (
-    <div className="studio-v2-page">
+    <div className="studio-v2-page settings-page">
       <PageHeader title="Settings" description={`Artist rules, autonomy and workspace controls for ${artist.artistName}.`} />
 
       <section className="v2-section">
