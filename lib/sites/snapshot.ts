@@ -3,7 +3,6 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ArtistContext } from "@/lib/studio/artist-context";
 import type { Database } from "@/types/database";
-import type { EnsemblisDatabase } from "@/types/ensemblis-database";
 import type {
   SiteReleaseLink,
   SiteTrackCard,
@@ -37,30 +36,27 @@ export async function buildArtistSiteSnapshot(
   client: SupabaseClient<Database>,
   context: ArtistContext,
 ): Promise<SiteViewModel> {
-  const artistDb = client as unknown as SupabaseClient<EnsemblisDatabase>;
-  const music = client;
-
   const [artistResult, releasesResult, linksResult, tracksResult] = await Promise.all([
-    artistDb
+    client
       .from("artists")
-      .select("id,workspace_id,name,slug,project_type,status,avatar_url,accent_color,legacy_owner_id,created_at,updated_at")
+      .select("id,workspace_id,name,slug,project_type,status,avatar_url,accent_color,created_at,updated_at")
       .eq("id", context.artistId)
       .maybeSingle(),
-    music
-      .from("releases")
-      .select("id,artist_id,title,slug,release_type,release_date,story,artwork_url,cover_asset,genre,spotify_url,soundcloud_url,youtube_url,smart_link_url,cta_label,cta_href,is_public,publish_state,is_archived,updated_at")
+    client
+      .from("release_read_model")
+      .select("id,artist_id,title,slug,release_type,release_date,story,cover_public_url,genre,spotify_url,soundcloud_url,youtube_url,smart_link_slug,cta_label,cta_href,is_public,publish_state,is_archived,updated_at")
       .eq("artist_id", context.artistId)
       .eq("is_public", true)
       .eq("publish_state", "live")
       .eq("is_archived", false)
       .order("release_date", { ascending: false }),
-    music
+    client
       .from("release_external_links")
       .select("id,artist_id,release_id,provider,external_id,external_url,label,raw_metadata,synced_at,created_at,updated_at")
       .eq("artist_id", context.artistId),
-    music
-      .from("tracks")
-      .select("id,artist_id,release_id,title,track_number,display_order,duration,audio_url,soundcloud_url,spotify_url,is_primary")
+    client
+      .from("track_read_model")
+      .select("id,artist_id,release_id,title,track_number,display_order,duration,master_audio_public_url,soundcloud_url,spotify_url,is_primary")
       .eq("artist_id", context.artistId)
       .order("display_order", { ascending: true }),
   ]);
@@ -93,7 +89,7 @@ export async function buildArtistSiteSnapshot(
       trackNumber: track.track_number,
       displayOrder: track.display_order,
       durationSeconds: normalizedDuration(track.duration),
-      audioUrl: publicAsset(track.audio_url),
+      audioUrl: publicAsset(track.master_audio_public_url),
       soundcloudUrl: publicHttpUrl(track.soundcloud_url),
       spotifyUrl: publicHttpUrl(track.spotify_url),
       isPrimary: track.is_primary,
@@ -111,7 +107,15 @@ export async function buildArtistSiteSnapshot(
     push("spotify", release.spotify_url, "Spotify");
     push("soundcloud", release.soundcloud_url, "SoundCloud");
     push("youtube", release.youtube_url, "YouTube");
-    push("smart-link", release.smart_link_url || release.cta_href, release.cta_label || "Listen");
+    if (release.smart_link_slug) {
+      links.push({
+        provider: "smart-link",
+        href: `/go/${encodeURIComponent(release.smart_link_slug)}`,
+        label: release.cta_label || "Listen",
+      });
+    } else {
+      push("cta", release.cta_href, release.cta_label || "Listen");
+    }
 
     return {
       id: release.id,
@@ -120,7 +124,7 @@ export async function buildArtistSiteSnapshot(
       releaseType: release.release_type,
       releaseDate: release.release_date,
       story: release.story,
-      artworkUrl: publicAsset(release.artwork_url),
+      artworkUrl: publicAsset(release.cover_public_url),
       genre: release.genre,
       links,
       tracks: tracksByRelease.get(release.id) ?? [],
