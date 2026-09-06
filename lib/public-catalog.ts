@@ -8,7 +8,6 @@ import {
   formatTotalDurationLabel,
   trackNumber,
 } from "@/lib/catalog/format";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import {
   createCatalogClient,
   getPublicCatalogOwnerId,
@@ -55,7 +54,6 @@ async function loadCatalogBundle(
   artistId?: string,
 ): Promise<CatalogBundle> {
   const supabase = createCatalogClient();
-  const music = asArtistScopedMusicClient(supabase);
   const resolvedArtistId = artistId ?? await resolveCatalogArtistId();
 
   const [
@@ -66,7 +64,7 @@ async function loadCatalogBundle(
     externalLinksResult,
     externalTrackIdsResult,
   ] = await Promise.all([
-    music
+    supabase
       .from("releases")
       .select("*")
       .eq("owner_id", ownerId)
@@ -74,29 +72,29 @@ async function loadCatalogBundle(
       .eq("is_public", true)
       .eq("publish_state", "live")
       .eq("is_archived", false),
-    music
+    supabase
       .from("homepage_placements")
       .select("*")
       .eq("owner_id", ownerId)
       .eq("artist_id", resolvedArtistId)
       .eq("enabled", true)
       .order("display_order", { ascending: true }),
-    music
+    supabase
       .from("tracks")
       .select("*")
       .eq("owner_id", ownerId)
       .eq("artist_id", resolvedArtistId),
-    music
+    supabase
       .from("media_links")
       .select("*")
       .eq("owner_id", ownerId)
       .eq("artist_id", resolvedArtistId),
-    music
+    supabase
       .from("release_external_links")
       .select("*")
       .eq("owner_id", ownerId)
       .eq("artist_id", resolvedArtistId),
-    music
+    supabase
       .from("track_external_ids")
       .select("*")
       .eq("owner_id", ownerId)
