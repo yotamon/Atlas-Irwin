@@ -42,6 +42,22 @@ jobs:
             return out;
           }
 
+          function removeCompatibilityImport(source) {
+            return source.replace(
+              /import\s*\{([^}]*)\}\s*from\s*(["'])([^"']*music-db)\2;?\s*/g,
+              (match, rawSpecifiers, quote, modulePath) => {
+                const specifiers = rawSpecifiers
+                  .split(',')
+                  .map((value) => value.trim())
+                  .filter(Boolean)
+                  .filter((value) => value !== 'asArtistScopedMusicClient');
+                return specifiers.length
+                  ? `import { ${specifiers.join(', ')} } from ${quote}${modulePath}${quote};\n`
+                  : '';
+              },
+            );
+          }
+
           const files = roots.flatMap(filesIn);
           let changed = 0;
           const unresolved = [];
@@ -51,20 +67,7 @@ jobs:
             if (!source.includes('asArtistScopedMusicClient')) continue;
             const before = source;
 
-            source = source.replace(
-              /import\s*\{([^}]*)\}\s*from\s*["']@\/lib\/studio\/music-db["'];?\s*/g,
-              (match, rawSpecifiers) => {
-                const specifiers = rawSpecifiers
-                  .split(',')
-                  .map((value) => value.trim())
-                  .filter(Boolean)
-                  .filter((value) => value !== 'asArtistScopedMusicClient');
-                return specifiers.length
-                  ? `import { ${specifiers.join(', ')} } from "@/lib/studio/music-db";\n`
-                  : '';
-              },
-            );
-
+            source = removeCompatibilityImport(source);
             source = source.replace(
               /asArtistScopedMusicClient\(\s*([A-Za-z_$][\w$]*)\s*\)/g,
               '$1',
