@@ -31,20 +31,21 @@ test("Studio has one canonical Design System stylesheet entrypoint with contextu
   const imports = [...layout.matchAll(/import\s+["'](\.\/[^"']+\.css)["'];/g)].map((match) => match[1]);
   assert.deepEqual(imports, ["./design-system/index.css"]);
   const index = await source("app/studio/design-system/index.css");
-  for (const file of ["legacy-compat.generated.css", "tokens.css", "primitives.css", "patterns.css", "shell.css", "compositions.css", "accessibility.css"]) assert.ok(index.includes(file), `${file} is missing from the Design System entrypoint`);
+  for (const file of ["legacy-compat.generated.css", "tokens.css", "primitives.css", "patterns.css", "shell.css", "compositions.css", "workflows.css", "accessibility.css"]) assert.ok(index.includes(file), `${file} is missing from the Design System entrypoint`);
   assert.ok(index.indexOf("ensemblis-tokens") < index.indexOf("ensemblis-primitives"));
   assert.ok(index.indexOf("ensemblis-primitives") < index.indexOf("ensemblis-compat"), "legacy contextual layout must be able to override primitive anatomy while it is migrated");
   assert.ok(index.indexOf("ensemblis-compat") < index.indexOf("ensemblis-patterns"));
   assert.ok(index.indexOf("ensemblis-patterns") < index.indexOf("ensemblis-shell"));
   assert.ok(index.indexOf("ensemblis-shell") < index.indexOf("ensemblis-compositions"));
-  assert.ok(index.indexOf("ensemblis-compositions") < index.indexOf("ensemblis-accessibility"));
+  assert.ok(index.indexOf("ensemblis-compositions") < index.indexOf("ensemblis-workflows"));
+  assert.ok(index.indexOf("ensemblis-workflows") < index.indexOf("ensemblis-accessibility"));
 });
 
 test("tokens.css is the only authoritative product-chrome value source", async () => {
   const tokens = await source("app/studio/design-system/tokens.css");
   for (const token of ["--en-bg:", "--en-surface:", "--en-surface-raised:", "--en-ink:", "--en-muted:", "--en-line:", "--en-accent:", "--en-violet:", "--en-mint:", "--en-danger:", "--en-warning:", "--en-radius:", "--en-space-4:", "--en-text-md:", "--en-duration-fast:", "--en-shadow-md:", "--en-focus-ring:"]) assert.ok(tokens.includes(token), `${token} is missing from canonical tokens`);
   assert.equal(tokens.includes("--s-"), false);
-  for (const file of ["primitives.css", "patterns.css", "shell.css", "compositions.css", "accessibility.css"]) {
+  for (const file of ["primitives.css", "patterns.css", "shell.css", "compositions.css", "workflows.css", "accessibility.css"]) {
     const css = await source(`app/studio/design-system/${file}`);
     assert.equal(/^\s*--en-[\w-]+\s*:/m.test(withoutComments(css)), false, `${file} redeclares canonical tokens`);
     assert.equal(rawChrome(css), null, `${file} contains raw product chrome: ${rawChrome(css)}`);
@@ -79,7 +80,7 @@ test("all Studio CSS Modules consume Ensemblis tokens instead of private chrome"
 test("canonical primitives own reusable control and surface chrome", async () => {
   const primitives = await source("app/studio/design-system/primitives.css");
   for (const selector of [".studio-root .button {", ".studio-root .text-button {", ".studio-root .field {", ".studio-root .studio-page-header {", ".studio-root .studio-panel {", ".studio-root .empty-state {", ".studio-root .studio-table {"]) assert.ok(primitives.includes(selector), `${selector} is not owned by primitives.css`);
-  for (const file of ["patterns.css", "shell.css", "compositions.css", "accessibility.css"]) {
+  for (const file of ["patterns.css", "shell.css", "compositions.css", "workflows.css", "accessibility.css"]) {
     const css = await source(`app/studio/design-system/${file}`);
     assert.equal(css.includes(".studio-root .button {"), false, `${file} redefines Button`);
     assert.equal(css.includes(".studio-root .field {"), false, `${file} redefines Field`);
@@ -114,10 +115,12 @@ test("Today uses semantic hierarchy, accessible region labels and a bounded deci
   assert.ok(today.includes("<PriorityHero"));
   assert.ok(today.includes("<DecisionQueue"));
   assert.ok(today.includes("needsYou.slice(0, 3)"));
-  for (const id of ["today-working-heading", "today-coming-up-heading"]) {
+  for (const id of ["today-handling-heading", "today-coming-up-heading"]) {
     assert.ok(today.includes(`aria-labelledby=\"${id}\"`));
     assert.ok(today.includes(`id=\"${id}\"`));
   }
+  assert.ok(today.includes("Ensemblis is handling"));
+  assert.equal(today.includes("Artist operating mode"), false, "working-profile configuration must not compete with the everyday manager loop");
   for (const page of [today, needsYou]) {
     assert.ok(page.includes('if (value === "important") return "danger";'));
     assert.ok(page.includes('if (value === "warning") return "attention";'));
