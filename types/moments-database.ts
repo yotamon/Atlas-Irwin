@@ -2,6 +2,7 @@ import type { Json } from "@/types/database";
 
 export type MomentSourceMode = "audio" | "lyrics" | "stems" | "fused";
 export type MomentLifecycleState = "proposed" | "approved" | "rejected" | "superseded";
+export type MomentCalibrationJudgment = "best" | "useful" | "poor" | "adjustment";
 
 export type Moment = {
   id: string;
@@ -40,6 +41,32 @@ export type Moment = {
   updated_at: string;
 };
 
+export type MomentCalibrationEvent = {
+  id: string;
+  owner_id: string;
+  artist_id: string;
+  release_id: string;
+  track_id: string;
+  moment_id: string;
+  moment_source_fingerprint: string;
+  moment_track_analysis_version: number | null;
+  moment_track_analysis_audio_sha256: string | null;
+  source_start_ms: number;
+  source_end_ms: number;
+  previous_start_ms: number;
+  previous_end_ms: number;
+  effective_start_ms: number;
+  effective_end_ms: number;
+  judgment: MomentCalibrationJudgment;
+  corrected_purpose: string | null;
+  preferred_cut_seconds: number | null;
+  preferred_moment_id: string | null;
+  preferred_moment_source_fingerprint: string | null;
+  evidence: Json;
+  created_by: string;
+  created_at: string;
+};
+
 type Table<Row> = {
   Row: Row;
   Insert: Partial<Row>;
@@ -73,6 +100,7 @@ export type MomentsDatabase = {
   public: {
     Tables: {
       moments: Table<Moment>;
+      moment_calibration_events: Table<MomentCalibrationEvent>;
     };
     Views: {
       moment_performance_rollups: {
@@ -80,10 +108,28 @@ export type MomentsDatabase = {
         Relationships: [];
       };
     };
-    Functions: Record<string, never>;
+    Functions: {
+      review_moment_with_calibration: {
+        Args: {
+          p_moment_id: string;
+          p_release_id: string;
+          p_decision: "save" | "approve" | "reject";
+          p_start_ms: number;
+          p_end_ms: number;
+          p_label: string;
+          p_judgment: MomentCalibrationJudgment;
+          p_corrected_purpose?: string | null;
+          p_preferred_cut_seconds?: number | null;
+          p_preferred_moment_id?: string | null;
+          p_evidence?: Json;
+        };
+        Returns: string;
+      };
+    };
     Enums: {
       moment_source_mode: MomentSourceMode;
       moment_lifecycle_state: MomentLifecycleState;
+      moment_calibration_judgment: MomentCalibrationJudgment;
     };
     CompositeTypes: Record<string, never>;
   };

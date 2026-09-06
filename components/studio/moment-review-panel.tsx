@@ -3,8 +3,17 @@
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { reviewMoment } from "@/app/studio/moment-actions";
+import {
+  latestExactMomentCalibration,
+  momentCalibrationLabel,
+} from "@/lib/studio/moment-calibration";
 import type { CuratedMoment } from "@/lib/studio/moments-curator";
-import type { Moment, MomentPerformanceRollup, MomentSourceMode } from "@/types/moments-database";
+import type {
+  Moment,
+  MomentCalibrationEvent,
+  MomentPerformanceRollup,
+  MomentSourceMode,
+} from "@/types/moments-database";
 import styles from "./moment-review-panel.module.css";
 
 type TrackRef = { id: string; title: string; audio_url: string | null };
@@ -23,10 +32,6 @@ function time(ms: number) {
   const minutes = Math.floor(total / 60);
   const seconds = total - minutes * 60;
   return `${minutes}:${seconds.toFixed(seconds % 1 ? 1 : 0).padStart(2, "0")}`;
-}
-
-function score(value: number | null) {
-  return typeof value === "number" ? Math.round(value * 100) : null;
 }
 
 function objectValue(value: unknown): Record<string, unknown> {
@@ -63,6 +68,70 @@ function evidenceSummary(moment: CuratedMoment) {
   return "Selected as one of the strongest complete, usable passages in this track.";
 }
 
+function CalibrationFields({
+  releaseId,
+  moment,
+  calibration,
+  alternatives,
+}: {
+  releaseId: string;
+  moment: CuratedMoment;
+  calibration: MomentCalibrationEvent | null;
+  alternatives: CuratedMoment[];
+}) {
+  return (
+    <form action={reviewMoment} className={styles.reviewForm}>
+      <input type="hidden" name="moment_id" value={moment.id} />
+      <input type="hidden" name="release_id" value={releaseId} />
+      <input type="hidden" name="decision" value="save" />
+      <label>
+        <span>Label</span>
+        <input name="label" defaultValue={moment.label} maxLength={180} required />
+      </label>
+      <div className={styles.timeFields}>
+        <label><span>Start · seconds</span><input name="start_seconds" type="number" min="0" step="0.1" defaultValue={(moment.start_ms / 1000).toFixed(1)} required /></label>
+        <label><span>End · seconds</span><input name="end_seconds" type="number" min="0" step="0.1" defaultValue={(moment.end_ms / 1000).toFixed(1)} required /></label>
+      </div>
+      <div className={styles.timeFields}>
+        <label>
+          <span>Your read</span>
+          <select name="judgment" defaultValue={calibration?.judgment === "best" || calibration?.judgment === "useful" ? calibration.judgment : "adjustment"}>
+            <option value="adjustment">Timing / context adjustment</option>
+            <option value="useful">Useful Moment</option>
+            <option value="best">One of my best Moments</option>
+          </select>
+        </label>
+        <label>
+          <span>Preferred social cut</span>
+          <select name="preferred_cut_seconds" defaultValue={calibration?.preferred_cut_seconds ? String(calibration.preferred_cut_seconds) : ""}>
+            <option value="">Let Ensemblis decide</option>
+            <option value="6">6 seconds</option>
+            <option value="8">8 seconds</option>
+            <option value="15">15 seconds</option>
+            <option value="30">30 seconds</option>
+          </select>
+        </label>
+      </div>
+      <label>
+        <span>What is this Moment really for?</span>
+        <input name="corrected_purpose" defaultValue={calibration?.corrected_purpose ?? ""} maxLength={180} placeholder="Optional, e.g. live-energy opener or emotional lyric payoff" />
+      </label>
+      {alternatives.length ? (
+        <label>
+          <span>I prefer another Moment from this track</span>
+          <select name="preferred_moment_id" defaultValue={calibration?.preferred_moment_id ?? ""}>
+            <option value="">No preference</option>
+            {alternatives.map((alternative) => <option key={alternative.id} value={alternative.id}>#{alternative.curation.rank} {alternative.label}</option>)}
+          </select>
+        </label>
+      ) : <input type="hidden" name="preferred_moment_id" value="" />}
+      <div className={styles.actions}>
+        <button className="button" type="submit">Save preference</button>
+      </div>
+    </form>
+  );
+}
+
 export function MomentReviewPanel({
   releaseId,
   moments,
@@ -72,6 +141,7 @@ export function MomentReviewPanel({
   tracks,
   performance,
   lyricSources,
+  calibrationEvents,
 }: {
   releaseId: string;
   moments: CuratedMoment[];
@@ -81,6 +151,7 @@ export function MomentReviewPanel({
   tracks: TrackRef[];
   performance: MomentPerformanceRollup[];
   lyricSources: LyricSource[];
+  calibrationEvents: MomentCalibrationEvent[];
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -109,18 +180,34 @@ export function MomentReviewPanel({
     void audio.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
   }
 
+  function decisionForm(moment: CuratedMoment, judgment: "best" | "useful" | "poor", decision: "approve" | "reject", label: string, primary = false) {
+    return (
+      <form action={reviewMoment}>
+        <input type="hidden" name="moment_id" value={moment.id} />
+        <input type="hidden" name="release_id" value={releaseId} />
+        <input type="hidden" name="label" value={moment.label} />
+        <input type="hidden" name="start_seconds" value={moment.start_ms / 1000} />
+        <input type="hidden" name="end_seconds" value={moment.end_ms / 1000} />
+        <input type="hidden" name="judgment" value={judgment} />
+        <input type="hidden" name="corrected_purpose" value="" />
+        <input type="hidden" name="preferred_cut_seconds" value="" />
+        <input type="hidden" name="preferred_moment_id" value="" />
+        <button className={`button${primary ? " primary" : ""}`} type="submit" name="decision" value={decision}>{label}</button>
+      </form>
+    );
+  }
+
   function card(moment: CuratedMoment) {
     const track = trackMap.get(moment.track_id);
     const rollup = rollupMap.get(moment.id);
     const lyricSource = moment.lyric_moment_id ? lyricMap.get(moment.lyric_moment_id) : null;
-    const scores = [
-      ["Hook", score(moment.hook_score)],
-      ["Energy", score(moment.energy_score)],
-      ["Emotion", score(moment.emotional_score)],
-      ["Vocal", score(moment.vocal_score)],
-      ["Unique", score(moment.uniqueness_score)],
-    ].filter((entry): entry is [string, number] => typeof entry[1] === "number");
     const durationSeconds = Math.round((moment.end_ms - moment.start_ms) / 100) / 10;
+    const calibration = latestExactMomentCalibration(moment, calibrationEvents);
+    const calibrationLabel = momentCalibrationLabel(calibration);
+    const preferredMoment = calibration?.preferred_moment_id
+      ? activeMoments.find((candidate) => candidate.id === calibration.preferred_moment_id) ?? null
+      : null;
+    const alternatives = activeMoments.filter((candidate) => candidate.track_id === moment.track_id && candidate.id !== moment.id);
 
     return (
       <article className={`${styles.card} ${moment.state === "approved" ? styles.approved : ""}`} key={moment.id}>
@@ -131,7 +218,7 @@ export function MomentReviewPanel({
               {moment.curation.primary_hook ? <span className={styles.primaryHook}>Primary hook</span> : null}
               {moment.curation.section_type ? <span className={styles.mode}>{moment.curation.section_type.replaceAll("_", " ")}</span> : null}
               <span>{track?.title ?? "Track"}</span>
-              {moment.state === "approved" ? <span className={styles.state}>approved</span> : null}
+              {moment.state === "approved" ? <span className={styles.state}>saved</span> : null}
             </div>
             <h3>{moment.label}</h3>
             <p>{evidenceSummary(moment)}</p>
@@ -155,10 +242,12 @@ export function MomentReviewPanel({
         </div>
 
         <div className={styles.scoreRow}>
-          <span className={styles.quality}>{Math.round(moment.curation.quality_score * 100)}% quality</span>
+          <span className={styles.quality}>{calibrationLabel ?? "Recommended"}</span>
           <span>{moment.curation.source_modes.map(sourceName).join(" + ")}</span>
-          {moment.curation.candidate_count > 1 ? <span>{moment.curation.candidate_count} signals fused</span> : null}
-          {scores.slice(0, 3).map(([label, value]) => <span key={label}>{label} {value}</span>)}
+          {moment.curation.candidate_count > 1 ? <span>{moment.curation.candidate_count} signals agree</span> : null}
+          {calibration?.corrected_purpose ? <span>{calibration.corrected_purpose}</span> : null}
+          {calibration?.preferred_cut_seconds ? <span>{calibration.preferred_cut_seconds}s preferred cut</span> : null}
+          {preferredMoment ? <span>Prefer #{preferredMoment.curation.rank} instead</span> : null}
         </div>
 
         {moment.purpose_tags.length ? <div className={styles.tags}>{moment.purpose_tags.slice(0, 5).map((tag) => <span key={tag}>{tag.replaceAll("_", " ")}</span>)}</div> : null}
@@ -177,39 +266,19 @@ export function MomentReviewPanel({
 
         <div className={styles.simpleActions}>
           {moment.state === "proposed" ? (
-            <form action={reviewMoment}>
-              <input type="hidden" name="moment_id" value={moment.id} />
-              <input type="hidden" name="release_id" value={releaseId} />
-              <input type="hidden" name="label" value={moment.label} />
-              <input type="hidden" name="start_seconds" value={moment.start_ms / 1000} />
-              <input type="hidden" name="end_seconds" value={moment.end_ms / 1000} />
-              <button className="button primary" type="submit" name="decision" value="approve">Use this Moment</button>
-            </form>
+            <>
+              {decisionForm(moment, "best", "approve", "Best Moment", true)}
+              {decisionForm(moment, "useful", "approve", "Useful")}
+              {decisionForm(moment, "poor", "reject", "Not for me")}
+            </>
           ) : null}
           {moment.state === "approved" ? <Link className="button primary" href={`/studio/production?release=${releaseId}&moment=${moment.id}`}>Create from this Moment →</Link> : null}
         </div>
 
-        {moment.state === "proposed" ? (
-          <details className={styles.editDetails}>
-            <summary>Adjust or reject</summary>
-            <form action={reviewMoment} className={styles.reviewForm}>
-              <input type="hidden" name="moment_id" value={moment.id} />
-              <input type="hidden" name="release_id" value={releaseId} />
-              <label>
-                <span>Label</span>
-                <input name="label" defaultValue={moment.label} maxLength={180} required />
-              </label>
-              <div className={styles.timeFields}>
-                <label><span>Start · seconds</span><input name="start_seconds" type="number" min="0" step="0.1" defaultValue={(moment.start_ms / 1000).toFixed(1)} required /></label>
-                <label><span>End · seconds</span><input name="end_seconds" type="number" min="0" step="0.1" defaultValue={(moment.end_ms / 1000).toFixed(1)} required /></label>
-              </div>
-              <div className={styles.actions}>
-                <button className="button" type="submit" name="decision" value="save">Save adjustment</button>
-                <button className="button" type="submit" name="decision" value="reject">Reject</button>
-              </div>
-            </form>
-          </details>
-        ) : null}
+        <details className={styles.editDetails}>
+          <summary>Fine-tune preference</summary>
+          <CalibrationFields releaseId={releaseId} moment={moment} calibration={calibration} alternatives={alternatives} />
+        </details>
       </article>
     );
   }
@@ -232,7 +301,7 @@ export function MomentReviewPanel({
         <div>
           <span className="section-label">Music intelligence → creation</span>
           <h2>Best Moments</h2>
-          <p>Ensemblis combines track, lyric and stem intelligence into a few complete musical passages. Sections stay intact; short internal detections add evidence instead of becoming dozens of clips.</p>
+          <p>Ensemblis combines track, lyric and stem intelligence into a few complete musical passages. Tell it what actually feels right and future ranking will adapt without changing the underlying music analysis.</p>
         </div>
         <div className={styles.counts}><span><strong>{activeMoments.length}</strong> best</span><span><strong>{approvedCount}</strong> saved</span></div>
       </div>

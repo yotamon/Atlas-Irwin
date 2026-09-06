@@ -72,6 +72,33 @@ function allExpectedMomentWindows(fixture) {
   return [...explicit, ...perIntent].filter((item) => finite(item?.start_ms) && finite(item?.end_ms));
 }
 
+function artistReviewedMoments(fixture) {
+  return Array.isArray(fixture.artist_reviewed_moments)
+    ? fixture.artist_reviewed_moments.filter((item) => (
+      finite(item?.start_ms)
+      && finite(item?.end_ms)
+      && item.end_ms > item.start_ms
+      && typeof item.accepted === "boolean"
+    ))
+    : [];
+}
+
+function evaluateArtistPreference(canonical, reviewed) {
+  let acceptedRecovered = 0;
+  let rejectedAvoided = 0;
+  for (const review of reviewed) {
+    const matched = canonical.some((moment) => overlapScore(moment, review) >= 0.5);
+    if (review.accepted && matched) acceptedRecovered += 1;
+    if (!review.accepted && !matched) rejectedAvoided += 1;
+  }
+  return {
+    reviewed: reviewed.length,
+    accepted_recovered: acceptedRecovered,
+    rejected_avoided: rejectedAvoided,
+    acceptance: reviewed.length ? (acceptedRecovered + rejectedAvoided) / reviewed.length : null,
+  };
+}
+
 function momentCompleteness(moment) {
   if (finite(moment?.musical_completeness)) return moment.musical_completeness;
   if (finite(moment?.metrics?.musical_completeness)) return moment.metrics.musical_completeness;
@@ -111,6 +138,10 @@ function evaluateThresholds(summary, thresholds = {}) {
       && summary.boundary_constrained_social_ratio < thresholds.min_boundary_constrained_social_ratio) {
     failures.push(`Boundary-constrained social ratio ${(summary.boundary_constrained_social_ratio * 100).toFixed(1)}% < ${(thresholds.min_boundary_constrained_social_ratio * 100).toFixed(1)}%`);
   }
+  if (finite(thresholds.min_artist_preference_acceptance) && finite(summary.artist_preference_acceptance)
+      && summary.artist_preference_acceptance < thresholds.min_artist_preference_acceptance) {
+    failures.push(`Artist preference acceptance ${(summary.artist_preference_acceptance * 100).toFixed(1)}% < ${(thresholds.min_artist_preference_acceptance * 100).toFixed(1)}%`);
+  }
   return failures;
 }
 
@@ -136,6 +167,8 @@ let usableExpected = 0;
 let usableHits = 0;
 let socialOptionCount = 0;
 let boundaryConstrainedSocialCount = 0;
+let artistPreferenceReviewed = 0;
+let artistPreferenceSuccessful = 0;
 const diversityScores = [];
 const tracks = [];
 
@@ -189,6 +222,15 @@ for (const fixture of manifest.tracks) {
     if (hit) usableHits += 1;
     row.top5_usable = hit;
   }
+
+  const reviewed = artistReviewedMoments(fixture);
+  if (reviewed.length) {
+    const preference = evaluateArtistPreference(canonical, reviewed);
+    artistPreferenceReviewed += preference.reviewed;
+    artistPreferenceSuccessful += preference.accepted_recovered + preference.rejected_avoided;
+    row.artist_preference = preference;
+  }
+
   for (const moment of canonical) {
     const completeness = momentCompleteness(moment);
     if (finite(completeness)) completenessScores.push(completeness);
@@ -222,6 +264,8 @@ const summary = {
   musical_completeness_mean: mean(completenessScores),
   moment_diversity_mean: mean(diversityScores),
   boundary_constrained_social_ratio: socialOptionCount ? boundaryConstrainedSocialCount / socialOptionCount : null,
+  artist_preference_reviewed: artistPreferenceReviewed,
+  artist_preference_acceptance: artistPreferenceReviewed ? artistPreferenceSuccessful / artistPreferenceReviewed : null,
 };
 const failures = evaluateThresholds(summary, manifest.thresholds);
 

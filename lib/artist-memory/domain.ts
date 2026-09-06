@@ -32,11 +32,11 @@ export type ArtistMemoryConsumerPolicy = {
 export const ARTIST_MEMORY_CONSUMER_POLICY: Record<ArtistMemoryConsumer, ArtistMemoryConsumerPolicy> = {
   moment_ranking: {
     consumer: "moment_ranking",
-    allowedClasses: ["performance_learning"],
+    allowedClasses: ["preference_evidence", "performance_learning"],
     maxEffect: "rank_only",
-    maxItems: 4,
+    maxItems: 6,
     minimumLearnedConfidence: 0.7,
-    description: "May reorder otherwise valid Moment proposals. It may not alter source timing, approval state or create artist truth.",
+    description: "May reorder otherwise valid Moment proposals. Explicit Moment calibration is Moment-specific; it may not alter source timing, approval state or create broader artist truth.",
   },
   creative_direction: {
     consumer: "creative_direction",
@@ -56,7 +56,7 @@ export const ARTIST_MEMORY_CONSUMER_POLICY: Record<ArtistMemoryConsumer, ArtistM
   },
   campaign_planning: {
     consumer: "campaign_planning",
-    allowedClasses: ["identity", "creative_rule", "performance_learning", "strategic_constraint", "provenance_compliance"],
+    allowedClasses: ["identity", "creative_rule", "preference_evidence", "performance_learning", "strategic_constraint", "provenance_compliance"],
     maxEffect: "suggest_only",
     maxItems: 8,
     minimumLearnedConfidence: 0.65,
@@ -81,7 +81,7 @@ export const ARTIST_MEMORY_CONSUMER_POLICY: Record<ArtistMemoryConsumer, ArtistM
 };
 
 export type ArtistMemorySource = {
-  kind: "brand_setting" | "creative_memory" | "verified_learning";
+  kind: "brand_setting" | "creative_memory" | "moment_calibration" | "verified_learning";
   id: string | null;
   label: string;
   href: string;
@@ -234,6 +234,48 @@ export function creativePreferenceMemoryItems(input: {
   return items;
 }
 
+export function momentCalibrationMemoryItem(input: {
+  eventId: string;
+  releaseId: string;
+  momentLabel: string;
+  judgment: "best" | "useful" | "poor" | "adjustment";
+  correctedPurpose?: string | null;
+  preferredCutSeconds?: number | null;
+  preferredMomentLabel?: string | null;
+  observedAt?: string | null;
+}): ArtistMemoryItem {
+  const judgment = input.judgment === "best"
+    ? "Favorite Moment"
+    : input.judgment === "useful"
+      ? "Useful Moment"
+      : input.judgment === "poor"
+        ? "Avoid this Moment"
+        : "Adjusted Moment";
+  const details = [
+    input.correctedPurpose ? `purpose: ${clean(input.correctedPurpose, 180)}` : "",
+    input.preferredCutSeconds ? `preferred cut: ${input.preferredCutSeconds}s` : "",
+    input.preferredMomentLabel ? `prefer: ${clean(input.preferredMomentLabel, 180)}` : "",
+  ].filter(Boolean);
+  return {
+    id: `moment-calibration:${input.eventId}`,
+    class: "preference_evidence",
+    title: `${judgment}: ${clean(input.momentLabel, 180)}`,
+    value: details.length ? details.join(" · ") : judgment,
+    summary: "Explicit Moment-specific artist calibration. Use it only as bounded preference evidence; never generalize it into source analysis or rewrite musical timing.",
+    source: {
+      kind: "moment_calibration",
+      id: input.eventId,
+      label: "Best Moments review",
+      href: `/studio/releases/${input.releaseId}?stage=create#moments`,
+      observedAt: input.observedAt ?? null,
+    },
+    confidence: { score: 1, label: "explicit", sampleSize: 1 },
+    lifecycle: "active",
+    expiresAt: null,
+    consumers: ["moment_ranking", "creative_direction", "video_director", "campaign_planning"],
+  };
+}
+
 export function verifiedLearningMemoryItem(input: {
   id: string;
   scope: string;
@@ -275,7 +317,7 @@ export function verifiedLearningMemoryItem(input: {
 export function summarizeArtistMemory(items: ArtistMemoryItem[]): ArtistMemorySnapshot {
   const active = items.filter((item) => item.lifecycle === "active");
   const explicitCount = active.filter((item) => item.confidence.label === "explicit").length;
-  const learnedCount = active.filter((item) => item.source.kind !== "brand_setting").length;
+  const learnedCount = active.filter((item) => item.confidence.label !== "explicit").length;
   const candidateCount = items.filter((item) => item.lifecycle === "candidate").length;
   return {
     items,
@@ -284,7 +326,7 @@ export function summarizeArtistMemory(items: ArtistMemoryItem[]): ArtistMemorySn
     learnedCount,
     candidateCount,
     summary: active.length
-      ? `${active.length} active memory item${active.length === 1 ? "" : "s"}: ${explicitCount} explicit artist rule${explicitCount === 1 ? "" : "s"} and ${learnedCount} evidence-backed learned signal${learnedCount === 1 ? "" : "s"}.`
+      ? `${active.length} active memory item${active.length === 1 ? "" : "s"}: ${explicitCount} explicit artist signal${explicitCount === 1 ? "" : "s"} and ${learnedCount} evidence-backed learned signal${learnedCount === 1 ? "" : "s"}.`
       : "Ensemblis has no durable artist memory yet. Explicit artist guidance will become the first source of truth.",
   };
 }
