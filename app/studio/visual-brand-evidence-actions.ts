@@ -39,8 +39,11 @@ export async function setVisualBrandEvidenceRelationship(form: FormData) {
   if (!metadata.tags.map((tag) => tag.toLowerCase()).includes(artistTag)) {
     throw new Error("Visual reference does not belong to the active artist.");
   }
-  const tags = metadata.tags.filter((tag) => !RELATIONSHIP_TAGS.includes(tag.toLowerCase()));
-  tags.push(`brand:${relationship}`);
+  const tags = metadata.tags.filter((tag) => {
+    const normalized = tag.toLowerCase();
+    return !RELATIONSHIP_TAGS.includes(normalized) && normalized !== "approval-required" && normalized !== "brand:reviewed";
+  });
+  tags.push(`brand:${relationship}`, "brand:reviewed");
   const nextMetadata = {
     ...record(asset.metadata),
     tags: Array.from(new Set(tags.map((tag) => tag.trim()).filter(Boolean))),
@@ -58,4 +61,6 @@ export async function setVisualBrandEvidenceRelationship(form: FormData) {
   if (updateError) throw new Error(updateError.message);
   revalidatePath("/studio/settings/brand/visual");
   revalidatePath("/studio/brand");
+  revalidatePath("/studio/media");
+  revalidatePath("/studio/library");
 }
