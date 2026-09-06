@@ -43,7 +43,7 @@ export default async function AudiencePage() {
         <div><strong>{fanGraph.qualifiedFanCount}</strong><span>qualified fans</span></div>
         <div><strong>{fanGraph.coreFanCount}</strong><span>core fans</span></div>
         <div><strong>{fanGraph.ownedReachableCount}</strong><span>directly reachable</span></div>
-        <p>{percent(fanGraph.repeatRelationshipRate)} of active relationships show repeat engagement. These are evidence bands, not a universal fan score: Ensemblis keeps discovery, fandom and permissioned reach separate and never infers consent.</p>
+        <p>{percent(fanGraph.repeatRelationshipRate)} of active relationships show repeat engagement. These are evidence bands, not a universal fan score: Ensemblis keeps discovery, fandom and permissioned reach separate, never infers consent, and nothing is sent without your decision.</p>
       </section>
 
       <section className="fan-graph-section">
