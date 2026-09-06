@@ -100,7 +100,8 @@ begin
     raise exception 'Release artist must exist';
   end if;
 
-  -- Temporary denormalized catalog label. artist_id remains the canonical identity.
+  -- This function is replaced by the following canonical storage migration before the old
+  -- display column is removed. artist_id is already the only identity used for validation.
   new.artist := v_artist_name;
   return new;
 end;
@@ -135,6 +136,10 @@ begin
 end;
 $$;
 
+-- The artist-scoped overload introduced during the cutover is canonical. Remove the owner-only
+-- compatibility overload before deleting its helper so Postgres function lint cannot retain a
+-- dangling dependency.
+drop function if exists private.rebuild_growth_plan(uuid);
 drop function if exists private.legacy_artist_for_owner(uuid);
 
 alter table public.artists drop column if exists legacy_owner_id;
