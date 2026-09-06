@@ -13,6 +13,7 @@ test("legacy polish is migration input while the Design System is the only runti
   const polishFiles = ["ux-polish.css", "music-polish.css", "release-polish.css", "create-polish.css", "growth-polish.css", "audience-polish.css", "library-polish.css", "inbox-polish.css", "shared-interactions.css", "loading-polish.css", "object-workspace-polish.css", "production-polish.css", "responsive-polish.css"];
   assert.ok(layout.includes('import "./design-system/index.css"'));
   assert.ok(index.includes('layer(ensemblis-compat)'));
+  assert.ok(index.includes('layer(ensemblis-workflows)'));
   for (const file of polishFiles) {
     assert.equal(layout.includes(`import "./${file}"`), false, `${file} must not load directly at runtime`);
     assert.ok(compiler.includes(`app/studio/${file}`), `${file} must remain a declared migration input until its layout rules are retired`);
@@ -154,19 +155,23 @@ test("Media Library uses signed resumable TUS above 6 MB without expanding stora
   assert.equal(Boolean(packageJson.dependencies?.["wavesurfer.js"]), false);
 });
 
-test("release workspace uses blocker-aware Mission semantics and no Atlas product copy", async () => {
+test("release workspace uses one Mission object with six artist-facing facets", async () => {
   const release = await source("components/studio/release-workspace-v2.tsx");
+  const releasePage = await source("app/studio/(protected)/releases/[id]/page.tsx");
   const mission = await source("lib/studio/release-mission.ts");
   assert.ok(release.includes("<ObjectHeader"));
   assert.ok(release.includes("deriveReleaseMission"));
-  assert.ok(release.includes('label: "Release mission"'));
-  assert.ok(release.includes("This mission is blocked"));
+  assert.ok(release.includes("Release Mission"));
+  assert.ok(release.includes("This release needs one thing before Ensemblis can move it forward"));
   assert.equal(release.includes("Workflow readiness"), false);
   assert.equal(release.includes("healthScore"), false);
   assert.ok(release.includes("Advanced view"));
   assert.ok(mission.includes('attention: "blocking"'));
   assert.ok(mission.includes('status: "on_track"'));
-  for (const stage of ["Select", "Prepare", "Build hype", "Release", "Sustain", "Rediscover", "Produce", "Distribute", "Learn"]) assert.ok(release.includes(stage), `release lifecycle lost ${stage}`);
+  for (const stage of ["Overview", "Music", "Content", "Promotion", "Distribution", "Results"]) assert.ok(release.includes(stage), `release object lost ${stage}`);
+  for (const alias of ['stage === "plan"', 'stage === "create"', 'stage === "publish"', 'stage === "learn"']) assert.ok(release.includes(alias), `legacy release alias lost ${alias}`);
+  assert.ok(releasePage.includes('simpleStage === "music" || stage === "create"'));
+  assert.ok(releasePage.includes("<MomentReviewPanel"));
   assert.equal(/\bAtlas\b/.test(release), false, "Atlas product language leaked into the Ensemblis release workspace");
 });
 
@@ -189,7 +194,7 @@ test("Production keeps the selected creative dominant and technical controls sec
   assert.ok(css.includes("@media (max-width: 960px)"));
 });
 
-test("Create starts from approved Moments before generic creation destinations", async () => {
+test("Create starts from approved Moments but asks for a deliverable instead of an engine", async () => {
   const create = await source("app/studio/(protected)/create/page.tsx");
   const grow = await source("app/studio/(protected)/growth/page.tsx");
   const audience = await source("app/studio/(protected)/audience/page.tsx");
@@ -197,15 +202,17 @@ test("Create starts from approved Moments before generic creation destinations",
   for (const snippet of [
     'from("moments")',
     '.eq("state", "approved")',
-    "Create from this Moment",
-    "Inspect evidence",
-    "Recommended musical starting points",
+    "What do you want to make?",
+    "Ensemblis picked",
+    "Review source Moments",
+    "Other ways to create",
     "Add or create music",
     "Start a release",
-    "Open the production queue",
-    "Direct a video",
-  ]) assert.ok(create.includes(snippet), `Moment-first Create is missing ${snippet}`);
+    "Continue production",
+    "Direct a longer video",
+  ]) assert.ok(create.includes(snippet), `deliverable-first Create is missing ${snippet}`);
   for (const view of ["overview", "opportunities", "performance", "portfolio"]) assert.ok(grow.includes(view));
+  assert.ok(grow.includes('label: "Audience"'));
   assert.ok(audience.includes("Needs judgment"));
   assert.ok(audience.includes("nothing is sent without your decision"));
   assert.ok(library.includes("reusable"));

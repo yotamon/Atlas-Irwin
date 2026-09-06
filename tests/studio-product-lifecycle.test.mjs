@@ -57,9 +57,10 @@ test("Today is the operational command center and Autopilot is behavior", () => 
   const snapshot = read("lib/studio/artist-operating-snapshot.ts");
   assert.doesNotMatch(sidebar, /\/studio\/autopilot/);
   assert.match(autopilot, /redirect\("\/studio"\)/);
-  for (const surface of ["Recommended next move", "Needs You", "Working", "Coming up"]) {
+  for (const surface of ["Recommended next move", "Needs You", "Ensemblis is handling", "Coming up"]) {
     assert.match(today, new RegExp(surface));
   }
+  assert.doesNotMatch(today, /Artist operating mode/);
   assert.match(today, /loadArtistOperatingSnapshot/);
   assert.match(snapshot, /deriveNeedsYouQueue/);
   assert.match(snapshot, /deriveReleaseMission/);
@@ -70,10 +71,11 @@ test("Today is the operational command center and Autopilot is behavior", () => 
   assert.doesNotMatch(today, /Artist-learned memory/);
 });
 
-test("release workspace hides lifecycle-skipped debt and changes language for catalog", () => {
+test("release object keeps lifecycle truth but hides skipped historical debt from the artist", () => {
   const workspace = read("components/studio/release-workspace-v2.tsx");
   assert.match(workspace, /\["Done", "Skipped"\]/);
-  assert.match(workspace, /"Rediscover"/);
-  assert.match(workspace, /"Distribute"/);
-  assert.match(workspace, /Missed historical moments are never recreated/);
+  assert.match(workspace, /lifecycle === "catalog"/);
+  assert.match(workspace, /lifecycle === "launch_window"/);
+  assert.match(workspace, /Historical missed moments are not recreated as overdue debt/);
+  for (const facet of ["Overview", "Music", "Content", "Promotion", "Distribution", "Results"]) assert.match(workspace, new RegExp(facet));
 });

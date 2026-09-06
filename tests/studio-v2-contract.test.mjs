@@ -20,41 +20,35 @@ const requiredRoutes = [
   "app/studio/(protected)/video/[id]/page.tsx",
 ];
 
-test("Studio V2 keeps every daily outcome route present", async () => {
+test("Studio V2 keeps every specialist route present even when navigation is simplified", async () => {
   await Promise.all(requiredRoutes.map((path) => access(path)));
 });
 
-test("Ensemblis navigation matches the grouped product roadmap and keeps specialist tools contextual", async () => {
+test("Ensemblis navigation exposes artist outcomes while specialist domains remain contextual", async () => {
   const product = await readFile("lib/ensemblis-product.ts", "utf8");
   const sidebar = await readFile("components/studio/sidebar.tsx", "utf8");
+  const workStart = product.indexOf("export const ENSEMBLIS_WORK_NAV");
+  const moreStart = product.indexOf("export const ENSEMBLIS_MORE_NAV");
+  const mobileMoreStart = product.indexOf("export const ENSEMBLIS_MOBILE_MORE_NAV");
+  const workSource = product.slice(workStart, moreStart);
+  const moreSource = product.slice(moreStart, mobileMoreStart);
 
   assert.ok(product.includes("ENSEMBLIS_WORK_NAV"));
   assert.ok(product.includes("ENSEMBLIS_MANAGE_NAV"));
   assert.ok(product.includes("ENSEMBLIS_SETTINGS_NAV"));
   assert.ok(product.includes("ENSEMBLIS_PRIMARY_NAV = ENSEMBLIS_WORK_NAV"));
 
-  for (const route of [
-    "/studio",
-    "/studio/music",
-    "/studio/releases",
-    "/studio/create",
-    "/studio/growth",
-    "/studio/audience",
-    "/studio/library",
-  ]) {
-    assert.match(product, new RegExp(route.replaceAll("/", "\\/")));
+  for (const route of ["/studio", "/studio/music", "/studio/releases", "/studio/create", "/studio/growth"]) {
+    assert.ok(workSource.includes(route), `${route} is missing from primary outcome navigation`);
   }
-
-  for (const route of [
-    "/studio/sites",
+  for (const route of ["/studio/library", "/studio/sites"]) {
+    assert.ok(moreSource.includes(route), `${route} is missing from cross-workflow More utilities`);
+  }
+  for (const contextualRoute of [
+    "/studio/audience",
     "/studio/distribution",
     "/studio/connections",
-    "/studio/settings",
-  ]) {
-    assert.match(product, new RegExp(route.replaceAll("/", "\\/")));
-  }
-
-  for (const contextualRoute of [
+    "/studio/memory",
     "/studio/campaigns",
     "/studio/content",
     "/studio/outreach",
@@ -62,9 +56,9 @@ test("Ensemblis navigation matches the grouped product roadmap and keeps special
     "/studio/data-health",
   ]) {
     assert.equal(
-      product.includes(`\"${contextualRoute}\"`),
+      workSource.includes(`\"${contextualRoute}\"`) || moreSource.includes(`\"${contextualRoute}\"`),
       false,
-      `${contextualRoute} leaked into durable Ensemblis navigation`,
+      `${contextualRoute} leaked into durable artist navigation`,
     );
   }
 
@@ -85,6 +79,10 @@ test("Ensemblis persists and validates active artist context across primary navi
   const layout = await readFile("app/studio/(protected)/layout.tsx", "utf8");
 
   assert.ok(product.includes('ENSEMBLIS_ACTIVE_ARTIST_COOKIE = "ensemblis_active_artist"'));
+  assert.ok(product.includes('const hashIndex = href.indexOf("#")'));
+  assert.ok(product.includes("href.slice(0, hashIndex)"));
+  assert.ok(product.includes("href.slice(hashIndex)"));
+  assert.ok(product.includes('`${base}${separator}artist=${encodeURIComponent(artistId)}${fragment}`'));
   assert.ok(context.includes("listAccessibleArtists"));
   assert.ok(context.includes("resolveActiveArtistContext"));
   assert.ok(context.includes("resolveArtistContext(client, identity, preferredArtistId)"));
@@ -105,7 +103,8 @@ test("primary creation, music and library surfaces use active artist identity ra
   const library = await readFile("app/studio/(protected)/library/page.tsx", "utf8");
 
   assert.ok(create.includes("requireArtistContext"));
-  assert.ok(create.includes("artist.artistName"));
+  assert.ok(create.includes("artist.artistId"));
+  assert.ok(create.includes("artist.userId"));
   assert.ok(create.includes("ensemblisArtistHref"));
 
   assert.ok(music.includes("resolveActiveArtistContext"));
@@ -118,8 +117,8 @@ test("primary creation, music and library surfaces use active artist identity ra
   assert.ok(library.includes("artistTag"));
   assert.ok(library.includes("<MediaUploader artistId={artist.artistId}"));
 
-  for (const [path, source] of [["Create", create], ["Music", music], ["Library", library]]) {
-    assert.equal(/\bAtlas Irwin\b/.test(source), false, `${path} contains a hardcoded Atlas artist assumption`);
+  for (const [path, surface] of [["Create", create], ["Music", music], ["Library", library]]) {
+    assert.equal(/\bAtlas Irwin\b/.test(surface), false, `${path} contains a hardcoded Atlas artist assumption`);
   }
 });
 
@@ -168,20 +167,20 @@ test("generic product surfaces contain no hardcoded Atlas user-facing language",
     "proxy.ts",
   ];
   for (const path of files) {
-    const source = await readFile(path, "utf8");
-    assert.equal(/\bAtlas(?: Irwin)?\b/.test(source), false, `${path} contains hardcoded Atlas product language`);
+    const surface = await readFile(path, "utf8");
+    assert.equal(/\bAtlas(?: Irwin)?\b/.test(surface), false, `${path} contains hardcoded Atlas product language`);
   }
 });
 
-test("release workspace exposes lifecycle-aware growth stages and preserves an advanced escape hatch", async () => {
+test("release workspace is one Mission object with artist-facing facets and an advanced escape hatch", async () => {
   const workspace = await readFile("components/studio/release-workspace-v2.tsx", "utf8");
   const mission = await readFile("lib/studio/release-mission.ts", "utf8");
-  for (const upcomingStage of ["Select", "Prepare", "Build hype", "Release", "Sustain"]) assert.ok(workspace.includes(upcomingStage));
-  for (const catalogStage of ["Orient", "Rediscover", "Produce", "Distribute", "Learn"]) assert.ok(workspace.includes(catalogStage));
+  for (const facet of ["Overview", "Music", "Content", "Promotion", "Distribution", "Results"]) assert.ok(workspace.includes(facet), `release workspace lost ${facet}`);
+  for (const alias of ['stage === "plan"', 'stage === "create"', 'stage === "publish"', 'stage === "learn"']) assert.ok(workspace.includes(alias), `release compatibility lost ${alias}`);
   assert.ok(workspace.includes("Advanced view"));
   assert.ok(workspace.includes("/studio/production"));
   assert.ok(workspace.includes("/studio/video?release="));
-  assert.ok(workspace.includes('label: "Release mission"'));
+  assert.ok(workspace.includes("Release Mission"));
   assert.ok(workspace.includes("deriveReleaseMission"));
   assert.ok(mission.includes('label: "Blocked"'));
   assert.ok(mission.includes('label: "On track"'));
@@ -218,11 +217,13 @@ test("unreleased masters are independent from releases and reuse the shared dura
   assert.ok(workerQueue.includes('status: "queued"'));
 });
 
-test("Create keeps specialist creation outcomes discoverable", async () => {
+test("Create keeps specialist creation outcomes discoverable without making them the primary mental model", async () => {
   const create = await readFile("app/studio/(protected)/create/page.tsx", "utf8");
   for (const route of ["/studio/music", "/studio/production", "/studio/video"]) {
     assert.ok(create.includes(route), `${route} is no longer discoverable from Create`);
   }
+  assert.ok(create.includes("Other ways to create"));
+  assert.ok(create.includes("What do you want to make?"));
 });
 
 test("normal Studio V2 routes do not link daily work back to Content Lab", async () => {
@@ -232,7 +233,7 @@ test("normal Studio V2 routes do not link daily work back to Content Lab", async
     "components/studio/release-workspace-v2.tsx",
   ];
   for (const path of files) {
-    const source = await readFile(path, "utf8");
-    assert.equal(source.includes("/studio/content?edit="), false, `${path} still routes normal edits through Content Lab`);
+    const surface = await readFile(path, "utf8");
+    assert.equal(surface.includes("/studio/content?edit="), false, `${path} still routes normal edits through Content Lab`);
   }
 });

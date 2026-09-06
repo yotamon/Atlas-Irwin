@@ -7,6 +7,14 @@ export const ENSEMBLIS_PRODUCT = {
 
 export const ENSEMBLIS_ACTIVE_ARTIST_COOKIE = "ensemblis_active_artist";
 
+/**
+ * Artist-facing information architecture.
+ *
+ * The primary navigation is intentionally outcome-driven. Internal engines such
+ * as campaigns, distribution, audience intelligence, memory and connections
+ * stay contextual to the workflow that owns them instead of competing for the
+ * artist's attention as standalone destinations.
+ */
 export const ENSEMBLIS_WORK_NAV = [
   { href: "/studio", label: "Today", icon: "dashboard" },
   { href: "/studio/music", label: "Music", icon: "musicLab" },
@@ -16,7 +24,7 @@ export const ENSEMBLIS_WORK_NAV = [
 ] as const;
 
 /* Mobile keeps four direct workflow destinations plus More. Grow remains a
-   first-class destination inside More so the tab bar can never wrap. */
+   first-class outcome inside More so the tab bar can never wrap. */
 export const ENSEMBLIS_MOBILE_WORK_NAV = [
   ENSEMBLIS_WORK_NAV[0],
   ENSEMBLIS_WORK_NAV[1],
@@ -24,13 +32,14 @@ export const ENSEMBLIS_MOBILE_WORK_NAV = [
   ENSEMBLIS_WORK_NAV[3],
 ] as const;
 
+/**
+ * Only cross-workflow utilities belong in More. Audience lives inside Grow;
+ * Distribution belongs to a Release; Memory and Connections belong to
+ * Settings. The routes still exist for deep links and specialist work.
+ */
 export const ENSEMBLIS_MORE_NAV = [
-  { href: "/studio/audience", label: "Audience", icon: "outreach" },
   { href: "/studio/library", label: "Library", icon: "media" },
-  { href: "/studio/memory", label: "Memory", icon: "brand" },
   { href: "/studio/sites", label: "Sites", icon: "sites" },
-  { href: "/studio/distribution", label: "Distribution", icon: "distribution" },
-  { href: "/studio/connections", label: "Connections", icon: "distribution" },
 ] as const;
 
 export const ENSEMBLIS_MOBILE_MORE_NAV = [
@@ -50,6 +59,9 @@ export const ENSEMBLIS_SETTINGS_NAV = {
 export const ENSEMBLIS_PRIMARY_NAV = ENSEMBLIS_WORK_NAV;
 
 export function ensemblisArtistHref(href: string, artistId: string) {
-  const separator = href.includes("?") ? "&" : "?";
-  return `${href}${separator}artist=${encodeURIComponent(artistId)}`;
+  const hashIndex = href.indexOf("#");
+  const base = hashIndex >= 0 ? href.slice(0, hashIndex) : href;
+  const fragment = hashIndex >= 0 ? href.slice(hashIndex) : "";
+  const separator = base.includes("?") ? "&" : "?";
+  return `${base}${separator}artist=${encodeURIComponent(artistId)}${fragment}`;
 }

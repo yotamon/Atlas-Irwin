@@ -89,9 +89,8 @@ export default async function GrowthPage({ searchParams }: { searchParams: Promi
   const growthTabs = [
     { label: "Overview", href: href("/studio/growth"), active: view === "overview" },
     { label: "Opportunities", href: href("/studio/growth?view=opportunities"), active: view === "opportunities" },
+    { label: "Audience", href: href("/studio/audience"), active: false },
     { label: "Performance", href: href("/studio/growth?view=performance"), active: view === "performance" },
-    { label: "Paid experiments", href: href("/studio/growth/paid"), active: false },
-    { label: "Learnings", href: href("/studio/learn"), active: false },
   ];
 
   return (
@@ -158,8 +157,8 @@ export default async function GrowthPage({ searchParams }: { searchParams: Promi
         </section>
 
         <details className="v2-section v2-compact-section">
-          <summary><strong>Advanced planning tools</strong><span>Campaign calendar, portfolio diagnostics and growth rules</span></summary>
-          <div className="actions"><Link className="button" href={href("/studio/campaigns")}>Campaigns</Link><Link className="button" href={href("/studio/calendar")}>Calendar</Link><Link className="button" href={href("/studio/growth?view=portfolio")}>Portfolio diagnostics</Link></div>
+          <summary><strong>Advanced growth tools</strong><span>Planning controls, paid experiments and detailed learning evidence</span></summary>
+          <div className="actions"><Link className="button" href={href("/studio/growth/paid")}>Paid experiments</Link><Link className="button" href={href("/studio/learn")}>Learnings</Link><Link className="button" href={href("/studio/campaigns")}>Campaigns</Link><Link className="button" href={href("/studio/calendar")}>Calendar</Link><Link className="button" href={href("/studio/growth?view=portfolio")}>Portfolio diagnostics</Link></div>
         </details>
       </> : null}
 
@@ -169,7 +168,7 @@ export default async function GrowthPage({ searchParams }: { searchParams: Promi
       </section> : null}
 
       {view === "performance" ? <section className="v2-section growth-polish-view-section" id="funnel">
-        <div className="v2-section-heading"><div><span className="section-label">Audience funnel</span><h2>Where attention turns into fandom</h2></div><Link href={href("/studio/analytics")}>Full analytics</Link></div>
+        <div className="v2-section-heading"><div><span className="section-label">Audience funnel</span><h2>Where attention turns into fandom</h2></div><div className="actions"><Link href={href("/studio/audience")}>Open Audience</Link><Link href={href("/studio/analytics")}>Detailed analytics</Link></div></div>
         <div className="growth-funnel"><article><span>Discovery</span><strong>{funnel.reach.toLocaleString()}</strong><small>qualified reach / views</small></article><i>→</i><article><span>Curiosity</span><strong>{funnel.profileVisits.toLocaleString()}</strong><small>{percent(funnel.profileVisitRate)} reach → profile</small></article><i>→</i><article><span>Music intent</span><strong>{funnel.linkClicks.toLocaleString()}</strong><small>{percent(funnel.linkClickRate)} profile → owned link</small></article><i>→</i><article><span>Listening</span><strong>{funnel.listeners.toLocaleString()}</strong><small>{funnel.streamsPerListener ? `${Math.round(funnel.streamsPerListener * 10) / 10} streams / listener` : "listener data needed"}</small></article><i>→</i><article><span>Fandom</span><strong>{(funnel.saves + funnel.follows + funnel.playlistAdds).toLocaleString()}</strong><small>{percent(funnel.saveRate)} save · {percent(funnel.followRate)} follow</small></article></div>
         {diagnosis ? <div className="growth-action-note growth-performance-diagnosis"><strong>Current constraint</strong><span>{diagnosis.diagnosis} {diagnosis.action}</span></div> : null}
         <div className="actions"><Link className="button primary" href={href("/studio/growth/paid")}>Run a bounded paid experiment</Link><Link className="button" href={href("/studio/sites/smart-links")}>Inspect owned attribution</Link></div>

@@ -1,0 +1,532 @@
+/* Ensemblis outcome-driven workflow compositions.
+   This layer owns the high-level artist workflows introduced by UX Architecture V3:
+   Today, Release Mission and deliverable-first Create. Internal engines remain
+   available underneath these compositions without defining their hierarchy. */
+
+/* Calm the primary hierarchy: status is communicated by a restrained edge, not
+   a different decorative card treatment for every semantic state. */
+.studio-root .en-priority-hero {
+  border-color: var(--en-line-strong);
+  border-left: 2px solid var(--en-accent);
+  background: var(--en-surface);
+  box-shadow: none;
+}
+
+.studio-root .en-priority-hero[data-tone="attention"] {
+  border-color: var(--en-line-strong);
+  border-left-color: var(--en-violet);
+  background: var(--en-surface);
+}
+
+.studio-root .en-priority-hero[data-tone="danger"] {
+  border-color: var(--en-line-strong);
+  border-left-color: var(--en-danger);
+  background: var(--en-surface);
+}
+
+.studio-root .en-priority-hero[data-tone="success"] {
+  border-color: var(--en-line-strong);
+  border-left-color: var(--en-mint);
+  background: var(--en-surface);
+}
+
+.studio-root .ensemblis-today-focus-grid {
+  align-items: start;
+}
+
+/* Create: deliverable first, technical context second. */
+.studio-root .ensemblis-create-page {
+  max-width: 82rem;
+}
+
+.studio-root .create-context-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--en-space-5);
+  padding: var(--en-space-4) 0;
+  border-top: 1px solid var(--en-line);
+  border-bottom: 1px solid var(--en-line);
+}
+
+.studio-root .create-context-strip > div {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: baseline;
+  gap: var(--en-space-1) var(--en-space-3);
+}
+
+.studio-root .create-context-strip .section-label {
+  grid-column: 1 / -1;
+}
+
+.studio-root .create-context-strip strong {
+  color: var(--en-ink);
+  font-size: var(--en-text-lg);
+}
+
+.studio-root .create-context-strip small,
+.studio-root .create-context-strip > a {
+  color: var(--en-muted);
+  font-size: var(--en-text-sm);
+}
+
+.studio-root .create-context-strip > a:hover,
+.studio-root .create-context-strip > a:focus-visible {
+  color: var(--en-accent);
+}
+
+.studio-root .create-deliverable-section {
+  display: grid;
+  gap: var(--en-space-5);
+}
+
+.studio-root .create-deliverable-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--en-space-4);
+}
+
+.studio-root .create-deliverable-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: var(--en-space-5);
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-lg);
+  background: var(--en-surface);
+  transition: border-color var(--en-duration-fast) var(--en-ease-standard), transform var(--en-duration-fast) var(--en-ease-standard);
+}
+
+.studio-root .create-deliverable-card.is-recommended {
+  border-color: color-mix(in srgb, var(--en-accent) 38%, var(--en-line));
+}
+
+.studio-root .create-deliverable-card:hover,
+.studio-root .create-deliverable-card:focus-within {
+  border-color: var(--en-line-strong);
+  transform: translateY(-2px);
+}
+
+.studio-root .create-deliverable-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--en-space-3);
+  color: var(--en-subtle);
+  font-size: var(--en-text-sm);
+}
+
+.studio-root .create-deliverable-card h3 {
+  margin: var(--en-space-4) 0 var(--en-space-2);
+  color: var(--en-ink);
+  font-size: clamp(1.25rem, 2.4vw, 1.7rem);
+  line-height: 1.12;
+  letter-spacing: -0.035em;
+}
+
+.studio-root .create-deliverable-card > p {
+  margin: 0;
+  color: var(--en-muted);
+  font-size: var(--en-text-md);
+  line-height: var(--en-leading-body);
+}
+
+.studio-root .create-source-preview {
+  display: grid;
+  gap: var(--en-space-1);
+  margin-top: var(--en-space-5);
+  padding-top: var(--en-space-4);
+  border-top: 1px solid var(--en-line);
+}
+
+.studio-root .create-source-preview strong {
+  color: var(--en-ink);
+  font-size: var(--en-text-lg);
+}
+
+.studio-root .create-source-preview small {
+  color: var(--en-muted);
+  font-size: var(--en-text-sm);
+}
+
+.studio-root .create-source-preview > :last-child {
+  margin-top: var(--en-space-2);
+}
+
+.studio-root .create-deliverable-card .create-direction-rationale {
+  margin-top: var(--en-space-4);
+  color: var(--en-muted);
+  font-size: var(--en-text-sm);
+}
+
+.studio-root .create-direction-action {
+  margin-top: auto;
+  padding-top: var(--en-space-5);
+}
+
+.studio-root .create-evidence-details {
+  margin-top: var(--en-space-4);
+  padding-top: var(--en-space-3);
+  border-top: 1px solid var(--en-line);
+  color: var(--en-muted);
+  font-size: var(--en-text-sm);
+}
+
+.studio-root .create-evidence-details summary {
+  cursor: pointer;
+}
+
+.studio-root .create-evidence-details p,
+.studio-root .create-evidence-details small {
+  display: block;
+  margin: var(--en-space-2) 0 0;
+  color: var(--en-muted);
+  line-height: 1.5;
+}
+
+.studio-root .create-next-action-callout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--en-space-5);
+  padding: var(--en-space-5) 0;
+  border-top: 1px solid var(--en-line);
+  border-bottom: 1px solid var(--en-line);
+}
+
+.studio-root .create-next-action-callout > div {
+  display: grid;
+  gap: var(--en-space-1);
+}
+
+.studio-root .create-next-action-callout strong {
+  color: var(--en-ink);
+  font-size: var(--en-text-lg);
+}
+
+.studio-root .create-next-action-callout p {
+  margin: 0;
+  color: var(--en-muted);
+  font-size: var(--en-text-sm);
+}
+
+.studio-root .create-specialist-tools {
+  margin-top: 0;
+}
+
+.studio-root .create-specialist-links {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--en-space-2);
+  margin-top: var(--en-space-4);
+}
+
+.studio-root .create-specialist-links > a {
+  display: grid;
+  gap: var(--en-space-1);
+  padding: var(--en-space-3) 0;
+  border-bottom: 1px solid var(--en-line);
+  color: var(--en-ink);
+  font-weight: var(--en-weight-semibold);
+}
+
+.studio-root .create-specialist-links > a span {
+  color: var(--en-muted);
+  font-size: var(--en-text-sm);
+  font-weight: var(--en-weight-medium);
+  line-height: 1.45;
+}
+
+.studio-root .create-policy-note {
+  margin-top: var(--en-space-4);
+  padding-top: var(--en-space-4);
+  border-top: 1px solid var(--en-line);
+}
+
+.studio-root .create-policy-note p {
+  color: var(--en-muted);
+  line-height: 1.5;
+}
+
+/* Release Mission: one object, six understandable facets. */
+.studio-root .ensemblis-release-mission {
+  max-width: 88rem;
+}
+
+.studio-root .release-mission-overview,
+.studio-root .release-music-workspace,
+.studio-root .release-content-workspace,
+.studio-root .release-promotion-workspace {
+  display: grid;
+  gap: var(--en-space-5);
+}
+
+.studio-root .release-mission-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--en-space-6);
+  padding: clamp(1.25rem, 3vw, 2.25rem) 0;
+  border-top: 1px solid var(--en-line);
+  border-bottom: 1px solid var(--en-line);
+}
+
+.studio-root .release-mission-hero[data-status="blocked"] {
+  border-top-color: color-mix(in srgb, var(--en-danger) 54%, var(--en-line));
+}
+
+.studio-root .release-mission-hero[data-status="needs_attention"] {
+  border-top-color: color-mix(in srgb, var(--en-violet) 46%, var(--en-line));
+}
+
+.studio-root .release-mission-hero[data-status="on_track"] {
+  border-top-color: color-mix(in srgb, var(--en-mint) 46%, var(--en-line));
+}
+
+.studio-root .release-mission-hero h2 {
+  max-width: 52rem;
+  margin: var(--en-space-2) 0;
+  color: var(--en-ink);
+  font-size: clamp(1.55rem, 3.5vw, 2.65rem);
+  line-height: 1.05;
+  letter-spacing: -0.045em;
+}
+
+.studio-root .release-mission-hero p {
+  max-width: 52rem;
+  margin: 0;
+  color: var(--en-muted);
+  font-size: var(--en-text-lg);
+  line-height: 1.58;
+}
+
+.studio-root .release-mission-checklist {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-bottom: 1px solid var(--en-line);
+}
+
+.studio-root .release-mission-checklist > div {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--en-space-1) var(--en-space-2);
+  padding: var(--en-space-4);
+  border-right: 1px solid var(--en-line);
+}
+
+.studio-root .release-mission-checklist > div:last-child {
+  border-right: 0;
+}
+
+.studio-root .release-mission-checklist > div > span {
+  grid-row: 1 / 3;
+  color: var(--en-subtle);
+  font-size: var(--en-text-xs);
+}
+
+.studio-root .release-mission-checklist > div > span.is-ready {
+  color: var(--en-mint);
+}
+
+.studio-root .release-mission-checklist strong {
+  color: var(--en-ink);
+  font-size: var(--en-text-md);
+}
+
+.studio-root .release-mission-checklist small {
+  color: var(--en-muted);
+  font-size: var(--en-text-sm);
+}
+
+.studio-root .release-source-details,
+.studio-root .v2-advanced-disclosure {
+  padding: var(--en-space-4) 0;
+  border-top: 1px solid var(--en-line);
+  color: var(--en-muted);
+}
+
+.studio-root .release-source-details > summary,
+.studio-root .v2-advanced-disclosure > summary {
+  cursor: pointer;
+  color: var(--en-ink);
+  font-weight: var(--en-weight-semibold);
+}
+
+.studio-root .release-stage-intro-card {
+  border: 0;
+  border-bottom: 1px solid var(--en-line);
+  border-radius: 0;
+  padding-inline: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.studio-root .release-track-summary {
+  display: grid;
+}
+
+.studio-root .release-track-summary > a {
+  display: grid;
+  grid-template-columns: minmax(7rem, auto) minmax(0, 1fr) minmax(9rem, auto) auto;
+  align-items: center;
+  gap: var(--en-space-4);
+  padding: var(--en-space-4) 0;
+  border-bottom: 1px solid var(--en-line);
+}
+
+.studio-root .release-track-summary span,
+.studio-root .release-track-summary small {
+  color: var(--en-muted);
+  font-size: var(--en-text-sm);
+}
+
+.studio-root .release-track-summary strong {
+  color: var(--en-ink);
+}
+
+.studio-root .release-track-summary b {
+  color: var(--en-subtle);
+}
+
+.studio-root .release-track-summary > a:hover b,
+.studio-root .release-track-summary > a:focus-visible b {
+  color: var(--en-accent);
+}
+
+.studio-root .release-moments-anchor {
+  padding-top: var(--en-space-4);
+}
+
+.studio-root .release-moments-anchor p {
+  max-width: 44rem;
+  margin: var(--en-space-1) 0 0;
+  color: var(--en-muted);
+}
+
+.studio-root .release-content-status {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--en-line);
+  border-bottom: 1px solid var(--en-line);
+}
+
+.studio-root .release-content-status > div {
+  display: grid;
+  gap: var(--en-space-1);
+  padding: var(--en-space-4);
+  border-right: 1px solid var(--en-line);
+}
+
+.studio-root .release-content-status > div:last-child {
+  border-right: 0;
+}
+
+.studio-root .release-content-status strong {
+  color: var(--en-ink);
+  font-size: var(--en-text-2xl);
+}
+
+.studio-root .release-content-status span {
+  color: var(--en-muted);
+  font-size: var(--en-text-sm);
+}
+
+.studio-root .release-promotion-plan {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--en-space-5);
+  margin-top: var(--en-space-4);
+  padding: var(--en-space-4) 0;
+  border-top: 1px solid var(--en-line);
+  border-bottom: 1px solid var(--en-line);
+}
+
+.studio-root .release-promotion-plan h3 {
+  margin: var(--en-space-1) 0;
+  color: var(--en-ink);
+}
+
+.studio-root .release-promotion-plan p,
+.studio-root .release-promotion-plan span {
+  margin: 0;
+  color: var(--en-muted);
+  font-size: var(--en-text-sm);
+}
+
+.studio-root .release-result-insight {
+  display: grid;
+  gap: var(--en-space-3);
+  margin-top: var(--en-space-5);
+  padding: var(--en-space-5) 0;
+  border-top: 1px solid var(--en-line);
+}
+
+.studio-root .release-result-insight > strong {
+  max-width: 54rem;
+  color: var(--en-ink);
+  font-size: var(--en-text-xl);
+  line-height: 1.5;
+}
+
+@media (max-width: 960px) {
+  .studio-root .create-deliverable-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .studio-root .release-mission-checklist {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .studio-root .release-mission-checklist > div:nth-child(2) {
+    border-right: 0;
+  }
+
+  .studio-root .release-mission-checklist > div:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--en-line);
+  }
+}
+
+@media (max-width: 620px) {
+  .studio-root .create-context-strip,
+  .studio-root .create-next-action-callout,
+  .studio-root .release-mission-hero,
+  .studio-root .release-promotion-plan {
+    display: grid;
+    align-items: start;
+  }
+
+  .studio-root .create-specialist-links,
+  .studio-root .release-content-status,
+  .studio-root .release-mission-checklist {
+    grid-template-columns: 1fr;
+  }
+
+  .studio-root .release-mission-checklist > div,
+  .studio-root .release-content-status > div {
+    border-right: 0;
+    border-bottom: 1px solid var(--en-line);
+  }
+
+  .studio-root .release-mission-checklist > div:last-child,
+  .studio-root .release-content-status > div:last-child {
+    border-bottom: 0;
+  }
+
+  .studio-root .release-track-summary > a {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .studio-root .release-track-summary > a span,
+  .studio-root .release-track-summary > a small {
+    grid-column: 1;
+  }
+
+  .studio-root .release-track-summary > a b {
+    grid-column: 2;
+    grid-row: 1 / 4;
+  }
+}
