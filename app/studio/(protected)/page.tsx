@@ -31,6 +31,9 @@ export default async function TodayPage() {
     topDecision,
     nextAction,
     nextActionHref,
+    humanNextAction,
+    humanNextActionHref,
+    managerPlan,
     working,
     comingUp,
     preferences,
@@ -38,32 +41,65 @@ export default async function TodayPage() {
     strategy,
   } = snapshot;
 
+  const handsOff = operatingContext.profile.marketingInvolvement === "just_make_music";
   const missionAction = activeMission?.nextAction ?? null;
-  const heroTitle = topDecision?.title || missionAction?.title || nextAction?.title || strategy.recommendedMission.title || "Ensemblis can keep moving without interrupting you";
-  const heroDetail = topDecision?.detail || (missionAction ? activeMission?.summary : null) || nextAction?.rationale || strategy.recommendedMission.rationale;
-  const heroStatus = topDecision ? (topDecision.severity === "required" ? "Required" : "Needs attention") : missionAction ? activeMission?.label || "Recommended" : nextAction ? "Recommended" : "Clear";
-  const heroTone: SemanticTone = topDecision?.severity === "required" ? "danger" : topDecision ? "attention" : missionAction || nextAction ? "accent" : "success";
+  const visibleMissionAction = handsOff ? null : missionAction;
+  const actionableNext = handsOff ? humanNextAction : nextAction;
+  const actionableNextHref = handsOff ? humanNextActionHref : nextActionHref;
+  const managerLead = managerPlan[0] ?? null;
+
+  const heroTitle = topDecision?.title
+    || visibleMissionAction?.title
+    || actionableNext?.title
+    || (handsOff ? "Keep making music. Ensemblis is managing the next moves." : strategy.recommendedMission.title)
+    || "Ensemblis can keep moving without interrupting you";
+  const heroDetail = topDecision?.detail
+    || (visibleMissionAction ? activeMission?.summary : null)
+    || actionableNext?.rationale
+    || (handsOff ? managerLead?.detail || strategy.humanIntervention : strategy.recommendedMission.rationale);
+  const heroStatus = topDecision
+    ? (topDecision.severity === "required" ? "Required" : "Needs attention")
+    : visibleMissionAction
+      ? activeMission?.label || "Recommended"
+      : actionableNext
+        ? "Recommended"
+        : handsOff
+          ? "Manager active"
+          : "Clear";
+  const heroTone: SemanticTone = topDecision?.severity === "required"
+    ? "danger"
+    : topDecision
+      ? "attention"
+      : visibleMissionAction || actionableNext
+        ? "accent"
+        : "success";
   const heroPrimary = topDecision
     ? { href: href(topDecision.href), label: "Resolve this" }
-    : missionAction
-      ? { href: href(missionAction.href), label: missionAction.title }
-      : nextAction && nextActionHref
-        ? { href: nextActionHref, label: "Act on this" }
-        : { href: href(strategy.recommendedMission.href), label: "Open recommended Mission" };
+    : visibleMissionAction
+      ? { href: href(visibleMissionAction.href), label: visibleMissionAction.title }
+      : actionableNext && actionableNextHref
+        ? { href: actionableNextHref, label: "Act on this" }
+        : handsOff
+          ? { href: "#manager-plan", label: "View manager plan" }
+          : { href: href(strategy.recommendedMission.href), label: "Open recommended Mission" };
   const decisionPreview = needsYou.slice(0, 3);
 
   return <div className="studio-v2-page ensemblis-today-page">
     <PageHeader title="Today" description={`What matters now for ${artist.artistName}.`} />
 
     <PriorityHero
-      eyebrow={activeRelease && activeMission ? `${activeRelease.title} · ${activeMission.label}` : "Recommended next move"}
+      eyebrow={activeRelease && activeMission && !handsOff
+        ? `${activeRelease.title} · ${activeMission.label}`
+        : handsOff
+          ? "Manager mode"
+          : "Recommended next move"}
       title={heroTitle}
       description={heroDetail}
       status={heroStatus}
       tone={heroTone}
       actions={<>
         <Link className="button primary" href={heroPrimary.href}>{heroPrimary.label}</Link>
-        {activeRelease
+        {activeRelease && !handsOff
           ? <Link href={href(`/studio/releases/${activeRelease.id}`)}>View release Mission</Link>
           : topDecision
             ? <Link href={href("/studio/needs-you")}>Open decision queue</Link>
@@ -83,6 +119,22 @@ export default async function TodayPage() {
       <div className="actions"><Link className={operatingContext.profileConfigured ? "button" : "button primary"} href={href("/studio/settings/artist")}>{operatingContext.profileConfigured ? "Edit working profile" : "Choose working mode"}</Link><Link className="button" href={href("/studio/growth/strategy")}>Artist strategy</Link></div>
     </section>
 
+    <section className="today-v3-section" id="manager-plan" aria-labelledby="today-manager-plan-heading">
+      <SectionHeading
+        id="today-manager-plan-heading"
+        eyebrow={handsOff ? "Ensemblis is handling" : "Planned work"}
+        title={handsOff ? "Manager plan" : "This week's plan"}
+        compact
+        action={<span className="today-v3-count">{managerPlan.length}</span>}
+      />
+      {managerPlan.length ? <div className="today-v3-list">{managerPlan.map((item) =>
+        <Link className="today-v3-work-row" href={item.href} key={item.id}>
+          <span className="today-v3-working-dot" aria-hidden />
+          <span className="today-v3-row-copy"><strong>{item.title}</strong><span>{item.detail}</span></span>
+          <Status>{item.status}</Status>
+        </Link>)}</div> : <CalmState title="No manager work is queued right now." body="Ensemblis will add the next evidence-backed move here when the artist context changes." />}
+    </section>
+
     <div className="today-v3-two-column">
       <DecisionQueue
         eyebrow="Decision queue"
@@ -99,7 +151,7 @@ export default async function TodayPage() {
             description={item.detail}
             tone={decisionTone(needsYouTone(item))}
           />
-        ) : <CalmState title="Nothing needs your judgment right now." body={operatingContext.profile.marketingInvolvement === "just_make_music" ? "Keep making music. Ensemblis will prepare safe marketing work and bring back only the decisions that genuinely need you." : "Approvals, ambiguity and important decisions appear here only when needed."} />}
+        ) : <CalmState title="Nothing needs your judgment right now." body={handsOff ? "Keep making music. Ensemblis will prepare safe marketing work and bring back only the decisions that genuinely need you." : "Approvals, ambiguity and important decisions appear here only when needed."} />}
         {needsYou.length > decisionPreview.length ? <Link className="en-decision-more" href={href("/studio/needs-you")}>View {needsYou.length - decisionPreview.length} more decision{needsYou.length - decisionPreview.length === 1 ? "" : "s"}</Link> : null}
       </DecisionQueue>
 

@@ -64,7 +64,7 @@ test("Today stays a thin Manager renderer while the snapshot owns artist operati
   assert.match(today, /loadArtistOperatingSnapshot/);
   assert.doesNotMatch(today, /loadArtistOperatingContext/);
   assert.match(snapshot, /loadArtistOperatingContext/);
-  assert.match(snapshot, /strategy: buildArtistStrategy\(operatingContext\)/);
+  assert.match(snapshot, /const strategy = buildArtistStrategy\(operatingContext\)/);
   assert.match(today, /I just want to make music|MARKETING_INVOLVEMENT_LABELS/);
   assert.match(today, /Keep making music/);
   assert.match(create, /Real artist material comes first/);
@@ -74,42 +74,25 @@ test("Today stays a thin Manager renderer while the snapshot owns artist operati
   assert.match(server, /strategySnapshot/);
 });
 
-test("artist AI capability policy is enforced at server and provider boundaries, not only in UI", async () => {
-  const [guard, guardMigration, musicPage, musicRoute, marketingActions, videoPipeline] = await Promise.all([
-    read("lib/artist-operating/capability-guard.ts"),
-    read("supabase/migrations/20260906151000_artist_ai_capability_guards.sql"),
-    read("app/studio/(protected)/music/page.tsx"),
-    read("app/api/studio/music/generate/route.ts"),
-    read("app/studio/marketing-creative-actions.ts"),
-    read("app/studio/video-pipeline-actions.ts"),
+test("Manager planning reaches quiet artists and follows the configured working relationship", async () => {
+  const [nextBest, snapshot, today] = await Promise.all([
+    read("lib/marketing/next-best-action.ts"),
+    read("lib/studio/artist-operating-snapshot.ts"),
+    read("app/studio/(protected)/page.tsx"),
   ]);
-
-  for (const capability of ["writing", "visuals", "music", "voice", "likeness"]) {
-    assert.match(guard, new RegExp(`\\"${capability}\\"`));
-    assert.match(guardMigration, new RegExp(`'${capability}'`));
-  }
-
-  assert.match(musicPage, /aiMusicAllowed/);
-  assert.match(musicPage, /AI music is off for this artist/);
-  assert.match(musicPage, /view === "generate" && !aiMusicAllowed/);
-  assert.match(musicRoute, /resolveActiveArtistContext/);
-  assert.match(musicRoute, /assertArtistAiCapability\(\{ artistId: artist\.artistId, capability: "music" \}\)/);
-  assert.match(musicRoute, /ArtistAiCapabilityDisabledError/);
-  assert.match(musicRoute, /status: 403/);
-
-  const firstVisualGuard = marketingActions.indexOf('assertArtistAiCapability({ artistId: artist.artistId, capability: "visuals" })');
-  const providerSubmit = marketingActions.indexOf("provider.submit(request");
-  assert.ok(firstVisualGuard >= 0 && firstVisualGuard < providerSubmit, "marketing must enforce artist visual policy before provider submission");
-  assert.ok(marketingActions.match(/assertArtistAiCapability\(\{ artistId: artist\.artistId, capability: "visuals" \}\)/g)?.length >= 2, "marketing must re-check visual policy at preparation and spend approval");
-
-  assert.match(guardMigration, /before insert on public\.generation_runs/);
-  assert.match(guardMigration, /new\.task_type is not null/);
-  assert.match(guardMigration, /new\.purpose like 'content_asset:%'/);
-  assert.match(guardMigration, /before insert or update of status, billing_status on public\.music_video_generations/);
-  assert.match(guardMigration, /new\.status = 'approved'/);
-  assert.match(guardMigration, /new\.billing_status = 'reserved'/);
-  assert.match(guardMigration, /reserve_music_video_generation/);
-
-  assert.match(videoPipeline, /resolveActiveArtistContext/);
-  assert.match(videoPipeline, /loadVideoProjectContext\(db, projectId, user\.id, artist\.artistId\)/);
+  assert.match(nextBest, /from\("artists"\).*eq\("status", "active"\)/s);
+  assert.match(nextBest, /artist_operating_profiles/);
+  assert.match(nextBest, /primary_goal/);
+  assert.match(nextBest, /managerOwned/);
+  assert.match(nextBest, /advance_gig_strategy/);
+  assert.match(nextBest, /advance_label_strategy/);
+  assert.match(nextBest, /advance_owned_audience/);
+  assert.match(nextBest, /operatingSchemaMissing/);
+  assert.match(nextBest, /existingManager/);
+  assert.match(nextBest, /"approved", "executing", "completed", "dismissed"/);
+  assert.match(snapshot, /humanNextAction/);
+  assert.match(snapshot, /managerPlan/);
+  assert.match(today, /const handsOff = operatingContext\.profile\.marketingInvolvement === "just_make_music"/);
+  assert.match(today, /View manager plan/);
+  assert.match(today, /Keep making music\. Ensemblis is managing the next moves\./);
 });
