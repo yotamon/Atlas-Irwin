@@ -59,6 +59,9 @@ export const ENSEMBLIS_SETTINGS_NAV = {
 export const ENSEMBLIS_PRIMARY_NAV = ENSEMBLIS_WORK_NAV;
 
 export function ensemblisArtistHref(href: string, artistId: string) {
-  const separator = href.includes("?") ? "&" : "?";
-  return `${href}${separator}artist=${encodeURIComponent(artistId)}`;
+  const hashIndex = href.indexOf("#");
+  const base = hashIndex >= 0 ? href.slice(0, hashIndex) : href;
+  const fragment = hashIndex >= 0 ? href.slice(hashIndex) : "";
+  const separator = base.includes("?") ? "&" : "?";
+  return `${base}${separator}artist=${encodeURIComponent(artistId)}${fragment}`;
 }
