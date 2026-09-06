@@ -25,14 +25,16 @@ test("artist operating profile keeps AI optional and human projects conservative
   assert.match(settings, /AI music creation/);
 });
 
-test("onboarding understands music before asking working preferences and does not force every artist into a release", async () => {
+test("onboarding understands music before asking only irreducible working preferences and does not force every artist into a release", async () => {
   const page = await read("app/studio/onboarding/page.tsx");
-  assert.match(page, /Five decisions, after the music/);
+  assert.match(page, /Only what the music cannot tell us/);
+  assert.match(page, /The music is already understood\. These few preferences decide how much Ensemblis should handle/);
   assert.match(page, /else if \(analysisPending\) current = "analysis";\n  else if \(!operatingContext\.profileConfigured\) current = "operating";/);
   assert.match(page, /releaseFirst = operatingContext\.profileConfigured && operatingContext\.profile\.primaryGoal === "release_music"/);
   assert.match(page, /releaseFirst && !mission/);
   assert.match(page, /next useful Mission/);
   assert.match(page, /get_gigs|GOAL_LABELS/);
+  assert.doesNotMatch(page, /Five decisions, after the music/);
 });
 
 test("scene intelligence refuses invented targets and reuses the Growth opportunity queue", async () => {
@@ -65,8 +67,10 @@ test("Today stays a thin Manager renderer while the snapshot owns artist operati
   assert.doesNotMatch(today, /loadArtistOperatingContext/);
   assert.match(snapshot, /loadArtistOperatingContext/);
   assert.match(snapshot, /const strategy = buildArtistStrategy\(operatingContext\)/);
-  assert.match(today, /I just want to make music|MARKETING_INVOLVEMENT_LABELS/);
+  assert.match(today, /marketingInvolvement === "just_make_music"/);
   assert.match(today, /Keep making music/);
+  assert.match(today, /Ensemblis is handling/);
+  assert.doesNotMatch(today, /MARKETING_INVOLVEMENT_LABELS|Artist operating mode/);
   assert.match(create, /Real artist material comes first/);
   assert.match(create, /AI music creation is disabled for this artist/);
   assert.match(createActions, /artistCreativePolicyBrief/);
@@ -93,7 +97,9 @@ test("Manager planning reaches quiet artists and follows the configured working 
   assert.match(snapshot, /humanNextAction/);
   assert.match(snapshot, /managerPlan/);
   assert.match(today, /const handsOff = operatingContext\.profile\.marketingInvolvement === "just_make_music"/);
-  assert.match(today, /View manager plan/);
+  assert.match(today, /See what Ensemblis is handling/);
+  assert.match(today, /#ensemblis-handling/);
+  assert.doesNotMatch(today, /View manager plan/);
   assert.match(today, /Keep making music\. Ensemblis is managing the next moves\./);
 });
 
