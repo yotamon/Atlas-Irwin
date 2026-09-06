@@ -6,13 +6,15 @@ on:
     paths:
       - "services/media-worker/app/music_intelligence*.py"
       - "services/media-worker/app/mastering_inspector.py"
+      - "services/media-worker/app/mastering_processor.py"
       - "services/media-worker/app/stem_intelligence*.py"
       - "services/media-worker/app/audio_intelligence_providers.py"
       - "services/media-worker/app/runner.py"
       - "services/media-worker/tests/test_music_intelligence*.py"
-      - "services/media-worker/tests/test_mastering_inspector.py"
+      - "services/media-worker/tests/test_mastering*.py"
       - "services/media-worker/requirements*.txt"
       - "lib/music-intelligence/**"
+      - "lib/mastering/**"
       - "lib/lyrics-intelligence/**"
       - "scripts/evaluate-track-intelligence.mjs"
       - ".github/workflows/audio-intelligence-ci.yml"
@@ -46,6 +48,8 @@ jobs:
           soundfile==0.13.1
           pyloudnorm==0.1.1
           imageio-ffmpeg==0.6.0
+          httpx==0.28.1
+          pydantic==2.11.7
 
       - name: Compile canonical and V4 worker modules
         run: >-
@@ -55,6 +59,7 @@ jobs:
           services/media-worker/app/music_intelligence_v4.py
           services/media-worker/app/music_intelligence_v4_runtime.py
           services/media-worker/app/mastering_inspector.py
+          services/media-worker/app/mastering_processor.py
           services/media-worker/app/audio_intelligence_providers.py
           services/media-worker/app/stem_intelligence.py
           services/media-worker/app/stem_intelligence_v3.py
