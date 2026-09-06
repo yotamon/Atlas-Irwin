@@ -51,6 +51,17 @@ function sourceName(mode: MomentSourceMode) {
   return "fused";
 }
 
+function editorialMomentLabel(moment: CuratedMoment) {
+  if (moment.curation.primary_hook) return "Best Hook";
+  const section = moment.curation.section_type?.replaceAll("_", " ");
+  if (section?.toLowerCase().includes("chorus")) return "Chorus Pick";
+  if (moment.purpose_tags.some((tag) => tag.includes("lyric")) || moment.source_mode === "lyrics") return "Lyric Moment";
+  if ((moment.emotional_score ?? 0) >= 0.72) return "Emotional Moment";
+  if ((moment.energy_score ?? 0) >= 0.75) return "Energy Moment";
+  if (section) return section.replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return `Moment ${moment.curation.rank}`;
+}
+
 function evidenceSummary(moment: CuratedMoment) {
   if (moment.curation.promoted_to_full_section && moment.curation.section_type) {
     const evidenceCount = moment.curation.candidate_count;
@@ -208,17 +219,16 @@ export function MomentReviewPanel({
       ? activeMoments.find((candidate) => candidate.id === calibration.preferred_moment_id) ?? null
       : null;
     const alternatives = activeMoments.filter((candidate) => candidate.track_id === moment.track_id && candidate.id !== moment.id);
+    const useCases = moment.purpose_tags.slice(0, 3).map((tag) => tag.replaceAll("_", " "));
 
     return (
       <article className={`${styles.card} ${moment.state === "approved" ? styles.approved : ""}`} key={moment.id}>
         <div className={styles.cardTop}>
           <div>
-            <div className={styles.kickerRow}>
-              <span className={styles.rank}>#{moment.curation.rank}</span>
-              {moment.curation.primary_hook ? <span className={styles.primaryHook}>Primary hook</span> : null}
-              {moment.curation.section_type ? <span className={styles.mode}>{moment.curation.section_type.replaceAll("_", " ")}</span> : null}
+            <div className={styles.editorialMeta}>
+              <span className={styles.editorialLabel}>{editorialMomentLabel(moment)}</span>
               <span>{track?.title ?? "Track"}</span>
-              {moment.state === "approved" ? <span className={styles.state}>saved</span> : null}
+              {moment.state === "approved" ? <span>Saved</span> : null}
             </div>
             <h3>{moment.label}</h3>
             <p>{evidenceSummary(moment)}</p>
@@ -237,46 +247,47 @@ export function MomentReviewPanel({
         <div className={styles.timeline}>
           <strong>{time(moment.start_ms)}–{time(moment.end_ms)}</strong>
           <span>{durationSeconds}s</span>
-          {moment.curation.promoted_to_full_section ? <small>Complete musical section · no mid-section crop</small> : null}
+          {moment.curation.promoted_to_full_section ? <small>Complete musical section</small> : null}
           {moment.curation.manual_timing ? <small>Artist timing preserved</small> : null}
         </div>
 
-        <div className={styles.scoreRow}>
-          <span className={styles.quality}>{calibrationLabel ?? "Recommended"}</span>
-          <span>{moment.curation.source_modes.map(sourceName).join(" + ")}</span>
-          {moment.curation.candidate_count > 1 ? <span>{moment.curation.candidate_count} signals agree</span> : null}
-          {calibration?.corrected_purpose ? <span>{calibration.corrected_purpose}</span> : null}
-          {calibration?.preferred_cut_seconds ? <span>{calibration.preferred_cut_seconds}s preferred cut</span> : null}
-          {preferredMoment ? <span>Prefer #{preferredMoment.curation.rank} instead</span> : null}
-        </div>
-
-        {moment.purpose_tags.length ? <div className={styles.tags}>{moment.purpose_tags.slice(0, 5).map((tag) => <span key={tag}>{tag.replaceAll("_", " ")}</span>)}</div> : null}
-        {lyricSource ? <blockquote className={styles.lyric}>“{lyricSource.excerpt}”<small>Timed lyric highlight inside this complete Moment</small></blockquote> : null}
-
-        {rollup && rollup.content_items > 0 ? (
-          <div className={styles.performance}>
-            <strong>Observed performance</strong>
-            <span>{rollup.content_items} creative{rollup.content_items === 1 ? "" : "s"}</span>
-            <span>{rollup.views.toLocaleString()} views</span>
-            <span>{rollup.saves.toLocaleString()} saves</span>
-            <span>{rollup.follows.toLocaleString()} follows</span>
-            <span>{rollup.link_clicks.toLocaleString()} clicks</span>
-          </div>
-        ) : null}
+        {useCases.length ? <div className={styles.useCases}><strong>Great for</strong>{useCases.map((tag) => <span key={tag}>{tag}</span>)}</div> : null}
+        {lyricSource ? <blockquote className={styles.lyric}>“{lyricSource.excerpt}”<small>Lyric inside this complete passage</small></blockquote> : null}
 
         <div className={styles.simpleActions}>
           {moment.state === "proposed" ? (
             <>
-              {decisionForm(moment, "best", "approve", "Best Moment", true)}
+              {decisionForm(moment, "best", "approve", "This is one of the best", true)}
               {decisionForm(moment, "useful", "approve", "Useful")}
               {decisionForm(moment, "poor", "reject", "Not for me")}
             </>
           ) : null}
-          {moment.state === "approved" ? <Link className="button primary" href={`/studio/production?release=${releaseId}&moment=${moment.id}`}>Create from this Moment →</Link> : null}
+          {moment.state === "approved" ? <Link className="button primary" href={`/studio/create?release=${releaseId}&track=${moment.track_id}`}>Create from this Moment →</Link> : null}
         </div>
 
+        <details className={styles.evidenceDetails}>
+          <summary>Why Ensemblis picked this</summary>
+          <div className={styles.evidenceBody}>
+            <div><span>Rank</span><strong>#{moment.curation.rank}</strong></div>
+            <div><span>Evidence</span><strong>{moment.curation.source_modes.map(sourceName).join(" + ")}</strong></div>
+            {moment.curation.candidate_count > 1 ? <div><span>Agreement</span><strong>{moment.curation.candidate_count} signals</strong></div> : null}
+            {calibrationLabel ? <div><span>Your calibration</span><strong>{calibrationLabel}</strong></div> : null}
+            {calibration?.corrected_purpose ? <p>{calibration.corrected_purpose}</p> : null}
+            {calibration?.preferred_cut_seconds ? <p>Preferred social cut: {calibration.preferred_cut_seconds}s</p> : null}
+            {preferredMoment ? <p>You prefer #{preferredMoment.curation.rank} for this use.</p> : null}
+            {rollup && rollup.content_items > 0 ? <div className={styles.performance}>
+              <strong>Observed performance</strong>
+              <span>{rollup.content_items} creative{rollup.content_items === 1 ? "" : "s"}</span>
+              <span>{rollup.views.toLocaleString()} views</span>
+              <span>{rollup.saves.toLocaleString()} saves</span>
+              <span>{rollup.follows.toLocaleString()} follows</span>
+              <span>{rollup.link_clicks.toLocaleString()} clicks</span>
+            </div> : null}
+          </div>
+        </details>
+
         <details className={styles.editDetails}>
-          <summary>Fine-tune preference</summary>
+          <summary>Fine-tune this Moment</summary>
           <CalibrationFields releaseId={releaseId} moment={moment} calibration={calibration} alternatives={alternatives} />
         </details>
       </article>
@@ -299,20 +310,20 @@ export function MomentReviewPanel({
       />
       <div className={styles.heading}>
         <div>
-          <span className="section-label">Music intelligence → creation</span>
+          <span className="section-label">Editorial music picks</span>
           <h2>Best Moments</h2>
-          <p>Ensemblis combines track, lyric and stem intelligence into a few complete musical passages. Tell it what actually feels right and future ranking will adapt without changing the underlying music analysis.</p>
+          <p>A few complete passages worth using. Ensemblis keeps the detection noise underneath and brings forward only the musical sections that can carry real creative.</p>
         </div>
-        <div className={styles.counts}><span><strong>{activeMoments.length}</strong> best</span><span><strong>{approvedCount}</strong> saved</span></div>
+        <div className={styles.counts}><span><strong>{activeMoments.length}</strong> selected</span><span><strong>{approvedCount}</strong> saved</span></div>
       </div>
 
       {activeMoments.length ? <div className={styles.grid}>{activeMoments.map((moment) => card(moment))}</div> : (
-        <div className={styles.empty}><strong>No strong complete Moments yet.</strong><p>Ensemblis will show fewer than five rather than surface weak or badly bounded clips. Analyze the canonical master, lyrics or stems to add stronger evidence.</p></div>
+        <div className={styles.empty}><strong>No strong complete Moments yet.</strong><p>Ensemblis would rather show nothing than surface weak or badly bounded clips. Analyze the canonical master, lyrics or stems to add stronger evidence.</p></div>
       )}
 
       {rawCandidateCount > activeMoments.length ? (
         <details className={styles.analysisDetails}>
-          <summary>Analysis evidence · {rawCandidateCount} raw candidates → {activeMoments.length} Best Moments</summary>
+          <summary>Show analysis evidence · {rawCandidateCount} raw candidates → {activeMoments.length} Best Moments</summary>
           <p>{suppressedCount} redundant, overlapping or lower-quality candidates were kept out of the artist workflow. They remain analysis evidence and do not need manual review.</p>
         </details>
       ) : null}
