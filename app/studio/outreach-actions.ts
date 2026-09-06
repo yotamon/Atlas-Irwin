@@ -80,7 +80,7 @@ export async function saveOutreachMessage(form: FormData) {
   if (!contact) throw new Error("Contact does not belong to the active artist.");
 
   if (releaseId) {
-    const { data: release, error: releaseError } = await music.from("releases")
+    const { data: release, error: releaseError } = await music.from("release_read_model")
       .select("id")
       .eq("id", releaseId)
       .eq("owner_id", artist.userId)

@@ -30,8 +30,8 @@ export async function buildCampaignIntelligence(form: FormData) {
   if (!campaign.release_id) throw new Error("Campaign Intelligence requires a release-linked campaign.");
 
   const [releaseResult, brandResult, learningResult, legacyLearningResult, contentResult, metricResult, momentResult, rejectionResult] = await Promise.all([
-    music.from("releases")
-      .select("id,title,release_type,release_date,story,core_emotion,audience,primary_hook,visual_direction,genre,subgenre,release_identity,smart_link_url,spotify_url,soundcloud_url")
+    music.from("release_read_model")
+      .select("id,title,release_type,release_date,story,core_emotion,audience,primary_hook,visual_direction,genre,subgenre,release_identity,smart_link_site_id,smart_link_slug,spotify_url,soundcloud_url")
       .eq("id", campaign.release_id)
       .eq("owner_id", user.id)
       .eq("artist_id", artist.artistId)

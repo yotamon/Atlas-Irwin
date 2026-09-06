@@ -93,7 +93,7 @@ export default async function ProductionPage({
   const momentsDb = asMomentsClient(supabase);
   const [itemsResult, releasesResult] = await Promise.all([
     marketing.from("content_items").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("updated_at", { ascending: false }).limit(100),
-    music.from("releases").select("id,title,release_date").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("updated_at", { ascending: false }),
+    music.from("release_read_model").select("id,title,release_date").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("updated_at", { ascending: false }),
   ]);
   if (itemsResult.error) throw new Error(itemsResult.error.message);
   if (releasesResult.error) throw new Error(releasesResult.error.message);

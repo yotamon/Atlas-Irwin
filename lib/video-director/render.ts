@@ -83,7 +83,7 @@ async function approvedMoments(
   project: ExtendedMusicVideoProject,
 ) {
   const musicDb = db as unknown as SupabaseClient<Database>;
-  const { data: release } = await musicDb.from("releases")
+  const { data: release } = await musicDb.from("release_read_model")
     .select("artist_id")
     .eq("id", project.release_id)
     .eq("owner_id", ownerId)

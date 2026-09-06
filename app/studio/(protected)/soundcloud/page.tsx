@@ -50,7 +50,7 @@ export default async function SoundCloudPage({
         .from("soundcloud_playlists")
         .select("*")
         .order("synced_at", { ascending: false }),
-      supabase.from("releases").select("id,title"),
+      supabase.from("release_read_model").select("id,title"),
     ]);
 
   const releaseById = new Map((releases ?? []).map((release) => [release.id, release]));

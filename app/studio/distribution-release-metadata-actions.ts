@@ -27,7 +27,7 @@ export async function saveDistributionReleaseMetadata(form: FormData) {
     : await resolveActiveArtistContext(supabase, user);
   const db = supabase as unknown as SupabaseClient<DistributionDatabase>;
 
-  const { data: release, error: releaseError } = await db.from("releases")
+  const { data: release, error: releaseError } = await db.from("release_read_model")
     .select("id")
     .eq("id", releaseId)
     .eq("owner_id", user.id)

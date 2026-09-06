@@ -41,7 +41,7 @@ export async function saveDistributionTerritories(form: FormData) {
   const db = supabase as unknown as Db;
 
   const [releaseResult, configResult] = await Promise.all([
-    db.from("releases").select("id").eq("id", releaseId).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
+    db.from("release_read_model").select("id").eq("id", releaseId).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
     db.from("release_distribution_configs").select("*").eq("release_id", releaseId).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
   ]);
   if (releaseResult.error) throw new Error(releaseResult.error.message);

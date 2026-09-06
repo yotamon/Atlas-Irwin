@@ -139,7 +139,7 @@ export async function saveCampaignMetric(form: FormData) {
     assertScopedId(marketing, artist, "campaign_experiments", experimentId),
   ]);
   if (releaseId) {
-    const { data: release, error: releaseError } = await music.from("releases")
+    const { data: release, error: releaseError } = await music.from("release_read_model")
       .select("id")
       .eq("id", releaseId)
       .eq("owner_id", artist.userId)

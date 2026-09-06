@@ -26,7 +26,7 @@ async function studioLyricsContext(form: FormData) {
   const releaseId = text(form, "release_id");
   if (!trackId || !releaseId) throw new Error("Track and release are required for Lyrics Intelligence.");
 
-  const { data: track, error } = await music.from("tracks")
+  const { data: track, error } = await music.from("track_read_model")
     .select("id,release_id,title")
     .eq("id", trackId)
     .eq("release_id", releaseId)

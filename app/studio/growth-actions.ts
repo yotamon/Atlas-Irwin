@@ -62,7 +62,7 @@ async function uniqueReleaseSlug(ctx: GrowthActionContext, title: string) {
   for (let index = 0; index < 50; index += 1) {
     const slug = index === 0 ? base : `${base}-${index + 1}`;
     const { data, error } = await ctx.music
-      .from("releases")
+      .from("release_read_model")
       .select("id")
       .eq("owner_id", ctx.user.id)
       .eq("artist_id", ctx.artist.artistId)
@@ -174,7 +174,7 @@ export async function generateGrowthPlan() {
       .eq("artist_id", ctx.artist.artistId)
       .neq("status", "archived"),
     ctx.music
-      .from("releases")
+      .from("release_read_model")
       .select("id,release_date,status")
       .eq("owner_id", ctx.user.id)
       .eq("artist_id", ctx.artist.artistId)
@@ -297,7 +297,7 @@ export async function refreshGrowthOpportunities() {
       .eq("artist_id", ctx.artist.artistId)
       .neq("status", "archived"),
     ctx.music
-      .from("releases")
+      .from("release_read_model")
       .select("id,title,status,release_date")
       .eq("owner_id", ctx.user.id)
       .eq("artist_id", ctx.artist.artistId),
@@ -367,7 +367,7 @@ export async function refreshGrowthOpportunities() {
 async function createCatalogRevivalCampaign(ctx: GrowthActionContext, releaseId: string, opportunityId: string) {
   const [{ data: release, error: releaseError }, socialResult] = await Promise.all([
     ctx.music
-      .from("releases")
+      .from("release_read_model")
       .select("id,title,release_date,primary_hook,core_emotion")
       .eq("id", releaseId)
       .eq("owner_id", ctx.user.id)

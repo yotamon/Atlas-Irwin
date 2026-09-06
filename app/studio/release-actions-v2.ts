@@ -57,7 +57,7 @@ async function uniqueReleaseSlug(
     // owner_id remains part of the legacy uniqueness contract during the compatibility
     // window, while artist_id prevents a release lookup from drifting into another artist.
     let query = db
-      .from("releases")
+      .from("release_read_model")
       .select("id")
       .eq("owner_id", ownerId)
       .eq("artist_id", artistId)
@@ -236,7 +236,7 @@ export async function saveReleaseV2(form: FormData) {
 
   const { data: existing, error: existingError } = id
     ? await db
-        .from("releases")
+        .from("release_read_model")
         .select("id,slug,status,release_date")
         .eq("id", id)
         .eq("artist_id", artist.artistId)

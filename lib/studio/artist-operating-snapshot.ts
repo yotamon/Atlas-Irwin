@@ -156,8 +156,8 @@ export async function loadArtistOperatingSnapshot({
   ] = await Promise.all([
     preferencesPromise,
     operatingContextPromise,
-    music.from("releases").select("id,title,release_date,active_release,artwork_url,cover_asset,primary_hook,smart_link_url,spotify_url,soundcloud_url,youtube_url,status,is_archived").eq("owner_id", userId).eq("artist_id", artist.artistId).order("updated_at", { ascending: false }),
-    music.from("tracks").select("id,release_id,audio_url,is_primary").eq("owner_id", userId).eq("artist_id", artist.artistId),
+    music.from("release_read_model").select("id,title,release_date,active_release,cover_public_url,cover_asset_id,primary_hook,smart_link_site_id,smart_link_slug,spotify_url,soundcloud_url,youtube_url,status,is_archived").eq("owner_id", userId).eq("artist_id", artist.artistId).order("updated_at", { ascending: false }),
+    music.from("track_read_model").select("id,release_id,master_audio_asset_id,master_audio_public_url,master_audio_bucket_name,master_audio_storage_path,is_primary").eq("owner_id", userId).eq("artist_id", artist.artistId),
     marketing.from("campaigns").select("id,release_id,status").eq("owner_id", userId).eq("artist_id", artist.artistId).not("status", "eq", "archived"),
     operational.from("tasks").select("id,title,due_at,priority,status").eq("owner_id", userId).eq("artist_id", artist.artistId).not("status", "in", '("Done","Skipped")').order("due_at", { ascending: true }).limit(30),
     marketing.from("automation_jobs").select("id,campaign_id,job_type,status,approval_status,run_after").eq("owner_id", userId).eq("artist_id", artist.artistId).not("status", "in", '("completed","failed","cancelled")').order("run_after", { ascending: true }).limit(40),

@@ -102,8 +102,8 @@ export async function processDueOutreachEnrollments(limit = 25, scope?: Marketin
     const releaseId = campaignResult.data?.release_id ?? null;
     if (releaseId) {
       const { data: release, error: releaseError } = await music
-        .from("releases")
-        .select("title,smart_link_url,spotify_url,soundcloud_url")
+        .from("release_read_model")
+        .select("title,smart_link_site_id,smart_link_slug,spotify_url,soundcloud_url")
         .eq("id", releaseId)
         .eq("owner_id", enrollment.owner_id)
         .eq("artist_id", enrollment.artist_id)

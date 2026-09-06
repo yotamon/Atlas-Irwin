@@ -67,7 +67,7 @@ export async function prepareReleaseGrowthPlan({
       .eq("artist_id", artistId)
       .neq("status", "archived"),
     music
-      .from("releases")
+      .from("release_read_model")
       .select("id,release_date,status")
       .eq("owner_id", ownerId)
       .eq("artist_id", artistId)
@@ -166,7 +166,7 @@ export async function prepareDetectedGrowthOpportunities({
       .eq("artist_id", artistId)
       .neq("status", "archived"),
     music
-      .from("releases")
+      .from("release_read_model")
       .select("id,title,status,release_date")
       .eq("owner_id", ownerId)
       .eq("artist_id", artistId),

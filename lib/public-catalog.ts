@@ -72,7 +72,7 @@ async function loadCatalogBundle(
       .eq("id", artistId)
       .single(),
     supabase
-      .from("releases")
+      .from("release_read_model")
       .select("*")
       .eq("owner_id", ownerId)
       .eq("artist_id", artistId)
@@ -87,7 +87,7 @@ async function loadCatalogBundle(
       .eq("enabled", true)
       .order("display_order", { ascending: true }),
     supabase
-      .from("tracks")
+      .from("track_read_model")
       .select("*")
       .eq("owner_id", ownerId)
       .eq("artist_id", artistId),

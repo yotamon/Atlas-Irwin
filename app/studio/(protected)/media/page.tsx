@@ -56,7 +56,7 @@ export default async function MediaLibraryPage({ searchParams }: { searchParams:
   const [assetsResult, linksResult, releasesResult] = await Promise.all([
     supabase.from("media_assets").select("*").eq("owner_id", user.id).order("created_at", { ascending: params.sort !== "oldest" }),
     supabase.from("media_links").select("*").eq("owner_id", user.id),
-    supabase.from("releases").select("id,title").eq("owner_id", user.id).order("title"),
+    supabase.from("release_read_model").select("id,title").eq("owner_id", user.id).order("title"),
   ]);
   if (assetsResult.error) throw new Error(assetsResult.error.message);
   if (linksResult.error) throw new Error(linksResult.error.message);

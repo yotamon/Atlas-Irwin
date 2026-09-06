@@ -57,9 +57,9 @@ export default async function VideoProjectPage({
     mediaLinksResult,
     thumbnailAssetsResult,
   ] = await Promise.all([
-    music.from("releases").select("*")
+    music.from("release_read_model").select("*")
       .eq("id", project.release_id).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
-    music.from("tracks").select("*")
+    music.from("track_read_model").select("*")
       .eq("id", project.track_id).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
     db.from("music_video_concepts").select("*").eq("project_id", project.id).eq("owner_id", user.id)
       .order("round_number", { ascending: false }).order("display_order"),

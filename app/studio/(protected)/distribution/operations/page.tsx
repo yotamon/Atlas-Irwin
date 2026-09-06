@@ -24,7 +24,7 @@ export default async function DistributionOperations({
   const artist = await resolveActiveArtistContext(supabase, user);
   const db = supabase as unknown as Db;
   const [releasesResult, configsResult, submissionsResult, issuesResult, eventsResult, operationsResult] = await Promise.all([
-    db.from("releases").select("id,title,artist,release_date").eq("owner_id", user.id).eq("artist_id", artist.artistId).eq("is_archived", false).order("updated_at", { ascending: false }),
+    db.from("release_read_model").select("id,title,artist_name,release_date").eq("owner_id", user.id).eq("artist_id", artist.artistId).eq("is_archived", false).order("updated_at", { ascending: false }),
     db.from("release_distribution_configs").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("updated_at", { ascending: false }),
     db.from("distribution_submissions").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("submitted_at", { ascending: false }).limit(20),
     db.from("distribution_validation_issues").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).in("status", ["open", "acknowledged"]).order("severity").limit(30),

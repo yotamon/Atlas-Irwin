@@ -39,10 +39,10 @@ export async function syncDistributionStatus(form: FormData) {
     : await resolveActiveArtistContext(supabase, user);
   const db = supabase as unknown as Db;
   const [releaseResult, configResult, accountResult, tracksResult, metadataResult] = await Promise.all([
-    db.from("releases").select("id,upc").eq("id", releaseId).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
+    db.from("release_read_model").select("id,upc").eq("id", releaseId).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
     db.from("release_distribution_configs").select("*").eq("release_id", releaseId).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
     db.from("distribution_accounts").select("*").eq("owner_id", user.id).eq("provider", "revelator").maybeSingle(),
-    db.from("tracks").select("id,title").eq("release_id", releaseId).eq("owner_id", user.id).order("display_order"),
+    db.from("track_read_model").select("id,title").eq("release_id", releaseId).eq("owner_id", user.id).order("display_order"),
     db.from("distribution_track_metadata").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId),
   ]);
   for (const result of [releaseResult, configResult, accountResult, tracksResult, metadataResult]) {

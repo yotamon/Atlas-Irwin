@@ -43,9 +43,9 @@ export async function approveCreativeMemoryLookReferences(form: FormData) {
   if (project.status !== "look_review") throw new Error("Visual language can only be approved during look review.");
 
   const [{ data: release, error: releaseError }, { data: track, error: trackError }] = await Promise.all([
-    music.from("releases").select("id,artist_id")
+    music.from("release_read_model").select("id,artist_id")
       .eq("id", project.release_id).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
-    music.from("tracks").select("id,release_id,artist_id")
+    music.from("track_read_model").select("id,release_id,artist_id")
       .eq("id", project.track_id).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
   ]);
   if (releaseError || !release) throw new Error(releaseError?.message || "Video project does not belong to the active artist.");

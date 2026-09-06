@@ -202,8 +202,8 @@ export async function composeFreeSocialAsset(ownerId: string, contentItemId: str
   if (!item.release_id) throw new Error("Free composition requires content linked to a release.");
 
   const [releaseResult, trackResult] = await Promise.all([
-    db.from("releases").select("id,title,artwork_url").eq("id", item.release_id).eq("owner_id", ownerId).single(),
-    db.from("tracks").select("id,title,audio_url,display_order").eq("release_id", item.release_id).eq("owner_id", ownerId).not("audio_url", "is", null).order("display_order", { ascending: true }).limit(1).maybeSingle(),
+    db.from("release_read_model").select("id,title,cover_public_url").eq("id", item.release_id).eq("owner_id", ownerId).single(),
+    db.from("track_read_model").select("id,title,master_audio_asset_id,master_audio_public_url,master_audio_bucket_name,master_audio_storage_path,display_order").eq("release_id", item.release_id).eq("owner_id", ownerId).not("audio_url", "is", null).order("display_order", { ascending: true }).limit(1).maybeSingle(),
   ]);
   if (releaseResult.error || !releaseResult.data) throw new Error(releaseResult.error?.message || "Release not found.");
   if (trackResult.error) throw new Error(trackResult.error.message);

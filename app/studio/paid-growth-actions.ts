@@ -115,7 +115,7 @@ export async function createPaidGrowthExperiment(form: FormData) {
   if (!releaseId || !contentItemId) throw new Error("Choose a release and an approved creative before creating a paid test.");
 
   const [releaseResult, creativeResult, smartLinkResult, momentResult, learningsResult] = await Promise.all([
-    paid.from("releases").select("id,title").eq("id", releaseId).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
+    paid.from("release_read_model").select("id,title").eq("id", releaseId).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
     marketing.from("content_items").select("id,title,release_id,campaign_id,asset_url,status").eq("id", contentItemId).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
     paid.from("smart_links").select("id,release_id,is_active").eq("release_id", releaseId).eq("owner_id", user.id).eq("artist_id", artist.artistId).eq("is_active", true).maybeSingle(),
     momentId ? paid.from("moments").select("id,label,state,release_id").eq("id", momentId).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle() : Promise.resolve({ data: null, error: null }),

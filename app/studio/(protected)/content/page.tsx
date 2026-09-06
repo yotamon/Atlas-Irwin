@@ -21,7 +21,7 @@ export default async function ContentPage({ searchParams }: {
   }
   const [{ data: items, error: itemError }, { data: releases, error: releaseError }] = await Promise.all([
     query,
-    supabase.from("releases").select("id,title")
+    supabase.from("release_read_model").select("id,title")
       .eq("owner_id", user.id).eq("artist_id", artist.artistId).order("title"),
   ]);
   if (itemError) throw new Error(itemError.message);

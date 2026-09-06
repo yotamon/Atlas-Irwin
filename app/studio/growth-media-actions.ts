@@ -123,8 +123,8 @@ export async function attachReleaseMasterFromMedia(form: FormData) {
 
   const [assetResult, releaseResult, tracksResult, linkedVaultResult, assetVaultResult] = await Promise.all([
     supabase.from("media_assets").select("id,public_url,mime_type,duration_ms,metadata").eq("id", assetId).eq("owner_id", user.id).single(),
-    music.from("releases").select("id,title,status,publish_state,artist_id").eq("id", releaseId).eq("owner_id", user.id).eq("artist_id", artist.artistId).single(),
-    music.from("tracks").select("*").eq("release_id", releaseId).eq("owner_id", user.id).eq("artist_id", artist.artistId).order("display_order").order("created_at"),
+    music.from("release_read_model").select("id,title,status,publish_state,artist_id").eq("id", releaseId).eq("owner_id", user.id).eq("artist_id", artist.artistId).single(),
+    music.from("track_read_model").select("*").eq("release_id", releaseId).eq("owner_id", user.id).eq("artist_id", artist.artistId).order("display_order").order("created_at"),
     growth.from("track_vault").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).eq("linked_release_id", releaseId).order("updated_at", { ascending: false }).limit(1).maybeSingle(),
     growth.from("track_vault").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).eq("media_asset_id", assetId).limit(1).maybeSingle(),
   ]);

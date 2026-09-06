@@ -30,13 +30,13 @@ export default async function VideoDirectorPage({
 
   const [releasesResult, tracksResult, projectsResult, momentsResult] = await Promise.all([
     music
-      .from("releases")
+      .from("release_read_model")
       .select("*")
       .eq("owner_id", artist.userId)
       .eq("artist_id", artist.artistId)
       .order("updated_at", { ascending: false }),
     music
-      .from("tracks")
+      .from("track_read_model")
       .select("*")
       .eq("owner_id", artist.userId)
       .eq("artist_id", artist.artistId)

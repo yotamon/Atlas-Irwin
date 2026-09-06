@@ -48,7 +48,7 @@ export async function suggestTrackMatches(
   },
 ): Promise<MatchSuggestion[]> {
   const { data: tracks, error } = await supabase
-    .from("tracks")
+    .from("track_read_model")
     .select("*,releases(title)")
     .eq("owner_id", ownerId);
   if (error) throw new Error(error.message);
@@ -101,7 +101,7 @@ export async function linkSoundCloudTrack(
       .select("*")
       .eq("id", soundcloudTrackId)
       .single(),
-    supabase.from("tracks").select("*").eq("id", canonicalTrackId).single(),
+    supabase.from("track_read_model").select("*").eq("id", canonicalTrackId).single(),
   ]);
   if (!external || !track) throw new Error("SoundCloud track or canonical track not found.");
   if (track.owner_id !== ownerId) throw new Error("Track ownership mismatch.");
@@ -168,14 +168,14 @@ export async function resolveMetricReleaseId(
   if (soundcloudTrack.linked_release_id) return soundcloudTrack.linked_release_id;
   if (soundcloudTrack.linked_track_id) {
     const { data } = await supabase
-      .from("tracks")
+      .from("track_read_model")
       .select("release_id")
       .eq("id", soundcloudTrack.linked_track_id)
       .maybeSingle();
     if (data?.release_id) return data.release_id;
   }
   const { data: byUrl } = await supabase
-    .from("tracks")
+    .from("track_read_model")
     .select("release_id")
     .eq("owner_id", ownerId)
     .eq("soundcloud_url", soundcloudTrack.permalink_url)

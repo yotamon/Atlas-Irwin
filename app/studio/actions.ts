@@ -55,7 +55,7 @@ async function uniqueReleaseSlug(
   for (let index = 0; index < 50; index += 1) {
     const slug = index === 0 ? base : `${base}-${index + 1}`;
     const { data, error } = await supabase
-      .from("releases")
+      .from("release_read_model")
       .select("id")
       .eq("owner_id", ownerId)
       .eq("slug", slug)
@@ -189,7 +189,7 @@ export async function generateIdentity(form: FormData) {
   const { supabase } = await requireStudioAdmin();
   const id = z.uuid().parse(value(form, "id"));
   const { data, error } = await supabase
-    .from("releases")
+    .from("release_read_model")
     .select("*")
     .eq("id", id)
     .single();
@@ -216,7 +216,7 @@ export async function generateContentPack(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
   const id = z.uuid().parse(value(form, "id"));
   const { data, error } = await supabase
-    .from("releases")
+    .from("release_read_model")
     .select("*")
     .eq("id", id)
     .single();
@@ -676,7 +676,7 @@ export async function importSpotifyAlbum(form: FormData) {
   if (tracksError) throw new Error(tracksError.message);
 
   const { data: existingRelease, error: existingError } = await supabase
-    .from("releases")
+    .from("release_read_model")
     .select("id")
     .eq("owner_id", user.id)
     .eq("spotify_url", album.spotify_url)
@@ -709,7 +709,7 @@ export async function importSpotifyAlbum(form: FormData) {
   }
 
   const { data: existingTracks, error: existingTracksError } = await supabase
-    .from("tracks")
+    .from("track_read_model")
     .select("spotify_url")
     .eq("release_id", releaseId);
   if (existingTracksError) throw new Error(existingTracksError.message);

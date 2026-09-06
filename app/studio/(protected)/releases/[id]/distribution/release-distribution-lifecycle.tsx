@@ -13,7 +13,7 @@ export default async function ReleaseDistributionLifecycle({ params }: { params:
   const artist = await resolveActiveArtistContext(supabase, user);
   const db = supabase as unknown as Db;
   const [releaseResult, configResult, deliveriesResult, operationsResult] = await Promise.all([
-    db.from("releases").select("id").eq("id", id).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
+    db.from("release_read_model").select("id").eq("id", id).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
     db.from("release_distribution_configs").select("state,provider_release_id,provider_metadata").eq("release_id", id).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
     db.from("distribution_deliveries").select("id,store_id,store_name,state,provider_status,store_url").eq("release_id", id).eq("owner_id", user.id).eq("artist_id", artist.artistId).order("store_name"),
     db.from("distribution_provider_operations").select("id,state,operation_type").eq("release_id", id).eq("owner_id", user.id).eq("artist_id", artist.artistId).in("state", ["started", "ambiguous"]),

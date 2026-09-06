@@ -35,7 +35,7 @@ export async function saveMetric(form: FormData) {
   const releaseId = nullable(form, "release_id");
   const contentItemId = nullable(form, "content_item_id");
   if (releaseId) {
-    const { data, error } = await music.from("releases").select("id")
+    const { data, error } = await music.from("release_read_model").select("id")
       .eq("id", z.uuid().parse(releaseId)).eq("owner_id", artist.userId).eq("artist_id", artist.artistId).maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) throw new Error("Release does not belong to the active artist.");
@@ -75,7 +75,7 @@ export async function saveLearning(form: FormData) {
   const music = supabase;
   const operational = asArtistScopedOperationalClient(supabase);
   const releaseId = z.uuid().parse(value(form, "release_id"));
-  const { data: release, error: releaseError } = await music.from("releases").select("id")
+  const { data: release, error: releaseError } = await music.from("release_read_model").select("id")
     .eq("id", releaseId).eq("owner_id", artist.userId).eq("artist_id", artist.artistId).maybeSingle();
   if (releaseError) throw new Error(releaseError.message);
   if (!release) throw new Error("Release does not belong to the active artist.");

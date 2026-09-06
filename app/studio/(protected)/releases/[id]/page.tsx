@@ -57,8 +57,8 @@ export default async function ReleaseDetail({
     campaignResult,
     vaultResult,
   ] = await Promise.all([
-    music.from("releases").select("*").eq("id", id).eq("artist_id", artist.artistId).single(),
-    music.from("tracks").select("*").eq("release_id", id).eq("artist_id", artist.artistId).order("display_order").order("is_primary", { ascending: false }),
+    music.from("release_read_model").select("*").eq("id", id).eq("artist_id", artist.artistId).single(),
+    music.from("track_read_model").select("*").eq("release_id", id).eq("artist_id", artist.artistId).order("display_order").order("is_primary", { ascending: false }),
     music.from("homepage_placements").select("*").eq("release_id", id).eq("artist_id", artist.artistId).maybeSingle(),
     music.from("media_links").select("*").eq("release_id", id).eq("artist_id", artist.artistId),
     operational.from("content_items").select("id", { count: "exact", head: true }).eq("release_id", id).eq("artist_id", artist.artistId),

@@ -109,7 +109,7 @@ export async function createCampaign(form: FormData) {
   const objective = objectiveSchema.parse(value(form, "objective") || "Streams");
   const mode = modeSchema.parse(value(form, "mode") || "assisted");
   const { data: release, error: releaseError } = await music
-    .from("releases")
+    .from("release_read_model")
     .select("id,title,release_date")
     .eq("id", releaseId)
     .eq("owner_id", user.id)
@@ -187,8 +187,8 @@ export async function generateCampaignStrategy(form: FormData) {
 
   const [releaseResult, brandResult, legacyLearningResult, learningResult, contentResult, metricResult] = await Promise.all([
     music
-      .from("releases")
-      .select("id,title,release_type,release_date,story,core_emotion,audience,primary_hook,visual_direction,genre,subgenre,release_identity,smart_link_url,spotify_url,soundcloud_url")
+      .from("release_read_model")
+      .select("id,title,release_type,release_date,story,core_emotion,audience,primary_hook,visual_direction,genre,subgenre,release_identity,smart_link_site_id,smart_link_slug,spotify_url,soundcloud_url")
       .eq("id", campaign.release_id)
       .eq("owner_id", user.id)
       .eq("artist_id", artist.artistId)

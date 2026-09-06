@@ -55,7 +55,7 @@ async function assertActiveArtistStemTarget(form: FormData) {
   if (!trackId) throw new Error("Stem Intelligence requires a track target.");
 
   const { data: track, error: trackError } = await music
-    .from("tracks")
+    .from("track_read_model")
     .select("id,release_id,artist_id")
     .eq("id", trackId)
     .eq("artist_id", artist.artistId)

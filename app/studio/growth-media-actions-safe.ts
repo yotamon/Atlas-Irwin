@@ -14,7 +14,7 @@ async function releaseArtistContext(releaseId: string) {
   const artist = await resolveActiveArtistContext(supabase, user);
   const db = supabase;
   const { data: release, error } = await db
-    .from("releases")
+    .from("release_read_model")
     .select("id")
     .eq("id", releaseId)
     .eq("artist_id", artist.artistId)

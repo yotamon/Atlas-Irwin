@@ -13,10 +13,10 @@ export async function loadDistributionArtistState(
 ): Promise<DistributionArtistState | null> {
   const db = client as unknown as SupabaseClient<DistributionDatabase>;
   const [releaseResult, tracksResult, configResult, releaseMetaResult, metadataResult, writersResult, contributorsResult, profilesResult, issuesResult] = await Promise.all([
-    db.from("releases").select("*").eq("id", releaseId).eq("owner_id", ownerId).eq("artist_id", artistId).maybeSingle(),
+    db.from("release_read_model").select("*").eq("id", releaseId).eq("owner_id", ownerId).eq("artist_id", artistId).maybeSingle(),
     // Track artist scope is inherited and enforced by the canonical release relationship.
     // Filtering by the already artist-validated release keeps this read safe without duplicating stale base types.
-    db.from("tracks").select("*").eq("release_id", releaseId).eq("owner_id", ownerId).order("display_order"),
+    db.from("track_read_model").select("*").eq("release_id", releaseId).eq("owner_id", ownerId).order("display_order"),
     db.from("release_distribution_configs").select("*").eq("release_id", releaseId).eq("owner_id", ownerId).eq("artist_id", artistId).maybeSingle(),
     db.from("distribution_release_metadata").select("*").eq("release_id", releaseId).eq("owner_id", ownerId).eq("artist_id", artistId).maybeSingle(),
     db.from("distribution_track_metadata").select("*").eq("owner_id", ownerId).eq("artist_id", artistId),

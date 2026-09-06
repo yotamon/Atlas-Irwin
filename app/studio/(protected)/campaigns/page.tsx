@@ -26,7 +26,7 @@ export default async function CampaignsPage() {
   const music = supabase;
   const marketing = asMarketingClient(supabase);
   const [releasesResult, campaignsResult, experimentsResult, contentResult, variantsResult, jobsResult] = await Promise.all([
-    music.from("releases").select("id,title,release_date,artwork_url,primary_hook,core_emotion,status").eq("artist_id", artist.artistId).order("release_date", { ascending: false }),
+    music.from("release_read_model").select("id,title,release_date,cover_public_url,primary_hook,core_emotion,status").eq("artist_id", artist.artistId).order("release_date", { ascending: false }),
     marketing.from("campaigns").select("*").eq("owner_id", artist.userId).eq("artist_id", artist.artistId).order("updated_at", { ascending: false }),
     marketing.from("campaign_experiments").select("id,campaign_id,status").eq("owner_id", artist.userId).eq("artist_id", artist.artistId),
     marketing.from("content_items").select("id,campaign_id,status,scheduled_at,approval_status").eq("owner_id", artist.userId).eq("artist_id", artist.artistId),

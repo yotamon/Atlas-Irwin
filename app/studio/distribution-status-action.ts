@@ -44,7 +44,7 @@ export async function syncDistributionStatus(form: FormData) {
     : await resolveActiveArtistContext(supabase, user);
   const db = supabase as unknown as Db;
   const [releaseResult, configResult, accountResult, submissionResult] = await Promise.all([
-    db.from("releases").select("id").eq("id", releaseId).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
+    db.from("release_read_model").select("id").eq("id", releaseId).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
     db.from("release_distribution_configs").select("*").eq("release_id", releaseId).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
     db.from("distribution_accounts").select("*").eq("owner_id", user.id).eq("provider", "revelator").maybeSingle(),
     db.from("distribution_submissions").select("id").eq("release_id", releaseId).eq("owner_id", user.id).eq("artist_id", artist.artistId).order("version", { ascending: false }).limit(1).maybeSingle(),

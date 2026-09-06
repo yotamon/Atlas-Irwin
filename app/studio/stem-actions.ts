@@ -50,8 +50,8 @@ async function canonicalTrackContext(trackId: string) {
   const { supabase, user } = await requireStudioAdmin();
   const db = asStemClient(supabase);
   const [trackResult, intelligenceResult] = await Promise.all([
-    db.from("tracks")
-      .select("id,owner_id,release_id,title,audio_url")
+    db.from("track_read_model")
+      .select("id,owner_id,release_id,title,master_audio_asset_id,master_audio_public_url,master_audio_bucket_name,master_audio_storage_path")
       .eq("id", trackId)
       .eq("owner_id", user.id)
       .single(),
@@ -333,7 +333,7 @@ export async function removeTrackStem(form: FormData) {
   const db = asStemClient(supabase);
   const stemResult = await db.from("track_stems").select("track_id,media_asset_id").eq("id", stemId).eq("owner_id", user.id).single();
   if (stemResult.error || !stemResult.data) throw new Error(stemResult.error?.message || "Stem not found.");
-  const trackResult = await db.from("tracks").select("release_id").eq("id", stemResult.data.track_id).eq("owner_id", user.id).single();
+  const trackResult = await db.from("track_read_model").select("release_id").eq("id", stemResult.data.track_id).eq("owner_id", user.id).single();
   if (trackResult.error || !trackResult.data) throw new Error(trackResult.error?.message || "Track not found.");
   const deleted = await db.from("track_stems").delete().eq("id", stemId).eq("owner_id", user.id);
   if (deleted.error) throw new Error(deleted.error.message);
@@ -472,7 +472,7 @@ export async function toggleAudioScenePin(form: FormData) {
   if (scene.error || !scene.data) throw new Error(scene.error?.message || "Audio Scene not found.");
   const updated = await db.from("audio_scenes").update({ is_pinned: !scene.data.is_pinned }).eq("id", sceneId).eq("owner_id", user.id);
   if (updated.error) throw new Error(updated.error.message);
-  const track = await db.from("tracks").select("release_id").eq("id", scene.data.track_id).eq("owner_id", user.id).single();
+  const track = await db.from("track_read_model").select("release_id").eq("id", scene.data.track_id).eq("owner_id", user.id).single();
   if (track.error || !track.data) throw new Error(track.error?.message || "Track not found.");
   revalidatePath(`/studio/releases/${track.data.release_id}`);
 }

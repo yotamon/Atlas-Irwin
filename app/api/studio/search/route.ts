@@ -20,7 +20,7 @@ export async function GET(request: Request) {
   const pattern = `%${query.replaceAll("%", "\\%").replaceAll("_", "\\_")}%`;
 
   const [releaseResult, trackResult, campaignResult, contentResult] = await Promise.all([
-    music.from("releases").select("id,title,status,release_type,release_date")
+    music.from("release_read_model").select("id,title,status,release_type,release_date")
       .eq("owner_id", user.id).eq("artist_id", artist.artistId).ilike("title", pattern).limit(5),
     growth.from("track_vault").select("id,title,status,version,linked_release_id")
       .eq("owner_id", user.id).eq("artist_id", artist.artistId).ilike("title", pattern).neq("status", "archived").limit(5),

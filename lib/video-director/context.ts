@@ -65,7 +65,7 @@ export async function loadVideoProjectContext(
   const operationalDb = db as unknown as SupabaseClient<ArtistScopedCoreOperationalDatabase>;
   const stemDb = db as unknown as SupabaseClient<StemDatabase>;
   const lyricsDb = db as unknown as SupabaseClient<LyricsDatabase>;
-  let releaseQuery = musicDb.from("releases").select("*")
+  let releaseQuery = musicDb.from("release_read_model").select("*")
     .eq("id", project.release_id)
     .eq("owner_id", ownerId);
   if (expectedArtistId) releaseQuery = releaseQuery.eq("artist_id", expectedArtistId);
@@ -75,7 +75,7 @@ export async function loadVideoProjectContext(
   if (expectedArtistId && artistId !== expectedArtistId) throw new Error("Video project does not belong to the active artist.");
 
   const [trackResult, brandResult, linkResult, sceneResult, lyrics, creativeMemory] = await Promise.all([
-    musicDb.from("tracks").select("*")
+    musicDb.from("track_read_model").select("*")
       .eq("id", project.track_id)
       .eq("owner_id", ownerId)
       .eq("artist_id", artistId)
@@ -187,8 +187,8 @@ export async function resolveProjectAudioUrl(
   artistId?: string | null,
 ) {
   const musicDb = db as unknown as SupabaseClient<Database>;
-  let trackQuery = musicDb.from("tracks")
-    .select("audio_url")
+  let trackQuery = musicDb.from("track_read_model")
+    .select("master_audio_asset_id,master_audio_public_url,master_audio_bucket_name,master_audio_storage_path")
     .eq("id", project.track_id)
     .eq("owner_id", ownerId);
   if (artistId) trackQuery = trackQuery.eq("artist_id", artistId);

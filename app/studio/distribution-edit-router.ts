@@ -69,8 +69,8 @@ async function editableContext(form: FormData) {
   const db = supabase as unknown as Db;
 
   const [releaseResult, configResult] = await Promise.all([
-    db.from("releases")
-      .select("id,artist")
+    db.from("release_read_model")
+      .select("id,artist_name")
       .eq("id", id)
       .eq("owner_id", user.id)
       .eq("artist_id", artist.artistId)

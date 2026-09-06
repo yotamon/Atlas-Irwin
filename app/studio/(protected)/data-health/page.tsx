@@ -38,8 +38,8 @@ export default async function DataHealthPage({
   const { category = "all" } = await searchParams;
   const { supabase, user } = await requireStudioAdmin();
   const [releasesResult, tracksResult, assetsResult, linksResult, placementsResult, releaseLinksResult, soundCloudResult, spotifyResult, albumsResult] = await Promise.all([
-    supabase.from("releases").select("*").eq("owner_id", user.id),
-    supabase.from("tracks").select("*").eq("owner_id", user.id),
+    supabase.from("release_read_model").select("*").eq("owner_id", user.id),
+    supabase.from("track_read_model").select("*").eq("owner_id", user.id),
     supabase.from("media_assets").select("*").eq("owner_id", user.id),
     supabase.from("media_links").select("*").eq("owner_id", user.id),
     supabase.from("homepage_placements").select("*").eq("owner_id", user.id),

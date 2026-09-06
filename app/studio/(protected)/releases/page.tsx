@@ -26,7 +26,7 @@ export default async function ReleasesPage({
   const params = await searchParams;
   const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
   let query = db
-    .from("releases")
+    .from("release_read_model")
     .select("*")
     .eq("artist_id", artist.artistId)
     .order("updated_at", { ascending: false });

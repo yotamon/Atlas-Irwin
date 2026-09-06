@@ -35,7 +35,7 @@ export async function recordDirectorPreference(input: {
   if (projectError || !project) throw new Error(projectError?.message || "Video project not found for Creative Memory.");
 
   const musicDb = input.db as unknown as SupabaseClient<Database>;
-  let releaseQuery = musicDb.from("releases")
+  let releaseQuery = musicDb.from("release_read_model")
     .select("artist_id")
     .eq("id", input.releaseId ?? project.release_id)
     .eq("owner_id", input.ownerId);

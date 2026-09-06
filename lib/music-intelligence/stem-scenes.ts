@@ -55,7 +55,7 @@ async function loadStemIntelligenceState(
 ) {
   const db = asStemClient(client);
   const [trackResult, stemsResult, scenesResult, musicResult] = await Promise.all([
-    db.from("tracks").select("id,audio_url").eq("id", trackId).eq("owner_id", ownerId).maybeSingle(),
+    db.from("track_read_model").select("id,master_audio_asset_id,master_audio_public_url,master_audio_bucket_name,master_audio_storage_path").eq("id", trackId).eq("owner_id", ownerId).maybeSingle(),
     db.from("track_stems").select("*").eq("track_id", trackId).eq("owner_id", ownerId).order("display_order").order("created_at"),
     db.from("audio_scenes").select("*").eq("track_id", trackId).eq("owner_id", ownerId).order("is_pinned", { ascending: false }).order("score", { ascending: false, nullsFirst: false }),
     db.from("track_music_intelligence").select("analysis,analysis_version,source_audio_url").eq("track_id", trackId).eq("owner_id", ownerId).maybeSingle(),

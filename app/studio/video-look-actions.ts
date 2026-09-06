@@ -46,7 +46,7 @@ async function loadLookGeneration(projectId: string, generationId: string) {
   ]);
   if (projectError || !project) throw new Error(projectError?.message || "Video project not found.");
   if (generationError || !generation) throw new Error(generationError?.message || "Look generation not found.");
-  const { data: release, error: releaseError } = await music.from("releases")
+  const { data: release, error: releaseError } = await music.from("release_read_model")
     .select("id,artist_id")
     .eq("id", project.release_id)
     .eq("owner_id", user.id)

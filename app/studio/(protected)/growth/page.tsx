@@ -64,7 +64,7 @@ export default async function GrowthPage({ searchParams }: { searchParams: Promi
     growth.from("track_vault").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).neq("status", "archived").order("updated_at", { ascending: false }),
     growth.from("growth_plan_items").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).in("status", ["proposed", "accepted", "scheduled"]).order("target_date").order("sort_order"),
     growth.from("growth_opportunities").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).in("status", ["new", "accepted"]).order("priority", { ascending: false }).order("detected_at", { ascending: false }),
-    music.from("releases").select("id,title,status,release_date,artwork_url").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("release_date", { ascending: true }),
+    music.from("release_read_model").select("id,title,status,release_date,cover_public_url").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("release_date", { ascending: true }),
     marketing.from("metric_snapshots").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId),
   ]);
   const firstError = [settingsResult, vaultResult, planResult, opportunityResult, releasesResult, metricsResult].find((result) => result.error)?.error;

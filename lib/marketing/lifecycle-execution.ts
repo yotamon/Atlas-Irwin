@@ -216,8 +216,8 @@ export async function ensureLifecycleCampaignExecution(campaignId: string, now =
   }
 
   const [{ data: release, error: releaseError }, { count: contentCount, error: contentCountError }] = await Promise.all([
-    catalog.from("releases")
-      .select("id,owner_id,title,status,release_date,core_emotion,audience,primary_hook,visual_direction,artwork_url,smart_link_url,spotify_url,soundcloud_url")
+    catalog.from("release_read_model")
+      .select("id,owner_id,title,status,release_date,core_emotion,audience,primary_hook,visual_direction,cover_public_url,smart_link_site_id,smart_link_slug,spotify_url,soundcloud_url")
       .eq("id", campaign.release_id)
       .eq("owner_id", campaign.owner_id)
       .maybeSingle(),

@@ -76,13 +76,13 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
   if (vaultTrack.linked_release_id) {
     const [releaseResult, tracksResult] = await Promise.all([
       music
-        .from("releases")
-        .select("id,title,artwork_url,cover_alt,release_date")
+        .from("release_read_model")
+        .select("id,title,cover_public_url,cover_alt,release_date")
         .eq("id", vaultTrack.linked_release_id)
         .eq("artist_id", artist.artistId)
         .maybeSingle(),
       music
-        .from("tracks")
+        .from("track_read_model")
         .select("*")
         .eq("release_id", vaultTrack.linked_release_id)
         .eq("artist_id", artist.artistId)

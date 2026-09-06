@@ -25,8 +25,8 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
   const [operatingContext, momentsResult, releasesResult, tracksResult] = await Promise.all([
     loadArtistOperatingContext({ db: supabase, artist }),
     momentsDb.from("moments").select("*").eq("artist_id", artist.artistId).eq("state", "approved").order("confidence", { ascending: false }).order("start_ms", { ascending: true }).limit(24),
-    music.from("releases").select("id,title,release_date,active_release").eq("owner_id", artist.userId).eq("artist_id", artist.artistId).order("updated_at", { ascending: false }),
-    music.from("tracks").select("id,title,release_id,audio_url,is_primary").eq("owner_id", artist.userId).eq("artist_id", artist.artistId),
+    music.from("release_read_model").select("id,title,release_date,active_release").eq("owner_id", artist.userId).eq("artist_id", artist.artistId).order("updated_at", { ascending: false }),
+    music.from("track_read_model").select("id,title,release_id,master_audio_asset_id,master_audio_public_url,master_audio_bucket_name,master_audio_storage_path,is_primary").eq("owner_id", artist.userId).eq("artist_id", artist.artistId),
   ]);
   const firstError = [momentsResult, releasesResult, tracksResult].find((result) => result.error)?.error;
   if (firstError) throw new Error(firstError.message);

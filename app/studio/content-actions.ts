@@ -26,7 +26,7 @@ async function assertRelease(
   releaseId: string | null,
 ) {
   if (!releaseId) return;
-  const { data, error } = await supabase.from("releases").select("id")
+  const { data, error } = await supabase.from("release_read_model").select("id")
     .eq("id", z.uuid().parse(releaseId)).eq("owner_id", ownerId).eq("artist_id", artistId).maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Release does not belong to the active artist.");

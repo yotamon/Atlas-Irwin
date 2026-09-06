@@ -68,8 +68,8 @@ async function loadContext(releaseId: string): Promise<UpdateContext> {
   const { supabase, user } = await requireStudioAdmin();
   const db = supabase as unknown as Db;
   const [releaseResult, tracksResult, configResult, accountResult, metadataResult, writersResult, contributorsResult, profilesResult] = await Promise.all([
-    db.from("releases").select("*").eq("id", releaseId).eq("owner_id", user.id).single(),
-    db.from("tracks").select("*").eq("release_id", releaseId).eq("owner_id", user.id).order("display_order"),
+    db.from("release_read_model").select("*").eq("id", releaseId).eq("owner_id", user.id).single(),
+    db.from("track_read_model").select("*").eq("release_id", releaseId).eq("owner_id", user.id).order("display_order"),
     db.from("release_distribution_configs").select("*").eq("release_id", releaseId).eq("owner_id", user.id).single(),
     db.from("distribution_accounts").select("*").eq("owner_id", user.id).eq("provider", "revelator").single(),
     db.from("distribution_track_metadata").select("*").eq("owner_id", user.id),

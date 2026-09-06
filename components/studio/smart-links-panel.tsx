@@ -12,7 +12,7 @@ export async function SmartLinksPanel({ siteId, siteSlug }: { siteId: string; si
   const sites = asSitesClient(supabase);
   const [linksResult, releasesResult, domainsResult] = await Promise.all([
     smart.from("smart_links").select("*").eq("site_id", siteId).eq("owner_id", user.id).eq("artist_id", artist.artistId).eq("is_active", true).order("created_at", { ascending: false }),
-    music.from("releases").select("id,title,release_date").eq("owner_id", user.id).eq("artist_id", artist.artistId),
+    music.from("release_read_model").select("id,title,release_date").eq("owner_id", user.id).eq("artist_id", artist.artistId),
     sites.from("artist_site_domains").select("hostname,is_primary,verification_status,ssl_status").eq("site_id", siteId).eq("is_primary", true).maybeSingle(),
   ]);
   const firstError = [linksResult, releasesResult, domainsResult].find((result) => result.error)?.error;

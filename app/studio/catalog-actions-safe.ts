@@ -29,7 +29,7 @@ async function assertActiveArtistTargets(form: FormData) {
 
   for (const releaseId of releaseIds) {
     const { data, error } = await db
-      .from("releases")
+      .from("release_read_model")
       .select("id")
       .eq("id", releaseId)
       .eq("artist_id", artist.artistId)
@@ -40,7 +40,7 @@ async function assertActiveArtistTargets(form: FormData) {
 
   for (const trackId of trackIds) {
     const { data, error } = await db
-      .from("tracks")
+      .from("track_read_model")
       .select("id,release_id")
       .eq("id", trackId)
       .eq("artist_id", artist.artistId)

@@ -46,7 +46,7 @@ export async function loadPaidGrowthWorkspace(input: {
   const [experimentsResult, observationsResult, releasesResult, momentsResult, contentResult, sourcesResult] = await Promise.all([
     db.from("paid_growth_experiments").select("*").eq("owner_id", input.ownerId).eq("artist_id", input.artistId).order("updated_at", { ascending: false }),
     db.from("paid_growth_observations").select("*").eq("owner_id", input.ownerId).eq("artist_id", input.artistId).order("observed_at", { ascending: false }),
-    db.from("releases").select("id,title").eq("owner_id", input.ownerId).eq("artist_id", input.artistId),
+    db.from("release_read_model").select("id,title").eq("owner_id", input.ownerId).eq("artist_id", input.artistId),
     db.from("moments").select("id,label").eq("owner_id", input.ownerId).eq("artist_id", input.artistId),
     db.from("content_items").select("id,title,asset_url").eq("owner_id", input.ownerId).eq("artist_id", input.artistId),
     db.from("smart_link_sources").select("id,code").eq("owner_id", input.ownerId).eq("artist_id", input.artistId),

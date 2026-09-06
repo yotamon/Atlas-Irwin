@@ -35,8 +35,8 @@ export async function GET(request: Request) {
   if (!trackId) return Response.json({ error: "A valid track_id is required." }, { status: 400 });
 
   const service = createServiceClient();
-  const trackResult = await service.from("tracks")
-    .select("id,owner_id,release_id,audio_url")
+  const trackResult = await service.from("track_read_model")
+    .select("id,owner_id,release_id,master_audio_asset_id,master_audio_public_url,master_audio_bucket_name,master_audio_storage_path")
     .eq("id", trackId)
     .maybeSingle();
   if (trackResult.error) return Response.json({ error: trackResult.error.message }, { status: 500 });

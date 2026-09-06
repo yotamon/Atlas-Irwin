@@ -22,7 +22,7 @@ export async function upsertHomepagePlacement(
 ) {
   const db = supabase;
   const { data: release, error: releaseError } = await db
-    .from("releases")
+    .from("release_read_model")
     .select("id,owner_id,artist_id")
     .eq("id", releaseId)
     .maybeSingle();
@@ -33,7 +33,7 @@ export async function upsertHomepagePlacement(
 
   if (values.default_track_id) {
     const { data: track, error: trackError } = await db
-      .from("tracks")
+      .from("track_read_model")
       .select("id,release_id,artist_id")
       .eq("id", values.default_track_id)
       .eq("release_id", releaseId)
@@ -70,7 +70,7 @@ export async function setReleasePublishState(
 ) {
   const db = supabase;
   const { data: release, error: releaseError } = await db
-    .from("releases")
+    .from("release_read_model")
     .select("id,artist_id")
     .eq("id", releaseId)
     .maybeSingle();

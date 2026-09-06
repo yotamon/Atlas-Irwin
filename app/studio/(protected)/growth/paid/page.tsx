@@ -46,7 +46,7 @@ export default async function PaidGrowthPage({ searchParams }: { searchParams: P
   const [workspace, growthMemory, releasesResult, momentsResult, contentResult, smartLinksResult] = await Promise.all([
     loadPaidGrowthWorkspace({ db: supabase, ownerId: user.id, artistId: artist.artistId }),
     loadArtistMemoryForConsumer({ db: supabase, ownerId: user.id, artistId: artist.artistId, consumer: "growth" }),
-    paid.from("releases").select("id,title,status,release_date").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("updated_at", { ascending: false }),
+    paid.from("release_read_model").select("id,title,status,release_date").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("updated_at", { ascending: false }),
     paid.from("moments").select("id,release_id,label,state").eq("owner_id", user.id).eq("artist_id", artist.artistId).eq("state", "approved").order("created_at", { ascending: false }),
     marketing.from("content_items").select("id,title,release_id,platform,asset_url,status").eq("owner_id", user.id).eq("artist_id", artist.artistId).not("asset_url", "is", null).order("updated_at", { ascending: false }).limit(100),
     paid.from("smart_links").select("id,release_id,is_active").eq("owner_id", user.id).eq("artist_id", artist.artistId).eq("is_active", true),

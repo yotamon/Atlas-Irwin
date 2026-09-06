@@ -28,7 +28,7 @@ async function validateReleaseArtistScope(form: FormData) {
   const db = supabase as unknown as SupabaseClient<DistributionDatabase>;
 
   const { data: release, error } = await db
-    .from("releases")
+    .from("release_read_model")
     .select("id,artist_id,label,upc")
     .eq("id", releaseId)
     .eq("owner_id", user.id)

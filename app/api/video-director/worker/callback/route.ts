@@ -93,8 +93,8 @@ async function analysisMatchesCurrentMaster(
     .eq("id", projectId)
     .single();
   if (projectError || !project) throw new Error(projectError?.message || "Video project not found while validating analysis source.");
-  const { data: track, error: trackError } = await db.from("tracks")
-    .select("audio_url")
+  const { data: track, error: trackError } = await db.from("track_read_model")
+    .select("master_audio_asset_id,master_audio_public_url,master_audio_bucket_name,master_audio_storage_path")
     .eq("id", project.track_id)
     .single();
   if (trackError || !track) throw new Error(trackError?.message || "Track not found while validating analysis source.");

@@ -23,7 +23,7 @@ export default async function AnalyticsPage() {
   const operational = asArtistScopedOperationalClient(supabase);
   const [metricsResult, releasesResult, contentResult, legacyLearningsResult, campaignsResult, marketingLearningsResult] = await Promise.all([
     marketing.from("metric_snapshots").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("captured_at", { ascending: false }),
-    music.from("releases").select("id,title").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("title"),
+    music.from("release_read_model").select("id,title").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("title"),
     marketing.from("content_items").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId),
     operational.from("release_learnings").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("created_at", { ascending: false }),
     marketing.from("campaigns").select("id,name,objective,primary_kpi,status").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("updated_at", { ascending: false }),

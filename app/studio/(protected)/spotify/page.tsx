@@ -42,7 +42,7 @@ export default async function SpotifyPage({
       supabase.from("spotify_albums").select("*").order("release_date", { ascending: false }),
       supabase.from("spotify_tracks").select("*").order("album_spotify_id").order("disc_number").order("track_number"),
       supabase.from("spotify_playlists").select("*").order("synced_at", { ascending: false }),
-      supabase.from("releases").select("id,title,spotify_url"),
+      supabase.from("release_read_model").select("id,title,spotify_url"),
     ]);
   const releaseBySpotifyUrl = new Map(
     (releases ?? []).filter((release) => release.spotify_url).map((release) => [release.spotify_url, release]),

@@ -105,8 +105,8 @@ export default async function CampaignWorkspacePage({
   ] = await Promise.all([
     campaign.release_id
       ? music
-          .from("releases")
-          .select("id,title,release_date,artwork_url,primary_hook,core_emotion,visual_direction,smart_link_url,spotify_url,soundcloud_url,status")
+          .from("release_read_model")
+          .select("id,title,release_date,cover_public_url,primary_hook,core_emotion,visual_direction,smart_link_site_id,smart_link_slug,spotify_url,soundcloud_url,status")
           .eq("id", campaign.release_id)
           .eq("owner_id", artist.userId)
           .eq("artist_id", artist.artistId)

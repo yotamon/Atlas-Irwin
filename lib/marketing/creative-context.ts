@@ -259,8 +259,8 @@ export async function loadCreativeReferenceContext({ db, ownerId, artistId, rele
   const lyricsDb = db as unknown as SupabaseClient<LyricsDatabase>;
   const [releaseResult, brandResult, assetResult, linkResult, tracksResult, contentResult] = await Promise.all([
     releaseId
-      ? musicDb.from("releases")
-          .select("id,title,artwork_url,visual_direction,color_palette")
+      ? musicDb.from("release_read_model")
+          .select("id,title,cover_public_url,visual_direction,color_palette")
           .eq("id", releaseId)
           .eq("owner_id", ownerId)
           .eq("artist_id", artistId)
@@ -270,7 +270,7 @@ export async function loadCreativeReferenceContext({ db, ownerId, artistId, rele
     db.from("media_assets").select("*").eq("owner_id", ownerId),
     musicDb.from("media_links").select("*").eq("owner_id", ownerId).eq("artist_id", artistId),
     releaseId
-      ? musicDb.from("tracks").select("id,title,audio_url,is_primary").eq("owner_id", ownerId).eq("artist_id", artistId).eq("release_id", releaseId).order("is_primary", { ascending: false })
+      ? musicDb.from("track_read_model").select("id,title,master_audio_asset_id,master_audio_public_url,master_audio_bucket_name,master_audio_storage_path,is_primary").eq("owner_id", ownerId).eq("artist_id", artistId).eq("release_id", releaseId).order("is_primary", { ascending: false })
       : Promise.resolve({ data: [], error: null }),
     contentItemId
       ? stemDb.from("content_items")

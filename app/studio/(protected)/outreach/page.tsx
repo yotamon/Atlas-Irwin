@@ -51,7 +51,7 @@ export default async function OutreachPage({
     sequenceMessagesResult,
   ] = await Promise.all([
     query,
-    music.from("releases").select("id,title,story,smart_link_url")
+    music.from("release_read_model").select("id,title,story,smart_link_site_id,smart_link_slug")
       .eq("owner_id", artist.userId).eq("artist_id", artist.artistId).order("title"),
     operational.from("outreach_messages").select("*")
       .eq("owner_id", artist.userId).eq("artist_id", artist.artistId)

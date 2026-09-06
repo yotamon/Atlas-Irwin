@@ -54,8 +54,8 @@ function scheduleCleanup() {
 }
 
 async function currentTrackAudio(db: ReturnType<typeof asStemClient>, ownerId: string, trackId: string) {
-  const result = await db.from("tracks")
-    .select("audio_url")
+  const result = await db.from("track_read_model")
+    .select("master_audio_asset_id,master_audio_public_url,master_audio_bucket_name,master_audio_storage_path")
     .eq("id", trackId)
     .eq("owner_id", ownerId)
     .single();

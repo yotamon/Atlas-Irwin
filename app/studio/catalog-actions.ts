@@ -91,11 +91,11 @@ async function attachAsset(
   const targetCount = [values.releaseId, values.trackId, values.contentItemId].filter(Boolean).length;
   if (targetCount !== 1) throw new Error("Choose exactly one media destination.");
   if (values.releaseId) {
-    const { data } = await supabase.from("releases").select("id").eq("id", values.releaseId).eq("owner_id", ownerId).maybeSingle();
+    const { data } = await supabase.from("release_read_model").select("id").eq("id", values.releaseId).eq("owner_id", ownerId).maybeSingle();
     if (!data) throw new Error("Release not found.");
   }
   if (values.trackId) {
-    const { data } = await supabase.from("tracks").select("id").eq("id", values.trackId).eq("owner_id", ownerId).maybeSingle();
+    const { data } = await supabase.from("track_read_model").select("id").eq("id", values.trackId).eq("owner_id", ownerId).maybeSingle();
     if (!data) throw new Error("Track not found.");
   }
   if (values.contentItemId) {
@@ -142,8 +142,8 @@ export async function publishRelease(form: FormData) {
   const isPublic = form.get("is_public") === "on" || publishState === "live";
   if (publishState === "live") {
     const [releaseResult, tracksResult, placementResult, linksResult, externalResult, contentResult] = await Promise.all([
-      supabase.from("releases").select("*").eq("id", id).single(),
-      supabase.from("tracks").select("*").eq("release_id", id).order("display_order"),
+      supabase.from("release_read_model").select("*").eq("id", id).single(),
+      supabase.from("track_read_model").select("*").eq("release_id", id).order("display_order"),
       supabase.from("homepage_placements").select("*").eq("release_id", id).maybeSingle(),
       supabase.from("media_links").select("*").eq("release_id", id),
       supabase.from("release_external_links").select("*").eq("release_id", id),
@@ -292,7 +292,7 @@ export async function linkExternalSpotifyTrack(form: FormData) {
   const trackId = z.uuid().parse(value(form, "track_id"));
   const [{ data: external, error: externalError }, { data: track, error: trackError }] = await Promise.all([
     supabase.from("spotify_tracks").select("*").eq("id", externalId).single(),
-    supabase.from("tracks").select("*").eq("id", trackId).single(),
+    supabase.from("track_read_model").select("*").eq("id", trackId).single(),
   ]);
   if (externalError || !external) throw new Error(externalError?.message || "Spotify track not found.");
   if (trackError || !track || track.owner_id !== user.id) throw new Error(trackError?.message || "Catalog track not found.");
@@ -373,7 +373,7 @@ export async function moveTrack(form: FormData) {
   const trackId = z.uuid().parse(value(form, "track_id"));
   const releaseId = z.uuid().parse(value(form, "release_id"));
   const direction = z.enum(["up", "down"]).parse(value(form, "direction"));
-  const { data, error } = await supabase.from("tracks").select("id,display_order").eq("owner_id", user.id).eq("release_id", releaseId).order("display_order").order("created_at");
+  const { data, error } = await supabase.from("track_read_model").select("id,display_order").eq("owner_id", user.id).eq("release_id", releaseId).order("display_order").order("created_at");
   if (error) throw new Error(error.message);
   const currentIndex = (data ?? []).findIndex((item) => item.id === trackId);
   const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;

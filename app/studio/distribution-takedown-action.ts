@@ -69,7 +69,7 @@ export async function requestDistributionTakedown(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
   const db = supabase as unknown as Db;
   const [releaseResult, configResult, accountResult, deliveriesResult] = await Promise.all([
-    db.from("releases").select("id,title").eq("id", releaseId).eq("owner_id", user.id).single(),
+    db.from("release_read_model").select("id,title").eq("id", releaseId).eq("owner_id", user.id).single(),
     db.from("release_distribution_configs").select("*").eq("release_id", releaseId).eq("owner_id", user.id).single(),
     db.from("distribution_accounts").select("*").eq("owner_id", user.id).eq("provider", "revelator").single(),
     db.from("distribution_deliveries").select("*").eq("release_id", releaseId).eq("owner_id", user.id),

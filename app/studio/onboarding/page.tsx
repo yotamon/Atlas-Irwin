@@ -32,7 +32,7 @@ export default async function ArtistOnboardingPage() {
   const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
   const [vaultResult, releaseResult, momentResult, eventResult, operatingContext] = await Promise.all([
     growth.from("track_vault").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).neq("status", "archived").order("created_at", { ascending: true }),
-    music.from("releases").select("id,title,status,release_date,created_at").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("created_at", { ascending: true }),
+    music.from("release_read_model").select("id,title,status,release_date,created_at").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("created_at", { ascending: true }),
     db.from("moments").select("id,owner_id,artist_id,release_id,track_id,label,state,confidence,created_at").eq("owner_id", user.id).eq("artist_id", artist.artistId).in("state", ["proposed", "approved"]).order("created_at", { ascending: true }),
     db.from("artist_activation_events").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("occurred_at", { ascending: true }),
     loadArtistOperatingContext({ db: supabase, artist }),

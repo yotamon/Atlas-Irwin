@@ -86,7 +86,7 @@ async function enrichMarketingContextWithLyrics({
 
   try {
     const { data: tracks, error } = await supabase
-      .from("tracks")
+      .from("track_read_model")
       .select("id,is_primary")
       .eq("owner_id", ownerId)
       .eq("artist_id", artistId)

@@ -48,7 +48,7 @@ async function requireProjectForActiveArtist(id: string) {
     .eq("owner_id", user.id)
     .maybeSingle();
   if (error || !project) throw new Error(error?.message ?? "Video project not found.");
-  const { data: release, error: releaseError } = await music.from("releases")
+  const { data: release, error: releaseError } = await music.from("release_read_model")
     .select("id")
     .eq("id", project.release_id)
     .eq("owner_id", user.id)
@@ -91,14 +91,14 @@ export async function createMusicVideoProject(form: FormData) {
 
   const [releaseResult, trackResult, momentsResult] = await Promise.all([
     music
-      .from("releases")
+      .from("release_read_model")
       .select("id,owner_id,artist_id,title,story,core_emotion,primary_hook,visual_direction")
       .eq("id", parsed.release_id)
       .eq("owner_id", user.id)
       .eq("artist_id", artist.artistId)
       .single(),
     music
-      .from("tracks")
+      .from("track_read_model")
       .select("id,owner_id,artist_id,release_id,title,notes")
       .eq("id", parsed.track_id)
       .eq("owner_id", user.id)
