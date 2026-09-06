@@ -122,7 +122,7 @@ export function StemCustomMixer({
         recipe={recipe}
         startMs={Math.max(0, Math.round(startSeconds * 1000))}
         endMs={Math.max(1, Math.round((startSeconds + durationSeconds) * 1000))}
-        stems={stems.map((stem) => ({ id: stem.id, label: stem.label, url: stem.url, offsetMs: stem.offsetMs }))}
+        stems={stems}
       />
 
       <div className="stem-mixer-layers">
