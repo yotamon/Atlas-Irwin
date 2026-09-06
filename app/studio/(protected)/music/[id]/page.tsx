@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { analyzeMusicTrack } from "@/app/studio/growth-media-actions-safe";
 import { LyricsIntelligencePanel } from "@/components/studio/lyrics-intelligence-panel";
+import { MasteringInspectorPanel } from "@/components/studio/mastering-inspector-panel";
 import { MusicIntelligencePreview } from "@/components/studio/music-intelligence-preview";
 import { ObjectHeader } from "@/components/studio/object-header";
 import { StemIntelligencePanel } from "@/components/studio/stem-intelligence-panel";
@@ -11,7 +12,7 @@ import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asGrowthClient } from "@/lib/studio/growth-db";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
-import type { Track } from "@/types/database";
+import type { Json, Track } from "@/types/database";
 
 function titleCase(value: string) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -35,6 +36,15 @@ function analysisStatus(value: unknown) {
   return typeof status === "string" ? status : "pending";
 }
 
+function masteringStatus(value: unknown) {
+  const inspector = asRecord(asRecord(value).mastering_inspector);
+  const status = inspector.status;
+  if (status === "fix_before_release") return "Fix before release";
+  if (status === "ready_review_suggested") return "Review suggested";
+  if (status === "ready") return "Ready";
+  return null;
+}
+
 export default async function TrackWorkspacePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { supabase, user } = await requireStudioAdmin();
@@ -52,6 +62,15 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
     .maybeSingle();
   if (vaultError) throw new Error(vaultError.message);
   if (!vaultTrack) notFound();
+
+  const { data: catalogTracks, error: catalogError } = await growth
+    .from("track_vault")
+    .select("id,title,audio_profile")
+    .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId)
+    .neq("id", id)
+    .limit(24);
+  if (catalogError) throw new Error(catalogError.message);
 
   let release: { id: string; title: string; artwork_url: string | null; cover_alt: string | null; release_date: string | null } | null = null;
   let releaseTrack: Track | null = null;
@@ -82,6 +101,7 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
   const sections = Array.isArray(musicMap.sections) ? musicMap.sections.length : 0;
   const hooks = Array.isArray(musicMap.hook_candidates) ? musicMap.hook_candidates.length : 0;
   const bpm = typeof musicMap.bpm === "number" && Number.isFinite(musicMap.bpm) ? Math.round(musicMap.bpm) : null;
+  const mastering = masteringStatus(vaultTrack.audio_profile);
   const currentAnalysisStatus = analysisStatus(vaultTrack.analysis);
   const analysisNeedsRecovery = Boolean(
     vaultTrack.audio_url
@@ -92,8 +112,12 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
   const tabs = [
     { label: "Overview", href: "#overview", active: true },
     { label: "Intelligence", href: "#intelligence" },
+    { label: "Mastering", href: "#mastering" },
     ...(releaseTrack ? [{ label: "Stems", href: "#stems" }, { label: "Lyrics", href: "#lyrics" }] : []),
   ];
+  const catalogProfiles = (catalogTracks ?? [])
+    .filter((track) => hasMusicMap(track.audio_profile))
+    .map((track) => ({ title: track.title, musicMap: track.audio_profile as Json }));
 
   return (
     <div className="studio-v2-page track-object-page">
@@ -107,6 +131,7 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
         imageAlt={release?.cover_alt || (release ? `${release.title} artwork` : "")}
         facts={[
           { label: "Master", value: vaultTrack.audio_url ? "Ready" : "Missing" },
+          { label: "Mastering", value: mastering ?? (intelligenceReady ? "Re-analyze" : "Pending") },
           { label: "Intelligence", value: intelligenceReady ? "Ready" : analysisNeedsRecovery ? "Needs attention" : "Listening" },
           { label: "Structure", value: intelligenceReady ? `${sections} section${sections === 1 ? "" : "s"}` : "Pending" },
           { label: "Strong moments", value: intelligenceReady ? `${Math.min(hooks, 5)} surfaced` : "Pending" },
@@ -124,15 +149,21 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
         <div className="track-object-primary">
           <span className="section-label">Source audio</span>
           <h2>{vaultTrack.audio_url ? "Canonical master" : "Master audio is still missing"}</h2>
-          {vaultTrack.notes ? <p>{vaultTrack.notes}</p> : <p>{vaultTrack.audio_url ? "The source Ensemblis uses for structure, energy and strongest Moments." : "Ensemblis needs the mastered source before it can make music-aware recommendations."}</p>}
+          {vaultTrack.notes ? <p>{vaultTrack.notes}</p> : <p>{vaultTrack.audio_url ? "The source Ensemblis uses for structure, mastering QA, beat stability and strongest Moments." : "Ensemblis needs the mastered source before it can make music-aware recommendations."}</p>}
           {vaultTrack.audio_url ? <TrackPreview src={vaultTrack.audio_url} label={`${vaultTrack.title} master`} /> : null}
         </div>
         <aside className="track-object-decision">
           <span className="section-label">Recommended next move</span>
-          {intelligenceReady ? (
+          {mastering === "Fix before release" ? (
+            <>
+              <strong>Fix the mastering blocker first</strong>
+              <p>Mastering Inspector found a technical issue that should be corrected before distribution.</p>
+              <Link href="#mastering">Review mastering →</Link>
+            </>
+          ) : intelligenceReady ? (
             <>
               <strong>Create from the strongest Moment</strong>
-              <p>Track Intelligence is ready. Start creative work from the musical evidence.</p>
+              <p>Track Intelligence and mastering checks are ready. Start creative work from the musical evidence.</p>
               <Link href={createHref}>Create with this track →</Link>
             </>
           ) : analysisNeedsRecovery ? (
@@ -144,7 +175,7 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
           ) : vaultTrack.audio_url ? (
             <>
               <strong>No action needed</strong>
-              <p>Ensemblis is preparing the musical understanding automatically.</p>
+              <p>Ensemblis is preparing musical understanding, mastering checks and beat stability automatically.</p>
               <Link href={href("/studio/music")}>Back to Music →</Link>
             </>
           ) : (
@@ -193,6 +224,27 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
             </form>
           </details>
         ) : null}
+      </section>
+
+      <section className="track-object-section" id="mastering">
+        <div className="v2-section-heading">
+          <div>
+            <span className="section-label">Mastering</span>
+            <h2>Release-quality and beat-stability check</h2>
+          </div>
+        </div>
+        {intelligenceReady ? (
+          <MasteringInspectorPanel
+            audioUrl={vaultTrack.audio_url}
+            musicMap={vaultTrack.audio_profile}
+            catalogProfiles={catalogProfiles}
+          />
+        ) : (
+          <div className="v2-calm-state compact">
+            <strong>{vaultTrack.audio_url ? "Mastering checks are part of the same analysis." : "No master to inspect yet."}</strong>
+            <p>{vaultTrack.audio_url ? "They appear here when Ensemblis finishes listening." : "Add the canonical master first."}</p>
+          </div>
+        )}
       </section>
 
       {releaseTrack && release ? (

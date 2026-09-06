@@ -6,6 +6,7 @@ from typing import Any
 import numpy as np
 
 from .audio_intelligence_providers import provider_capabilities, run_beat_this_shadow
+from .mastering_inspector import enrich_music_map_with_mastering
 from .music_intelligence_v4 import analyze_music as analyze_music_v4_core
 
 
@@ -85,4 +86,15 @@ def analyze_music(path: Path, source_audio: dict[str, Any] | None = None) -> dic
     analysis = result.setdefault("analysis", {})
     analysis["provider_capabilities"] = capabilities
     _attach_shadow_rhythm(result, path)
+
+    # Mastering Inspector runs after the canonical musical grid exists so beat stability
+    # can distinguish drift/jitter from section-aligned tempo changes. It enriches the
+    # same v4 payload rather than creating a second source of truth.
+    enrich_music_map_with_mastering(result, path)
+    analysis_tiers = result.setdefault("analysis_tiers", {})
+    deep = analysis_tiers.setdefault("deep", {"status": "completed", "includes": []})
+    includes = deep.setdefault("includes", [])
+    for capability in ("mastering_inspector", "beat_stability", "codec_stress"):
+        if capability not in includes:
+            includes.append(capability)
     return result
