@@ -24,13 +24,15 @@ test("Create recommends three deliverables grounded in the strongest musical Mom
   assert.equal(create.includes('href={href(`/studio/production?release=${moment.release_id}&moment=${moment.id}`)}'), false);
 });
 
-test("an explicitly selected Best Moment remains the exact creative source", async () => {
+test("an explicitly selected Best Moment remains the exact creative source and owns its context", async () => {
   const [create, moments] = await Promise.all([
     source("app/studio/(protected)/create/page.tsx"),
     source("components/studio/moment-review-panel.tsx"),
   ]);
   assert.ok(create.includes("moment?: string"));
   assert.ok(create.includes("const requestedMoment = params.moment"));
+  assert.match(create, /const requestedTrack = requestedMoment\s*\? trackById\.get\(requestedMoment\.track_id\)/);
+  assert.ok(create.includes("const requestedReleaseId = requestedMoment?.release_id ?? params.release ?? requestedTrack?.release_id ?? null"));
   assert.match(create, /const requestedMoments = requestedMoment\s*\? \[requestedMoment\]/);
   assert.ok(create.includes("Your selected Moment"));
   assert.ok(moments.includes('href={`/studio/create?release=${releaseId}&moment=${moment.id}`}'));
