@@ -3,16 +3,15 @@
 import { z } from "zod";
 import { saveContentV2 } from "@/app/studio/content-actions-v2";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { artistCreativePolicyBrief } from "@/lib/artist-operating/domain";
+import { loadArtistOperatingContext } from "@/lib/artist-operating/server";
 import { artistMemoryBrief, loadArtistMemoryForConsumer } from "@/lib/artist-memory/server";
 import { resolveArtistContext } from "@/lib/studio/artist-context";
 import { resolveCreateOutcome } from "@/lib/studio/create-outcomes";
 import { asMomentsClient } from "@/lib/studio/moments-db";
 
 const uuid = z.uuid();
-
-function value(form: FormData, key: string) {
-  return String(form.get(key) ?? "").trim();
-}
+function value(form: FormData, key: string) { return String(form.get(key) ?? "").trim(); }
 
 export async function startOutcomeCreative(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
@@ -23,20 +22,10 @@ export async function startOutcomeCreative(form: FormData) {
   if (!outcome) throw new Error("Choose a valid creative outcome.");
 
   const moments = asMomentsClient(supabase);
-  const [{ data: moment, error }, memory] = await Promise.all([
-    moments
-      .from("moments")
-      .select("id,release_id,label,start_ms,end_ms,state")
-      .eq("id", momentId)
-      .eq("owner_id", artist.userId)
-      .eq("artist_id", artist.artistId)
-      .maybeSingle(),
-    loadArtistMemoryForConsumer({
-      db: supabase,
-      ownerId: artist.userId,
-      artistId: artist.artistId,
-      consumer: "creative_direction",
-    }),
+  const [{ data: moment, error }, memory, operatingContext] = await Promise.all([
+    moments.from("moments").select("id,release_id,label,start_ms,end_ms,state").eq("id", momentId).eq("owner_id", artist.userId).eq("artist_id", artist.artistId).maybeSingle(),
+    loadArtistMemoryForConsumer({ db: supabase, ownerId: artist.userId, artistId: artist.artistId, consumer: "creative_direction" }),
+    loadArtistOperatingContext({ db: supabase, artist }),
   ]);
   if (error) throw new Error(error.message);
   if (!moment) throw new Error("Moment not found for the active artist.");
@@ -45,9 +34,8 @@ export async function startOutcomeCreative(form: FormData) {
   const rememberedDirection = artistMemoryBrief(memory.items, 1_800);
   const notes = [
     `Creative outcome: ${outcome.label}. ${outcome.description}`,
-    rememberedDirection
-      ? `Bounded Artist Memory (${memory.maxEffect.replaceAll("_", " ")}):\n${rememberedDirection}`
-      : null,
+    artistCreativePolicyBrief(operatingContext.profile),
+    rememberedDirection ? `Bounded Artist Memory (${memory.maxEffect.replaceAll("_", " ")}):\n${rememberedDirection}` : null,
   ].filter(Boolean).join("\n\n");
 
   const production = new FormData();
@@ -61,6 +49,5 @@ export async function startOutcomeCreative(form: FormData) {
   production.set("audio_timestamp_start", String(Math.floor(moment.start_ms / 1000)));
   production.set("audio_timestamp_end", String(Math.ceil(moment.end_ms / 1000)));
   production.set("production_notes", notes);
-
   await saveContentV2(production);
 }

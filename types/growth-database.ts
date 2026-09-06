@@ -83,7 +83,13 @@ export type GrowthOpportunityKind =
   | "content_breakout"
   | "release_risk"
   | "funnel_bottleneck"
-  | "release_candidate";
+  | "release_candidate"
+  | "scene_fit"
+  | "outreach_target"
+  | "gig_fit"
+  | "label_fit"
+  | "playlist_fit"
+  | "channel_fit";
 
 export type GrowthOpportunity = {
   id: string;

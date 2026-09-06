@@ -21,8 +21,10 @@ export default async function SettingsPage() {
       <section className="v2-section">
         <div className="v2-section-heading"><div><span className="section-label">Artist foundation</span><h2>Teach Ensemblis the artist once</h2></div></div>
         <div className="v2-settings-grid">
+          <Link href={href("/studio/settings/artist")}><div><strong>Artist operating profile</strong></div><p>Goals, marketing involvement, scene, visibility and AI boundaries that change how Ensemblis works.</p><small>Set working relationship →</small></Link>
           <Link href={href("/studio/brand")}><div><strong>Brand profile</strong></div><p>Voice, visual world, audience and explicit creative rules.</p><small>Edit artist rules →</small></Link>
           <Link href={href("/studio/memory")}><div><strong>Artist Memory</strong></div><p>What Ensemblis currently believes, with source evidence available on demand.</p><small>Review memory →</small></Link>
+          <Link href={href("/studio/growth/strategy")}><div><strong>Artist strategy</strong></div><p>Current growth focus, scene logic, source-first content plan and evidence-backed outreach direction.</p><small>Review strategy →</small></Link>
         </div>
       </section>
 

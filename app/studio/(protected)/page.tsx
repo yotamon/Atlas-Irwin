@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CalmState, DecisionQueue, DecisionRow, PriorityHero, SectionHeading, type SemanticTone } from "@/components/studio/patterns";
 import { PageHeader, Status } from "@/components/studio/ui";
+import { GOAL_LABELS, MARKETING_INVOLVEMENT_LABELS } from "@/lib/artist-operating/domain";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { loadArtistOperatingSnapshot } from "@/lib/studio/artist-operating-snapshot";
@@ -23,11 +24,23 @@ export default async function TodayPage() {
     artist,
   });
   const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
-  const { activeRelease, activeMission, needsYou, topDecision, nextAction, nextActionHref, working, comingUp, preferences } = snapshot;
+  const {
+    activeRelease,
+    activeMission,
+    needsYou,
+    topDecision,
+    nextAction,
+    nextActionHref,
+    working,
+    comingUp,
+    preferences,
+    operatingContext,
+    strategy,
+  } = snapshot;
 
   const missionAction = activeMission?.nextAction ?? null;
-  const heroTitle = topDecision?.title || missionAction?.title || nextAction?.title || "Ensemblis can keep moving without interrupting you";
-  const heroDetail = topDecision?.detail || (missionAction ? activeMission?.summary : null) || nextAction?.rationale || "Safe internal work can continue. Ensemblis will surface the next decision when your judgment is actually useful.";
+  const heroTitle = topDecision?.title || missionAction?.title || nextAction?.title || strategy.recommendedMission.title || "Ensemblis can keep moving without interrupting you";
+  const heroDetail = topDecision?.detail || (missionAction ? activeMission?.summary : null) || nextAction?.rationale || strategy.recommendedMission.rationale;
   const heroStatus = topDecision ? (topDecision.severity === "required" ? "Required" : "Needs attention") : missionAction ? activeMission?.label || "Recommended" : nextAction ? "Recommended" : "Clear";
   const heroTone: SemanticTone = topDecision?.severity === "required" ? "danger" : topDecision ? "attention" : missionAction || nextAction ? "accent" : "success";
   const heroPrimary = topDecision
@@ -36,7 +49,7 @@ export default async function TodayPage() {
       ? { href: href(missionAction.href), label: missionAction.title }
       : nextAction && nextActionHref
         ? { href: nextActionHref, label: "Act on this" }
-        : null;
+        : { href: href(strategy.recommendedMission.href), label: "Open recommended Mission" };
   const decisionPreview = needsYou.slice(0, 3);
 
   return <div className="studio-v2-page ensemblis-today-page">
@@ -48,17 +61,27 @@ export default async function TodayPage() {
       description={heroDetail}
       status={heroStatus}
       tone={heroTone}
-      actions={heroPrimary || activeRelease || topDecision || nextAction ? <>
-        {heroPrimary ? <Link className="button primary" href={heroPrimary.href}>{heroPrimary.label}</Link> : null}
+      actions={<>
+        <Link className="button primary" href={heroPrimary.href}>{heroPrimary.label}</Link>
         {activeRelease
           ? <Link href={href(`/studio/releases/${activeRelease.id}`)}>View release Mission</Link>
           : topDecision
             ? <Link href={href("/studio/needs-you")}>Open decision queue</Link>
-            : nextAction
-              ? <Link href={href("/studio/growth")}>Inspect evidence</Link>
-              : null}
-      </> : undefined}
+            : <Link href={href("/studio/growth/strategy")}>Why this strategy?</Link>}
+      </>}
     />
+
+    <section className="v2-section v2-compact-section">
+      <div className="v2-section-heading compact">
+        <div>
+          <span className="section-label">Artist operating mode</span>
+          <h2>{operatingContext.profileConfigured ? `${MARKETING_INVOLVEMENT_LABELS[operatingContext.profile.marketingInvolvement]} · ${GOAL_LABELS[operatingContext.profile.primaryGoal]}` : "Make Ensemblis fit the artist"}</h2>
+          <p>{operatingContext.profileConfigured ? strategy.humanIntervention : "Choose how much marketing you want to handle. Ensemblis uses conservative defaults until you confirm the working relationship."}</p>
+        </div>
+        <Status>{operatingContext.profileConfigured ? "Configured" : "Needs setup"}</Status>
+      </div>
+      <div className="actions"><Link className={operatingContext.profileConfigured ? "button" : "button primary"} href={href("/studio/settings/artist")}>{operatingContext.profileConfigured ? "Edit working profile" : "Choose working mode"}</Link><Link className="button" href={href("/studio/growth/strategy")}>Artist strategy</Link></div>
+    </section>
 
     <div className="today-v3-two-column">
       <DecisionQueue
@@ -76,7 +99,7 @@ export default async function TodayPage() {
             description={item.detail}
             tone={decisionTone(needsYouTone(item))}
           />
-        ) : <CalmState title="Nothing needs your judgment right now." body="Approvals, ambiguity and important decisions appear here only when needed." />}
+        ) : <CalmState title="Nothing needs your judgment right now." body={operatingContext.profile.marketingInvolvement === "just_make_music" ? "Keep making music. Ensemblis will prepare safe marketing work and bring back only the decisions that genuinely need you." : "Approvals, ambiguity and important decisions appear here only when needed."} />}
         {needsYou.length > decisionPreview.length ? <Link className="en-decision-more" href={href("/studio/needs-you")}>View {needsYou.length - decisionPreview.length} more decision{needsYou.length - decisionPreview.length === 1 ? "" : "s"}</Link> : null}
       </DecisionQueue>
 
