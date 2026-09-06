@@ -47,12 +47,12 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
   const trackById = new Map(tracks.map((track) => [track.id, track]));
   const curation = curateReleaseMoments({ moments: momentsResult.data ?? [] });
   const requestedMoment = params.moment ? curation.curated.find((moment) => moment.id === params.moment) ?? null : null;
-  const requestedTrack = params.track
-    ? trackById.get(params.track) ?? null
-    : requestedMoment
-      ? trackById.get(requestedMoment.track_id) ?? null
+  const requestedTrack = requestedMoment
+    ? trackById.get(requestedMoment.track_id) ?? null
+    : params.track
+      ? trackById.get(params.track) ?? null
       : null;
-  const requestedReleaseId = params.release ?? requestedMoment?.release_id ?? requestedTrack?.release_id ?? null;
+  const requestedReleaseId = requestedMoment?.release_id ?? params.release ?? requestedTrack?.release_id ?? null;
   const activeRelease = (requestedReleaseId ? releases.find((release) => release.id === requestedReleaseId) : null)
     ?? releases.find((release) => release.active_release)
     ?? releases.find((release) => release.release_date && release.release_date >= new Date().toISOString().slice(0, 10))
