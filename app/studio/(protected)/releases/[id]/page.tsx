@@ -148,7 +148,7 @@ export default async function ReleaseDetail({
 
   if (!advanced) {
     return <>
-      <ReleaseWorkspaceV2 release={release} tracks={tracks ?? []} mediaLinks={mediaLinks ?? []} mediaAssets={mediaAssets ?? []} contentItems={contentItems ?? []} metrics={metrics ?? []} campaign={campaignResult.data} stage={simpleStage} renderedAt={renderedAt} playbookTasks={playbookTasks ?? []} providerScheduledCount={providerScheduledCount ?? 0} vaultTrack={vaultResult.data} />
+      <ReleaseWorkspaceV2 release={release} tracks={tracks ?? []} contentItems={contentItems ?? []} metrics={metrics ?? []} campaign={campaignResult.data} stage={simpleStage} renderedAt={renderedAt} playbookTasks={playbookTasks ?? []} providerScheduledCount={providerScheduledCount ?? 0} vaultTrack={vaultResult.data} />
       {simpleStage === "music" ? <MomentReviewPanel releaseId={release.id} moments={momentCuration.curated} historicalMoments={momentCuration.historical} rawCandidateCount={momentCuration.raw_active_count} suppressedCount={momentCuration.suppressed_count} tracks={(tracks ?? []).map((track) => ({ id: track.id, title: track.title, audio_url: track.audio_url }))} performance={momentPerformance ?? []} lyricSources={lyricSources ?? []} calibrationEvents={calibrationEvents} /> : null}
     </>;
   }
