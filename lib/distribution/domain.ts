@@ -1,4 +1,4 @@
-import type { Json, Release, Track } from "@/types/database";
+import type { Json, ReleaseReadModel, TrackReadModel } from "@/types/database";
 
 export const DISTRIBUTION_STATES = [
   "draft",
@@ -128,8 +128,8 @@ export function calculateDistributionReadiness({
   providerIssues = [],
   creditsReady,
 }: {
-  release: Release;
-  tracks: Track[];
+  release: ReleaseReadModel;
+  tracks: TrackReadModel[];
   rights: DistributionRights | null;
   aiProvenance: AIProvenance;
   artistProfiles: Array<{ platform: string; external_artist_id: string | null; status: string }>;
@@ -138,14 +138,14 @@ export function calculateDistributionReadiness({
 }): DistributionReadiness {
   const issues: DistributionIssue[] = [...providerIssues, ...(creditsReady?.issues ?? [])];
   const primaryTrack = tracks.find((track) => track.is_primary) ?? tracks[0];
-  const audioPass = tracks.length > 0 && tracks.every((track) => Boolean(track.audio_url));
+  const audioPass = tracks.length > 0 && tracks.every((track) => Boolean(track.master_audio_asset_id));
   if (!tracks.length) issues.push({ code: "tracks.missing", title: "Add at least one track", detail: "DSP delivery requires a release with at least one track.", severity: "error", source: "ensemblis", objectType: "release", objectId: release.id });
-  else if (!audioPass) issues.push({ code: "audio.master_missing", title: "Add every track master", detail: "Every track needs its canonical master audio before distribution.", severity: "error", source: "ensemblis", objectType: "track", objectId: tracks.find((track) => !track.audio_url)?.id });
+  else if (!audioPass) issues.push({ code: "audio.master_missing", title: "Add every track master", detail: "Every track needs its canonical master audio before distribution.", severity: "error", source: "ensemblis", objectType: "track", objectId: tracks.find((track) => !track.master_audio_asset_id)?.id });
 
-  const metadataPass = Boolean(release.title.trim() && release.artist?.trim() && release.genre?.trim());
+  const metadataPass = Boolean(release.title.trim() && release.artist_name.trim() && release.genre?.trim());
   if (!metadataPass) issues.push({ code: "metadata.incomplete", title: "Complete release metadata", detail: "Artist, title and primary genre are required for distribution readiness.", severity: "error", source: "ensemblis", objectType: "release", objectId: release.id });
 
-  const artworkPass = Boolean(release.artwork_url || release.cover_asset);
+  const artworkPass = Boolean(release.cover_asset_id || release.cover_public_url);
   if (!artworkPass) issues.push({ code: "artwork.missing", title: "Add cover artwork", detail: "A DSP-ready cover is required before delivery.", severity: "error", source: "ensemblis", objectType: "artwork", objectId: release.id });
 
   const timingPass = Boolean(release.release_date);
