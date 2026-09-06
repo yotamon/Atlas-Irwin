@@ -26,8 +26,7 @@ function age(value: string | null) {
 const categories = [
   ["all", "All issues"], ["unmatched", "Unmatched tracks"], ["duplicates", "Duplicate candidates"],
   ["links", "Missing links"], ["media", "Public media"], ["preview", "Preview audio"],
-  ["website", "Website gaps"], ["homepage", "Homepage validity"], ["legacy", "Legacy review"],
-  ["stale", "Stale sync"], ["metadata", "Metadata"],
+  ["website", "Website gaps"], ["homepage", "Homepage validity"], ["stale", "Stale sync"], ["metadata", "Metadata"],
 ] as const;
 
 export default async function DataHealthPage({
@@ -80,13 +79,13 @@ export default async function DataHealthPage({
     const attached = mediaLinks.filter((link) => link.release_id === release.id);
     const attachedAssets = assets.filter((asset) => attached.some((link) => link.media_asset_id === asset.id));
     const platformLinks = releaseLinks.filter((link) => link.release_id === release.id);
-    if (!(release.spotify_url || release.soundcloud_url || release.youtube_url || release.smart_link_url || platformLinks.length)) items.push({ category: "links", identity: release.title, source: "Catalog", syncedAt: release.updated_at, status: "Missing", reason: "No reviewed release-level listening destination exists.", href: `/studio/releases/${release.id}?tab=music#platform-links` });
-    if (release.publish_state === "live" && !(release.artwork_url || attachedAssets.some((asset) => asset.asset_type === "cover" && asset.visibility === "public"))) items.push({ category: "media", identity: release.title, source: "Public website", syncedAt: release.updated_at, status: "Blocking", reason: "Live release has no intentional public cover asset.", href: `/studio/releases/${release.id}?tab=media#upload` });
-    if (!releaseTracks.some((track) => track.audio_url || track.soundcloud_url || track.spotify_url)) items.push({ category: "preview", identity: release.title, source: "Catalog", syncedAt: release.updated_at, status: "Missing", reason: "No track has preview audio or an external playable URL.", href: `/studio/releases/${release.id}?tab=music#tracklist` });
+    const hasSmartLink = Boolean(release.smart_link_site_id && release.smart_link_slug);
+    if (!(release.spotify_url || release.soundcloud_url || release.youtube_url || hasSmartLink || platformLinks.length)) items.push({ category: "links", identity: release.title, source: "Catalog", syncedAt: release.updated_at, status: "Missing", reason: "No reviewed release-level listening destination exists.", href: `/studio/releases/${release.id}?tab=music#platform-links` });
+    if (release.publish_state === "live" && !(release.cover_public_url || attachedAssets.some((asset) => asset.asset_type === "cover" && asset.visibility === "public"))) items.push({ category: "media", identity: release.title, source: "Public website", syncedAt: release.updated_at, status: "Blocking", reason: "Live release has no intentional public cover asset.", href: `/studio/releases/${release.id}?tab=media#upload` });
+    if (!releaseTracks.some((track) => track.master_audio_asset_id || track.soundcloud_url || track.spotify_url)) items.push({ category: "preview", identity: release.title, source: "Catalog", syncedAt: release.updated_at, status: "Missing", reason: "No track has a canonical master or external playable URL.", href: `/studio/releases/${release.id}?tab=music#tracklist` });
     const matchingAlbum = albums.find((album) => normalized(album.name) === normalized(release.title));
     if (matchingAlbum && release.publish_state !== "live") items.push({ category: "website", identity: release.title, source: "Spotify", syncedAt: matchingAlbum.synced_at, status: "Platform live / website hidden", reason: "A synced Spotify release matches this draft catalog record.", href: `/studio/releases/${release.id}?tab=website#publishing` });
-    if (release.public_release_path && !release.notes?.toLowerCase().includes("reviewed")) items.push({ category: "legacy", identity: release.title, source: "Legacy import", syncedAt: release.updated_at, status: "Review", reason: `Imported from ${release.public_release_path}; verify media and platform links.`, href: `/studio/releases/${release.id}` });
-    const missing = [["UPC", release.upc], ["release date", release.release_date], ["label", release.label], ["artwork alt text", release.cover_alt]].filter(([, value]) => !value).map(([label]) => label);
+    const missing = [["UPC", release.upc], ["release date", release.release_date], ["label", release.label], ["artwork alt text", release.cover_alt]].filter(([, candidate]) => !candidate).map(([label]) => label);
     if (missing.length) items.push({ category: "metadata", identity: release.title, source: "Catalog", syncedAt: release.updated_at, status: "Incomplete", reason: `Missing ${missing.join(", ")}.`, href: `/studio/releases/${release.id}?tab=overview#identity` });
   });
 
