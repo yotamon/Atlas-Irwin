@@ -88,12 +88,143 @@ test("Music defaults to source material and makes Add music primary", async () =
 test("track objects have one readable workspace for source, intelligence, stems and lyrics", async () => {
   const track = await source("app/studio/(protected)/music/[id]/page.tsx");
   const header = await source("components/studio/object-header.tsx");
-  assert.ok(track.includes("Track understanding"));
-  assert.ok(track.includes("Stem Intelligence"));
-  assert.ok(track.includes("Lyrics Intelligence"));
-  assert.ok(track.includes("TrackIntelligenceInspector"));
-  assert.ok(track.includes("StemIntelligencePanel"));
-  assert.ok(track.includes("LyricsIntelligencePanel"));
-  assert.ok(track.includes("<ObjectHeader"));
-  assert.ok(header.includes("ObjectHeader"));
+  for (const snippet of ["<ObjectHeader", 'from("track_vault")', '.eq("artist_id", artist.artistId)', "<MusicIntelligencePreview", "<StemIntelligencePanel", "<LyricsIntelligencePanel", "Technical details"]) assert.ok(track.includes(snippet), `track workspace is missing ${snippet}`);
+  assert.equal(track.includes("Portfolio score"), false, "track workspace must not present Growth scoring as music understanding");
+  assert.ok(header.includes("ensemblis-object-header"));
+  assert.ok(header.includes("ensemblis-object-tabs"));
+});
+
+test("Track Intelligence exposes a real native waveform plus semantic musical timeline data", async () => {
+  const preview = await source("components/studio/music-intelligence-preview.tsx");
+  const css = await source("components/studio/music-intelligence-preview.module.css");
+  for (const snippet of [
+    "sampleWaveform",
+    "new AudioContext()",
+    'role="slider"',
+    "onPointerDown",
+    'event.key === "ArrowLeft"',
+    'event.key === "ArrowRight"',
+    "waveformPeaks",
+    "map.energy_curve",
+    "map.edit_points",
+    "sectionOverlay",
+    "hookOverlay",
+    "playhead",
+  ]) assert.ok(preview.includes(snippet), `Track Intelligence preview is missing ${snippet}`);
+  assert.ok(css.includes(".waveformBars"));
+  assert.ok(css.includes(".waveformPlayed"));
+  assert.equal(preview.includes("wavesurfer.js"), false, "native waveform should not require a package dependency");
+});
+
+test("Media Library uses signed resumable TUS above 6 MB without expanding storage policy", async () => {
+  const uploader = await source("components/studio/media-uploader.tsx");
+  const resumable = await source("lib/supabase/resumable-upload.ts");
+  const catalog = await source("app/studio/catalog-actions.ts");
+  const interactions = await source("app/studio/shared-interactions.css");
+  const packageJson = JSON.parse(await source("package.json"));
+
+  assert.ok(uploader.includes("RESUMABLE_THRESHOLD = 6 * 1024 * 1024"));
+  assert.ok(uploader.includes("PUBLIC_LIMIT = 100 * 1024 * 1024"));
+  assert.ok(uploader.includes("uploadResumableMedia"));
+  assert.ok(uploader.includes("upload-progress"));
+  assert.ok(uploader.includes("Retry to resume from the last confirmed chunk"));
+  assert.ok(uploader.includes("ResumableUploadAuthorizationError"));
+  assert.equal(uploader.includes("auth.getSession"), false, "signed resumable upload must not depend on browser session retrieval");
+
+  for (const snippet of [
+    "TUS_CHUNK_SIZE = 6 * 1024 * 1024",
+    '"Tus-Resumable"',
+    '"x-signature"',
+    '"Upload-Length"',
+    '"Upload-Metadata"',
+    '"Upload-Offset"',
+    'method: "HEAD"',
+    'method: "PATCH"',
+    "sessionStorage",
+    "RETRY_DELAYS",
+    "const chunkOffset: number = offset",
+    "patchChunk(uploadUrl, target, chunk, chunkOffset)",
+    "serverOffset !== chunkOffset",
+  ]) assert.ok(resumable.includes(snippet), `resumable transport is missing ${snippet}`);
+
+  assert.ok(catalog.includes("createSignedUploadUrl(storagePath)"));
+  assert.ok(catalog.includes("max(104857600)"));
+  assert.ok(interactions.includes(".upload-progress"));
+  assert.equal(Boolean(packageJson.dependencies?.["tus-js-client"]), false);
+  assert.equal(Boolean(packageJson.dependencies?.["wavesurfer.js"]), false);
+});
+
+test("release workspace uses blocker-aware Mission semantics and no Atlas product copy", async () => {
+  const release = await source("components/studio/release-workspace-v2.tsx");
+  const mission = await source("lib/studio/release-mission.ts");
+  assert.ok(release.includes("<ObjectHeader"));
+  assert.ok(release.includes("deriveReleaseMission"));
+  assert.ok(release.includes('label: "Release mission"'));
+  assert.ok(release.includes("This mission is blocked"));
+  assert.equal(release.includes("Workflow readiness"), false);
+  assert.equal(release.includes("healthScore"), false);
+  assert.ok(release.includes("Advanced view"));
+  assert.ok(mission.includes('attention: "blocking"'));
+  assert.ok(mission.includes('status: "on_track"'));
+  for (const stage of ["Select", "Prepare", "Build hype", "Release", "Sustain", "Rediscover", "Produce", "Distribute", "Learn"]) assert.ok(release.includes(stage), `release lifecycle lost ${stage}`);
+  assert.equal(/\bAtlas\b/.test(release), false, "Atlas product language leaked into the Ensemblis release workspace");
+});
+
+test("campaign workspace uses Ensemblis chrome without Atlas-era editorial styling", async () => {
+  const css = await source("components/studio/marketing-workspace.module.css");
+  assert.ok(css.includes("var(--en-surface)"));
+  assert.ok(css.includes("var(--font-body)"));
+  assert.ok(css.includes("text-transform: none"));
+  assert.ok(css.includes("var(--en-accent-soft)"));
+  for (const legacyColor of ["#0c100e", "#d7ccb3", "#ddd2ba", "#d9cfb8", "#d8cdb5"]) assert.equal(css.includes(legacyColor), false, `${legacyColor} leaked into Campaign chrome`);
+  assert.equal(css.includes("heroCard::after"), false, "decorative orbit styling should not define Campaign hierarchy");
+});
+
+test("Production keeps the selected creative dominant and technical controls secondary", async () => {
+  const css = await source("app/studio/production-polish.css");
+  assert.ok(css.includes(".v2-production-layout"));
+  assert.ok(css.includes(".v2-production-editor"));
+  assert.ok(css.includes(".v2-production-list > a.active"));
+  assert.ok(css.includes(".studio-advanced-details"));
+  assert.ok(css.includes("@media (max-width: 960px)"));
+});
+
+test("Create starts from approved Moments before generic creation destinations", async () => {
+  const create = await source("app/studio/(protected)/create/page.tsx");
+  const grow = await source("app/studio/(protected)/growth/page.tsx");
+  const audience = await source("app/studio/(protected)/audience/page.tsx");
+  const library = await source("app/studio/(protected)/library/page.tsx");
+  for (const snippet of [
+    'from("moments")',
+    '.eq("state", "approved")',
+    "Create from this Moment",
+    "Inspect evidence",
+    "Recommended musical starting points",
+    "Add or create music",
+    "Start a release",
+    "Open the production queue",
+    "Direct a video",
+  ]) assert.ok(create.includes(snippet), `Moment-first Create is missing ${snippet}`);
+  for (const view of ["overview", "opportunities", "performance", "portfolio"]) assert.ok(grow.includes(view));
+  assert.ok(audience.includes("Needs judgment"));
+  assert.ok(audience.includes("nothing is sent without your decision"));
+  assert.ok(library.includes("reusable"));
+  assert.ok(library.includes("Recent visual memory"));
+});
+
+test("Needs you previews external effects before approval and protects unknown automation", async () => {
+  const inbox = await source("app/studio/(protected)/inbox/page.tsx");
+  assert.ok(inbox.includes("publicationContentIds"));
+  assert.ok(inbox.includes('select("id,title,caption,asset_url,format,platform,release_id")'));
+  assert.ok(inbox.includes("What will happen"));
+  assert.ok(inbox.includes("Paid generation never enters a batch approval"));
+  assert.ok(inbox.includes("SAFE_INTERNAL_AUTOMATION"));
+  assert.ok(inbox.includes("protectedAutomation"));
+});
+
+test("lyrics intelligence is Ensemblis-branded on the reusable product surface", async () => {
+  const lyrics = await source("components/studio/lyrics-intelligence-panel.tsx");
+  assert.equal(/\bAtlas\b/.test(lyrics), false);
+  assert.ok(lyrics.includes("Ensemblis will structure them"));
+  assert.ok(lyrics.includes("Ensemblis keeps revision history"));
 });
