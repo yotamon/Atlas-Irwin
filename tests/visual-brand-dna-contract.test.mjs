@@ -86,15 +86,21 @@ test("activation turns Visual Brand DNA into the existing central creative-conte
 });
 
 test("brand evidence remains media-library-native and artist-local", async () => {
-  await requireSnippets("app/studio/visual-brand-evidence-actions.ts", [
+  const evidenceActions = await requireSnippets("app/studio/visual-brand-evidence-actions.ts", [
     "artist:${artist.artistId}",
     "brand:official",
     "brand:inspiration",
     "brand:experimental",
     "brand:avoid",
+    'relationship === "avoid"',
+    '"brand_negative_reference"',
     '.from("media_assets")',
   ]);
   const media = await read("lib/studio/media.ts");
+  const creativeContext = await read("lib/marketing/creative-context.ts");
   assert.ok(media.includes('brand_reference: "Artist visual reference"'));
+  assert.ok(media.includes('brand_negative_reference: "Artist negative visual reference"'));
   assert.ok(!media.includes("Atlas Irwin visual reference"));
+  assert.ok(evidenceActions.includes('asset_type: nextAssetType'));
+  assert.ok(!creativeContext.includes('"brand_negative_reference"'));
 });
