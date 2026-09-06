@@ -1,4 +1,3 @@
-/* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
 import { MediaUploader } from "@/components/studio/media-uploader";
 import { ObjectHeader } from "@/components/studio/object-header";
@@ -6,7 +5,7 @@ import { ReleaseForm } from "@/components/studio/release-form";
 import { ReleaseMasterAudioPanel } from "@/components/studio/release-master-audio-panel";
 import { lifecycleLabel, releaseLifecycle } from "@/lib/marketing/release-lifecycle";
 import { deriveReleaseMission } from "@/lib/studio/release-mission";
-import type { ContentItem, MediaAsset, MediaLink, MetricSnapshot, Release, Track } from "@/types/database";
+import type { ContentItem, MetricSnapshot, Release, Track } from "@/types/database";
 import type { VaultTrack } from "@/types/growth-database";
 
 const STAGES = [
@@ -51,11 +50,9 @@ function resultInsight(metrics: MetricSnapshot[]) {
   return "There is listening activity, but not enough durable intent yet to declare a winning creative angle. Keep testing from the strongest musical Moments.";
 }
 
-export function ReleaseWorkspaceV2({ release, tracks, mediaLinks, mediaAssets, contentItems, metrics, campaign, stage, renderedAt, playbookTasks = [], providerScheduledCount = 0, vaultTrack = null }: {
+export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, campaign, stage, renderedAt, playbookTasks = [], providerScheduledCount = 0, vaultTrack = null }: {
   release: Release;
   tracks: Track[];
-  mediaLinks: MediaLink[];
-  mediaAssets: MediaAsset[];
   contentItems: ContentItem[];
   metrics: MetricSnapshot[];
   campaign: CampaignSummary;
@@ -68,8 +65,6 @@ export function ReleaseWorkspaceV2({ release, tracks, mediaLinks, mediaAssets, c
   const renderTime = new Date(renderedAt);
   const lifecycle = releaseLifecycle({ releaseDate: release.release_date, status: release.status, isArchived: release.is_archived }, renderTime);
   const activeStage = normalizeStage(stage);
-  const releaseMediaIds = new Set(mediaLinks.map((link) => link.media_asset_id));
-  const releaseAssets = mediaAssets.filter((asset) => releaseMediaIds.has(asset.id));
   const now = renderTime.getTime();
   const planned = contentItems.filter((item) => item.scheduled_at && item.status !== "Published" && Date.parse(item.scheduled_at) >= now - 3_600_000).sort((a,b) => Date.parse(a.scheduled_at!) - Date.parse(b.scheduled_at!));
   const scheduled = contentItems.filter((item) => item.status === "Scheduled");
