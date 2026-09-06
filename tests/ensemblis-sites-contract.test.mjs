@@ -141,7 +141,7 @@ test("site snapshots read rich playable data from the active artist only", async
     '.eq("artist_id", context.artistId)',
     '.eq("is_public", true)',
     '.eq("publish_state", "live")',
-    '.from("tracks")',
+    '.from("track_read_model")',
     "durationSeconds",
     "soundcloudUrl",
     "spotifyUrl",

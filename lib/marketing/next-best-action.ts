@@ -29,23 +29,23 @@ async function artistScopes() {
   const autonomy = createAutonomyServiceClient();
   const marketing = createMarketingServiceClient();
   const operating = autonomy as unknown as SupabaseClient<EnsemblisDatabase>;
-  const [artists, workspaces, audience, opportunities, publications, campaigns] = await Promise.all([
-    operating.from("artists").select("id,workspace_id,legacy_owner_id,status").eq("status", "active").limit(500),
-    operating.from("workspaces").select("id,created_by,legacy_owner_id").limit(500),
+  const [artists, memberships, audience, opportunities, publications, campaigns] = await Promise.all([
+    operating.from("artists").select("id,workspace_id,status").eq("status", "active").limit(500),
+    operating.from("workspace_memberships").select("workspace_id,profile_id,role,status").eq("role", "owner").eq("status", "active").limit(500),
     autonomy.from("audience_interactions").select("owner_id,artist_id").limit(500),
     autonomy.from("marketing_opportunities").select("owner_id,artist_id").limit(500),
     marketing.from("publication_jobs").select("owner_id,artist_id").limit(500),
     marketing.from("campaigns").select("owner_id,artist_id").in("status", ["draft", "planned", "active"]).limit(500),
   ]);
-  const error = artists.error || workspaces.error || audience.error || opportunities.error || publications.error || campaigns.error;
+  const error = artists.error || memberships.error || audience.error || opportunities.error || publications.error || campaigns.error;
   if (error) throw new Error(error.message);
 
   const unique = new Map<string, AutonomyArtistScope>();
   const workspaceOwner = new Map(
-    (workspaces.data ?? []).map((workspace) => [workspace.id, workspace.legacy_owner_id ?? workspace.created_by]),
+    (memberships.data ?? []).map((membership) => [membership.workspace_id, membership.profile_id]),
   );
   for (const artist of artists.data ?? []) {
-    const ownerId = artist.legacy_owner_id ?? workspaceOwner.get(artist.workspace_id) ?? null;
+    const ownerId = workspaceOwner.get(artist.workspace_id) ?? null;
     if (!ownerId) continue;
     unique.set(`${ownerId}:${artist.id}`, { ownerId, artistId: artist.id });
   }

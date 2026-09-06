@@ -49,7 +49,7 @@ export async function loadArtistOperatingContext({
   const db = client as unknown as SupabaseClient<EnsemblisDatabase>;
   const artistResult = await db
     .from("artists")
-    .select("id,workspace_id,name,slug,project_type,status,avatar_url,accent_color,legacy_owner_id,created_at,updated_at")
+    .select("id,workspace_id,name,slug,project_type,status,avatar_url,accent_color,created_at,updated_at")
     .eq("id", artist.artistId)
     .maybeSingle();
   if (artistResult.error) throw new Error(artistResult.error.message);

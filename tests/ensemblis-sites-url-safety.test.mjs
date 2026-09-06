@@ -15,7 +15,7 @@ test("Sites snapshot builder drops blank and non-http public links", async () =>
     "soundcloudUrl: publicHttpUrl(track.soundcloud_url)",
     "spotifyUrl: publicHttpUrl(track.spotify_url)",
     "const href = publicHttpUrl(candidate)",
-    "artworkUrl: publicAsset(release.artwork_url)",
+    "artworkUrl: publicAsset(release.cover_public_url)",
     "imageUrl: publicHttpUrl(latestRelease?.artworkUrl || artist.avatar_url)",
   ]) {
     assert.ok(snapshot.includes(snippet), `snapshot builder must retain URL safety: ${snippet}`);

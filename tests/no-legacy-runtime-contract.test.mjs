@@ -114,9 +114,12 @@ test("canonical music schema drops denormalized release and platform-link column
     );
   }
 
-  assert.doesNotMatch(
-    migration,
-    /drop column if exists audio_url/,
-    "master audio stays temporarily until intelligence invalidation moves to media_links.master_audio",
+  const masterMigration = await readFile(
+    path.join(root, "supabase/migrations/20260906195000_master_audio_media_ssot.sql"),
+    "utf8",
   );
+  assert.match(masterMigration, /alter table public\.tracks drop column if exists audio_url/);
+  assert.match(masterMigration, /create trigger invalidate_track_master_dependents/);
+  assert.match(masterMigration, /on public\.media_links/);
+  assert.match(masterMigration, /current_track_master_asset_id/);
 });
