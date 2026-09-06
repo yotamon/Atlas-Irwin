@@ -6,7 +6,6 @@ import { PageHeader } from "@/components/studio/ui";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { CAMPAIGN_MODES, MARKETING_OBJECTIVES } from "@/lib/marketing/domain";
 import { requireArtistContext } from "@/lib/studio/artist-context";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/types/database";
 
@@ -24,7 +23,7 @@ function dayLabel(value: string | null) {
 export default async function CampaignsPage() {
   const artist = await requireArtistContext();
   const supabase = await createClient();
-  const music = asArtistScopedMusicClient(supabase);
+  const music = supabase;
   const marketing = asMarketingClient(supabase);
   const [releasesResult, campaignsResult, experimentsResult, contentResult, variantsResult, jobsResult] = await Promise.all([
     music.from("releases").select("id,title,release_date,artwork_url,primary_hook,core_emotion,status").eq("artist_id", artist.artistId).order("release_date", { ascending: false }),

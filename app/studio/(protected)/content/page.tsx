@@ -4,7 +4,6 @@ import { requireStudioAdmin } from "@/lib/auth/studio";
 import { CONTENT_FORMATS, CONTENT_STATUSES, GOALS, PLATFORMS } from "@/lib/studio/constants";
 import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { asMarketingClient } from "@/lib/marketing/db";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { deleteStudioRecord, duplicateContent, saveContent, updateContentStatus } from "@/app/studio/content-actions";
 
 export default async function ContentPage({ searchParams }: {
@@ -22,7 +21,7 @@ export default async function ContentPage({ searchParams }: {
   }
   const [{ data: items, error: itemError }, { data: releases, error: releaseError }] = await Promise.all([
     query,
-    asArtistScopedMusicClient(supabase).from("releases").select("id,title")
+    supabase.from("releases").select("id,title")
       .eq("owner_id", user.id).eq("artist_id", artist.artistId).order("title"),
   ]);
   if (itemError) throw new Error(itemError.message);

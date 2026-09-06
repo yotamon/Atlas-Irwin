@@ -1,7 +1,6 @@
 import "server-only";
 
 import { createCatalogClient } from "@/lib/supabase/service";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 import { createMarketingServiceClient } from "./db";
 
@@ -18,7 +17,7 @@ export async function processDueOutreachEnrollments(limit = 25, scope?: Marketin
   const marketing = createMarketingServiceClient();
   const catalog = createCatalogClient();
   const operational = asArtistScopedOperationalClient(catalog);
-  const music = asArtistScopedMusicClient(catalog);
+  const music = catalog;
   const now = new Date().toISOString();
   let enrollmentQuery = marketing
     .from("outreach_enrollments")

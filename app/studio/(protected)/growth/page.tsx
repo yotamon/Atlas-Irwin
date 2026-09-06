@@ -15,7 +15,6 @@ import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { evidenceStrengthLabel } from "@/lib/studio/evidence-labels";
 import { asGrowthClient } from "@/lib/studio/growth-db";
 import { buildGrowthFunnel, diagnoseGrowthFunnel, rankVaultTracks } from "@/lib/studio/growth";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import type { GrowthSettings } from "@/types/growth-database";
 
 const DEFAULT_SETTINGS: Pick<GrowthSettings, "north_star" | "planning_horizon_days" | "release_cadence_days" | "minimum_candidate_score" | "catalog_engine_enabled" | "autoplan_enabled"> = {
@@ -58,7 +57,7 @@ export default async function GrowthPage({ searchParams }: { searchParams: Promi
   const artist = await resolveDefaultArtistContext(supabase, user);
   const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
   const growth = asGrowthClient(supabase);
-  const music = asArtistScopedMusicClient(supabase);
+  const music = supabase;
   const marketing = asMarketingClient(supabase);
   const [settingsResult, vaultResult, planResult, opportunityResult, releasesResult, metricsResult] = await Promise.all([
     growth.from("artist_growth_settings").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),

@@ -8,8 +8,6 @@ import { requireStudioAdmin } from "@/lib/auth/studio";
 import { loadArtistCreativeMemory } from "@/lib/creative-memory/server";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
-
 function metadataTitle(metadata: unknown, fallback: string) {
   if (metadata && typeof metadata === "object" && !Array.isArray(metadata)) {
     const typed = metadata as { title?: unknown; original_name?: unknown };
@@ -35,7 +33,7 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
   const params = await searchParams;
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveActiveArtistContext(supabase, user);
-  const music = asArtistScopedMusicClient(supabase);
+  const music = supabase;
   const [assetsResult, linksResult, creativeMemory] = await Promise.all([
     supabase.from("media_assets").select("*").eq("owner_id", user.id).order("created_at", { ascending: false }).limit(400),
     music.from("media_links").select("id,media_asset_id,release_id,content_item_id,role,is_primary,artist_id").eq("owner_id", user.id).eq("artist_id", artist.artistId),

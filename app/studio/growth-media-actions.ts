@@ -7,7 +7,6 @@ import { requireStudioAdmin } from "@/lib/auth/studio";
 import { kickMediaWorkerQueue } from "@/lib/media-worker/queue";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asGrowthClient } from "@/lib/studio/growth-db";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { vaultAnalysisReadiness } from "@/lib/studio/vault-analysis";
 import type { Json } from "@/types/database";
 
@@ -118,7 +117,7 @@ export async function attachReleaseMasterFromMedia(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveActiveArtistContext(supabase, user);
   const growth = asGrowthClient(supabase);
-  const music = asArtistScopedMusicClient(supabase);
+  const music = supabase;
   const assetId = z.uuid().parse(value(form, "media_asset_id"));
   const releaseId = z.uuid().parse(value(form, "release_id"));
 

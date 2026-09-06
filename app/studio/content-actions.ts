@@ -5,8 +5,6 @@ import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
-
 const required = z.string().trim().min(1).max(300);
 const number = z.coerce.number().int().nonnegative().default(0);
 function value(form: FormData, key: string) { return String(form.get(key) ?? "").trim(); }
@@ -28,7 +26,7 @@ async function assertRelease(
   releaseId: string | null,
 ) {
   if (!releaseId) return;
-  const { data, error } = await asArtistScopedMusicClient(supabase).from("releases").select("id")
+  const { data, error } = await supabase.from("releases").select("id")
     .eq("id", z.uuid().parse(releaseId)).eq("owner_id", ownerId).eq("artist_id", artistId).maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Release does not belong to the active artist.");

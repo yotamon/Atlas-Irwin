@@ -1,7 +1,6 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import type { ArtistContext } from "@/lib/studio/artist-context";
 import type { Database } from "@/types/database";
 import type { EnsemblisDatabase } from "@/types/ensemblis-database";
@@ -39,7 +38,7 @@ export async function buildArtistSiteSnapshot(
   context: ArtistContext,
 ): Promise<SiteViewModel> {
   const artistDb = client as unknown as SupabaseClient<EnsemblisDatabase>;
-  const music = asArtistScopedMusicClient(client);
+  const music = client;
 
   const [artistResult, releasesResult, linksResult, tracksResult] = await Promise.all([
     artistDb

@@ -19,7 +19,6 @@ import { creativeProviderReadiness } from "@/lib/marketing/creative-providers";
 import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { CONTENT_FORMATS, GOALS, PLATFORMS } from "@/lib/studio/constants";
 import { creativeContextQualityLabel, momentEvidenceSummary } from "@/lib/studio/evidence-labels";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { asMomentAwareMarketingClient, asMomentsClient } from "@/lib/studio/moments-db";
 import { higgsfieldReadiness } from "@/lib/video-providers/higgsfield/client";
 import type { Json } from "@/types/database";
@@ -89,7 +88,7 @@ export default async function ProductionPage({
   const params = await searchParams;
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveDefaultArtistContext(supabase, user);
-  const music = asArtistScopedMusicClient(supabase);
+  const music = supabase;
   const marketing = asMomentAwareMarketingClient(supabase);
   const momentsDb = asMomentsClient(supabase);
   const [itemsResult, releasesResult] = await Promise.all([

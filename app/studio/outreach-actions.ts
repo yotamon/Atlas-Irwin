@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 
 const required = z.string().trim().min(1).max(300);
@@ -30,7 +29,7 @@ async function outreachContext(form: FormData) {
   return {
     artist,
     operational: asArtistScopedOperationalClient(supabase),
-    music: asArtistScopedMusicClient(supabase),
+    music: supabase,
   };
 }
 

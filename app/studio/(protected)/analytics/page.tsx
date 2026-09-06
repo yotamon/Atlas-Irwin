@@ -8,7 +8,6 @@ import { aggregateMetrics, formatRate, metricSignals, primarySignalValue } from 
 import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { PLATFORMS } from "@/lib/studio/constants";
 import { buildGrowthFunnel, diagnoseGrowthFunnel } from "@/lib/studio/growth";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 import { goalPerformanceScore } from "@/lib/studio/performance";
 
@@ -20,7 +19,7 @@ export default async function AnalyticsPage() {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveDefaultArtistContext(supabase, user);
   const marketing = asMarketingClient(supabase);
-  const music = asArtistScopedMusicClient(supabase);
+  const music = supabase;
   const operational = asArtistScopedOperationalClient(supabase);
   const [metricsResult, releasesResult, contentResult, legacyLearningsResult, campaignsResult, marketingLearningsResult] = await Promise.all([
     marketing.from("metric_snapshots").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).order("captured_at", { ascending: false }),

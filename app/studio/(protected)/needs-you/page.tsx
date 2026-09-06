@@ -8,7 +8,6 @@ import { asMarketingClient } from "@/lib/marketing/db";
 import { releaseLifecycle } from "@/lib/marketing/release-lifecycle";
 import { loadPaidGrowthWorkspace, paidGrowthNeedsYou } from "@/lib/paid-growth/server";
 import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { deriveNeedsYouQueue, needsYouTone } from "@/lib/studio/needs-you";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 import { deriveReleaseMission } from "@/lib/studio/release-mission";
@@ -40,7 +39,7 @@ export default async function NeedsYouPage() {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveDefaultArtistContext(supabase, user);
   const operational = asArtistScopedOperationalClient(supabase);
-  const music = asArtistScopedMusicClient(supabase);
+  const music = supabase;
   const marketing = asMarketingClient(supabase);
   const now = new Date();
   const sevenDays = new Date(now);

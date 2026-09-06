@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { revalidatePublicCatalog } from "@/lib/studio/catalog";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import * as actions from "./catalog-actions";
 
 function formValue(form: FormData, key: string) {
@@ -15,7 +14,7 @@ function formValue(form: FormData, key: string) {
 async function assertActiveArtistTargets(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveDefaultArtistContext(supabase, user);
-  const db = asArtistScopedMusicClient(supabase);
+  const db = supabase;
 
   const releaseIds = new Set(
     ["release_id", "target_release_id"]

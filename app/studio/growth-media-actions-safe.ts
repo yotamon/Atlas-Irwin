@@ -3,7 +3,6 @@
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asGrowthClient } from "@/lib/studio/growth-db";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import * as actions from "./growth-media-actions";
 
 function formValue(form: FormData, key: string) {
@@ -13,7 +12,7 @@ function formValue(form: FormData, key: string) {
 async function releaseArtistContext(releaseId: string) {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveActiveArtistContext(supabase, user);
-  const db = asArtistScopedMusicClient(supabase);
+  const db = supabase;
   const { data: release, error } = await db
     .from("releases")
     .select("id")

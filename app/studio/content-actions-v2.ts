@@ -8,7 +8,6 @@ import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { zonedDateTimeToUtc } from "@/lib/marketing/schedule";
 import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { asMomentAwareMarketingClient, asMomentsClient } from "@/lib/studio/moments-db";
 import { deriveContentStatus } from "@/features/studio-v2/policy.mjs";
 
@@ -41,7 +40,7 @@ async function assertRelease(
   releaseId: string | null,
 ) {
   if (!releaseId) return;
-  const { data, error } = await asArtistScopedMusicClient(supabase).from("releases").select("id")
+  const { data, error } = await supabase.from("releases").select("id")
     .eq("id", releaseId).eq("owner_id", ownerId).eq("artist_id", artistId).maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Release does not belong to the active artist.");

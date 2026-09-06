@@ -5,7 +5,6 @@ import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { recordCreativeMemoryEvent, upsertCreativeAssetProfile } from "@/lib/creative-memory/server";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { createServiceClient } from "@/lib/supabase/service";
 import { parseVideoCreativeBrief } from "@/lib/video-director/domain";
 import { prepareShotGenerationRecords } from "@/lib/video-director/generation";
@@ -37,7 +36,7 @@ export async function approveCreativeMemoryLookReferences(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveActiveArtistContext(supabase, user);
   const db = createServiceClient();
-  const music = asArtistScopedMusicClient(db);
+  const music = db;
   const { data: project, error: projectError } = await db.from("music_video_projects")
     .select("*").eq("id", projectId).eq("owner_id", user.id).single();
   if (projectError || !project) throw new Error(projectError?.message || "Video project not found.");

@@ -31,7 +31,6 @@ import {
 } from "@/lib/marketing/domain";
 import { getSiteUrl } from "@/lib/site-url";
 import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import type { Json } from "@/types/database";
 
 function objectValue(value: Json) {
@@ -80,7 +79,7 @@ export default async function CampaignWorkspacePage({
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveDefaultArtistContext(supabase, user);
   const marketing = asMarketingClient(supabase);
-  const music = asArtistScopedMusicClient(supabase);
+  const music = supabase;
   const { data: campaign, error: campaignError } = await marketing
     .from("campaigns")
     .select("*")

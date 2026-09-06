@@ -6,7 +6,6 @@ import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { recordCreativeMemoryEvent, upsertCreativeAssetProfile } from "@/lib/creative-memory/server";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { createServiceClient } from "@/lib/supabase/service";
 import { parseVideoCreativeBrief } from "@/lib/video-director/domain";
 import { HiggsfieldProvider } from "@/lib/video-providers/higgsfield/client";
@@ -35,7 +34,7 @@ async function loadLookGeneration(projectId: string, generationId: string) {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveActiveArtistContext(supabase, user);
   const db = createServiceClient();
-  const music = asArtistScopedMusicClient(db);
+  const music = db;
   const [{ data: project, error: projectError }, { data: generation, error: generationError }] = await Promise.all([
     db.from("music_video_projects").select("*").eq("id", projectId).eq("owner_id", user.id).single(),
     db.from("music_video_generations").select("*")

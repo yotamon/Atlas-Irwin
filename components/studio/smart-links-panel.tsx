@@ -4,13 +4,11 @@ import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asSitesClient } from "@/lib/sites/db";
 import { asSmartLinksClient } from "@/lib/smart-links/db";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
-
 export async function SmartLinksPanel({ siteId, siteSlug }: { siteId: string; siteSlug: string }) {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveActiveArtistContext(supabase, user);
   const smart = asSmartLinksClient(supabase);
-  const music = asArtistScopedMusicClient(supabase);
+  const music = supabase;
   const sites = asSitesClient(supabase);
   const [linksResult, releasesResult, domainsResult] = await Promise.all([
     smart.from("smart_links").select("*").eq("site_id", siteId).eq("owner_id", user.id).eq("artist_id", artist.artistId).eq("is_active", true).order("created_at", { ascending: false }),

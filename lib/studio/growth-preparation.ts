@@ -4,7 +4,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { asGrowthClient } from "@/lib/studio/growth-db";
 import { detectGrowthOpportunities, planReleaseQueue } from "@/lib/studio/growth";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import type { Database, Json } from "@/types/database";
 import type { GrowthOpportunityKind, GrowthSettings } from "@/types/growth-database";
 
@@ -50,7 +49,7 @@ export async function prepareReleaseGrowthPlan({
   respectAutoplan?: boolean;
 }) {
   const growth = asGrowthClient(client);
-  const music = asArtistScopedMusicClient(client);
+  const music = client;
   const settings = await ensureGrowthSettings(client, ownerId, artistId);
   if (respectAutoplan && !settings.autoplan_enabled) {
     return {
@@ -145,7 +144,7 @@ export async function prepareDetectedGrowthOpportunities({
   respectCatalogEngine?: boolean;
 }) {
   const growth = asGrowthClient(client);
-  const music = asArtistScopedMusicClient(client);
+  const music = client;
   const marketing = asMarketingClient(client);
   const settings = await ensureGrowthSettings(client, ownerId, artistId);
   if (respectCatalogEngine && !settings.catalog_engine_enabled) {

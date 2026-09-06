@@ -6,7 +6,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { setCreativeAssetExcluded, upsertCreativeAssetProfile } from "@/lib/creative-memory/server";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { mediaMetadata } from "@/lib/studio/media";
 import type { CreativeMemoryDatabase } from "@/types/creative-memory-database";
 
@@ -17,7 +16,7 @@ function value(form: FormData, key: string) {
 async function creativeAssetContext(assetId: string) {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveActiveArtistContext(supabase, user);
-  const music = asArtistScopedMusicClient(supabase);
+  const music = supabase;
   const memory = supabase as unknown as SupabaseClient<CreativeMemoryDatabase>;
   const [{ data: asset, error: assetError }, linksResult, profileResult, eventResult] = await Promise.all([
     supabase.from("media_assets").select("*").eq("id", assetId).eq("owner_id", user.id).maybeSingle(),

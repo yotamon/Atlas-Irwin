@@ -12,7 +12,6 @@ import { loadPaidGrowthWorkspace, paidGrowthNeedsYou } from "@/lib/paid-growth/s
 import type { Database } from "@/types/database";
 import { deriveArtistMission } from "./artist-mission";
 import type { ArtistContext } from "./artist-context";
-import { asArtistScopedMusicClient } from "./music-db";
 import { deriveNeedsYouQueue } from "./needs-you";
 import {
   formatOperatingDate,
@@ -126,7 +125,7 @@ export async function loadArtistOperatingSnapshot({
   now?: Date;
 }) {
   const operational = asArtistScopedOperationalClient(db);
-  const music = asArtistScopedMusicClient(db);
+  const music = db;
   const marketing = asMarketingClient(db);
   const autonomy = createAutonomyServiceClient();
   const preferencesPromise = loadWorkspaceOperatingPreferences(db, artist.workspaceId);

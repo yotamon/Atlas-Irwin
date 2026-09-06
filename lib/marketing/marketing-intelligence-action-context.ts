@@ -8,7 +8,6 @@ import { normalizeArtistPerformance, type ArtistPerformanceInput, type Marketing
 import { aggregateMetrics, formatRate, objectivePerformanceScore, primarySignalValue } from "@/lib/marketing/domain";
 import type { CampaignPlanningContext } from "@/lib/marketing/planner";
 import { resolveActiveArtistContext, resolveArtistContext } from "@/lib/studio/artist-context";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 import { asMomentAwareMarketingClient, asMomentsClient } from "@/lib/studio/moments-db";
 import type { Json } from "@/types/database";
@@ -48,7 +47,7 @@ export async function actionContext(form?: FormData) {
     marketing: asMarketingClient(supabase),
     momentMarketing: asMomentAwareMarketingClient(supabase),
     moments: asMomentsClient(supabase),
-    music: asArtistScopedMusicClient(supabase),
+    music: supabase,
     operational: asArtistScopedOperationalClient(supabase),
   };
 }

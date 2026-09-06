@@ -8,7 +8,6 @@ import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { miniMaxGenerationCost } from "@/lib/music/generator";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asGrowthClient } from "@/lib/studio/growth-db";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 
 export default async function MusicPage({
@@ -155,7 +154,7 @@ export default async function MusicPage({
   }
 
   const growth = asGrowthClient(supabase);
-  const music = asArtistScopedMusicClient(supabase);
+  const music = supabase;
   const [vaultResult, releasesResult, tracksResult] = await Promise.all([
     growth
       .from("track_vault")

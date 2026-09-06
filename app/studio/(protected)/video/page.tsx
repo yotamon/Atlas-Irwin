@@ -3,7 +3,6 @@ import { ReleaseVideoPanel } from "@/components/studio/video-director/release-vi
 import { EmptyState, PageHeader } from "@/components/studio/ui";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { requireArtistContext } from "@/lib/studio/artist-context";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { asMomentsClient } from "@/lib/studio/moments-db";
 import { createClient } from "@/lib/supabase/server";
 
@@ -24,7 +23,7 @@ export default async function VideoDirectorPage({
 }) {
   const artist = await requireArtistContext();
   const supabase = await createClient();
-  const music = asArtistScopedMusicClient(supabase);
+  const music = supabase;
   const momentsDb = asMomentsClient(supabase);
   const params = await searchParams;
   const href = (path: string) => ensemblisArtistHref(path, artist.artistId);

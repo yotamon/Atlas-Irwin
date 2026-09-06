@@ -13,7 +13,6 @@ import {
   detectGrowthOpportunities,
   planReleaseQueue,
 } from "@/lib/studio/growth";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 import { asSocialClient } from "@/lib/studio/social-db";
 import type { Json } from "@/types/database";
@@ -50,7 +49,7 @@ async function getGrowthActionContext() {
     artist,
     growth: asGrowthClient(supabase),
     marketing: asMarketingClient(supabase),
-    music: asArtistScopedMusicClient(supabase),
+    music: supabase,
     operational: asArtistScopedOperationalClient(supabase),
     social: asSocialClient(supabase),
   };

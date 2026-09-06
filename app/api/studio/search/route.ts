@@ -4,8 +4,6 @@ import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { resolveArtistContext } from "@/lib/studio/artist-context";
 import { asGrowthClient } from "@/lib/studio/growth-db";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
-
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
@@ -16,7 +14,7 @@ export async function GET(request: Request) {
 
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveArtistContext(supabase, user, artistId);
-  const music = asArtistScopedMusicClient(supabase);
+  const music = supabase;
   const growth = asGrowthClient(supabase);
   const marketing = asMarketingClient(supabase);
   const pattern = `%${query.replaceAll("%", "\\%").replaceAll("_", "\\_")}%`;

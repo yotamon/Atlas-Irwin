@@ -18,7 +18,6 @@ import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { CONTACT_TYPES, RELATIONSHIP_STATUSES } from "@/lib/studio/constants";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 
 export default async function OutreachPage({
@@ -31,7 +30,7 @@ export default async function OutreachPage({
   const artist = await resolveDefaultArtistContext(supabase, user);
   const marketing = asMarketingClient(supabase);
   const operational = asArtistScopedOperationalClient(supabase);
-  const music = asArtistScopedMusicClient(supabase);
+  const music = supabase;
 
   let query = operational.from("outreach_contacts").select("*")
     .eq("owner_id", artist.userId)

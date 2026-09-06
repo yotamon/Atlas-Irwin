@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { asMarketingClient } from "@/lib/marketing/db";
 import {
   OBJECTIVE_KPIS,
@@ -51,7 +50,7 @@ async function uniqueReleaseSlug(
   preferred?: string,
   currentId?: string,
 ) {
-  const db = asArtistScopedMusicClient(supabase);
+  const db = supabase;
   const base = slugify(preferred || title);
   for (let index = 0; index < 50; index += 1) {
     const slug = index === 0 ? base : `${base}-${index + 1}`;
@@ -229,7 +228,7 @@ async function shiftReleasePlan({
 export async function saveReleaseV2(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveDefaultArtistContext(supabase, user);
-  const db = asArtistScopedMusicClient(supabase);
+  const db = supabase;
   const id = value(form, "id");
   const title = required.parse(value(form, "title"));
   const releaseType = required.parse(value(form, "release_type") || "Single");

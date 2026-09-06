@@ -8,7 +8,6 @@ import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { requireArtistContext } from "@/lib/studio/artist-context";
 import { recommendCreativeDirections } from "@/lib/studio/creative-directions";
 import { momentEvidenceSummary } from "@/lib/studio/evidence-labels";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { curateReleaseMoments } from "@/lib/studio/moments-curator";
 import { asMomentsClient } from "@/lib/studio/moments-db";
 import { createClient } from "@/lib/supabase/server";
@@ -19,7 +18,7 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
   const params = await searchParams;
   const artist = await requireArtistContext();
   const supabase = await createClient();
-  const music = asArtistScopedMusicClient(supabase);
+  const music = supabase;
   const momentsDb = asMomentsClient(supabase);
   const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
 

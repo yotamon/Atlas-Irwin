@@ -5,7 +5,6 @@ import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 import type { MarketingMetricSnapshot } from "@/types/marketing-database";
 
@@ -32,7 +31,7 @@ async function analyticsContext(form: FormData) {
 export async function saveMetric(form: FormData) {
   const { supabase, artist } = await analyticsContext(form);
   const marketing = asMarketingClient(supabase);
-  const music = asArtistScopedMusicClient(supabase);
+  const music = supabase;
   const releaseId = nullable(form, "release_id");
   const contentItemId = nullable(form, "content_item_id");
   if (releaseId) {
@@ -73,7 +72,7 @@ export async function saveMetric(form: FormData) {
 
 export async function saveLearning(form: FormData) {
   const { supabase, artist } = await analyticsContext(form);
-  const music = asArtistScopedMusicClient(supabase);
+  const music = supabase;
   const operational = asArtistScopedOperationalClient(supabase);
   const releaseId = z.uuid().parse(value(form, "release_id"));
   const { data: release, error: releaseError } = await music.from("releases").select("id")

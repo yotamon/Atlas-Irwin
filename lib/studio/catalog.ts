@@ -2,7 +2,6 @@ import "server-only";
 
 import { revalidatePath, revalidateTag } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { asArtistScopedMusicClient } from "./music-db";
 import type { Database } from "@/types/database";
 
 export function revalidatePublicCatalog() {
@@ -21,7 +20,7 @@ export async function upsertHomepagePlacement(
     placement_type?: string;
   },
 ) {
-  const db = asArtistScopedMusicClient(supabase);
+  const db = supabase;
   const { data: release, error: releaseError } = await db
     .from("releases")
     .select("id,owner_id,artist_id")
@@ -69,7 +68,7 @@ export async function setReleasePublishState(
     status?: string;
   },
 ) {
-  const db = asArtistScopedMusicClient(supabase);
+  const db = supabase;
   const { data: release, error: releaseError } = await db
     .from("releases")
     .select("id,artist_id")

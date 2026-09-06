@@ -2,7 +2,6 @@ import { notFound } from "next/navigation";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { loadArtistCreativeMemory } from "@/lib/creative-memory/server";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { createServiceClient } from "@/lib/supabase/service";
 import { openAIDirectorReadiness } from "@/lib/video-director/openai-director";
 import { mediaWorkerReadiness } from "@/lib/video-director/worker";
@@ -38,7 +37,7 @@ export default async function VideoProjectPage({
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveActiveArtistContext(supabase, user);
   const db = createServiceClient();
-  const music = asArtistScopedMusicClient(db);
+  const music = db;
 
   const { data: project, error: projectError } = await db.from("music_video_projects")
     .select("*").eq("id", id).eq("owner_id", user.id).maybeSingle();

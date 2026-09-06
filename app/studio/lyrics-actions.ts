@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { analyzeTrackLyrics } from "@/lib/lyrics-intelligence/analyze";
 import { parseLyrics } from "@/lib/lyrics-intelligence/domain";
 import type { Json } from "@/types/database";
@@ -21,7 +20,7 @@ function checked(form: FormData, key: string) {
 async function studioLyricsContext(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveDefaultArtistContext(supabase, user);
-  const music = asArtistScopedMusicClient(supabase);
+  const music = supabase;
   const db = supabase as unknown as SupabaseClient<LyricsDatabase>;
   const trackId = text(form, "track_id");
   const releaseId = text(form, "release_id");

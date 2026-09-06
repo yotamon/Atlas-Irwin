@@ -4,7 +4,6 @@ import { EmptyState, PageHeader } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import type {
   ArtistScopedHomepagePlacement,
   ArtistScopedRelease,
@@ -27,7 +26,7 @@ export default async function ReleasesPage({
 }) {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveDefaultArtistContext(supabase, user);
-  const db = asArtistScopedMusicClient(supabase);
+  const db = supabase;
   const params = await searchParams;
   const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
   let query = db

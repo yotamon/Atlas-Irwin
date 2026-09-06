@@ -6,7 +6,6 @@ import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { recordCreativeMemoryEvent } from "@/lib/creative-memory/server";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { asMomentsClient } from "@/lib/studio/moments-db";
 import { buildQuickVideoConcepts, QUICK_VIDEO_CONCEPT_IDS } from "@/lib/video-director/quick-video";
 import {
@@ -42,7 +41,7 @@ function projectPath(projectId: string) {
 async function requireProjectForActiveArtist(id: string) {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveActiveArtistContext(supabase, user);
-  const music = asArtistScopedMusicClient(supabase);
+  const music = supabase;
   const { data: project, error } = await supabase.from("music_video_projects")
     .select("*")
     .eq("id", id)
@@ -62,7 +61,7 @@ async function requireProjectForActiveArtist(id: string) {
 export async function createMusicVideoProject(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveActiveArtistContext(supabase, user);
-  const music = asArtistScopedMusicClient(supabase);
+  const music = supabase;
   const momentsDb = asMomentsClient(supabase);
   const parsed = z.object({
     release_id: z.uuid(),

@@ -21,7 +21,6 @@ import {
 import { planCampaign, type CampaignPlanningContext } from "@/lib/marketing/planner";
 import { releaseRelativeTimestamp } from "@/lib/marketing/schedule";
 import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 import type { Json } from "@/types/database";
 import type {
@@ -49,7 +48,7 @@ async function actionContext(form?: FormData) {
     user,
     artist,
     marketing: asMarketingClient(supabase),
-    music: asArtistScopedMusicClient(supabase),
+    music: supabase,
     operational: asArtistScopedOperationalClient(supabase),
   };
 }

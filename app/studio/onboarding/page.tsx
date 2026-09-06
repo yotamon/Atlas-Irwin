@@ -4,7 +4,6 @@ import { requireStudioAdmin } from "@/lib/auth/studio";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asGrowthClient } from "@/lib/studio/growth-db";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { GOAL_LABELS, MARKETING_INVOLVEMENT_LABELS } from "@/lib/artist-operating/domain";
 import { loadArtistOperatingContext } from "@/lib/artist-operating/server";
 import { saveArtistOperatingProfileAction } from "@/app/studio/artist-operating-actions";
@@ -28,7 +27,7 @@ export default async function ArtistOnboardingPage() {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveActiveArtistContext(supabase, user);
   const growth = asGrowthClient(supabase);
-  const music = asArtistScopedMusicClient(supabase);
+  const music = supabase;
   const db = supabase as unknown as Db;
   const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
   const [vaultResult, releaseResult, momentResult, eventResult, operatingContext] = await Promise.all([

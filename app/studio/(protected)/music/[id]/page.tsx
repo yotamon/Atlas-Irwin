@@ -11,7 +11,6 @@ import { requireStudioAdmin } from "@/lib/auth/studio";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asGrowthClient } from "@/lib/studio/growth-db";
-import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import type { Json, Track } from "@/types/database";
 
 function titleCase(value: string) {
@@ -51,7 +50,7 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
   const artist = await resolveActiveArtistContext(supabase, user);
   const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
   const growth = asGrowthClient(supabase);
-  const music = asArtistScopedMusicClient(supabase);
+  const music = supabase;
 
   const { data: vaultTrack, error: vaultError } = await growth
     .from("track_vault")
