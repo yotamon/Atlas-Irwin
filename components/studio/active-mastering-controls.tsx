@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { createActiveMaster } from "@/app/studio/mastering-actions";
+import { createActiveMaster, promoteActiveMaster } from "@/app/studio/mastering-actions";
 import type { Json } from "@/types/database";
 import styles from "./active-mastering-panel.module.css";
 
@@ -124,7 +124,15 @@ export function ActiveMasteringControls({
                   <label><span>Mastered</span><audio controls preload="metadata" src={job.outputUrl || undefined} /></label>
                 </div>
                 <div className={styles.actions}>
-                  <a className="button primary" href={job.outputUrl || "#"} download>Download 24-bit WAV</a>
+                  <div className={styles.actionButtons}>
+                    <a className="button" href={job.outputUrl || "#"} download>Download 24-bit WAV</a>
+                    {checks.pass === true ? (
+                      <form action={promoteActiveMaster}>
+                        <input type="hidden" name="job_id" value={job.id} />
+                        <button className="button primary" type="submit">Use as canonical master</button>
+                      </form>
+                    ) : null}
+                  </div>
                   <span>{checks.true_peak_safe === true ? "True peak safe" : "Check true peak"} · {checks.dynamics_preserved === true ? "Dynamics preserved" : "Review dynamics"}</span>
                 </div>
               </article>
