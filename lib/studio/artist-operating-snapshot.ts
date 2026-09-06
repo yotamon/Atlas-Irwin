@@ -41,7 +41,7 @@ export type OperatingManagerPlanItem = {
   id: string;
   title: string;
   detail: string;
-  status: "Queued" | "Working" | "Publishing" | "Planned" | "Scheduled";
+  status: "Queued" | "Working" | "Publishing" | "Planned" | "Prepared" | "Scheduled";
   href: string;
 };
 
@@ -50,6 +50,12 @@ const ARTIST_DECISION_ACTION_TYPES = new Set([
   "approve_publication",
   "repair_publication",
 ]);
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
 
 function dateDistance(value: string | null | undefined, now: Date) {
   if (!value) return "Date not set";
@@ -73,6 +79,19 @@ function nextBestActionPath(action: { action_type: string }) {
 
 function needsArtistJudgment(action: { action_type: string }) {
   return ARTIST_DECISION_ACTION_TYPES.has(action.action_type);
+}
+
+function managerOwned(action: { payload: unknown }) {
+  return record(action.payload).managerOwned === true;
+}
+
+function preparedManagerDetail(action: { rationale: string; payload: unknown }) {
+  const execution = record(record(action.payload).managerExecution);
+  const prepared = Number(execution.prepared ?? execution.synced ?? 0);
+  if (prepared > 0) {
+    return `Ensemblis prepared ${prepared} evidence-backed Growth opportunit${prepared === 1 ? "y" : "ies"}. ${action.rationale}`;
+  }
+  return action.rationale;
 }
 
 function humanizeJobType(value: string | null | undefined) {
@@ -113,6 +132,8 @@ export async function loadArtistOperatingSnapshot({
   const operatingContextPromise = loadArtistOperatingContext({ db, artist });
   const sevenDays = new Date(now);
   sevenDays.setDate(sevenDays.getDate() + 7);
+  const sevenDaysAgo = new Date(now);
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
   const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
 
   const [
@@ -127,6 +148,7 @@ export async function loadArtistOperatingSnapshot({
     contentResult,
     learningsResult,
     nextActionsResult,
+    completedManagerActionsResult,
     soundCloudPendingResult,
     spotifyPendingResult,
     outreachDraftsResult,
@@ -143,6 +165,7 @@ export async function loadArtistOperatingSnapshot({
     marketing.from("content_items").select("id,title,platform,status,asset_url,scheduled_at,release_id").eq("owner_id", userId).eq("artist_id", artist.artistId).not("status", "eq", "Archived").order("scheduled_at", { ascending: true }).limit(100),
     marketing.from("marketing_learnings").select("id,status").eq("owner_id", userId).eq("artist_id", artist.artistId).eq("status", "proposed").limit(20),
     autonomy.from("next_best_actions").select("id,title,rationale,action_type,score,status,source_type,payload").eq("owner_id", userId).eq("artist_id", artist.artistId).eq("status", "proposed").order("score", { ascending: false }).limit(8),
+    autonomy.from("next_best_actions").select("id,title,rationale,action_type,status,source_type,payload,updated_at").eq("owner_id", userId).eq("artist_id", artist.artistId).eq("status", "completed").eq("source_type", "artist_operating_profile").gte("updated_at", sevenDaysAgo.toISOString()).order("updated_at", { ascending: false }).limit(6),
     db.from("soundcloud_tracks").select("id,linked_track_id").eq("owner_id", userId).eq("reconcile_status", "pending"),
     db.from("spotify_tracks").select("id,linked_track_id").eq("owner_id", userId).eq("reconcile_status", "pending"),
     marketing.from("outreach_messages").select("id").eq("owner_id", userId).eq("artist_id", artist.artistId).is("sent_at", null).eq("response_status", "Draft"),
@@ -159,6 +182,7 @@ export async function loadArtistOperatingSnapshot({
     contentResult,
     learningsResult,
     nextActionsResult,
+    completedManagerActionsResult,
     soundCloudPendingResult,
     spotifyPendingResult,
     outreachDraftsResult,
@@ -172,6 +196,7 @@ export async function loadArtistOperatingSnapshot({
   const automation = automationResult.data ?? [];
   const publications = publicationResult.data ?? [];
   const nextActions = nextActionsResult.data ?? [];
+  const completedManagerActions = (completedManagerActionsResult.data ?? []).filter(managerOwned);
   const nextAction = nextActions[0] ?? null;
   const humanNextAction = nextActions.find(needsArtistJudgment) ?? null;
   const activeRelease = releases.find((release) => release.active_release)
@@ -264,6 +289,13 @@ export async function loadArtistOperatingSnapshot({
   const strategy = buildArtistStrategy(operatingContext);
   const managerPlan: OperatingManagerPlanItem[] = [
     ...working.map((item) => ({ ...item })),
+    ...completedManagerActions.slice(0, 2).map((action) => ({
+      id: `manager-completed-${action.id}`,
+      title: action.title,
+      detail: preparedManagerDetail(action),
+      status: "Prepared" as const,
+      href: href(nextBestActionPath(action)),
+    })),
     ...nextActions.filter((action) => !needsArtistJudgment(action)).slice(0, 3).map((action) => ({
       id: `manager-action-${action.id}`,
       title: action.title,
