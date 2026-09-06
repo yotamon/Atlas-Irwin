@@ -15,6 +15,10 @@ function readable(value: string | null | undefined, fallback: string) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function percent(value: number) {
+  return `${Math.round(value * 100)}%`;
+}
+
 export default async function AudiencePage() {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveDefaultArtistContext(supabase, user);
@@ -28,32 +32,32 @@ export default async function AudiencePage() {
   const ready = interactions.filter((item) => item.suggested_reply);
   const reviewOnly = interactions.filter((item) => !item.suggested_reply);
   const ordered = [...ready, ...reviewOnly];
-  const recentRelationships = fanGraph.profiles.filter((profile) => profile.relationshipState !== "inactive").slice(0, 10);
+  const recentRelationships = fanGraph.profiles.filter((profile) => profile.qualityBand !== "inactive").slice(0, 10);
 
   return (
     <div className="studio-v2-page audience-polish-page">
-      <PageHeader title="Audience" description={`Relationships and conversations that matter for ${artist.artistName}.`} />
+      <PageHeader title="Audience" description={`Fan quality, relationships and conversations that matter for ${artist.artistName}.`} />
 
-      <section className="audience-polish-summary fan-graph-summary" aria-label="Audience relationship summary">
+      <section className="audience-polish-summary fan-graph-summary" aria-label="Fan quality summary">
         <div><strong>{interactions.length}</strong><span>need judgment</span></div>
-        <div><strong>{fanGraph.returningCount}</strong><span>returning relationships</span></div>
-        <div><strong>{fanGraph.knownSupporterCount}</strong><span>known supporters</span></div>
-        <div><strong>{fanGraph.permissionedIdentityCount}</strong><span>permissioned identities</span></div>
-        <p>Channel relationships stay separate unless real evidence and permission connect them; nothing is sent without your decision.</p>
+        <div><strong>{fanGraph.qualifiedFanCount}</strong><span>qualified fans</span></div>
+        <div><strong>{fanGraph.coreFanCount}</strong><span>core fans</span></div>
+        <div><strong>{fanGraph.ownedReachableCount}</strong><span>directly reachable</span></div>
+        <p>{percent(fanGraph.repeatRelationshipRate)} of active relationships show repeat engagement. These are evidence bands, not a universal fan score: Ensemblis keeps discovery, fandom and permissioned reach separate, never infers consent, and nothing is sent without your decision.</p>
       </section>
 
       <section className="fan-graph-section">
         <div className="audience-polish-heading fan-graph-heading">
-          <div><span className="section-label">Relationship memory</span><h2>{recentRelationships.length ? `${recentRelationships.length} recent relationship${recentRelationships.length === 1 ? "" : "s"}` : "Relationships will appear as conversations arrive"}</h2></div>
-          <span>{fanGraph.profiles.length} total active</span>
+          <div><span className="section-label">Fan quality intelligence</span><h2>{recentRelationships.length ? `${recentRelationships.length} recent relationship${recentRelationships.length === 1 ? "" : "s"}` : "Relationships will appear as conversations arrive"}</h2></div>
+          <span>{fanGraph.activeRelationshipCount} active · {fanGraph.engagedFanCount} engaged</span>
         </div>
         {recentRelationships.length ? <div className="fan-relationship-list">
           {recentRelationships.map((profile) => <Link href={`/studio/audience/fans/${profile.id}`} className="fan-relationship-row" key={profile.id}>
-            <div className="fan-relationship-person"><strong>{profile.displayName}</strong><span>{readable(profile.relationshipState, "New")} · {profile.interactionCount} interaction{profile.interactionCount === 1 ? "" : "s"}</span></div>
+            <div className="fan-relationship-person"><strong>{profile.displayName}</strong><span>{readable(profile.qualityBand, "New")} fan · {profile.interactionCount} interaction{profile.interactionCount === 1 ? "" : "s"}</span></div>
             <div className="fan-channel-chips">{profile.identities.slice(0, 4).map((identity) => <span key={identity.id}>{readable(identity.channel, "Channel")} · {identity.label}</span>)}</div>
-            <div className="fan-relationship-context"><span>Last seen {shortDate(profile.lastSeenAt)}</span>{profile.nextAction ? <strong>{profile.nextAction.title}</strong> : <small>No action needed</small>}</div>
+            <div className="fan-relationship-context"><span>{profile.qualityReasons.slice(0, 2).join(" · ")}</span>{profile.nextAction ? <strong>{profile.nextAction.title}</strong> : <small>{profile.ownedReachable ? "Permissioned direct relationship" : `Last seen ${shortDate(profile.lastSeenAt)}`}</small>}</div>
           </Link>)}
-        </div> : <div className="v2-calm-state compact"><strong>No relationship history yet.</strong><p>Ensemblis remembers recurring channel relationships without guessing identities across platforms.</p></div>}
+        </div> : <div className="v2-calm-state compact"><strong>No relationship history yet.</strong><p>Ensemblis will distinguish attention from repeat fandom as real first-party evidence arrives, without guessing identities across platforms.</p></div>}
       </section>
 
       <section className="audience-polish-queue">

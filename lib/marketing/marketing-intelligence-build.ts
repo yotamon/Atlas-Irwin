@@ -1,6 +1,8 @@
 import "server-only";
 
 import { z } from "zod";
+import { loadFanQualitySnapshot } from "@/lib/audience/fan-graph-server";
+import { fanQualityPlanningContext } from "@/lib/audience/fan-quality";
 import { loadArtistCreativeMemory } from "@/lib/creative-memory/server";
 import { MARKETING_OBJECTIVES } from "@/lib/marketing/domain";
 import { finalizeCampaignIntelligence, selectMarketingMoments } from "@/lib/marketing/marketing-intelligence";
@@ -65,13 +67,17 @@ export async function buildCampaignIntelligence(form: FormData) {
   if (!release) throw new Error("Campaign Intelligence could not load the linked release.");
 
   const objective = objectiveSchema.parse(campaign.objective);
-  const creativeMemory = await loadArtistCreativeMemory({
-    db: supabase,
-    ownerId: user.id,
-    artistId: artist.artistId,
-    releaseId: release.id,
-    recommendationLimit: 12,
-  });
+  const [creativeMemory, fanQuality] = await Promise.all([
+    loadArtistCreativeMemory({
+      db: supabase,
+      ownerId: user.id,
+      artistId: artist.artistId,
+      releaseId: release.id,
+      recommendationLimit: 12,
+    }),
+    loadFanQualitySnapshot(supabase, user.id, artist.artistId),
+  ]);
+  const fanContext = fanQualityPlanningContext(fanQuality);
   const allContent = contentResult.data ?? [];
   const allMetrics = (metricResult.data ?? []) as unknown as Array<Record<string, unknown>>;
   const memorySemantic = uniqueStrings(creativeMemory.recommendations.flatMap((reference) => reference.semanticDescriptors), 24);
@@ -117,6 +123,7 @@ export async function buildCampaignIntelligence(form: FormData) {
     objective,
     brandContext: [
       ...brandContext,
+      fanContext,
       ...selectedMusicMoments.map((moment) => `Approved marketing Moment: ${moment.label} (${(moment.startMs / 1000).toFixed(2)}s–${(moment.endMs / 1000).toFixed(2)}s), ${moment.sourceMode}; ${moment.selectionReasons.join(" ")}`),
       ...rejections.map((signal) => `Do not repeat rejected direction: ${signal}`),
     ],

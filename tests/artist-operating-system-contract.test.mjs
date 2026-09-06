@@ -161,10 +161,11 @@ test("Manager reuses deterministic Growth engines for release, discovery and fan
   assert.match(preparation, /status = preserveLifecycle \? previous!\.status : "new"/);
 });
 
-test("owned-audience Manager preparation is consent-first and never invents contact permission", async () => {
-  const [executor, preparation, migration, growthTypes] = await Promise.all([
+test("owned-audience Manager preparation is consent-first and reuses the Fan Quality permission contract", async () => {
+  const [executor, preparation, quality, migration, growthTypes] = await Promise.all([
     read("lib/marketing/manager-execution.ts"),
     read("lib/audience/owned-audience-preparation.ts"),
+    read("lib/audience/fan-quality.ts"),
     read("supabase/migrations/20260906165000_owned_audience_growth_opportunity.sql"),
     read("types/growth-database.ts"),
   ]);
@@ -172,12 +173,13 @@ test("owned-audience Manager preparation is consent-first and never invents cont
   assert.match(executor, /advance_owned_audience/);
   assert.match(executor, /prepareOwnedAudienceOpportunity/);
   assert.match(executor, /source: "owned_audience"/);
-  assert.match(preparation, /verified_email/);
-  assert.match(preparation, /verified_phone/);
-  assert.match(preparation, /email_marketing/);
-  assert.match(preparation, /sms_marketing/);
-  assert.match(preparation, /permission\.evidence_at/);
-  assert.match(preparation, /validPermissionExpiry/);
+  assert.match(preparation, /permissionedOwnedFanIds/);
+  assert.match(quality, /verified_email/);
+  assert.match(quality, /verified_phone/);
+  assert.match(quality, /email_marketing/);
+  assert.match(quality, /sms_marketing/);
+  assert.match(quality, /permission\.evidence_at/);
+  assert.match(quality, /permission\.expires_at/);
   assert.match(preparation, /relationshipGap/);
   assert.match(preparation, /smart_link_readback/);
   assert.match(preparation, /externalContactRequiresApproval: true/);
