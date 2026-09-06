@@ -82,7 +82,11 @@ async function canonicalReferences(input: {
   if (error) throw new Error(error.message);
   const expectedArtistTag = `artist:${input.artistId}`.toLowerCase();
   return ((data ?? []) as MediaAsset[])
-    .filter((asset) => asset.public_url && asset.mime_type?.startsWith("image/") && mediaMetadata(asset).tags.map((tag) => tag.toLowerCase()).includes(expectedArtistTag))
+    .filter((asset) => {
+      if (!asset.public_url || !asset.mime_type?.startsWith("image/") || asset.asset_type === "brand_negative_reference") return false;
+      const tags = mediaMetadata(asset).tags.map((tag) => tag.toLowerCase());
+      return tags.includes(expectedArtistTag) && !tags.includes("brand:avoid");
+    })
     .map((asset, index) => ({
       assetId: asset.id,
       url: asset.public_url as string,
@@ -120,7 +124,7 @@ export async function prepareVisualBrandReferencePack(form: FormData) {
     artistId: artist.artistId,
     ids: active.canonicalAssetIds,
   });
-  if (references.length < 3) throw new Error("Keep at least three valid canonical image references before generating an identity pack.");
+  if (references.length < 3) throw new Error("Keep at least three valid positive canonical image references before generating an identity pack.");
   const routeContext = visualBrandRouteReferenceContext(references);
   const slots = visualBrandReferenceSlots(active.dna);
   const prepared = await Promise.all(slots.map(async (slot) => {
@@ -198,11 +202,10 @@ async function packRuns(marketing: ReturnType<typeof asMarketingClient>, ownerId
   return data ?? [];
 }
 
-async function existingVisualReferenceSpend(marketing: ReturnType<typeof asMarketingClient>, ownerId: string, artistId: string) {
+async function existingVisualReferenceSpend(marketing: ReturnType<typeof asMarketingClient>, ownerId: string) {
   const { data, error } = await marketing.from("generation_runs")
     .select("status,actual_cost_usd,estimated_cost_usd")
     .eq("owner_id", ownerId)
-    .eq("artist_id", artistId)
     .like("purpose", `${VISUAL_BRAND_REFERENCE_PURPOSE_PREFIX}%`)
     .in("status", ["running", "completed"]);
   if (error) throw new Error(error.message);
@@ -225,7 +228,7 @@ export async function approveVisualBrandReferencePack(form: FormData) {
   const estimates = runs.map((run) => numeric(run.estimated_cost_usd));
   if (estimates.some((estimate) => estimate === null)) throw new Error("At least one reference has no reliable USD estimate, so Ensemblis cannot approve this pack safely.");
   const estimatedTotal = estimates.reduce<number>((sum, estimate) => sum + (estimate ?? 0), 0);
-  const alreadySpent = await existingVisualReferenceSpend(marketing, artist.userId, artist.artistId);
+  const alreadySpent = await existingVisualReferenceSpend(marketing, artist.userId);
   await assertSpecialistMediaSpendAllowed({
     ownerId: artist.userId,
     kind: "image",
