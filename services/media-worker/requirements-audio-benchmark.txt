@@ -1,0 +1,4 @@
+# Offline/private-catalog benchmark profile only.
+# These dependencies are intentionally excluded from the production media worker.
+mir-eval==0.8.2
+audiomentations==0.43.1
