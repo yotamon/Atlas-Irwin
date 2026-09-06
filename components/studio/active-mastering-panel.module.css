@@ -134,6 +134,17 @@
   align-items: center;
 }
 
+.actionButtons {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.actionButtons form {
+  margin: 0;
+}
+
 .actions span {
   font-size: 0.78rem;
 }
