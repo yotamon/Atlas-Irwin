@@ -1,0 +1,12 @@
+/* Single Ensemblis Studio stylesheet entrypoint.
+   Cascade ownership is explicit: compatibility can supply layout, but canonical
+   Design System layers always own tokens, primitives, patterns and shell. */
+
+@layer ensemblis-compat, ensemblis-tokens, ensemblis-primitives, ensemblis-patterns, ensemblis-shell, ensemblis-accessibility;
+
+@import "./legacy-compat.generated.css" layer(ensemblis-compat);
+@import "./tokens.css" layer(ensemblis-tokens);
+@import "./primitives.css" layer(ensemblis-primitives);
+@import "./patterns.css" layer(ensemblis-patterns);
+@import "./shell.css" layer(ensemblis-shell);
+@import "./accessibility.css" layer(ensemblis-accessibility);

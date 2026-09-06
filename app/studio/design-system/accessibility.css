@@ -1,0 +1,56 @@
+/* Global interaction and accessibility guarantees for Ensemblis. */
+
+.studio-root ::selection {
+  background: color-mix(in srgb, var(--en-accent) 46%, transparent);
+  color: var(--en-ink);
+}
+
+.studio-root :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--en-accent) 82%, var(--en-white));
+  outline-offset: 3px;
+}
+
+.studio-root :where(button, summary, a[href]) {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.studio-root * {
+  scrollbar-color: var(--en-line-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.studio-root *::-webkit-scrollbar,
+body:has(.studio-root)::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.studio-root *::-webkit-scrollbar-thumb,
+body:has(.studio-root)::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: var(--en-radius-pill);
+  background: var(--en-line-strong);
+  background-clip: padding-box;
+}
+
+.studio-root *::-webkit-scrollbar-track,
+body:has(.studio-root)::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media (pointer: coarse) {
+  .studio-root :where(button, summary, a[href], input:not([type="hidden"]), select, textarea) {
+    min-height: var(--en-control-lg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-root *,
+  .studio-root *::before,
+  .studio-root *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

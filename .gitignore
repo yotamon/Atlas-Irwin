@@ -45,6 +45,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# generated Ensemblis compatibility CSS (built from legacy layout sources)
+/app/studio/design-system/legacy-compat.generated.css
+
 # local tooling / agent artifacts
 .playwright-mcp/
 

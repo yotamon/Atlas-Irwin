@@ -1,40 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { ENSEMBLIS_PRODUCT } from "@/lib/ensemblis-product";
-import "./studio.css";
-import "./studio-v2.css";
-import "./studio-v2-workflows.css";
-import "./studio-v2-safety.css";
-import "./release-workspace-v2.css";
-import "./release-growth.css";
-import "./growth-os.css";
-import "./growth-import.css";
-import "./video-director.css";
-import "./video-director-states.css";
-import "./video-director-refinements.css";
-import "./ai-control.css";
-import "./distribution.css";
-import "./distribution-release.css";
-import "./sites-domains.css";
-import "./ensemblis-shell.css";
-import "./ensemblis-screens.css";
-import "./ensemblis-root-isolation.css";
-import "./ensemblis-states.css";
-import "./ux-polish.css";
-import "./music-polish.css";
-import "./release-polish.css";
-import "./create-polish.css";
-import "./growth-polish.css";
-import "./paid-growth-polish.css";
-import "./audience-polish.css";
-import "./library-polish.css";
-import "./inbox-polish.css";
-import "./shared-interactions.css";
-import "./loading-polish.css";
-import "./object-workspace-polish.css";
-import "./production-polish.css";
-import "./responsive-polish.css";
-import "./onboarding.css";
-import "./ux-consolidation.css";
+import "./design-system/index.css";
 
 export const metadata: Metadata = {
   title: {
@@ -71,6 +37,8 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
+  // Browser metadata cannot reference CSS custom properties. Keep this literal
+  // synchronized with --en-bg in design-system/tokens.css.
   themeColor: "#080b09",
   colorScheme: "dark",
 };

@@ -6,14 +6,16 @@ async function source(path) {
   return readFile(new URL(`../${path}`, import.meta.url), "utf8");
 }
 
-test("UX polish styles load after the Ensemblis compatibility layers", async () => {
+test("legacy polish is migration input while the Design System is the only runtime entrypoint", async () => {
   const layout = await source("app/studio/layout.tsx");
-  const shell = layout.indexOf('import "./ensemblis-shell.css"');
+  const index = await source("app/studio/design-system/index.css");
+  const compiler = await source("scripts/build-studio-css.mjs");
   const polishFiles = ["ux-polish.css", "music-polish.css", "release-polish.css", "create-polish.css", "growth-polish.css", "audience-polish.css", "library-polish.css", "inbox-polish.css", "shared-interactions.css", "loading-polish.css", "object-workspace-polish.css", "production-polish.css", "responsive-polish.css"];
-  assert.ok(shell >= 0);
+  assert.ok(layout.includes('import "./design-system/index.css"'));
+  assert.ok(index.includes('layer(ensemblis-compat)'));
   for (const file of polishFiles) {
-    const index = layout.indexOf(`import "./${file}"`);
-    assert.ok(index > shell, `${file} must load after the Ensemblis compatibility shell`);
+    assert.equal(layout.includes(`import "./${file}"`), false, `${file} must not load directly at runtime`);
+    assert.ok(compiler.includes(`app/studio/${file}`), `${file} must remain a declared migration input until its layout rules are retired`);
     await access(new URL(`../app/studio/${file}`, import.meta.url));
   }
 });
