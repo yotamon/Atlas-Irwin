@@ -22,6 +22,7 @@ class AudioIntelligenceV4RuntimeTest(unittest.TestCase):
             "ENSEMBLIS_BEAT_THIS_ENABLED": "false",
             "ENSEMBLIS_BASIC_PITCH_ENABLED": "false",
             "ENSEMBLIS_CLAP_ENABLED": "false",
+            "ENSEMBLIS_CLAP_ALLOW_DOWNLOAD": "false",
         }, clear=False):
             capabilities = provider_capabilities()
 
