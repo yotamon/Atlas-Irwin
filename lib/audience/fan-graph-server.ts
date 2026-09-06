@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { asFanGraphClient } from "@/lib/audience/fan-graph-db";
+import { assessFanQuality, summarizeFanQuality, type FanQualityBand, type FanQualitySnapshot } from "@/lib/audience/fan-quality";
 import type { Database } from "@/types/database";
 import type {
   FanChannel,
@@ -22,6 +23,10 @@ export type FanRelationshipCard = {
   id: string;
   displayName: string;
   relationshipState: FanRelationshipState;
+  qualityBand: FanQualityBand;
+  qualityReasons: string[];
+  repeatEngaged: boolean;
+  ownedReachable: boolean;
   firstSeenAt: string;
   lastSeenAt: string;
   interactionCount: number;
@@ -41,7 +46,7 @@ export type FanRelationshipCard = {
   nextAction: FanRelationshipAction | null;
 };
 
-export type FanGraphSummary = {
+export type FanGraphSummary = FanQualitySnapshot & {
   profiles: FanRelationshipCard[];
   returningCount: number;
   knownSupporterCount: number;
@@ -61,6 +66,40 @@ function profileDisplayName(profile: FanProfile, identities: FanIdentity[]) {
     || identities.find((identity) => identity.display_name)?.display_name
     || identities.find((identity) => identity.handle)?.handle
     || "Listener";
+}
+
+export async function loadFanQualitySnapshot(
+  client: SupabaseClient<Database>,
+  ownerId: string,
+  artistId: string,
+): Promise<FanQualitySnapshot> {
+  const db = asFanGraphClient(client);
+  const [profilesResult, identitiesResult, permissionsResult] = await Promise.all([
+    db.from("fan_profiles")
+      .select("id,relationship_state,interaction_count")
+      .eq("owner_id", ownerId)
+      .eq("artist_id", artistId)
+      .is("merged_into_fan_id", null)
+      .limit(1000),
+    db.from("fan_identities")
+      .select("id,fan_id,channel,identifier_kind,evidence_level,verified_at")
+      .eq("owner_id", ownerId)
+      .eq("artist_id", artistId)
+      .limit(3000),
+    db.from("fan_permissions")
+      .select("identity_id,channel,purpose,status,evidence_at,expires_at")
+      .eq("owner_id", ownerId)
+      .eq("artist_id", artistId)
+      .limit(5000),
+  ]);
+  for (const result of [profilesResult, identitiesResult, permissionsResult]) {
+    if (result.error) throw new Error(result.error.message);
+  }
+  return summarizeFanQuality(
+    profilesResult.data ?? [],
+    identitiesResult.data ?? [],
+    permissionsResult.data ?? [],
+  );
 }
 
 export async function loadFanGraphSummary(
@@ -85,6 +124,7 @@ export async function loadFanGraphSummary(
   const permissions = permissionsResult.data ?? [];
   const links = linksResult.data ?? [];
   const pendingInteractions = pendingInteractionsResult.data ?? [];
+  const qualitySummary = summarizeFanQuality(profiles, identities, permissions);
   const identityById = new Map(identities.map((identity) => [identity.id, identity]));
   const interactionById = new Map(pendingInteractions.map((interaction) => [interaction.id, interaction]));
   const pendingByFan = new Map<string, typeof pendingInteractions[number]>();
@@ -103,6 +143,7 @@ export async function loadFanGraphSummary(
     const fanIdentities = identities.filter((identity) => identity.fan_id === profile.id);
     const fanIdentityIds = new Set(fanIdentities.map((identity) => identity.id));
     const fanPermissions = permissions.filter((permission) => fanIdentityIds.has(permission.identity_id));
+    const quality = assessFanQuality({ profile, identities: fanIdentities, permissions: fanPermissions });
     const pending = pendingByFan.get(profile.id) ?? null;
     const nextAction: FanRelationshipAction | null = pending ? {
       title: pending.suggested_reply ? "Review the prepared reply" : "Review this conversation",
@@ -114,6 +155,10 @@ export async function loadFanGraphSummary(
       id: profile.id,
       displayName: profileDisplayName(profile, fanIdentities),
       relationshipState: profile.relationship_state,
+      qualityBand: quality.band,
+      qualityReasons: quality.reasons,
+      repeatEngaged: quality.repeatEngaged,
+      ownedReachable: quality.ownedReachable,
       firstSeenAt: profile.first_seen_at,
       lastSeenAt: profile.last_seen_at,
       interactionCount: profile.interaction_count,
@@ -142,6 +187,7 @@ export async function loadFanGraphSummary(
     permissionedIdentityCount: new Set(
       permissions.filter((permission) => permission.status === "granted").map((permission) => permission.identity_id),
     ).size,
+    ...qualitySummary,
   };
 }
 

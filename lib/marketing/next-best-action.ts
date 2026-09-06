@@ -1,7 +1,9 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Json } from "@/types/database";
+import { loadFanQualitySnapshot } from "@/lib/audience/fan-graph-server";
+import type { FanQualitySnapshot } from "@/lib/audience/fan-quality";
+import type { Database, Json } from "@/types/database";
 import type { EnsemblisDatabase } from "@/types/ensemblis-database";
 import { createAutonomyServiceClient } from "./autonomy-db";
 import { createMarketingServiceClient } from "./db";
@@ -93,6 +95,7 @@ function managerGoalAction(input: {
   marketingInvolvement: string;
   liveTargetCount: number;
   labelTargetCount: number;
+  fanQuality: FanQualitySnapshot | null;
 }) {
   const managerOwned = input.marketingInvolvement === "just_make_music";
   const common = {
@@ -134,19 +137,38 @@ function managerGoalAction(input: {
     };
   }
   if (input.primaryGoal === "build_owned_audience") {
+    const quality = input.fanQuality;
+    const captureGap = quality ? Math.max(0, quality.qualifiedFanCount - quality.ownedReachableCount) : 0;
     return {
       ...common,
       actionType: "advance_owned_audience",
-      title: "Strengthen the owned-audience path",
-      rationale: "Prioritize listener capture and repeat contact over adding more disconnected reach. Ensemblis should turn current attention into an audience the artist can reach again.",
+      title: quality?.ownedReachableCount
+        ? `Grow beyond ${quality.ownedReachableCount} directly reachable fan${quality.ownedReachableCount === 1 ? "" : "s"}`
+        : captureGap
+          ? `Create a consent-first path for ${captureGap} qualified fan${captureGap === 1 ? "" : "s"}`
+          : "Build the first permissioned fan relationship",
+      rationale: quality?.ownedReachableCount
+        ? `${quality.ownedReachableCount} fan relationship${quality.ownedReachableCount === 1 ? " is" : "s are"} currently reachable through verified contact details and current explicit marketing permission. Grow that owned baseline without broadening consent.`
+        : captureGap
+          ? `${quality?.qualifiedFanCount ?? 0} relationship${quality?.qualifiedFanCount === 1 ? " shows" : "s show"} qualified fandom evidence, but none is directly reachable with verified current marketing permission. Strengthen the consent-first capture path before buying more reach.`
+          : "Prioritize listener capture and repeat contact over adding more disconnected reach. Ensemblis should turn current attention into an audience the artist can reach again without inferring identity or consent.",
     };
   }
   if (input.primaryGoal === "grow_fans") {
+    const quality = input.fanQuality;
     return {
       ...common,
       actionType: "advance_fan_growth",
-      title: "Turn current listeners into repeat fans",
-      rationale: "Favor the strongest proven listener-to-follow, save and repeat-engagement path rather than increasing posting volume for its own sake.",
+      title: quality?.qualifiedFanCount
+        ? `Deepen ${quality.qualifiedFanCount} qualified fan relationship${quality.qualifiedFanCount === 1 ? "" : "s"}`
+        : quality?.engagedFanCount
+          ? `Convert ${quality.engagedFanCount} engaged relationship${quality.engagedFanCount === 1 ? "" : "s"} into repeat fans`
+          : "Build the first repeat-fan loop",
+      rationale: quality?.qualifiedFanCount
+        ? `${quality.qualifiedFanCount} current relationship${quality.qualifiedFanCount === 1 ? " has" : "s have"} repeat plus stronger first-party evidence. Favor content and listening paths that deepen those relationships instead of optimizing posting volume or raw views.`
+        : quality?.engagedFanCount
+          ? `There is real engagement, but not enough repeat or strong evidence to call it qualified fandom yet. Optimize for saves, follows, repeat listening, meaningful interaction and return behavior.`
+          : "There is not enough first-party evidence to call current attention fandom yet. Use discovery experiments to earn repeat engagement before treating reach or views as fan growth.",
     };
   }
   return {
@@ -308,11 +330,20 @@ async function actionsForArtist(scope: AutonomyArtistScope) {
         ["promoter", "venue", "festival"].includes(relationship.relationship_type),
       ).length;
       const labelTargetCount = trustedRelationships.filter((relationship) => relationship.relationship_type === "label").length;
+      const fanQualityGoal = profile.primary_goal === "grow_fans" || profile.primary_goal === "build_owned_audience";
+      const fanQuality = fanQualityGoal
+        ? await loadFanQualitySnapshot(
+          operating as unknown as SupabaseClient<Database>,
+          scope.ownerId,
+          scope.artistId,
+        )
+        : null;
       const manager = managerGoalAction({
         primaryGoal: profile.primary_goal,
         marketingInvolvement: profile.marketing_involvement,
         liveTargetCount,
         labelTargetCount,
+        fanQuality,
       });
       await propose(scope, {
         actionType: manager.actionType,
@@ -327,6 +358,14 @@ async function actionsForArtist(scope: AutonomyArtistScope) {
           marketingInvolvement: profile.marketing_involvement,
           liveTargetCount,
           labelTargetCount,
+          fanQuality: fanQuality ? {
+            activeRelationshipCount: fanQuality.activeRelationshipCount,
+            engagedFanCount: fanQuality.engagedFanCount,
+            qualifiedFanCount: fanQuality.qualifiedFanCount,
+            coreFanCount: fanQuality.coreFanCount,
+            ownedReachableCount: fanQuality.ownedReachableCount,
+            repeatRelationshipRate: fanQuality.repeatRelationshipRate,
+          } : null,
         },
         key: managerKey,
         expiresAt: new Date(Date.now() + 36 * 60 * 60 * 1000).toISOString(),

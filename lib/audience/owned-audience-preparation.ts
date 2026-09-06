@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { asFanGraphClient } from "@/lib/audience/fan-graph-db";
+import { permissionedOwnedFanIds } from "@/lib/audience/fan-quality";
 import { asSmartLinksClient } from "@/lib/smart-links/db";
 import { asGrowthClient } from "@/lib/studio/growth-db";
 import type { Database, Json } from "@/types/database";
@@ -11,10 +12,6 @@ const PRESERVED_STATUSES = new Set(["accepted", "dismissed", "completed"]);
 
 function json(value: unknown) {
   return value as Json;
-}
-
-function validPermissionExpiry(value: string | null, now: Date) {
-  return !value || Date.parse(value) > now.getTime();
 }
 
 export async function prepareOwnedAudienceOpportunity({
@@ -79,23 +76,7 @@ export async function prepareOwnedAudienceOpportunity({
   const permissions = permissionsResult.data ?? [];
   const readback = readbackResult.data ?? [];
   const existing = existingResult.data ?? null;
-
-  const identityById = new Map(identities.map((identity) => [identity.id, identity]));
-  const permissionedFanIds = new Set<string>();
-  for (const permission of permissions) {
-    if (!permission.evidence_at || !validPermissionExpiry(permission.expires_at, now)) continue;
-    const identity = identityById.get(permission.identity_id);
-    if (!identity || !identity.verified_at) continue;
-    const validEmail = identity.channel === "email"
-      && identity.identifier_kind === "verified_email"
-      && permission.channel === "email"
-      && permission.purpose === "email_marketing";
-    const validSms = identity.channel === "sms"
-      && identity.identifier_kind === "verified_phone"
-      && permission.channel === "sms"
-      && permission.purpose === "sms_marketing";
-    if (validEmail || validSms) permissionedFanIds.add(identity.fan_id);
-  }
+  const permissionedFanIds = permissionedOwnedFanIds(identities, permissions, now);
 
   const engagedFanIds = new Set(
     profiles
