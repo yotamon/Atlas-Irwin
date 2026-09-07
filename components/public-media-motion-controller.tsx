@@ -56,10 +56,6 @@ export function PublicMediaMotionController() {
     }
 
     function sync() {
-      const stageLabel = Array.from(releaseRoot.querySelectorAll<HTMLElement>("p"))
-        .find((element) => element.textContent?.trim() === "New Release");
-      if (stageLabel) stageLabel.textContent = "Selected Release";
-
       const videos = Array.from(releaseRoot.querySelectorAll<HTMLVideoElement>("video"));
       videos.forEach(configureVideo);
       for (const video of cleanups.keys()) {
