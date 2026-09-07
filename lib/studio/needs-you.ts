@@ -64,7 +64,9 @@ export function deriveNeedsYouQueue(input: NeedsYouProjectionInput): NeedsYouIte
     queue.push(item({ id: `mission:${blocker.key}`, category: "Release Mission", title: blocker.title, detail: blocker.detail, href: blocker.href, severity: "required", priority: 90, source: { kind: "mission", id: blocker.key }, missionId }));
   }
 
-  for (const decision of (input.distributionDecisions ?? []).slice(0, 5)) {
+  // Do not hide later distribution blockers behind an arbitrary first-five cap.
+  // The final queue ranking still controls what deserves the most attention.
+  for (const decision of input.distributionDecisions ?? []) {
     queue.push(item({
       id: `distribution:${decision.releaseId}:${decision.key}`,
       category: "Distribution",
@@ -114,9 +116,9 @@ export function deriveNeedsYouQueue(input: NeedsYouProjectionInput): NeedsYouIte
     queue.push(item({ id: `creative:${asset.id}`, category: "Creative", title: `${asset.title} is waiting for its asset`, detail: `${asset.platform}${asset.scheduledLabel ? ` · ${asset.scheduledLabel}` : ""}`, href: `/studio/production?edit=${asset.id}`, severity: "review", priority: 40, source: { kind: "creative", id: asset.id }, missionId: asset.releaseId ?? missionId }));
   }
 
-  for (const task of input.dueTasks.slice(0, 3)) {
-    queue.push(item({ id: `task:${task.id}`, category: "Task", title: task.title, detail: task.dueLabel ? `${task.priority} · ${task.dueLabel}` : task.priority, href: missionId ? `/studio/releases/${missionId}` : "/studio/releases", severity: "review", priority: 30, source: { kind: "task", id: task.id }, missionId }));
-  }
+  // Routine due work belongs in Today/release work, not in the judgment queue.
+  // Keeping it out of Needs You prevents repeated auto-generated tasks from
+  // masquerading as decisions that require the artist's attention.
 
   if (input.proposedLearningCount) {
     queue.push(item({ id: "learning-proposals", category: "Learning", title: `${input.proposedLearningCount} evidence-backed insight${input.proposedLearningCount === 1 ? "" : "s"} to review`, detail: "Only approved findings may become active Artist Memory and influence future decisions.", href: "/studio/learn", severity: "review", priority: 20, source: { kind: "learning", id: null }, missionId }));
