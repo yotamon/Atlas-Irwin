@@ -4,6 +4,7 @@ import { AnalysisSubmitButton } from "@/components/studio/analysis-submit-button
 import { LyricsIntelligencePanel } from "@/components/studio/lyrics-intelligence-panel";
 import { MediaUploader } from "@/components/studio/media-uploader";
 import { MusicIntelligencePreview } from "@/components/studio/music-intelligence-preview";
+import { ReleaseMasteringPanel } from "@/components/studio/release-mastering-panel";
 import { StemIntelligencePanel } from "@/components/studio/stem-intelligence-panel";
 import { describeTrackAnalysis } from "@/lib/studio/track-analysis-state";
 import type { Track } from "@/types/database";
@@ -38,7 +39,10 @@ export function ReleaseMasterAudioPanel({
             <span className="section-label">Master & Music Intelligence</span>
             <h2>{hasMaster ? primaryTrack?.title || vaultTrack?.title || "Release master" : "Add the audio Ensemblis should understand"}</h2>
           </div>
-          <span className={hasMaster ? "growth-active-label" : "v2-count has-items"}>{hasMaster ? analysis.label : "Missing"}</span>
+          <div className="actions">
+            <span className={hasMaster ? "growth-active-label" : "v2-count has-items"}>{hasMaster ? analysis.label : "Missing"}</span>
+            {analysis.hasMusicMap && vaultTrack ? <a className="button" href="#mastering">Mastering report</a> : null}
+          </div>
         </div>
 
         {!hasMaster ? (
@@ -109,6 +113,9 @@ export function ReleaseMasterAudioPanel({
           </>
         )}
       </section>
+
+      {analysis.hasMusicMap && vaultTrack ? <ReleaseMasteringPanel vaultTrack={vaultTrack} /> : null}
+
       <StemIntelligencePanel releaseId={releaseId} track={primaryTrack} />
       <LyricsIntelligencePanel releaseId={releaseId} track={primaryTrack} />
     </>

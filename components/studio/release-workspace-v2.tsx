@@ -148,7 +148,7 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
       </section>
       <ReleaseMasterAudioPanel releaseId={release.id} primaryTrack={primaryTrack} vaultTrack={vaultTrack} />
       <section className="release-track-summary">
-        {tracks.map((track) => <Link href={`/studio/music/${track.id}`} key={track.id}><span>{track.is_primary ? "Primary track" : "Track"}</span><strong>{track.title}</strong><small>{track.audio_url ? "Audio ready · open intelligence" : "Audio source needed"}</small><b aria-hidden>→</b></Link>)}
+        {tracks.map((track) => <Link href={`/studio/music/${(track.is_primary || tracks.length === 1) && vaultTrack ? vaultTrack.id : track.id}`} key={track.id}><span>{track.is_primary ? "Primary track" : "Track"}</span><strong>{track.title}</strong><small>{track.audio_url ? "Audio ready · open intelligence" : "Audio source needed"}</small><b aria-hidden>→</b></Link>)}
       </section>
       <div className="release-moments-anchor"><span className="section-label">Best Moments</span><p>Ensemblis shows only a small editorial selection of complete, usable musical passages below.</p></div>
     </div> : null}
