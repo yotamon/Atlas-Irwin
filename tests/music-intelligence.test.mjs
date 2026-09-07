@@ -81,6 +81,7 @@ test("release tracklist queues the same canonical analysis pipeline per exact tr
   const releaseMission = await readFile("lib/studio/release-mission.ts", "utf8");
   const uploader = await readFile("components/studio/media-uploader.tsx", "utf8");
   const actions = await readFile("app/studio/growth-media-actions.ts", "utf8");
+  const safeActions = await readFile("app/studio/growth-media-actions-safe.ts", "utf8");
   const callback = await readFile("app/api/studio/growth/audio-callback/route.ts", "utf8");
   const vaultBridge = await readFile("lib/studio/vault-analysis.ts", "utf8");
 
@@ -93,11 +94,13 @@ test("release tracklist queues the same canonical analysis pipeline per exact tr
   assert.ok(releaseMission.includes("Add the canonical master"));
   assert.ok(uploader.includes("releaseMasterMode"));
   assert.ok(uploader.includes("trackId?: string"));
-  assert.ok(uploader.includes("attachReleaseMasterFromMedia"));
+  assert.ok(uploader.includes("attachCatalogTrackMasterFromMedia"));
   assert.ok(actions.includes("analysisReused"));
   assert.ok(actions.includes("kickMediaWorkerQueue"));
   assert.ok(actions.includes("source_media_asset_id"));
-  assert.ok(actions.includes("linked_track_id"));
+  assert.ok(safeActions.includes('.eq("linked_track_id", trackId)'));
+  assert.ok(safeActions.includes("linked_track_id: track.id"));
+  assert.ok(safeActions.includes("await actions.analyzeVaultTrack(analysisForm)"));
   assert.equal(actions.includes("queueVaultAudioAnalysis"), false);
   assert.equal(vaultBridge.includes("dispatchMediaWorkerJob"), false);
   assert.ok(callback.includes("stale: true"));
