@@ -1,4 +1,5 @@
 import { ActiveMasteringControls } from "@/components/studio/active-mastering-controls";
+import { MasteringAnalysisReport } from "@/components/studio/mastering-analysis-report";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMasteringClient } from "@/lib/mastering/jobs";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
@@ -42,7 +43,7 @@ export async function ActiveMasteringPanel({
       id: job.id,
       preset: job.preset,
       status: job.status,
-      error: job.error,
+      error: job.error ? "The mastering worker could not complete this render." : null,
       createdAt: job.created_at,
       outputUrl: job.status === "completed" && typeof request.public_url === "string" ? request.public_url : null,
       result: job.result_payload as Json,
@@ -52,37 +53,27 @@ export async function ActiveMasteringPanel({
   return (
     <>
       <ActiveMasteringControls
+        artistId={artist.artistId}
         trackId={trackId}
         sourceAudioUrl={sourceAudioUrl}
         jobs={serialized.slice(0, 4)}
       />
 
-      {serialized.length ? (
+      {serialized.length > 4 ? (
         <details className="workspace-drawer">
-          <summary>Complete mastering run history ({serialized.length})</summary>
+          <summary>Earlier mastering runs ({serialized.length - 4})</summary>
           <p className="v2-muted-copy">
-            The main workspace keeps the four newest runs in focus. Every older render and its complete verification payload remains available here.
+            The main workspace keeps the newest candidates in focus. Older renders remain available with the same human-readable verification evidence.
           </p>
-          <div style={{ display: "grid", gap: "0.65rem" }}>
-            {serialized.map((job) => (
-              <details key={job.id} style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: "0.65rem" }}>
+          <div className="mastering-history-list">
+            {serialized.slice(4).map((job) => (
+              <details key={job.id} className="mastering-history-run">
                 <summary>
                   {job.preset.charAt(0).toUpperCase() + job.preset.slice(1)} · {job.status} · {runDate(job.createdAt)}
                 </summary>
-                {job.error ? <p className="v2-muted-copy">{job.error}</p> : null}
-                {job.outputUrl ? <p><a href={job.outputUrl} download>Download rendered WAV</a></p> : null}
-                <pre
-                  style={{
-                    maxHeight: "28rem",
-                    overflow: "auto",
-                    whiteSpace: "pre-wrap",
-                    overflowWrap: "anywhere",
-                    fontSize: "0.74rem",
-                    lineHeight: 1.5,
-                  }}
-                >
-                  {JSON.stringify(job.result, null, 2)}
-                </pre>
+                {job.error ? <p className="v2-muted-copy" role="alert">{job.error}</p> : null}
+                {job.outputUrl ? <p><a className="button" href={job.outputUrl} download>Download rendered WAV</a></p> : null}
+                <MasteringAnalysisReport result={job.result} compact />
               </details>
             ))}
           </div>

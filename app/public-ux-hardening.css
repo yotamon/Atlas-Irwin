@@ -1,0 +1,34 @@
+/* Public artist-site interaction hardening. Keep the visual language expressive
+   without making controls and metadata harder to scan. */
+
+#release-widget .uppercase {
+  letter-spacing: 0.1em !important;
+}
+
+#release-widget h2.uppercase,
+#release-widget h3.uppercase {
+  letter-spacing: 0.025em !important;
+}
+
+#release-widget a,
+#release-widget button {
+  touch-action: manipulation;
+}
+
+#release-widget [role="slider"]:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 4px;
+}
+
+@media (max-width: 767px) {
+  #release-widget a,
+  #release-widget button {
+    min-height: 44px;
+  }
+
+  #release-widget [role="slider"] {
+    min-height: 44px;
+    margin-block: -0.8rem;
+    padding-block: calc(0.8rem + 5px);
+  }
+}

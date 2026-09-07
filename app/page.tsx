@@ -7,6 +7,7 @@ import { Hero } from "@/components/hero";
 import { ListenPlatformsSection } from "@/components/listen-platforms-section";
 import { Navbar } from "@/components/navbar";
 import { NewsletterSignup } from "@/components/newsletter-signup";
+import { PublicMediaMotionController } from "@/components/public-media-motion-controller";
 import { ReleaseWidget } from "@/components/release-widget";
 import { buildMusicAlbumJsonLd } from "@/lib/catalog/json-ld";
 import { getPublicReleases } from "@/lib/public-catalog";
@@ -108,7 +109,7 @@ export default async function Home() {
   const albumJsonLd = buildMusicAlbumJsonLd(releases);
 
   return (
-    <div className="relative min-h-screen overflow-x-hidden">
+    <div className="relative min-h-screen">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdWebsite) }}
@@ -125,6 +126,7 @@ export default async function Home() {
       )}
       <HashScrollRestorer />
       <Navbar />
+      <PublicMediaMotionController />
       <main id="main-content" className="relative flex min-h-screen flex-col">
         <Hero />
         <ReleaseWidget />

@@ -79,20 +79,29 @@ test("Today is a thin Manager renderer over one canonical operating snapshot", a
   assert.equal(snapshot.includes("/100 signal"), false, "Manager should not expose pseudo-precise ranking scores as artist truth");
 });
 
-test("primary navigation exposes five outcomes and internal domains are owned contextually", async () => {
+test("primary navigation exposes durable workspaces while releases and create stay contextual", async () => {
   const product = await source("lib/ensemblis-product.ts");
   const sidebar = await source("components/studio/sidebar.tsx");
+  const contextBar = await source("components/studio/context-bar.tsx");
   const grow = await source("app/studio/(protected)/growth/page.tsx");
   const settings = await source("app/studio/(protected)/settings/page.tsx");
   const release = await source("components/studio/release-workspace-v2.tsx");
+  const musicNav = await source("components/studio/music-library-nav.tsx");
+  const mobileNav = await source("components/studio/mobile-navigation.tsx");
   const workStart = product.indexOf("export const ENSEMBLIS_WORK_NAV");
+  const createStart = product.indexOf("export const ENSEMBLIS_CREATE_ACTION");
   const moreStart = product.indexOf("export const ENSEMBLIS_MORE_NAV");
   const mobileMoreStart = product.indexOf("export const ENSEMBLIS_MOBILE_MORE_NAV");
-  const workSource = product.slice(workStart, moreStart);
+  const workSource = product.slice(workStart, createStart);
   const moreSource = product.slice(moreStart, mobileMoreStart);
 
-  for (const label of ["Today", "Music", "Releases", "Create", "Grow"]) assert.ok(workSource.includes(`label: "${label}"`));
-  for (const label of ["Audience", "Library", "Memory", "Sites", "Distribution", "Connections"]) assert.equal(workSource.includes(`label: "${label}"`), false, `${label} must not compete in primary navigation`);
+  for (const label of ["Today", "Music", "Grow"]) assert.ok(workSource.includes(`label: "${label}"`));
+  for (const label of ["Releases", "Create", "Audience", "Library", "Memory", "Sites", "Distribution", "Connections"]) assert.equal(workSource.includes(`label: "${label}"`), false, `${label} must not compete in primary navigation`);
+  assert.ok(product.includes('ENSEMBLIS_CREATE_ACTION'));
+  assert.ok(product.includes('label: "Create"'));
+  assert.ok(product.includes('{ prefix: "/studio/releases", area: "Music", parentHref: "/studio/music" }'));
+  assert.ok(musicNav.includes("Releases"));
+  assert.ok(musicNav.includes('ensemblisArtistHref("/studio/releases", artistId)'));
   for (const label of ["Library", "Sites"]) assert.ok(moreSource.includes(`label: "${label}"`), `${label} remains a cross-workflow utility`);
   for (const label of ["Audience", "Memory", "Distribution", "Connections"]) assert.equal(moreSource.includes(`label: "${label}"`), false, `${label} must be owned by its parent workflow rather than More`);
 
@@ -100,8 +109,10 @@ test("primary navigation exposes five outcomes and internal domains are owned co
   assert.ok(settings.includes("Artist Memory"));
   assert.ok(settings.includes("Connections"));
   assert.ok(release.includes('"Distribution"'));
-  assert.ok(sidebar.includes("<details"));
-  assert.ok(sidebar.includes(">More</summary>"));
-  assert.ok(sidebar.includes('href={ensemblisArtistHref("/studio/needs-you", artistId)}'));
+  assert.ok(sidebar.includes('studio-sidebar-section-label">More'));
+  assert.ok(sidebar.includes("<StudioPrimaryNavigation items={moreNavigation}"));
+  assert.ok(contextBar.includes('href={ensemblisArtistHref("/studio/needs-you", artistId)}'));
+  assert.ok(mobileNav.includes("resolveEnsemblisRouteContext(pathname)"));
+  assert.ok(mobileNav.includes("context.parentHref === item.href"));
   assert.equal(product.includes('{ href: "/studio/needs-you", label:'), false, "Needs You should stay a decision surface rather than another primary destination");
 });

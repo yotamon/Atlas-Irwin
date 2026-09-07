@@ -69,13 +69,13 @@ html[data-theme="dark"] {
 html {
   scroll-behavior: smooth;
   background: var(--paper);
-  scrollbar-width: none;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--ink) 34%, transparent) transparent;
 }
 
 body {
   position: relative;
   min-height: 100vh;
-  overflow-x: hidden;
   background-color: var(--paper);
   color: var(--ink);
   font-family: var(--font-body), sans-serif;
@@ -86,7 +86,18 @@ body {
 }
 
 body::-webkit-scrollbar {
-  display: none;
+  width: 10px;
+}
+
+body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+body::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 34%, transparent);
+  background-clip: padding-box;
 }
 
 body::before {
@@ -279,21 +290,10 @@ button {
   animation: eq-bounce 0.55s ease-in-out infinite;
 }
 
-.eq-active .eq-bar:nth-child(1) {
-  animation-delay: 0ms;
-}
-
-.eq-active .eq-bar:nth-child(2) {
-  animation-delay: 140ms;
-}
-
-.eq-active .eq-bar:nth-child(3) {
-  animation-delay: 70ms;
-}
-
-.eq-active .eq-bar:nth-child(4) {
-  animation-delay: 210ms;
-}
+.eq-active .eq-bar:nth-child(1) { animation-delay: 0ms; }
+.eq-active .eq-bar:nth-child(2) { animation-delay: 140ms; }
+.eq-active .eq-bar:nth-child(3) { animation-delay: 70ms; }
+.eq-active .eq-bar:nth-child(4) { animation-delay: 210ms; }
 
 .buffer-pulse {
   animation: buffer-pulse 1.2s ease-in-out infinite;
@@ -301,6 +301,16 @@ button {
 
 .hero-reveal {
   opacity: 1;
+}
+
+/* The release widget participates in normal document flow. The previous paired
+   negative top/margin offsets made the composition fragile across viewport heights. */
+#release-widget {
+  top: 0 !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  padding-top: clamp(1rem, 3vw, 2.5rem);
+  padding-bottom: clamp(1.5rem, 4vw, 3.5rem);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -322,17 +332,23 @@ button {
     animation: none;
     height: 10px;
   }
+
+  /* Canvas remains visible as a paused first frame instead of disappearing and
+     leaving an empty stage when reduced motion is requested. */
+  #release-widget video.motion-reduce\:hidden {
+    display: block !important;
+  }
 }
 
 @media (max-width: 767px) {
   .hero-scene {
-    min-height: max(100svh, 47rem);
+    min-height: 100svh;
   }
 
   .hero-copy {
     position: relative;
-    margin-top: 8.75rem;
-    padding: 0 1.25rem 4rem;
+    margin-top: clamp(6.75rem, 18vh, 8rem);
+    padding: 0 1.25rem 3.5rem;
     left: auto;
     top: auto;
     max-width: 24rem;
@@ -346,10 +362,10 @@ button {
   }
 
   .hero-copy h1 {
-    max-width: 3.6ch;
+    max-width: 4ch;
     margin-top: 0.65rem;
-    font-size: 5.85rem;
-    line-height: 0.82;
+    font-size: clamp(4rem, 19vw, 5rem);
+    line-height: 0.86;
     scale: 1;
   }
 
@@ -365,8 +381,13 @@ button {
   }
 
   .hero-copy p {
-    margin-top: 1.7rem;
+    margin-top: 1.5rem;
     font-size: 0.98rem;
+  }
+
+  #release-widget a,
+  #release-widget button {
+    min-height: 44px;
   }
 }
 

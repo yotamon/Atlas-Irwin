@@ -17,6 +17,12 @@ type ProcessingStateProps = {
   announce?: boolean;
 };
 
+function stateLabel(state: ProcessingStep["state"]) {
+  if (state === "complete") return "complete";
+  if (state === "active") return "in progress";
+  return "waiting";
+}
+
 export function ProcessingState({
   eyebrow = "Ensemblis",
   title,
@@ -33,15 +39,16 @@ export function ProcessingState({
   const classes = ["ensemblis-processing", compact ? "is-compact" : null, className]
     .filter(Boolean)
     .join(" ");
+  const activeStep = steps?.find((step) => step.state === "active");
+  const announcement = [
+    ariaLabel || title,
+    normalizedProgress !== null ? `${Math.round(normalizedProgress)} percent` : null,
+    activeStep ? `${activeStep.label} in progress` : null,
+  ].filter(Boolean).join(". ");
 
   return (
-    <section
-      className={classes}
-      role={announce ? "status" : undefined}
-      aria-live={announce ? "polite" : undefined}
-      aria-busy={announce ? true : undefined}
-      aria-label={announce ? ariaLabel : undefined}
-    >
+    <section className={classes} aria-busy={announce ? true : undefined} aria-label={ariaLabel}>
+      {announce ? <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">{announcement}</span> : null}
       <div className="ensemblis-processing-visual" aria-hidden="true">
         <span className="ensemblis-processing-scan" />
         <div className="ensemblis-processing-wave">
@@ -60,9 +67,11 @@ export function ProcessingState({
           <div
             className="ensemblis-processing-progress"
             role="progressbar"
+            aria-label={ariaLabel || title}
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={Math.round(normalizedProgress)}
+            aria-valuetext={`${Math.round(normalizedProgress)} percent complete`}
           >
             <span style={{ width: `${normalizedProgress}%` }} />
           </div>
@@ -70,12 +79,16 @@ export function ProcessingState({
 
         {steps?.length ? (
           <ol className="ensemblis-processing-steps">
-            {steps.map((step) => (
-              <li key={step.label} data-state={step.state ?? "waiting"}>
-                <span aria-hidden="true" />
-                {step.label}
-              </li>
-            ))}
+            {steps.map((step) => {
+              const status = stateLabel(step.state);
+              return (
+                <li key={step.label} data-state={step.state ?? "waiting"}>
+                  <span aria-hidden="true" />
+                  <span>{step.label}</span>
+                  <small className="ensemblis-processing-step-state">{status}</small>
+                </li>
+              );
+            })}
           </ol>
         ) : null}
       </div>

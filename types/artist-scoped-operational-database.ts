@@ -29,6 +29,7 @@ type CoreOperationalScopedTableName =
   | "metric_snapshots"
   | "brand_settings"
   | "tasks"
+  | "releases"
   | "release_learnings";
 
 export type ArtistScopedCoreOperationalDatabase = Omit<Database, "public"> & {

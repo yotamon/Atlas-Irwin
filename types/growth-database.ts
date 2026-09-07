@@ -36,6 +36,7 @@ export type VaultTrack = {
   owner_id: string;
   artist_id: string;
   linked_release_id: string | null;
+  linked_track_id: string | null;
   media_asset_id: string | null;
   title: string;
   version: string | null;

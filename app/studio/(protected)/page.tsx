@@ -106,17 +106,21 @@ export default async function TodayPage() {
             ? { href: "#ensemblis-handling", label: "See what Ensemblis is handling" }
             : { href: href(strategy.recommendedMission.href), label: "Open recommended Mission" };
 
-  const decisionPreview = needsYou.slice(0, 3);
+  const remainingDecisions = topDecision
+    ? needsYou.filter((item) => item.id !== topDecision.id)
+    : needsYou;
+  const decisionPreview = topDecision ? remainingDecisions.slice(0, 3) : needsYou.slice(0, 3);
   const handling = [
     ...working.map((item) => ({ ...item, activity: "Working now" })),
     ...managerPlan.map((item) => ({ ...item, activity: "Planned" })),
   ].filter((item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index).slice(0, 6);
+  const contextCount = remainingDecisions.length + handling.length + comingUp.length;
 
   return (
     <div className="studio-v2-page ensemblis-today-page">
       <PageHeader
         title="Today"
-        description={`One clear next move for ${artist.artistName}. Everything else stays out of the way.`}
+        description={`One clear next move for ${artist.artistName}. Background work stays collapsed until you want it.`}
         action={<Link href={href("/studio/settings/artist")}>Working profile</Link>}
       />
 
@@ -137,65 +141,79 @@ export default async function TodayPage() {
         actions={<>
           <Link className="button primary" href={heroPrimary.href}>{heroPrimary.label}</Link>
           {topDecision
-            ? <Link href={href("/studio/needs-you")}>Open decision queue</Link>
+            ? remainingDecisions.length
+              ? <Link href="#ensemblis-handling">{remainingDecisions.length} more decision{remainingDecisions.length === 1 ? "" : "s"}</Link>
+              : <Link href={href("/studio/needs-you")}>Decision history</Link>
             : primaryMission?.kind === "release" && activeRelease
               ? <Link href={href(`/studio/releases/${activeRelease.id}`)}>View release Mission</Link>
               : <Link href={href("/studio/growth/strategy")}>Why this strategy?</Link>}
         </>}
       />
 
-      <div className="today-v3-two-column ensemblis-today-focus-grid">
-        <DecisionQueue
-          eyebrow="Only when your judgment matters"
-          title="Needs You"
-          count={needsYou.length}
-          action={<Link href={href("/studio/needs-you")}>Open queue</Link>}
-        >
-          {decisionPreview.length ? decisionPreview.map((item) =>
-            <DecisionRow
-              href={href(item.href)}
-              key={item.id}
-              meta={item.severity === "required" ? "Required" : item.category}
-              title={item.title}
-              description={item.detail}
-              tone={decisionTone(needsYouTone(item))}
+      <details className="today-v3-context" id="ensemblis-handling">
+        <summary>
+          <span>
+            <strong>Everything else today</strong>
+            <small>Decisions, background work and the next seven days</small>
+          </span>
+          <Status>{contextCount ? `${contextCount} items` : "Clear"}</Status>
+        </summary>
+
+        <div className="today-v3-context-body">
+          <div className="today-v3-two-column ensemblis-today-focus-grid">
+            <DecisionQueue
+              eyebrow="Only when your judgment matters"
+              title={topDecision ? "Other decisions" : "Needs You"}
+              count={remainingDecisions.length}
+              action={<Link href={href("/studio/needs-you")}>Open queue</Link>}
+            >
+              {decisionPreview.length ? decisionPreview.map((item) =>
+                <DecisionRow
+                  href={href(item.href)}
+                  key={item.id}
+                  meta={item.severity === "required" ? "Required" : item.category}
+                  title={item.title}
+                  description={item.detail}
+                  tone={decisionTone(needsYouTone(item))}
+                />
+              ) : <CalmState title="No other decisions need you." body={handsOff ? "Keep making music. Ensemblis will bring back only decisions that genuinely need you." : "Approvals and ambiguous decisions appear here only when needed."} />}
+              {remainingDecisions.length > decisionPreview.length ? <Link className="en-decision-more" href={href("/studio/needs-you")}>View {remainingDecisions.length - decisionPreview.length} more decision{remainingDecisions.length - decisionPreview.length === 1 ? "" : "s"}</Link> : null}
+            </DecisionQueue>
+
+            <section className="today-v3-section" aria-labelledby="today-handling-heading">
+              <SectionHeading
+                id="today-handling-heading"
+                eyebrow="Behind the scenes"
+                title="Ensemblis is handling"
+                compact
+                action={<span className={`today-v3-count${handling.length ? " is-working" : ""}`}>{handling.length}</span>}
+              />
+              {handling.length ? <div className="today-v3-list">{handling.map((item) =>
+                <Link className="today-v3-work-row" href={item.href} key={item.id}>
+                  <span className="today-v3-working-dot" aria-hidden />
+                  <span className="today-v3-row-copy"><strong>{item.title}</strong><span>{item.detail}</span></span>
+                  <Status>{item.activity}</Status>
+                </Link>)}</div> : <CalmState title="Nothing is running right now." body="Ensemblis will add the next evidence-backed action when the artist context changes." />}
+            </section>
+          </div>
+
+          <section className="today-v3-section today-v3-upcoming" aria-labelledby="today-coming-up-heading">
+            <SectionHeading
+              id="today-coming-up-heading"
+              eyebrow="Next 7 days"
+              title="Coming up"
+              compact
+              action={<Link href={href("/studio/growth")}>Open Grow</Link>}
             />
-          ) : <CalmState title="Nothing needs your judgment right now." body={handsOff ? "Keep making music. Ensemblis will bring back only decisions that genuinely need you." : "Approvals and ambiguous decisions appear here only when needed."} />}
-          {needsYou.length > decisionPreview.length ? <Link className="en-decision-more" href={href("/studio/needs-you")}>View {needsYou.length - decisionPreview.length} more decision{needsYou.length - decisionPreview.length === 1 ? "" : "s"}</Link> : null}
-        </DecisionQueue>
-
-        <section className="today-v3-section" id="ensemblis-handling" aria-labelledby="today-handling-heading">
-          <SectionHeading
-            id="today-handling-heading"
-            eyebrow="Behind the scenes"
-            title="Ensemblis is handling"
-            compact
-            action={<span className={`today-v3-count${handling.length ? " is-working" : ""}`}>{handling.length}</span>}
-          />
-          {handling.length ? <div className="today-v3-list">{handling.map((item) =>
-            <Link className="today-v3-work-row" href={item.href} key={item.id}>
-              <span className="today-v3-working-dot" aria-hidden />
-              <span className="today-v3-row-copy"><strong>{item.title}</strong><span>{item.detail}</span></span>
-              <Status>{item.activity}</Status>
-            </Link>)}</div> : <CalmState title="Nothing is running right now." body="Ensemblis will add the next evidence-backed action when the artist context changes." />}
-        </section>
-      </div>
-
-      <section className="today-v3-section today-v3-upcoming" aria-labelledby="today-coming-up-heading">
-        <SectionHeading
-          id="today-coming-up-heading"
-          eyebrow="Next 7 days"
-          title="Coming up"
-          compact
-          action={<Link href={href("/studio/growth")}>Open Grow</Link>}
-        />
-        {comingUp.length ? <div className="today-v3-list">{comingUp.map((item) =>
-          <Link className="today-v3-upcoming-row" href={item.href} key={item.id}>
-            <time dateTime={item.scheduledAt}>{formatOperatingDateTime(item.scheduledAt, preferences)}</time>
-            <span className="today-v3-row-copy"><strong>{item.title}</strong><span>{item.detail}</span></span>
-            <span className="today-v3-arrow" aria-hidden>→</span>
-          </Link>)}</div> : <CalmState inline title="The next seven days are clear." body="Scheduled content and publications will appear here." />}
-      </section>
+            {comingUp.length ? <div className="today-v3-list">{comingUp.map((item) =>
+              <Link className="today-v3-upcoming-row" href={item.href} key={item.id}>
+                <time dateTime={item.scheduledAt}>{formatOperatingDateTime(item.scheduledAt, preferences)}</time>
+                <span className="today-v3-row-copy"><strong>{item.title}</strong><span>{item.detail}</span></span>
+                <span className="today-v3-arrow" aria-hidden>→</span>
+              </Link>)}</div> : <CalmState inline title="The next seven days are clear." body="Scheduled content and publications will appear here." />}
+          </section>
+        </div>
+      </details>
     </div>
   );
 }

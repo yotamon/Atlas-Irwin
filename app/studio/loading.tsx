@@ -4,14 +4,10 @@ export default function Loading() {
   return (
     <div className="ensemblis-loading">
       <ProcessingState
-        eyebrow="Studio signal"
-        title="Tuning your artist workspace"
-        detail="Loading music, context, and the latest decisions into one coherent view."
-        steps={[
-          { label: "Artist context", state: "complete" },
-          { label: "Music intelligence", state: "active" },
-          { label: "Workspace", state: "waiting" },
-        ]}
+        eyebrow="Studio"
+        title="Opening your artist workspace"
+        detail="Loading the current workspace and the data required for this view."
+        steps={[{ label: "Workspace data", state: "active" }]}
       />
     </div>
   );

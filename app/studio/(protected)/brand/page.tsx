@@ -5,6 +5,7 @@ import { MediaUploader } from "@/components/studio/media-uploader";
 import { Field, PageHeader, Submit } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 import { mediaMetadata, mediaTypeLabel } from "@/lib/studio/media";
 
@@ -45,12 +46,15 @@ export default async function BrandPage() {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveDefaultArtistContext(supabase, user);
   const operational = asArtistScopedOperationalClient(supabase);
-  const [settingsResult, assetsResult] = await Promise.all([
+  const music = asArtistScopedMusicClient(supabase);
+  const [settingsResult, assetsResult, releasesResult] = await Promise.all([
     operational.from("brand_settings").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId),
     supabase.from("media_assets").select("*").eq("owner_id", user.id).order("updated_at", { ascending: false }),
+    music.from("releases").select("title,artwork_url").eq("owner_id", user.id).eq("artist_id", artist.artistId),
   ]);
   if (settingsResult.error) throw new Error(settingsResult.error.message);
   if (assetsResult.error) throw new Error(assetsResult.error.message);
+  if (releasesResult.error) throw new Error(releasesResult.error.message);
   const data = settingsResult.data ?? [];
   const stored = new Map(
     data.map((x) => [
@@ -60,9 +64,16 @@ export default async function BrandPage() {
   );
   const storedIds = new Map(data.map((x) => [x.section, x.id]));
   const artistTag = `artist:${artist.artistId}`.toLowerCase();
+  const releaseArtworkTitles = new Map(
+    (releasesResult.data ?? []).flatMap((release) => release.artwork_url ? [[release.artwork_url, `${release.title} artwork`] as const] : []),
+  );
   const brandAssets = (assetsResult.data ?? []).filter((asset) => {
-    if (!["brand_reference", "brand_logo", "brand_motion_reference"].includes(asset.asset_type)) return false;
-    return mediaMetadata(asset).tags.map((tag) => tag.toLowerCase()).includes(artistTag);
+    const tags = mediaMetadata(asset).tags.map((tag) => tag.toLowerCase());
+    const explicitReference = ["brand_reference", "brand_logo", "brand_motion_reference"].includes(asset.asset_type)
+      && tags.includes(artistTag);
+    const releaseArtwork = asset.asset_type === "cover"
+      && Boolean(asset.public_url && releaseArtworkTitles.has(asset.public_url));
+    return explicitReference || releaseArtwork;
   });
 
   return (
@@ -78,7 +89,7 @@ export default async function BrandPage() {
           <div>
             <span className="section-label">Visual source of truth</span>
             <h2>{artist.artistName} reference media</h2>
-            <p>Upload finished artwork, identity studies, texture references, photography, motion language or logos that genuinely represent this artist. Ensemblis tags these references to the active artist so sibling artist workspaces cannot inherit them accidentally.</p>
+            <p>Upload finished artwork, identity studies, texture references, photography, motion language or logos that genuinely represent this artist. Existing release artwork is included automatically, while additional references are explicitly tagged to the active artist so sibling artist workspaces cannot inherit them accidentally.</p>
           </div>
         </div>
         <div className="studio-smart-defaults">
@@ -90,6 +101,7 @@ export default async function BrandPage() {
           <div className="media-grid" aria-label={`${artist.artistName} brand references`}>
             {brandAssets.map((asset) => {
               const metadata = mediaMetadata(asset);
+              const releaseArtworkTitle = asset.public_url ? releaseArtworkTitles.get(asset.public_url) : null;
               return (
                 <article className="media-card" key={asset.id}>
                   <div className="media-thumb">
@@ -98,7 +110,7 @@ export default async function BrandPage() {
                   </div>
                   <div className="media-card-body">
                     <span className="section-label">{mediaTypeLabel(asset.asset_type)}</span>
-                    <h3>{metadata.title}</h3>
+                    <h3>{metadata.title || releaseArtworkTitle || mediaTypeLabel(asset.asset_type)}</h3>
                     {metadata.description ? <p>{metadata.description}</p> : null}
                     {metadata.tags.length ? <div className="media-tags">{metadata.tags.filter((tag) => tag.toLowerCase() !== artistTag).map((tag) => <span key={tag}>{tag}</span>)}</div> : null}
                   </div>

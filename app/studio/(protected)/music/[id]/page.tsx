@@ -4,6 +4,7 @@ import { analyzeMusicTrack } from "@/app/studio/growth-media-actions-safe";
 import { ActiveMasteringPanel } from "@/components/studio/active-mastering-panel";
 import { AnalysisAutoRefresh } from "@/components/studio/analysis-auto-refresh";
 import { AnalysisSubmitButton } from "@/components/studio/analysis-submit-button";
+import { CatalogTrackWorkspace } from "@/components/studio/catalog-track-workspace";
 import { LyricsIntelligencePanel } from "@/components/studio/lyrics-intelligence-panel";
 import { MasteringInspectorPanel } from "@/components/studio/mastering-inspector-panel";
 import { MusicIntelligencePreview } from "@/components/studio/music-intelligence-preview";
@@ -60,24 +61,37 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
   if (!vaultTrack) {
     const aliasTrackResult = await music
       .from("tracks")
-      .select("id,release_id")
+      .select("*")
       .eq("id", id)
+      .eq("owner_id", user.id)
       .eq("artist_id", artist.artistId)
       .maybeSingle();
     if (aliasTrackResult.error) throw new Error(aliasTrackResult.error.message);
 
-    if (aliasTrackResult.data?.release_id) {
-      const aliasVaultResult = await growth
-        .from("track_vault")
-        .select("id")
-        .eq("owner_id", user.id)
-        .eq("artist_id", artist.artistId)
-        .eq("linked_release_id", aliasTrackResult.data.release_id)
-        .order("updated_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+    if (aliasTrackResult.data) {
+      const aliasTrack = aliasTrackResult.data as Track;
+      const [aliasVaultResult, releaseResult] = await Promise.all([
+        growth
+          .from("track_vault")
+          .select("id")
+          .eq("owner_id", user.id)
+          .eq("artist_id", artist.artistId)
+          .eq("linked_track_id", aliasTrack.id)
+          .maybeSingle(),
+        music
+          .from("releases")
+          .select("id,title")
+          .eq("id", aliasTrack.release_id)
+          .eq("owner_id", user.id)
+          .eq("artist_id", artist.artistId)
+          .maybeSingle(),
+      ]);
       if (aliasVaultResult.error) throw new Error(aliasVaultResult.error.message);
+      if (releaseResult.error) throw new Error(releaseResult.error.message);
       if (aliasVaultResult.data) redirect(href(`/studio/music/${aliasVaultResult.data.id}`));
+      if (releaseResult.data) {
+        return <CatalogTrackWorkspace track={aliasTrack} releaseTitle={releaseResult.data.title} artistId={artist.artistId} />;
+      }
     }
 
     notFound();
@@ -107,13 +121,18 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
         .select("*")
         .eq("release_id", vaultTrack.linked_release_id)
         .eq("artist_id", artist.artistId)
-        .order("is_primary", { ascending: false })
-        .order("display_order", { ascending: true }),
+        .order("display_order", { ascending: true })
+        .order("created_at", { ascending: true }),
     ]);
     if (releaseResult.error) throw new Error(releaseResult.error.message);
     if (tracksResult.error) throw new Error(tracksResult.error.message);
     release = releaseResult.data;
-    releaseTrack = (tracksResult.data ?? []).find((track) => track.is_primary) ?? tracksResult.data?.[0] ?? null;
+    const releaseTracks = (tracksResult.data ?? []) as Track[];
+    releaseTrack = vaultTrack.linked_track_id
+      ? releaseTracks.find((track) => track.id === vaultTrack.linked_track_id) ?? null
+      : releaseTracks.length === 1
+        ? releaseTracks[0]
+        : null;
   }
 
   const analysis = describeTrackAnalysis(vaultTrack.analysis, vaultTrack.audio_profile);
@@ -145,8 +164,8 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
     <div className="studio-v2-page track-object-page">
       <AnalysisAutoRefresh active={analysis.isActive} />
       <ObjectHeader
-        backHref={href("/studio/music")}
-        backLabel="Music"
+        backHref={release ? href(`/studio/releases/${release.id}`) : href("/studio/music")}
+        backLabel={release?.title ?? "Music"}
         eyebrow="Track"
         title={vaultTrack.title}
         subtitle={`${titleCase(vaultTrack.status)} · ${duration(vaultTrack.duration_seconds)} · ${vaultTrack.audio_url ? analysis.label : "Needs master"}`}
@@ -301,8 +320,8 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
       ) : (
         <section className="track-object-section track-object-linked-context">
           <span className="section-label">Release context</span>
-          <h2>Stems and lyrics attach when this track becomes a release.</h2>
-          <p>The unreleased master stays independent until you make the release decision.</p>
+          <h2>{release ? "This legacy release link needs exact track lineage before stems and lyrics can be shown safely." : "Stems and lyrics attach when this track becomes a release."}</h2>
+          <p>{release ? "Ensemblis will not guess which song owns track-level derived material." : "The unreleased master stays independent until you make the release decision."}</p>
         </section>
       )}
     </div>

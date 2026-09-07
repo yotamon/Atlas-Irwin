@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import tempfile
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Awaitable, Callable, Literal
 
 import httpx
 import librosa
@@ -124,7 +124,14 @@ async def prepare_tracks(payload_tracks: list[dict[str, Any]], workdir: Path, pu
     return tracks
 
 
-async def automix_job(payload: dict[str, Any], workdir: Path) -> dict[str, Any]:
+PlanCallback = Callable[[dict[str, Any]], Awaitable[None]]
+
+
+async def automix_job(
+    payload: dict[str, Any],
+    workdir: Path,
+    on_plan: PlanCallback | None = None,
+) -> dict[str, Any]:
     raw_tracks = _list_records(payload.get("tracks"))
     purpose = str(payload.get("purpose") or "booking")
     profile = str(payload.get("energy_profile") or "dynamic")
@@ -143,6 +150,8 @@ async def automix_job(payload: dict[str, Any], workdir: Path) -> dict[str, Any]:
 
     tracks = await prepare_tracks(raw_tracks, workdir, purpose, target_duration_ms)  # type: ignore[arg-type]
     plan = build_plan(tracks, purpose, profile, style, target_duration_ms)  # type: ignore[arg-type]
+    if on_plan is not None:
+        await on_plan(plan)
     wav_path, render_meta = await asyncio.to_thread(render_plan, tracks, plan, workdir)
 
     output_format = str(payload.get("output_format") or "mp3").lower()
@@ -174,6 +183,7 @@ async def automix_job(payload: dict[str, Any], workdir: Path) -> dict[str, Any]:
         "mime_type": mime_type,
         "sha256": sha256,
         "output": {"file_size": output_path.stat().st_size, "mime_type": mime_type, "sha256": sha256},
+        "phase": "complete",
         "plan": plan,
         "render": render_meta,
         "warnings": warnings,
@@ -190,10 +200,17 @@ async def automix_job(payload: dict[str, Any], workdir: Path) -> dict[str, Any]:
 
 
 async def execute_automix(request: AutomixWorkerRequest) -> str:
-    await worker_main.callback(request, "running")  # type: ignore[arg-type]
+    await worker_main.callback(request, "running", result={"phase": "preparing_sources"})  # type: ignore[arg-type]
     try:
         with tempfile.TemporaryDirectory(prefix="ensemblis-automix-") as directory:
-            result = await automix_job(request.payload, Path(directory))
+            async def publish_plan(plan: dict[str, Any]) -> None:
+                await worker_main.callback(
+                    request,
+                    "running",
+                    result={"phase": "rendering", "plan": plan},
+                )  # type: ignore[arg-type]
+
+            result = await automix_job(request.payload, Path(directory), on_plan=publish_plan)
     except Exception as exc:
         await worker_main.callback(request, "failed", error=str(exc)[:4000])  # type: ignore[arg-type]
         return "failed"

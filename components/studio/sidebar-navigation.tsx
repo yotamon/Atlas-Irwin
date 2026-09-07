@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { resolveEnsemblisRouteContext } from "@/lib/ensemblis-product";
 import { studioIcons } from "./icons";
 
 type NavigationItem = {
@@ -18,12 +19,13 @@ function routeIsActive(pathname: string, route: string) {
 
 export function StudioPrimaryNavigation({ items }: { items: NavigationItem[] }) {
   const pathname = usePathname();
+  const context = resolveEnsemblisRouteContext(pathname);
 
   return (
     <nav aria-label="Ensemblis primary navigation">
       {items.map(({ href, route, label, icon }) => {
         const Icon = studioIcons[icon];
-        const active = routeIsActive(pathname, route);
+        const active = routeIsActive(pathname, route) || context.parentHref === route;
         return (
           <Link
             href={href}
@@ -31,7 +33,6 @@ export function StudioPrimaryNavigation({ items }: { items: NavigationItem[] }) 
             className={active ? "is-active" : undefined}
             aria-current={active ? "page" : undefined}
             aria-label={label}
-            title={label}
           >
             <Icon aria-hidden />
             <span className="studio-nav-text">{label}</span>
@@ -44,7 +45,8 @@ export function StudioPrimaryNavigation({ items }: { items: NavigationItem[] }) 
 
 export function StudioAdvancedNavigation({ item }: { item: NavigationItem }) {
   const pathname = usePathname();
-  const active = routeIsActive(pathname, item.route);
+  const context = resolveEnsemblisRouteContext(pathname);
+  const active = routeIsActive(pathname, item.route) || context.parentHref === item.route;
   const Icon = studioIcons[item.icon];
 
   return (
@@ -53,7 +55,6 @@ export function StudioAdvancedNavigation({ item }: { item: NavigationItem }) {
       className={active ? "is-active" : undefined}
       aria-current={active ? "page" : undefined}
       aria-label={item.label}
-      title={item.label}
     >
       <Icon aria-hidden />
       <span className="studio-nav-text">{item.label}</span>

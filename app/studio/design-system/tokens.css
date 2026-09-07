@@ -14,8 +14,8 @@
   --en-surface-raised: #151e19;
   --en-surface-hover: #1a251e;
   --en-ink: #f6f8f4;
-  --en-muted: #9aa79f;
-  --en-subtle: #6f7c74;
+  --en-muted: #aab6af;
+  --en-subtle: #7f8d84;
   --en-line: #25302a;
   --en-line-strong: #35443b;
   --en-accent: #b7f36a;
@@ -49,31 +49,32 @@
   --en-space-10: 2.5rem;
   --en-space-12: 3rem;
 
-  --en-text-2xs: 0.56rem;
-  --en-text-xs: 0.62rem;
-  --en-text-sm: 0.72rem;
-  --en-text-md: 0.82rem;
-  --en-text-lg: 0.95rem;
-  --en-text-xl: 1.1rem;
-  --en-text-2xl: 1.35rem;
+  /* Minimum readable product typography. 2xs is reserved for tertiary metadata. */
+  --en-text-2xs: 0.68rem;
+  --en-text-xs: 0.75rem;
+  --en-text-sm: 0.82rem;
+  --en-text-md: 0.92rem;
+  --en-text-lg: 1.02rem;
+  --en-text-xl: 1.16rem;
+  --en-text-2xl: 1.45rem;
   --en-weight-medium: 620;
   --en-weight-semibold: 680;
   --en-weight-bold: 760;
   --en-leading-tight: 1.2;
   --en-leading-body: 1.55;
 
-  --en-control-sm: 2.15rem;
-  --en-control-md: 2.4rem;
-  --en-control-lg: 2.75rem;
+  --en-control-sm: 2.5rem;
+  --en-control-md: 2.75rem;
+  --en-control-lg: 3rem;
 
-  --en-duration-fast: 140ms;
-  --en-duration-normal: 180ms;
-  --en-duration-slow: 320ms;
+  --en-duration-fast: 120ms;
+  --en-duration-normal: 170ms;
+  --en-duration-slow: 260ms;
   --en-ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --en-ease-emphasized: cubic-bezier(0.22, 1, 0.36, 1);
 
   --en-shadow-sm: 0 8px 28px color-mix(in srgb, var(--en-black) 18%, transparent);
   --en-shadow-md: 0 22px 70px color-mix(in srgb, var(--en-black) 24%, transparent);
   --en-shadow-lg: 0 32px 90px color-mix(in srgb, var(--en-black) 32%, transparent);
-  --en-focus-ring: 0 0 0 3px color-mix(in srgb, var(--en-accent) 10%, transparent);
+  --en-focus-ring: 0 0 0 3px color-mix(in srgb, var(--en-accent) 12%, transparent);
 }

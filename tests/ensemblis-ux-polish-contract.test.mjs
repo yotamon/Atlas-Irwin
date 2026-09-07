@@ -51,12 +51,15 @@ test("global command search is keyboard accessible, artist aware and object awar
 test("compact Studio navigation keeps accessible names and coarse-pointer targets", async () => {
   const navigation = await source("components/studio/sidebar-navigation.tsx");
   const sidebar = await source("components/studio/sidebar.tsx");
+  const context = await source("components/studio/context-bar.tsx");
   const responsive = await source("app/studio/responsive-polish.css");
-  assert.ok(navigation.includes("aria-label={label}"));
-  assert.ok(navigation.includes("title={label}"));
-  assert.ok(sidebar.includes('aria-label="Open Needs You"'));
+  assert.ok(navigation.includes('<span className="studio-nav-text">{label}</span>'));
+  assert.ok(navigation.includes('aria-current={active ? "page" : undefined}'));
+  assert.equal(navigation.includes("title={label}"), false, "native title tooltips must not be required for navigation labels");
+  assert.ok(context.includes('href={ensemblisArtistHref("/studio/needs-you", artistId)}'));
+  assert.ok(context.includes("Needs You"), "Needs You must have a visible accessible label in the global context bar");
   assert.ok(sidebar.includes('aria-label="Sign out"'));
-  assert.equal(sidebar.includes('aria-label="Add unreleased tracks"'), false, "Music owns Add music; the persistent shortcut is reserved for human decisions");
+  assert.equal(sidebar.includes('aria-label="Add unreleased tracks"'), false, "Music owns Add music; persistent navigation must not duplicate intake shortcuts");
   assert.ok(responsive.includes("@media (pointer: coarse)"));
   assert.ok(responsive.includes("min-height: 2.75rem"));
   assert.ok(responsive.includes(".studio-root .studio-nav-text"));
@@ -80,7 +83,9 @@ test("Music defaults to source material and makes Add music primary", async () =
   assert.ok(page.includes("<MusicWorkspaceOverview"));
   assert.ok(page.includes('from("track_vault")'));
   assert.ok(page.includes('.eq("artist_id", artist.artistId)'));
-  assert.ok(overview.includes("Track understanding"));
+  assert.ok(overview.includes("Catalog tracks"));
+  assert.ok(overview.includes("Every released or release-bound song"));
+  assert.ok(overview.includes("Unreleased focus"));
   assert.ok(overview.includes("/studio/music/${trackId}"));
   assert.ok(overview.includes("Add music"));
   assert.ok(overview.includes("Create with AI"));
@@ -155,22 +160,25 @@ test("Media Library uses signed resumable TUS above 6 MB without expanding stora
   assert.equal(Boolean(packageJson.dependencies?.["wavesurfer.js"]), false);
 });
 
-test("release workspace uses one Mission object with six artist-facing facets", async () => {
+test("release workspace keeps tracks first and release workflow secondary", async () => {
   const release = await source("components/studio/release-workspace-v2.tsx");
   const releasePage = await source("app/studio/(protected)/releases/[id]/page.tsx");
   const mission = await source("lib/studio/release-mission.ts");
   assert.ok(release.includes("<ObjectHeader"));
+  assert.ok(release.includes("<ReleaseTracklist"));
   assert.ok(release.includes("deriveReleaseMission"));
   assert.ok(release.includes("Release Mission"));
   assert.ok(release.includes("This release needs one thing before Ensemblis can move it forward"));
+  assert.ok(release.indexOf("<ReleaseTracklist") < release.indexOf("release-mission-hero"), "tracks must be visible before workflow detail");
   assert.equal(release.includes("Workflow readiness"), false);
   assert.equal(release.includes("healthScore"), false);
   assert.ok(release.includes("Advanced view"));
   assert.ok(mission.includes('attention: "blocking"'));
   assert.ok(mission.includes('status: "on_track"'));
-  for (const stage of ["Overview", "Music", "Content", "Promotion", "Distribution", "Results"]) assert.ok(release.includes(stage), `release object lost ${stage}`);
-  for (const alias of ['stage === "plan"', 'stage === "create"', 'stage === "publish"', 'stage === "learn"']) assert.ok(release.includes(alias), `legacy release alias lost ${alias}`);
-  assert.ok(releasePage.includes('simpleStage === "music" || stage === "create"'));
+  for (const stage of ["Overview", "Release work", "Content", "Promotion", "Distribution", "Results"]) assert.ok(release.includes(stage), `release object lost ${stage}`);
+  assert.equal(release.includes('{ label: "Music", href:'), false, "release must not hide tracks behind a duplicate Music tab");
+  for (const alias of ['stage === "music"', 'stage === "plan"', 'stage === "create"', 'stage === "publish"', 'stage === "learn"']) assert.ok(release.includes(alias), `legacy release alias lost ${alias}`);
+  assert.ok(releasePage.includes('stage === "create" ? <MomentReviewPanel'));
   assert.ok(releasePage.includes("<MomentReviewPanel"));
   assert.equal(/\bAtlas\b/.test(release), false, "Atlas product language leaked into the Ensemblis release workspace");
 });

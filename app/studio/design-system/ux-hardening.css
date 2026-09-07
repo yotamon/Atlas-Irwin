@@ -1,0 +1,331 @@
+/* Final UX guarantees. This layer is intentionally small and systemic: it
+   resolves interaction, readability and accessibility contracts that must win
+   over migrated feature CSS until every legacy route has been retired. */
+
+.studio-root {
+  font-size: 16px;
+}
+
+.studio-root .studio-page-header h1 {
+  font-size: clamp(2.15rem, 4vw, 3.75rem);
+  line-height: 1.02;
+  letter-spacing: -0.048em;
+}
+
+.studio-root :where(p, li, td, input, select, textarea, button, a) {
+  text-rendering: optimizeLegibility;
+}
+
+.studio-root :where(.section-label, .studio-sidebar-section-label, .en-eyebrow) {
+  font-size: var(--en-text-xs);
+  letter-spacing: 0.055em;
+}
+
+.studio-root .button {
+  min-height: var(--en-control-md);
+  font-size: var(--en-text-sm);
+}
+
+.studio-root .text-button,
+.studio-root .ensemblis-dialog-close,
+.studio-root [data-icon-button] {
+  min-width: var(--en-control-sm);
+  min-height: var(--en-control-sm);
+}
+
+/* Native browser title tooltips are inconsistent. Icon controls use this
+   product tooltip contract and remain fully labelled through aria-label. */
+.studio-root [data-tooltip] {
+  position: relative;
+}
+
+.studio-root [data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  z-index: 120;
+  left: 50%;
+  bottom: calc(100% + 0.5rem);
+  width: max-content;
+  max-width: 15rem;
+  padding: 0.42rem 0.55rem;
+  border: 1px solid var(--en-line-strong);
+  border-radius: var(--en-radius-xs);
+  background: var(--en-surface-raised);
+  color: var(--en-ink);
+  box-shadow: var(--en-shadow-sm);
+  font-size: var(--en-text-xs);
+  font-weight: var(--en-weight-medium);
+  line-height: 1.3;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px);
+  transition: opacity var(--en-duration-fast) var(--en-ease-standard), transform var(--en-duration-fast) var(--en-ease-standard);
+}
+
+.studio-root [data-tooltip]:hover::after,
+.studio-root [data-tooltip]:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* Tabs must advertise overflow instead of hiding it. */
+.studio-root :where(.studio-tabs, .ensemblis-object-tabs) {
+  padding-bottom: 0.3rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--en-line-strong) transparent;
+  scroll-snap-type: x proximity;
+}
+
+.studio-root :where(.studio-tabs, .ensemblis-object-tabs)::-webkit-scrollbar {
+  display: block;
+  height: 4px;
+}
+
+.studio-root :where(.studio-tabs a, .ensemblis-object-tabs a) {
+  scroll-snap-align: start;
+}
+
+/* Semantic status language is shared across the whole product. */
+.studio-root :where(.status-chip, .status-pill)[data-tone="neutral"] {
+  border-color: var(--en-line-strong);
+  background: color-mix(in srgb, var(--en-surface-raised) 76%, transparent);
+  color: var(--en-muted);
+}
+
+.studio-root :where(.status-chip, .status-pill)[data-tone="success"] {
+  border-color: color-mix(in srgb, var(--en-mint) 42%, var(--en-line));
+  background: var(--en-mint-soft);
+  color: var(--en-mint);
+}
+
+.studio-root :where(.status-chip, .status-pill)[data-tone="attention"] {
+  border-color: color-mix(in srgb, var(--en-warning) 46%, var(--en-line));
+  background: var(--en-warning-soft);
+  color: var(--en-warning);
+}
+
+.studio-root :where(.status-chip, .status-pill)[data-tone="danger"] {
+  border-color: color-mix(in srgb, var(--en-danger) 46%, var(--en-line));
+  background: var(--en-danger-soft);
+  color: var(--en-danger);
+}
+
+.studio-root .field-hint,
+.studio-root .field-error {
+  display: block;
+  font-size: var(--en-text-xs);
+  line-height: 1.4;
+}
+
+.studio-root .field-hint { color: var(--en-subtle); }
+.studio-root .field-error { color: var(--en-danger); }
+.studio-root .field[data-invalid="true"] :where(input, select, textarea) { border-color: var(--en-danger); }
+
+/* Accessible modal primitive. */
+.ensemblis-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: clamp(0.75rem, 3vw, 2rem);
+  background: var(--en-overlay);
+  backdrop-filter: blur(8px);
+}
+
+.ensemblis-dialog {
+  width: min(100%, 36rem);
+  max-height: min(88svh, 52rem);
+  overflow: auto;
+  border: 1px solid var(--en-line-strong);
+  border-radius: var(--en-radius-xl);
+  background: color-mix(in srgb, var(--en-surface) 98%, var(--en-black));
+  box-shadow: var(--en-shadow-lg);
+}
+
+.ensemblis-dialog-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--en-space-4);
+  padding: var(--en-space-5);
+  border-bottom: 1px solid var(--en-line);
+  background: color-mix(in srgb, var(--en-surface) 97%, var(--en-black));
+}
+
+.ensemblis-dialog-header h2 {
+  margin: 0;
+  color: var(--en-ink);
+  font-size: var(--en-text-2xl);
+  letter-spacing: -0.035em;
+}
+
+.ensemblis-dialog-header p {
+  margin: var(--en-space-2) 0 0;
+  color: var(--en-muted);
+  font-size: var(--en-text-sm);
+  line-height: var(--en-leading-body);
+}
+
+.ensemblis-dialog-close {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-sm);
+  background: var(--en-surface-raised);
+  color: var(--en-muted);
+  cursor: pointer;
+}
+
+.ensemblis-dialog-close:hover,
+.ensemblis-dialog-close:focus-visible {
+  color: var(--en-ink);
+  border-color: var(--en-line-strong);
+}
+
+.ensemblis-dialog-body {
+  padding: var(--en-space-5);
+}
+
+.ensemblis-confirm-copy {
+  margin: 0;
+  color: var(--en-muted);
+  line-height: var(--en-leading-body);
+}
+
+.ensemblis-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--en-space-2);
+  margin-top: var(--en-space-5);
+  flex-wrap: wrap;
+}
+
+/* Context orientation for deep/specialist routes. */
+.ensemblis-location-trail {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 0.45rem;
+  color: var(--en-subtle);
+  font-size: var(--en-text-xs);
+  font-weight: var(--en-weight-semibold);
+}
+
+.ensemblis-location-trail :where(a, strong) {
+  overflow: hidden;
+  max-width: 15rem;
+  color: var(--en-ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ensemblis-location-trail a:hover,
+.ensemblis-location-trail a:focus-visible { color: var(--en-accent); }
+
+.ensemblis-artist-static {
+  display: grid;
+  gap: var(--en-space-1);
+}
+
+.ensemblis-artist-static strong {
+  color: var(--en-ink);
+  font-size: var(--en-text-md);
+}
+
+.ensemblis-artist-static small { color: var(--en-muted); font-size: var(--en-text-xs); }
+
+/* Mobile bottom navigation: primary destinations are the same as desktop. */
+@media (max-width: 900px) {
+  .ensemblis-mobile-navigation > a,
+  .ensemblis-mobile-more-trigger {
+    min-height: 3.25rem;
+    font-size: 0.72rem;
+    line-height: 1.15;
+  }
+
+  .ensemblis-mobile-more-trigger {
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 0.28rem;
+    padding: 0.35rem;
+    border: 0;
+    border-radius: var(--en-radius-sm);
+    background: transparent;
+    color: var(--en-muted);
+    font-weight: var(--en-weight-semibold);
+    cursor: pointer;
+  }
+
+  .ensemblis-mobile-more-trigger.is-active,
+  .ensemblis-mobile-more-trigger[aria-expanded="true"] {
+    background: var(--en-accent-soft);
+    color: var(--en-ink);
+  }
+
+  .ensemblis-mobile-more-dialog {
+    align-self: end;
+    width: min(100%, 42rem);
+    max-height: min(78svh, 42rem);
+    border-bottom-right-radius: calc(var(--en-radius-xl) + env(safe-area-inset-bottom));
+    border-bottom-left-radius: calc(var(--en-radius-xl) + env(safe-area-inset-bottom));
+  }
+
+  .ensemblis-mobile-more-links {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--en-space-2);
+  }
+
+  .ensemblis-mobile-more-links a,
+  .ensemblis-mobile-needs-you,
+  .ensemblis-mobile-create {
+    min-height: 3rem;
+    font-size: var(--en-text-sm);
+  }
+
+  .ensemblis-mobile-create {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--en-space-2);
+    width: 100%;
+    margin-bottom: var(--en-space-3);
+  }
+
+  .ensemblis-context-bar {
+    gap: var(--en-space-2);
+  }
+
+  .ensemblis-context-link {
+    display: none;
+  }
+
+  .ensemblis-context-actions .button.primary {
+    min-width: 5.25rem;
+  }
+
+  .ensemblis-location-artist { max-width: 7.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+
+/* Progress/status announcements should remain visually rich without making the
+   whole changing surface a live region. */
+.ensemblis-processing-step-state {
+  margin-left: 0.35rem;
+  color: var(--en-subtle);
+  font-size: var(--en-text-2xs);
+}
+
+/* Media controls stay usable on narrow surfaces. */
+.studio-root audio { width: 100%; min-width: 0; }
+
+@media (pointer: coarse) {
+  .studio-root :where(button, a[href], summary, select, input:not([type="hidden"])) {
+    min-height: 44px;
+  }
+}

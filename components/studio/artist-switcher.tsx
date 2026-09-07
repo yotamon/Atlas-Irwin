@@ -1,7 +1,8 @@
 "use client";
 
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useTransition } from "react";
+import { ensemblisArtistSwitchHref } from "@/lib/ensemblis-product";
 
 type ArtistSwitcherOption = {
   artistId: string;
@@ -17,43 +18,47 @@ export function ArtistSwitcher({
   artists: ArtistSwitcherOption[];
 }) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-
   const activeArtist = artists.find((artist) => artist.artistId === activeArtistId);
 
   function selectArtist(artistId: string) {
     if (!artistId || artistId === activeArtistId) return;
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("artist", artistId);
     startTransition(() => {
-      router.push(`${pathname}?${params.toString()}`);
-      router.refresh();
+      router.push(ensemblisArtistSwitchHref(pathname, artistId));
     });
   }
 
   return (
-    <div className="ensemblis-artist-switcher">
+    <div className="ensemblis-artist-switcher" aria-busy={isPending || undefined}>
       <div className="ensemblis-artist-switcher-heading">
         <span>Active artist</span>
-        {artists.length > 1 && <small>{isPending ? "Switching…" : `${artists.length} available`}</small>}
+        {artists.length > 1 ? <small aria-live="polite">{isPending ? "Switching…" : `${artists.length} available`}</small> : null}
       </div>
-      <select
-        aria-label="Active artist"
-        value={activeArtistId}
-        onChange={(event) => selectArtist(event.target.value)}
-        disabled={isPending || artists.length < 2}
-      >
-        {artists.map((artist) => (
-          <option value={artist.artistId} key={artist.artistId}>
-            {artist.artistName}{artists.length > 1 ? ` · ${artist.workspaceName}` : ""}
-          </option>
-        ))}
-      </select>
-      <small className="ensemblis-artist-workspace">
+
+      {artists.length > 1 ? (
+        <select
+          aria-label="Active artist"
+          value={activeArtistId}
+          onChange={(event) => selectArtist(event.target.value)}
+          disabled={isPending}
+        >
+          {artists.map((artist) => (
+            <option value={artist.artistId} key={artist.artistId}>
+              {artist.artistName} · {artist.workspaceName}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <div className="ensemblis-artist-static" aria-label={`Active artist: ${activeArtist?.artistName ?? "Artist"}`}>
+          <strong>{activeArtist?.artistName ?? "Artist"}</strong>
+          <small>{activeArtist?.workspaceName ?? "Ensemblis workspace"}</small>
+        </div>
+      )}
+
+      {artists.length > 1 ? <small className="ensemblis-artist-workspace">
         {activeArtist?.workspaceName ?? "Ensemblis workspace"}
-      </small>
+      </small> : null}
     </div>
   );
 }

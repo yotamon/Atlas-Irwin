@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { MusicLibraryNav } from "@/components/studio/music-library-nav";
 import { ReleaseCatalog } from "@/components/studio/release-catalog";
 import { EmptyState, PageHeader } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
@@ -72,9 +73,10 @@ export default async function ReleasesPage({
     <div className="studio-v2-page release-catalog-page">
       <PageHeader
         title="Releases"
-        description={`Move ${artist.artistName}'s music from preparation to release day and then into a healthy long-term catalog. Open a release only when you need its full workflow.`}
+        description={`Collections inside ${artist.artistName}'s Music library. Open a release for its tracklist, release work and results; open an individual song for its master and intelligence.`}
         action={<Link className="button primary" href={href("/studio/releases/new")}>New release</Link>}
       />
+      <MusicLibraryNav artistId={artist.artistId} active="releases" />
       {filtered.length ? (
         <ReleaseCatalog
           releases={filtered}

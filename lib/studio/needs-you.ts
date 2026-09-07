@@ -35,8 +35,8 @@ export type NeedsYouProjectionInput = {
   outreachDraftCount: number;
   manualReady: Array<{ id: string; platform: string; contentItemId?: string | null }>;
   unmatchedCount: number;
-  missingAssets: Array<{ id: string; title: string; platform: string; scheduledLabel?: string | null; releaseId?: string | null }>;
-  dueTasks: Array<{ id: string; title: string; priority: string; dueLabel?: string | null }>;
+  missingAssets: Array<{ id: string; title: string; platform: string; scheduledLabel?: string | null; releaseId?: string | null; requiresDecision?: boolean }>;
+  dueTasks: Array<{ id: string; title: string; priority: string; dueLabel?: string | null; requiresDecision?: boolean }>;
   proposedLearningCount: number;
 };
 
@@ -64,7 +64,9 @@ export function deriveNeedsYouQueue(input: NeedsYouProjectionInput): NeedsYouIte
     queue.push(item({ id: `mission:${blocker.key}`, category: "Release Mission", title: blocker.title, detail: blocker.detail, href: blocker.href, severity: "required", priority: 90, source: { kind: "mission", id: blocker.key }, missionId }));
   }
 
-  for (const decision of (input.distributionDecisions ?? []).slice(0, 5)) {
+  // Do not hide later distribution blockers behind an arbitrary first-five cap.
+  // The final queue ranking still controls what deserves the most attention.
+  for (const decision of input.distributionDecisions ?? []) {
     queue.push(item({
       id: `distribution:${decision.releaseId}:${decision.key}`,
       category: "Distribution",
@@ -108,14 +110,21 @@ export function deriveNeedsYouQueue(input: NeedsYouProjectionInput): NeedsYouIte
     queue.push(item({ id: "catalog-matches", category: "Needs matching", title: `${input.unmatchedCount} catalog match${input.unmatchedCount === 1 ? "" : "es"} need a decision`, detail: "Ensemblis found an ambiguous platform match and left the judgment to you.", href: "/studio/data-health?category=unmatched", severity: "decision", priority: 55, source: { kind: "catalog_match", id: null }, missionId }));
   }
 
+  // Missing creative production is system work by default. It only belongs in
+  // Needs You when the originating workflow explicitly says artist judgment is
+  // required (for example, choosing between ambiguous creative directions).
+  const decisionAssets = input.missingAssets.filter((asset) => asset.requiresDecision === true);
   const missionMissingAssets = new Set((input.activeMission?.recommendations ?? []).filter((recommendation) => recommendation.key.startsWith("asset:")).map((recommendation) => recommendation.title.replace(/^Finish\s+/i, "").toLowerCase()));
-  for (const asset of input.missingAssets.slice(0, 3)) {
+  for (const asset of decisionAssets.slice(0, 3)) {
     if (asset.releaseId === missionId && missionMissingAssets.has(asset.title.toLowerCase())) continue;
-    queue.push(item({ id: `creative:${asset.id}`, category: "Creative", title: `${asset.title} is waiting for its asset`, detail: `${asset.platform}${asset.scheduledLabel ? ` · ${asset.scheduledLabel}` : ""}`, href: `/studio/production?edit=${asset.id}`, severity: "review", priority: 40, source: { kind: "creative", id: asset.id }, missionId: asset.releaseId ?? missionId }));
+    queue.push(item({ id: `creative:${asset.id}`, category: "Creative", title: `${asset.title} is waiting for your decision`, detail: `${asset.platform}${asset.scheduledLabel ? ` · ${asset.scheduledLabel}` : ""}`, href: `/studio/production?edit=${asset.id}`, severity: "review", priority: 40, source: { kind: "creative", id: asset.id }, missionId: asset.releaseId ?? missionId }));
   }
 
-  for (const task of input.dueTasks.slice(0, 3)) {
-    queue.push(item({ id: `task:${task.id}`, category: "Task", title: task.title, detail: task.dueLabel ? `${task.priority} · ${task.dueLabel}` : task.priority, href: missionId ? `/studio/releases/${missionId}` : "/studio/releases", severity: "review", priority: 30, source: { kind: "task", id: task.id }, missionId }));
+  // Routine due work belongs in Today/release work, not in the judgment queue.
+  // Future task sources can opt into this queue explicitly via requiresDecision,
+  // but no generic task should manufacture artist attention by merely being due.
+  for (const task of input.dueTasks.filter((task) => task.requiresDecision === true).slice(0, 3)) {
+    queue.push(item({ id: `task:${task.id}`, category: "Task decision", title: task.title, detail: task.dueLabel ? `${task.priority} · ${task.dueLabel}` : task.priority, href: missionId ? `/studio/releases/${missionId}` : "/studio/releases", severity: "review", priority: 30, source: { kind: "task", id: task.id }, missionId }));
   }
 
   if (input.proposedLearningCount) {

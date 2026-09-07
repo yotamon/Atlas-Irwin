@@ -40,9 +40,10 @@ function authorized(request: Request, requestPayload: Record<string, unknown>) {
   return safeEqual(actualHash, expectedHash);
 }
 
-function cleanRequestPayload(value: Record<string, unknown>) {
+function terminalRequestPayload(value: Record<string, unknown>) {
   const next = { ...value };
-  delete next[MEDIA_WORKER_CALLBACK_HASH_KEY];
+  // Keep the one-way callback verifier internally so duplicate/late worker callbacks can
+  // still authenticate and be acknowledged. Artist-facing GET responses always strip it.
   delete next.upload_url;
   delete next.tracks;
   return next;
@@ -102,12 +103,23 @@ export async function POST(request: Request) {
   }
 
   if (status === "running") {
+    const previousResult = record(job.result_payload);
+    const mergedResult = Object.keys(result).length ? { ...previousResult, ...result } : previousResult;
     const update = await db.from("automix_jobs").update({
       status: "running",
+      result_payload: json(mergedResult),
       started_at: job.started_at || new Date().toISOString(),
       error: null,
-    }).eq("id", job.id).eq("owner_id", job.owner_id);
+    }).eq("id", job.id)
+      .eq("owner_id", job.owner_id)
+      .in("status", ["queued", "running"])
+      .select("id")
+      .maybeSingle();
     if (update.error) return NextResponse.json({ error: update.error.message }, { status: 500 });
+    if (!update.data) {
+      scheduleCleanup();
+      return NextResponse.json({ ok: true, duplicate: true });
+    }
     return NextResponse.json({ ok: true });
   }
 
@@ -115,28 +127,37 @@ export async function POST(request: Request) {
     const message = callbackError || "AutoMix worker job failed.";
     const update = await db.from("automix_jobs").update({
       status: "failed",
-      request_payload: json(cleanRequestPayload(requestPayload)),
+      request_payload: json(terminalRequestPayload(requestPayload)),
       result_payload: json(result),
       error: message,
       completed_at: new Date().toISOString(),
-    }).eq("id", job.id).eq("owner_id", job.owner_id);
+    }).eq("id", job.id)
+      .eq("owner_id", job.owner_id)
+      .in("status", ["queued", "running"])
+      .select("id")
+      .maybeSingle();
     if (update.error) return NextResponse.json({ error: update.error.message }, { status: 500 });
     scheduleCleanup();
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, duplicate: !update.data });
   }
 
   try {
     if (!(await canonicalMastersStillMatch(job))) {
       const message = "A canonical track master changed while this mix was rendering. The late mix was kept out of the active catalog.";
-      await db.from("automix_jobs").update({
+      const staleUpdate = await db.from("automix_jobs").update({
         status: "cancelled",
-        request_payload: json(cleanRequestPayload(requestPayload)),
+        request_payload: json(terminalRequestPayload(requestPayload)),
         result_payload: json(result),
         error: message,
         completed_at: new Date().toISOString(),
-      }).eq("id", job.id).eq("owner_id", job.owner_id);
+      }).eq("id", job.id)
+        .eq("owner_id", job.owner_id)
+        .in("status", ["queued", "running"])
+        .select("id")
+        .maybeSingle();
+      if (staleUpdate.error) throw new Error(staleUpdate.error.message);
       scheduleCleanup();
-      return NextResponse.json({ ok: true, stale: true });
+      return NextResponse.json({ ok: true, stale: Boolean(staleUpdate.data), duplicate: !staleUpdate.data });
     }
 
     const path = typeof requestPayload.upload_path === "string" ? requestPayload.upload_path : job.output_path;
@@ -147,6 +168,17 @@ export async function POST(request: Request) {
       ? result.mime_type
       : job.output_format === "wav" ? "audio/wav" : "audio/mpeg";
     const render = record(result.render);
+
+    const latestBeforeCatalog = await db.from("automix_jobs")
+      .select("status")
+      .eq("id", job.id)
+      .eq("owner_id", job.owner_id)
+      .maybeSingle();
+    if (latestBeforeCatalog.error) throw new Error(latestBeforeCatalog.error.message);
+    if (!latestBeforeCatalog.data || !["queued", "running"].includes(latestBeforeCatalog.data.status)) {
+      scheduleCleanup();
+      return NextResponse.json({ ok: true, duplicate: true });
+    }
 
     const existing = await service.from("media_assets")
       .select("*")
@@ -191,13 +223,33 @@ export async function POST(request: Request) {
 
     const update = await db.from("automix_jobs").update({
       status: "completed",
-      request_payload: json(cleanRequestPayload(requestPayload)),
+      request_payload: json(terminalRequestPayload(requestPayload)),
       result_payload: json(result),
       output_asset_id: asset.id,
       error: null,
       completed_at: new Date().toISOString(),
-    }).eq("id", job.id).eq("owner_id", job.owner_id);
+    }).eq("id", job.id)
+      .eq("owner_id", job.owner_id)
+      .in("status", ["queued", "running"])
+      .select("id")
+      .maybeSingle();
     if (update.error) throw new Error(update.error.message);
+
+    if (!update.data) {
+      const latest = await db.from("automix_jobs")
+        .select("status,output_asset_id")
+        .eq("id", job.id)
+        .eq("owner_id", job.owner_id)
+        .maybeSingle();
+      if (latest.error) throw new Error(latest.error.message);
+      if (latest.data?.status === "cancelled" && latest.data.output_asset_id !== asset.id) {
+        await service.from("media_assets").delete().eq("id", asset.id).eq("owner_id", job.owner_id);
+        await service.storage.from(bucket).remove([path]);
+      }
+      scheduleCleanup();
+      return NextResponse.json({ ok: true, duplicate: true, cancelled: latest.data?.status === "cancelled" });
+    }
+
     scheduleCleanup();
     return NextResponse.json({ ok: true, mediaAssetId: asset.id });
   } catch (error) {
