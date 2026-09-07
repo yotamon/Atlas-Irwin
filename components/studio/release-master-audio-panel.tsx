@@ -4,6 +4,7 @@ import { AnalysisSubmitButton } from "@/components/studio/analysis-submit-button
 import { LyricsIntelligencePanel } from "@/components/studio/lyrics-intelligence-panel";
 import { MediaUploader } from "@/components/studio/media-uploader";
 import { MusicIntelligencePreview } from "@/components/studio/music-intelligence-preview";
+import { ReleaseMasteringPanel } from "@/components/studio/release-mastering-panel";
 import { StemIntelligencePanel } from "@/components/studio/stem-intelligence-panel";
 import { describeTrackAnalysis } from "@/lib/studio/track-analysis-state";
 import type { Track } from "@/types/database";
@@ -109,6 +110,9 @@ export function ReleaseMasterAudioPanel({
           </>
         )}
       </section>
+
+      {analysis.hasMusicMap && vaultTrack ? <ReleaseMasteringPanel vaultTrack={vaultTrack} /> : null}
+
       <StemIntelligencePanel releaseId={releaseId} track={primaryTrack} />
       <LyricsIntelligencePanel releaseId={releaseId} track={primaryTrack} />
     </>
