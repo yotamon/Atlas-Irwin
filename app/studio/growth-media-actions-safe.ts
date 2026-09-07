@@ -37,7 +37,7 @@ export async function attachReleaseMasterFromMedia(form: FormData) {
   return actions.attachReleaseMasterFromMedia(form);
 }
 
-export async function analyzeMusicTrack(form: FormData) {
+export async function analyzeMusicTrack(form: FormData): Promise<void> {
   const vaultTrackId = formValue(form, "id");
   if (!vaultTrackId) throw new Error("Track is required for analysis.");
 
@@ -54,10 +54,10 @@ export async function analyzeMusicTrack(form: FormData) {
   if (error) throw new Error(error.message);
   if (!vaultTrack) throw new Error("Track not found for the active artist.");
 
-  return actions.analyzeVaultTrack(form);
+  await actions.analyzeVaultTrack(form);
 }
 
-export async function analyzeReleaseVaultTrack(form: FormData) {
+export async function analyzeReleaseVaultTrack(form: FormData): Promise<void> {
   const releaseId = formValue(form, "release_id");
   const vaultTrackId = formValue(form, "id");
   if (!releaseId || !vaultTrackId) throw new Error("Release and Vault track are required for analysis.");
@@ -76,5 +76,5 @@ export async function analyzeReleaseVaultTrack(form: FormData) {
     throw new Error("Music Intelligence track does not belong to this active-artist release.");
   }
 
-  return actions.analyzeVaultTrack(form);
+  await actions.analyzeVaultTrack(form);
 }
