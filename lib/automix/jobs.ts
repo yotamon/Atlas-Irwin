@@ -104,7 +104,7 @@ async function prepareCatalogPayload(job: AutoMixJob) {
     const intelligence = intelligenceByTrack.get(trackId);
     const map = record(intelligence?.analysis);
     const intelligenceSource = intelligence?.source_audio_url || sourceUrlFromMap(map);
-    const mapIsCurrent = !intelligenceSource || intelligenceSource === track.audio_url;
+    const mapIsCurrent = Boolean(intelligenceSource && intelligenceSource === track.audio_url);
     const currentStems = (stemsByTrack.get(trackId) ?? []).filter((stem) => stem.source_master_url === track.audio_url);
     const vocals = bestStemByCategory(currentStems, "vocals");
     const bass = bestStemByCategory(currentStems, "bass");
