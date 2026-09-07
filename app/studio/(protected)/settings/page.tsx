@@ -16,15 +16,14 @@ export default async function SettingsPage() {
 
   return (
     <div className="studio-v2-page settings-page">
-      <PageHeader title="Settings" description={`Artist rules, autonomy and workspace controls for ${artist.artistName}.`} />
+      <PageHeader title="Settings" description={`Identity, permissions, autonomy and workspace controls for ${artist.artistName}.`} />
 
       <section className="v2-section">
         <div className="v2-section-heading"><div><span className="section-label">Artist foundation</span><h2>Teach Ensemblis the artist once</h2></div></div>
         <div className="v2-settings-grid">
           <Link href={href("/studio/settings/artist")}><div><strong>Artist operating profile</strong></div><p>Goals, marketing involvement, scene, visibility and AI boundaries that change how Ensemblis works.</p><small>Set working relationship →</small></Link>
           <Link href={href("/studio/brand")}><div><strong>Brand profile</strong></div><p>Voice, visual world, audience and explicit creative rules.</p><small>Edit artist rules →</small></Link>
-          <Link href={href("/studio/memory")}><div><strong>Artist Memory</strong></div><p>What Ensemblis currently believes, with source evidence available on demand.</p><small>Review memory →</small></Link>
-          <Link href={href("/studio/growth/strategy")}><div><strong>Artist strategy</strong></div><p>Current growth focus, scene logic, source-first content plan and evidence-backed outreach direction.</p><small>Review strategy →</small></Link>
+          <Link href={href("/studio/memory")}><div><strong>Artist Memory</strong></div><p>What Ensemblis currently believes about the artist, with source evidence available on demand.</p><small>Review memory →</small></Link>
         </div>
       </section>
 
@@ -40,17 +39,11 @@ export default async function SettingsPage() {
         </div>
       </section>
 
-      <details className="v2-section v2-compact-section">
-        <summary><strong>Advanced tools</strong><span>Maintenance, specialist workflows and debugging</span></summary>
-        <p className="v2-muted-copy">These remain available for exceptional work without defining the everyday Ensemblis experience.</p>
-        <div className="actions">
-          <Link className="button" href={href("/studio/data-health")}>Data health</Link>
-          <Link className="button" href={href("/studio/campaigns")}>Campaign Brain</Link>
-          <Link className="button" href={href("/studio/outreach")}>Outreach</Link>
-          <Link className="button" href={href("/studio/content")}>Content Lab</Link>
-          <Link className="button" href={href("/studio/calendar")}>Publishing calendar</Link>
-        </div>
-      </details>
+      <section className="v2-section v2-compact-section">
+        <div className="v2-section-heading"><div><span className="section-label">Maintenance</span><h2>Workspace health</h2></div></div>
+        <p className="v2-muted-copy">Technical integrity belongs here. Campaigns, outreach, publishing and creative work stay inside Grow or Create instead of becoming a second navigation system in Settings.</p>
+        <div className="actions"><Link className="button" href={href("/studio/data-health")}>Data health</Link></div>
+      </section>
 
       <section className="v2-section v2-compact-section">
         <div className="v2-section-heading"><div><span className="section-label">Account</span><h2>Session</h2></div></div>
