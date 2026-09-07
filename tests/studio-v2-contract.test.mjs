@@ -24,9 +24,10 @@ test("Studio V2 keeps every specialist route present even when navigation is sim
   await Promise.all(requiredRoutes.map((path) => access(path)));
 });
 
-test("Ensemblis navigation exposes artist outcomes while specialist domains remain contextual", async () => {
+test("Ensemblis navigation exposes durable artist workspaces while specialist domains remain contextual", async () => {
   const product = await readFile("lib/ensemblis-product.ts", "utf8");
   const sidebar = await readFile("components/studio/sidebar.tsx", "utf8");
+  const musicPage = await readFile("app/studio/(protected)/music/page.tsx", "utf8");
   const workStart = product.indexOf("export const ENSEMBLIS_WORK_NAV");
   const moreStart = product.indexOf("export const ENSEMBLIS_MORE_NAV");
   const mobileMoreStart = product.indexOf("export const ENSEMBLIS_MOBILE_MORE_NAV");
@@ -34,13 +35,22 @@ test("Ensemblis navigation exposes artist outcomes while specialist domains rema
   const moreSource = product.slice(moreStart, mobileMoreStart);
 
   assert.ok(product.includes("ENSEMBLIS_WORK_NAV"));
+  assert.ok(product.includes("ENSEMBLIS_CREATE_ACTION"));
   assert.ok(product.includes("ENSEMBLIS_MANAGE_NAV"));
   assert.ok(product.includes("ENSEMBLIS_SETTINGS_NAV"));
   assert.ok(product.includes("ENSEMBLIS_PRIMARY_NAV = ENSEMBLIS_WORK_NAV"));
 
-  for (const route of ["/studio", "/studio/music", "/studio/releases", "/studio/create", "/studio/growth"]) {
-    assert.ok(workSource.includes(route), `${route} is missing from primary outcome navigation`);
+  for (const route of ["/studio", "/studio/music", "/studio/growth"]) {
+    assert.ok(workSource.includes(route), `${route} is missing from primary work navigation`);
   }
+  for (const route of ["/studio/releases", "/studio/create"]) {
+    assert.equal(workSource.includes(route), false, `${route} must stay contextual instead of competing in primary navigation`);
+  }
+  assert.ok(product.includes('{ prefix: "/studio/releases", area: "Music", parentHref: "/studio/music" }'));
+  assert.ok(product.includes('href: "/studio/create"'));
+  assert.ok(product.includes('label: "Create"'));
+  assert.ok(musicPage.includes('label: "Releases"'));
+
   for (const route of ["/studio/library", "/studio/sites"]) {
     assert.ok(moreSource.includes(route), `${route} is missing from cross-workflow More utilities`);
   }
@@ -82,14 +92,16 @@ test("Ensemblis persists and validates active artist context across primary navi
   assert.ok(product.includes('const hashIndex = href.indexOf("#")'));
   assert.ok(product.includes("href.slice(0, hashIndex)"));
   assert.ok(product.includes("href.slice(hashIndex)"));
-  assert.ok(product.includes('`${base}${separator}artist=${encodeURIComponent(artistId)}${fragment}`'));
+  assert.ok(product.includes("new URLSearchParams(query)"));
+  assert.ok(product.includes('params.set("artist", artistId)'));
+  assert.ok(product.includes("ensemblisArtistSwitchHref"));
   assert.ok(context.includes("listAccessibleArtists"));
   assert.ok(context.includes("resolveActiveArtistContext"));
   assert.ok(context.includes("resolveArtistContext(client, identity, preferredArtistId)"));
   assert.ok(context.includes("resolveLegacyFallbackArtistContext"));
   assert.ok(context.includes("return resolveActiveArtistContext(client, identity);"));
   assert.equal(context.includes("return resolveDefaultArtistContext(client, identity);"), false);
-  assert.ok(switcher.includes('params.set("artist", artistId)'));
+  assert.ok(switcher.includes("ensemblisArtistSwitchHref(pathname, artistId)"));
   assert.ok(sidebar.includes("ensemblisArtistHref(href, artistId)"));
   assert.ok(proxy.includes("selectedArtistFromRequest(request)"));
   assert.ok(proxy.includes("request.cookies.set(ENSEMBLIS_ACTIVE_ARTIST_COOKIE, requestedArtistId)"));
@@ -172,11 +184,14 @@ test("generic product surfaces contain no hardcoded Atlas user-facing language",
   }
 });
 
-test("release workspace is one Mission object with artist-facing facets and an advanced escape hatch", async () => {
+test("release workspace is one Mission object with tracks visible before release work and an advanced escape hatch", async () => {
   const workspace = await readFile("components/studio/release-workspace-v2.tsx", "utf8");
   const mission = await readFile("lib/studio/release-mission.ts", "utf8");
-  for (const facet of ["Overview", "Music", "Content", "Promotion", "Distribution", "Results"]) assert.ok(workspace.includes(facet), `release workspace lost ${facet}`);
+  for (const facet of ["Overview", "Release work", "Content", "Promotion", "Distribution", "Results"]) assert.ok(workspace.includes(facet), `release workspace lost ${facet}`);
+  assert.equal(workspace.includes('{ label: "Music", href:'), false, "Release must not hide tracks behind a duplicate Music tab");
   for (const alias of ['stage === "plan"', 'stage === "create"', 'stage === "publish"', 'stage === "learn"']) assert.ok(workspace.includes(alias), `release compatibility lost ${alias}`);
+  assert.ok(workspace.includes("release-track-summary"));
+  assert.ok(workspace.indexOf("release-track-summary") < workspace.indexOf("release-mission-hero"), "tracklist must appear before release workflow detail");
   assert.ok(workspace.includes("Advanced view"));
   assert.ok(workspace.includes("/studio/production"));
   assert.ok(workspace.includes("/studio/video?release="));
@@ -203,11 +218,13 @@ test("Growth OS keeps planning and diagnosis deterministic before paid creative"
 
 test("unreleased masters are independent from releases and reuse the shared durable media worker", async () => {
   const migration = await readFile("supabase/migrations/20260819183500_artist_growth_os.sql", "utf8");
+  const lineageMigration = await readFile("supabase/migrations/20260907145000_track_vault_track_lineage.sql", "utf8");
   const mediaAction = await readFile("app/studio/growth-media-actions.ts", "utf8");
   const workerReadiness = await readFile("lib/studio/vault-analysis.ts", "utf8");
   const workerQueue = await readFile("lib/media-worker/queue.ts", "utf8");
   assert.ok(migration.includes("create table public.track_vault"));
   assert.ok(migration.includes("linked_release_id uuid references public.releases"));
+  assert.ok(lineageMigration.includes("linked_track_id"));
   assert.ok(mediaAction.includes("createVaultTrackFromMedia"));
   assert.ok(mediaAction.includes("kickMediaWorkerQueue"));
   assert.ok(workerReadiness.includes("mediaWorkerReadiness"));
