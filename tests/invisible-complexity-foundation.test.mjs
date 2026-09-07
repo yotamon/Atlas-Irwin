@@ -86,6 +86,7 @@ test("primary navigation exposes durable workspaces while releases and create st
   const settings = await source("app/studio/(protected)/settings/page.tsx");
   const release = await source("components/studio/release-workspace-v2.tsx");
   const musicNav = await source("components/studio/music-library-nav.tsx");
+  const mobileNav = await source("components/studio/mobile-navigation.tsx");
   const workStart = product.indexOf("export const ENSEMBLIS_WORK_NAV");
   const moreStart = product.indexOf("export const ENSEMBLIS_MORE_NAV");
   const mobileMoreStart = product.indexOf("export const ENSEMBLIS_MOBILE_MORE_NAV");
@@ -106,8 +107,10 @@ test("primary navigation exposes durable workspaces while releases and create st
   assert.ok(settings.includes("Artist Memory"));
   assert.ok(settings.includes("Connections"));
   assert.ok(release.includes('"Distribution"'));
-  assert.ok(sidebar.includes("<details"));
-  assert.ok(sidebar.includes(">More</summary>"));
+  assert.ok(sidebar.includes('studio-sidebar-section-label">More'));
+  assert.ok(sidebar.includes("<StudioPrimaryNavigation items={moreNavigation}"));
   assert.ok(sidebar.includes('href={ensemblisArtistHref("/studio/needs-you", artistId)}'));
+  assert.ok(mobileNav.includes("resolveEnsemblisRouteContext(pathname)"));
+  assert.ok(mobileNav.includes("context.parentHref === item.href"));
   assert.equal(product.includes('{ href: "/studio/needs-you", label:'), false, "Needs You should stay a decision surface rather than another primary destination");
 });
