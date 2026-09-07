@@ -357,12 +357,12 @@ export function selectStrongestMoments(map: MusicMap | null): StrongestMoment[] 
 }
 
 export function strongestMomentIntentLabel(moment: StrongestMoment) {
-  return String(dominantIntent(moment as MusicHookCandidate)).replaceAll("_", " ");
+  return String(dominantIntent(moment)).replaceAll("_", " ");
 }
 
 export function strongestMomentTitle(moment: StrongestMoment) {
   const section = moment.section_label || "Moment";
-  const intent = dominantIntent(moment as MusicHookCandidate);
+  const intent = dominantIntent(moment);
   if (intent === "musical_identity") return `Signature ${section}`;
   if (intent === "instant_hook") return `Instant Hook · ${section}`;
   if (intent === "groove_loop") return `Groove Pocket · ${section}`;
