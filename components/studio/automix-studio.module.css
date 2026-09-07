@@ -5,10 +5,10 @@
 
 .heroCard,
 .panel {
-  border: 1px solid var(--studio-border, rgba(255,255,255,.12));
-  border-radius: 22px;
-  background: var(--studio-surface, rgba(255,255,255,.035));
-  box-shadow: 0 18px 60px rgba(0,0,0,.12);
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-xl);
+  background: var(--en-surface);
+  box-shadow: var(--en-shadow-sm);
 }
 
 .heroCard {
@@ -29,7 +29,7 @@
 .intentNote,
 .empty {
   margin: 0;
-  color: var(--studio-muted, #9296a4);
+  color: var(--en-muted);
   line-height: 1.6;
 }
 
@@ -46,10 +46,10 @@
 }
 
 .qualityPills span {
-  border: 1px solid rgba(135, 230, 185, .24);
-  background: rgba(94, 210, 154, .08);
-  color: #b8f5d7;
-  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--en-mint) 28%, transparent);
+  background: var(--en-mint-soft);
+  color: var(--en-mint);
+  border-radius: var(--en-radius-pill);
   padding: 7px 10px;
   font-size: 12px;
   white-space: nowrap;
@@ -95,15 +95,16 @@
   align-content: start;
   gap: 7px;
   padding: 16px;
-  border-radius: 16px;
-  border: 1px solid var(--studio-border, rgba(255,255,255,.12));
-  background: rgba(255,255,255,.02);
-  transition: border-color .18s ease, background .18s ease, transform .18s ease;
+  border-radius: var(--en-radius-lg);
+  border: 1px solid var(--en-line);
+  background: var(--en-bg-elevated);
+  transition: border-color var(--en-duration-normal) var(--en-ease-standard), background var(--en-duration-normal) var(--en-ease-standard), transform var(--en-duration-normal) var(--en-ease-standard);
 }
 
 .intentCard:hover {
   transform: translateY(-1px);
-  border-color: rgba(255,255,255,.24);
+  border-color: var(--en-line-strong);
+  background: var(--en-surface-hover);
 }
 
 .intentCard strong {
@@ -111,14 +112,14 @@
 }
 
 .intentCard span {
-  color: var(--studio-muted, #9296a4);
+  color: var(--en-muted);
   line-height: 1.45;
   font-size: 13px;
 }
 
 .selectedIntent {
-  background: rgba(118, 111, 255, .12);
-  border-color: rgba(142, 136, 255, .58);
+  background: var(--en-violet-soft);
+  border-color: color-mix(in srgb, var(--en-violet) 58%, transparent);
 }
 
 .intentNote {
@@ -136,8 +137,8 @@
 
 .catalogTrack {
   border: 1px solid transparent;
-  border-radius: 14px;
-  background: rgba(255,255,255,.025);
+  border-radius: var(--en-radius);
+  background: var(--en-bg-elevated);
   padding: 12px;
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr);
@@ -146,12 +147,12 @@
 }
 
 .catalogTrack:hover {
-  background: rgba(255,255,255,.045);
+  background: var(--en-surface-hover);
 }
 
 .catalogTrackSelected {
-  border-color: rgba(142, 136, 255, .45);
-  background: rgba(118, 111, 255, .09);
+  border-color: color-mix(in srgb, var(--en-violet) 45%, transparent);
+  background: var(--en-violet-soft);
 }
 
 .catalogTrack span:last-child,
@@ -173,20 +174,20 @@
 .catalogTrack small,
 .orderRow small,
 .jobTop small {
-  color: var(--studio-muted, #9296a4);
+  color: var(--en-muted);
 }
 
 .check {
   width: 30px;
   height: 30px;
-  border-radius: 50%;
+  border-radius: var(--en-radius-pill);
   display: grid;
   place-items: center;
-  background: rgba(255,255,255,.05);
+  background: var(--en-surface-raised);
 }
 
 .catalogTrackSelected .check {
-  background: rgba(130, 121, 255, .25);
+  background: color-mix(in srgb, var(--en-violet) 25%, transparent);
 }
 
 .runningOrder {
@@ -200,14 +201,14 @@
   align-items: center;
   gap: 12px;
   padding: 11px 13px;
-  border-radius: 14px;
-  background: rgba(255,255,255,.025);
-  border: 1px solid rgba(255,255,255,.055);
+  border-radius: var(--en-radius);
+  background: var(--en-bg-elevated);
+  border: 1px solid var(--en-line);
 }
 
 .orderIndex {
   font-variant-numeric: tabular-nums;
-  color: var(--studio-muted, #9296a4);
+  color: var(--en-muted);
   font-size: 12px;
 }
 
@@ -221,11 +222,16 @@
   height: 32px;
   display: grid;
   place-items: center;
-  border-radius: 9px;
-  border: 1px solid rgba(255,255,255,.09);
-  background: rgba(255,255,255,.035);
+  border-radius: var(--en-radius-sm);
+  border: 1px solid var(--en-line);
+  background: var(--en-surface-raised);
   color: inherit;
   cursor: pointer;
+}
+
+.orderActions button:hover:not(:disabled) {
+  background: var(--en-surface-hover);
+  border-color: var(--en-line-strong);
 }
 
 .orderActions button:disabled {
@@ -236,7 +242,7 @@
 .createBar {
   margin-top: 20px;
   padding-top: 18px;
-  border-top: 1px solid rgba(255,255,255,.08);
+  border-top: 1px solid var(--en-line);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -249,16 +255,16 @@
 }
 
 .createBar span {
-  color: var(--studio-muted, #9296a4);
+  color: var(--en-muted);
   font-size: 12px;
 }
 
 .error,
 .jobError {
-  border: 1px solid rgba(255, 117, 117, .28);
-  background: rgba(255, 85, 85, .075);
-  color: #ffc2c2;
-  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--en-danger) 32%, transparent);
+  background: var(--en-danger-soft);
+  color: var(--en-danger);
+  border-radius: var(--en-radius);
   padding: 10px 12px;
   margin-top: 14px;
   line-height: 1.45;
@@ -270,10 +276,10 @@
 }
 
 .jobCard {
-  border: 1px solid rgba(255,255,255,.08);
-  border-radius: 16px;
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-lg);
   padding: 16px;
-  background: rgba(255,255,255,.02);
+  background: var(--en-bg-elevated);
 }
 
 .jobTop {
@@ -284,31 +290,32 @@
 }
 
 .status {
-  border-radius: 999px;
+  border-radius: var(--en-radius-pill);
   padding: 6px 10px;
   font-size: 12px;
-  border: 1px solid rgba(255,255,255,.12);
-  color: var(--studio-muted, #aeb1bb);
+  border: 1px solid var(--en-line);
+  color: var(--en-muted);
 }
 
 .status_completed {
-  color: #b8f5d7;
-  border-color: rgba(94,210,154,.3);
-  background: rgba(94,210,154,.08);
+  color: var(--en-mint);
+  border-color: color-mix(in srgb, var(--en-mint) 34%, transparent);
+  background: var(--en-mint-soft);
 }
 
 .status_running,
 .status_queued,
 .status_planned {
-  color: #d8d5ff;
-  border-color: rgba(142,136,255,.32);
-  background: rgba(118,111,255,.08);
+  color: var(--en-violet);
+  border-color: color-mix(in srgb, var(--en-violet) 35%, transparent);
+  background: var(--en-violet-soft);
 }
 
 .status_failed,
 .status_cancelled {
-  color: #ffc2c2;
-  border-color: rgba(255,117,117,.25);
+  color: var(--en-danger);
+  border-color: color-mix(in srgb, var(--en-danger) 30%, transparent);
+  background: var(--en-danger-soft);
 }
 
 .player {
@@ -332,9 +339,9 @@
 
 .resultMeta span {
   font-size: 11px;
-  color: var(--studio-muted, #9296a4);
-  border: 1px solid rgba(255,255,255,.08);
-  border-radius: 999px;
+  color: var(--en-muted);
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-pill);
   padding: 5px 8px;
 }
 
@@ -350,8 +357,8 @@
   position: relative;
   overflow: hidden;
   height: 5px;
-  border-radius: 99px;
-  background: rgba(255,255,255,.07);
+  border-radius: var(--en-radius-pill);
+  background: var(--en-surface-raised);
 }
 
 .progress > span::after {
@@ -361,18 +368,18 @@
   width: 45%;
   border-radius: inherit;
   background: currentColor;
-  animation: automix-progress 1.6s ease-in-out infinite alternate;
+  animation: automix-progress 1.6s var(--en-ease-standard) infinite alternate;
 }
 
 .progress p {
   margin: 0;
-  color: var(--studio-muted, #9296a4);
+  color: var(--en-muted);
   font-size: 12px;
 }
 
 .warnings {
   margin-top: 12px;
-  color: var(--studio-muted, #a9a39c);
+  color: var(--en-muted);
   font-size: 12px;
 }
 
@@ -416,7 +423,7 @@
   .heroCard,
   .panel {
     padding: 18px;
-    border-radius: 18px;
+    border-radius: var(--en-radius-lg);
   }
 
   .intentGrid {
