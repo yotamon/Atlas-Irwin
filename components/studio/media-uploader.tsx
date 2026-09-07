@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FiCheck, FiFile, FiUploadCloud, FiX } from "react-icons/fi";
 import {
@@ -34,6 +34,7 @@ type UploadItem = {
 const PUBLIC_LIMIT = 100 * 1024 * 1024;
 const HASH_LIMIT = 128 * 1024 * 1024;
 const RESUMABLE_THRESHOLD = 6 * 1024 * 1024;
+const MAX_PARALLEL_UPLOADS = 3;
 
 function humanSize(size: number) {
   return size >= 1024 * 1024
@@ -43,6 +44,16 @@ function humanSize(size: number) {
 
 function cleanAudioTitle(name: string) {
   return name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function safeUploadFailure(error: unknown, resumable: boolean) {
+  if (error instanceof ResumableUploadAuthorizationError) {
+    return "Upload authorization expired. Retry to prepare a fresh resumable upload.";
+  }
+  if (resumable) {
+    return "Upload was interrupted after automatic retries. Retry to resume from the last confirmed chunk.";
+  }
+  return "The upload could not be completed. Check the connection and try again.";
 }
 
 async function sha256(file: File) {
@@ -99,10 +110,13 @@ export function MediaUploader({
   releaseMasterMode?: boolean;
 }) {
   const router = useRouter();
+  const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
+  const dragDepth = useRef(0);
   const masterIntake = vaultMode || musicIntakeMode;
   const [items, setItems] = useState<UploadItem[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [selectionError, setSelectionError] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState("");
@@ -110,13 +124,28 @@ export function MediaUploader({
   const [busy, setBusy] = useState(false);
 
   function addFiles(files: FileList | File[]) {
-    const next = Array.from(files).filter((file) => file.size > 0 && (!(masterIntake || releaseMasterMode) || file.type.startsWith("audio/")));
+    const source = Array.from(files);
+    const rejectedEmpty = source.filter((file) => file.size <= 0);
+    const rejectedSize = source.filter((file) => file.size > PUBLIC_LIMIT);
+    const rejectedType = source.filter((file) => (masterIntake || releaseMasterMode) && !file.type.startsWith("audio/"));
+    const rejected = new Set([...rejectedEmpty, ...rejectedSize, ...rejectedType]);
+    const next = source.filter((file) => !rejected.has(file));
+
+    const messages = [
+      rejectedType.length ? `${rejectedType.length} non-audio file${rejectedType.length === 1 ? " was" : "s were"} skipped. This workflow accepts audio masters only.` : "",
+      rejectedSize.length ? `${rejectedSize.length} file${rejectedSize.length === 1 ? " exceeds" : "s exceed"} the ${humanSize(PUBLIC_LIMIT)} per-file limit.` : "",
+      rejectedEmpty.length ? `${rejectedEmpty.length} empty file${rejectedEmpty.length === 1 ? " was" : "s were"} skipped.` : "",
+    ].filter(Boolean);
+    setSelectionError(messages.join(" "));
     if (!next.length) return;
+
     if (releaseMasterMode) {
       const file = next[0];
       setItems([{ file, role: "master_audio", state: "ready" }]);
+      if (next.length > 1) setSelectionError((current) => `${current ? `${current} ` : ""}Only one release master can be selected at a time.`);
       return;
     }
+
     setItems((current) => {
       const signatures = new Set(current.map((item) => `${item.file.name}:${item.file.size}:${item.file.lastModified}`));
       return [...current, ...next.filter((file) => !signatures.has(`${file.name}:${file.size}:${file.lastModified}`)).map((file) => ({
@@ -137,16 +166,22 @@ export function MediaUploader({
       setItems((current) => current.map((item) => !isCompatibleMediaType(item.role, item.file.type) ? { ...item, state: "error", message: "Choose a compatible use for this format." } : item));
       return;
     }
+
     setBusy(true);
+    setSelectionError("");
     const supabase = createClient();
-    const limit = PUBLIC_LIMIT;
-    for (let index = 0; index < items.length; index += 1) {
-      const item = items[index];
-      if (item.state === "done") continue;
-      if (item.file.size > limit) {
-        setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, state: "error", message: `This file exceeds the ${humanSize(limit)} upload limit.` } : entry));
-        continue;
+    const pending = items
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => item.state !== "done");
+    let cursor = 0;
+    let completedThisRun = 0;
+
+    async function processItem(index: number, item: UploadItem) {
+      if (item.file.size > PUBLIC_LIMIT) {
+        setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, state: "error", message: `This file exceeds the ${humanSize(PUBLIC_LIMIT)} upload limit.` } : entry));
+        return;
       }
+
       const resumable = item.file.size > RESUMABLE_THRESHOLD;
       setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? {
         ...entry,
@@ -163,8 +198,12 @@ export function MediaUploader({
       let uploadTarget: UploadTarget | null = item.target ?? null;
       let registered = false;
       let releaseMasterResult: Awaited<ReturnType<typeof attachReleaseMasterFromMedia>> | null = null;
+
       try {
-        const [contentHash, dimensions] = await Promise.all([sha256(item.file), mediaDimensions(item.file).catch(() => ({ width: "", height: "", duration_ms: "" }))]);
+        const [contentHash, dimensions] = await Promise.all([
+          sha256(item.file),
+          mediaDimensions(item.file).catch(() => ({ width: "", height: "", duration_ms: "" })),
+        ]);
         if (!uploadTarget) {
           const targetForm = new FormData();
           targetForm.set("asset_type", item.role);
@@ -223,6 +262,7 @@ export function MediaUploader({
         }).forEach(([key, formValue]) => form.set(key, formValue));
         const result = await registerMediaUpload(form);
         registered = true;
+
         if (contentItemId) {
           const attachForm = new FormData();
           attachForm.set("content_item_id", contentItemId);
@@ -242,6 +282,8 @@ export function MediaUploader({
           masterForm.set("release_id", releaseId);
           releaseMasterResult = await attachReleaseMasterFromMedia(masterForm);
         }
+
+        completedThisRun += 1;
         setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? {
           ...entry,
           state: "done",
@@ -276,51 +318,93 @@ export function MediaUploader({
           state: "error",
           progress: authorizationExpired ? undefined : entry.progress,
           target: resumable && !authorizationExpired ? uploadTarget ?? entry.target : undefined,
-          message: authorizationExpired
-            ? "Upload authorization expired. Retry to prepare a fresh resumable upload."
-            : resumable
-              ? "Upload interrupted after automatic retries. Retry to resume from the last confirmed chunk."
-              : error instanceof Error ? error.message : "Upload failed. Try again.",
+          message: safeUploadFailure(error, resumable),
         } : entry));
       }
     }
+
+    const workerCount = releaseMasterMode ? 1 : Math.min(MAX_PARALLEL_UPLOADS, pending.length);
+    await Promise.all(Array.from({ length: workerCount }, async () => {
+      while (cursor < pending.length) {
+        const next = pending[cursor];
+        cursor += 1;
+        if (next) await processItem(next.index, next.item);
+      }
+    }));
+
     setBusy(false);
-    router.refresh();
+    if (completedThisRun > 0) router.refresh();
   }
 
   const completed = items.filter((item) => item.state === "done").length;
+  const activeUploads = items.filter((item) => item.state === "uploading").length;
   const hasPending = items.some((item) => item.state === "ready" || item.state === "error");
   const contextualAttach = Boolean(releaseId || contentItemId || masterIntake || releaseMasterMode);
+  const pickerLabel = releaseMasterMode ? "Choose master" : musicIntakeMode ? "Choose mastered tracks" : vaultMode ? "Choose masters" : "Choose files";
 
   return (
     <div className={`media-uploader${vaultMode ? " vault-media-uploader" : ""}${musicIntakeMode ? " music-intake-uploader" : ""}${releaseMasterMode ? " release-master-uploader" : ""}`}>
-      <div
+      <label
         className={`media-dropzone${dragging ? " dragging" : ""}`}
-        onDragEnter={(event) => { event.preventDefault(); setDragging(true); }}
+        htmlFor={inputId}
+        onDragEnter={(event) => {
+          event.preventDefault();
+          dragDepth.current += 1;
+          setDragging(true);
+        }}
         onDragOver={(event) => event.preventDefault()}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(event) => { event.preventDefault(); setDragging(false); addFiles(event.dataTransfer.files); }}
+        onDragLeave={(event) => {
+          event.preventDefault();
+          dragDepth.current = Math.max(0, dragDepth.current - 1);
+          if (dragDepth.current === 0) setDragging(false);
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          dragDepth.current = 0;
+          setDragging(false);
+          addFiles(event.dataTransfer.files);
+        }}
       >
         <FiUploadCloud aria-hidden />
         <strong>{releaseMasterMode ? "Drop the release master here" : musicIntakeMode ? "Drop mastered tracks here" : vaultMode ? "Drop unreleased masters here" : "Drop media here"}</strong>
         <span>{releaseMasterMode ? "WAV, MP3 or another audio master. Ensemblis will attach it to this release and analyze its structure and strongest hooks." : musicIntakeMode ? "Audio only. Title is optional; Ensemblis starts understanding structure and strongest moments automatically." : vaultMode ? "Audio masters only. Each file becomes an independent Vault track." : "Images, video, audio, masters, stems, or ZIP files"}</span>
-        <small>Files over 6 MB upload in resumable chunks and retry automatically if the network drops.</small>
-        <button type="button" className="button" onClick={() => inputRef.current?.click()}>{releaseMasterMode ? "Choose master" : musicIntakeMode ? "Choose mastered tracks" : vaultMode ? "Choose masters" : "Choose files"}</button>
-        <input ref={inputRef} hidden multiple={!releaseMasterMode} type="file" accept={masterIntake || releaseMasterMode ? "audio/*" : "image/*,video/*,audio/*,.zip"} onChange={(event) => event.target.files && addFiles(event.target.files)} />
-      </div>
+        <small>Maximum {humanSize(PUBLIC_LIMIT)} per file. Files over 6 MB use resumable chunks and retry automatically if the network drops.</small>
+        <span className="button media-dropzone-cta" aria-hidden="true">{pickerLabel}</span>
+      </label>
+      <input
+        id={inputId}
+        ref={inputRef}
+        className="sr-only"
+        multiple={!releaseMasterMode}
+        type="file"
+        accept={masterIntake || releaseMasterMode ? "audio/*" : "image/*,video/*,audio/*,.zip"}
+        onChange={(event) => {
+          if (event.target.files) addFiles(event.target.files);
+          event.target.value = "";
+        }}
+      />
+      {selectionError ? <p className="media-selection-error" role="alert">{selectionError}</p> : null}
+
+      <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {busy ? `${activeUploads || 1} upload${activeUploads === 1 ? "" : "s"} in progress. ${completed} complete.` : completed ? `${completed} of ${items.length} uploads complete.` : ""}
+      </span>
 
       {items.length ? (
-        <div className="upload-queue" aria-live="polite">
+        <div className="upload-queue">
           {items.map((item, index) => (
             <div className={`upload-item ${item.state}`} key={`${item.file.name}-${item.file.lastModified}`}>
               <span className="upload-file-icon">{item.state === "done" ? <FiCheck /> : <FiFile />}</span>
               <span className="upload-item-copy">
                 <strong>{item.file.name}</strong>
                 <small>{humanSize(item.file.size)} · {item.file.type || "Unknown format"}{item.message ? ` · ${item.message}` : ""}</small>
-                {item.state === "uploading" && typeof item.progress === "number" ? <progress className="upload-progress" max={100} value={Math.round(item.progress * 100)} aria-label={`Upload progress for ${item.file.name}`} /> : null}
+                {item.state === "uploading" ? (
+                  typeof item.progress === "number"
+                    ? <progress className="upload-progress" max={100} value={Math.round(item.progress * 100)} aria-label={`Upload progress for ${item.file.name}`} />
+                    : <progress className="upload-progress" aria-label={`Uploading ${item.file.name}`} />
+                ) : null}
               </span>
               <select aria-label={`Use for ${item.file.name}`} value={item.role} disabled={masterIntake || releaseMasterMode || busy || item.state === "done"} onChange={(event) => setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, role: event.target.value as MediaType, state: entry.state === "error" ? "ready" : entry.state, message: undefined, target: undefined, progress: undefined } : entry))}>{compatibleMediaTypes(item.file.type).map((type) => <option value={type} key={type}>{MEDIA_TYPE_LABELS[type]}</option>)}</select>
-              {!busy && item.state !== "done" ? <button type="button" aria-label={`Remove ${item.file.name}`} onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}><FiX /></button> : null}
+              {!busy && item.state !== "done" ? <button type="button" aria-label={`Remove ${item.file.name}`} data-tooltip={`Remove ${item.file.name}`} onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}><FiX /></button> : null}
             </div>
           ))}
         </div>
@@ -336,7 +420,7 @@ export function MediaUploader({
       </div> : null}
       <div className="media-upload-actions">
         <button className="button primary" type="button" disabled={!items.length || busy || !hasPending} onClick={upload}>
-          {busy ? `Uploading ${Math.min(items.length, completed + 1)} of ${items.length}…` : completed === items.length && items.length ? "Upload complete" : releaseMasterMode ? "Upload & analyze master" : musicIntakeMode ? `Add ${items.length || ""} mastered track${items.length === 1 ? "" : "s"}` : vaultMode ? `Import ${items.length || ""} to Vault` : contextualAttach ? "Upload and attach" : `Add ${items.length || ""} to library`}
+          {busy ? `Uploading ${activeUploads || 1} file${activeUploads === 1 ? "" : "s"}…` : completed === items.length && items.length ? "Upload complete" : releaseMasterMode ? "Upload & analyze master" : musicIntakeMode ? `Add ${items.length || ""} mastered track${items.length === 1 ? "" : "s"}` : vaultMode ? `Import ${items.length || ""} to Vault` : contextualAttach ? "Upload and attach" : `Add ${items.length || ""} to library`}
         </button>
         {completed ? <span>{completed} of {items.length} ready</span> : <span>{releaseMasterMode ? "The previous master stays in Media Library history when you replace it." : musicIntakeMode ? "Each master stays reusable in Media Library. Track Intelligence starts automatically after upload." : vaultMode ? "Upload is reusable in Media Library; audio analysis does not spend an AI call." : contentItemId ? "Media will be attached to this content item." : "Media is published to the public asset library."}</span>}
       </div>
