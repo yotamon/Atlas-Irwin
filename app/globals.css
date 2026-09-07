@@ -313,18 +313,6 @@ button {
   padding-bottom: clamp(1.5rem, 4vw, 3.5rem);
 }
 
-/* The selected release can be an older catalog item. Never call it "New" purely
-   because it is currently selected in the player. */
-#release-widget .absolute.inset-x-4.bottom-4 p:first-child {
-  font-size: 0 !important;
-}
-
-#release-widget .absolute.inset-x-4.bottom-4 p:first-child::after {
-  content: "Selected Release";
-  font-size: 1rem;
-  letter-spacing: 0.18em;
-}
-
 @media (prefers-reduced-motion: no-preference) {
   .hero-reveal {
     animation: hero-enter 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;

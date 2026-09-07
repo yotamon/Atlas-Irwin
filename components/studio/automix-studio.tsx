@@ -497,7 +497,7 @@ export function AutoMixStudio({ artistId, artistName, tracks }: AutoMixStudioPro
             <div>
               <span className={styles.readiness}>{selectedIds.length >= 2 ? "READY FOR ANALYSIS" : "NEEDS MUSIC"}</span>
               <strong>{selectedIds.length >= 2 ? `${selectedIds.length} tracks selected by you` : "Choose at least two tracks"}</strong>
-              <small>Pitch preserved · fixed-grid stretch capped by the engine's quality contract · final ceiling reported from the measured render</small>
+              <small>Pitch preserved · fixed-grid stretch capped by the engine's quality contract · final loudness measured · -1.0 dBTP safety ceiling enforced</small>
             </div>
             <button className="button primary" type="button" disabled={creating || selectedIds.length < 2} onClick={createMix}><FiZap /> {creating ? "Starting engine…" : "Analyze, plan & render"}</button>
           </div>
@@ -550,7 +550,7 @@ export function AutoMixStudio({ artistId, artistName, tracks }: AutoMixStudioPro
                       <div className={styles.resultMeta}>
                         <span><small>Length</small>{formatDuration(job.output.duration_ms || (typeof render.duration_ms === "number" ? render.duration_ms : 0))}</span>
                         {typeof render.final_measured_lufs === "number" ? <span><small>Measured loudness</small>{render.final_measured_lufs.toFixed(1)} LUFS</span> : null}
-                        {ceiling !== null ? <span><small>Measured ceiling</small>{ceiling.toFixed(1)} dBTP</span> : null}
+                        {ceiling !== null ? <span><small>Safety ceiling</small>{ceiling.toFixed(1)} dBTP</span> : null}
                       </div>
                       <a className="button" href={job.output.public_url} download><FiDownload /> Download mix</a>
                     </div>

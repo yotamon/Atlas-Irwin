@@ -755,7 +755,7 @@ export function ReleaseWidgetClient({ releases }: ReleaseWidgetClientProps) {
                 <div className="flex items-end justify-between gap-4">
                   <div className="min-w-0">
                     <p className="font-display text-[1rem] uppercase tracking-[0.24em] text-teal">
-                      New Release
+                      Selected Release
                     </p>
                     <h2 className="mt-2 font-display text-[3.45rem] uppercase leading-[0.82] tracking-[0.03em] text-paper sm:text-[4.2rem] lg:text-[4.6rem]">
                       {featuredRelease.title}
