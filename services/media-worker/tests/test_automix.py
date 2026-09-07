@@ -12,7 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.automix_dsp import _apply_ceiling, _scan_peaks, mix_transition
+from app.automix_dsp import _apply_ceiling, _channel_gain_db, _scan_peaks, mix_transition
+from app.automix_intelligence import mastering_profile, tempo_profile
 from app.automix_model import (
     MAX_BEATMATCH_STRETCH,
     SAMPLE_RATE,
@@ -36,6 +37,7 @@ class AutoMixEngineTest(unittest.TestCase):
         start_ms: int = 0,
         end_ms: int = 90_000,
         label: str = "instrumental",
+        extra_map: dict | None = None,
     ) -> TrackDescriptor:
         number = int(camelot[:-1])
         letter = camelot[-1]
@@ -46,13 +48,31 @@ class AutoMixEngineTest(unittest.TestCase):
             camelot=camelot,
             label=f"Key {camelot}",
         )
+        timeline = [
+            {"ms": ms, "bpm": bpm, "deviation_bpm": 0.0}
+            for ms in range(0, 180_001, 5_000)
+        ]
         music_map = {
             "duration_ms": 180_000,
+            "beat_stability": {
+                "classification": "stable",
+                "confidence": 0.95,
+                "local_jitter_bpm": 0.15,
+                "timeline": timeline,
+            },
+            "master_qc": {
+                "technical_ready": True,
+                "integrated_lufs": -10.0,
+                "true_peak_dbtp": -1.0,
+                "clipping_ratio": 0.0,
+            },
             "sections": [
                 {"start_ms": 0, "end_ms": 90_000, "label": label, "confidence": 0.9},
                 {"start_ms": 90_000, "end_ms": 180_000, "label": "outro", "confidence": 0.9},
             ],
         }
+        if extra_map:
+            music_map.update(extra_map)
         return TrackDescriptor(
             id=track_id,
             title=track_id,
@@ -127,6 +147,82 @@ class AutoMixEngineTest(unittest.TestCase):
         self.assertEqual(bars, 0)
         self.assertIn(technique, {"echo_out", "drop_cut"})
         self.assertTrue(reasons)
+
+    def test_unstable_tempo_is_never_flattened_to_a_fixed_grid(self) -> None:
+        unstable = self._track("live-feel", 120, "8A", 0.62)
+        unstable.music_map["beat_stability"] = {
+            "classification": "unstable",
+            "confidence": 0.96,
+            "local_jitter_bpm": 3.4,
+            "timeline": [
+                {"ms": 0, "bpm": 116.0},
+                {"ms": 15_000, "bpm": 123.0},
+                {"ms": 30_000, "bpm": 118.0},
+                {"ms": 45_000, "bpm": 126.0},
+                {"ms": 60_000, "bpm": 117.0},
+                {"ms": 75_000, "bpm": 124.0},
+            ],
+        }
+        stable = self._track("grid", 122, "8A", 0.65)
+        profile = tempo_profile(unstable.music_map, 0, 90_000, 120.0)
+        self.assertEqual(profile["classification"], "unstable")
+        self.assertFalse(profile["constant_stretch_safe"])
+        plan = build_plan([unstable, stable], "journey", "dynamic", "dj", 6 * 60 * 1000)
+        self.assertEqual(float(plan["tracks"][0]["time_factor"]), 1.0)
+        self.assertFalse(plan["transitions"][0]["beatmatch"])
+        self.assertEqual(plan["transitions"][0]["technique"], "echo_out")
+
+    def test_section_tempo_change_can_use_local_stable_window(self) -> None:
+        changing = self._track("tempo-change", 120, "8A", 0.6, start_ms=90_000, end_ms=180_000)
+        changing.music_map["beat_stability"] = {
+            "classification": "section_tempo_changes",
+            "confidence": 0.93,
+            "local_jitter_bpm": 0.2,
+            "timeline": [
+                *[{"ms": ms, "bpm": 118.0} for ms in range(0, 90_000, 5_000)],
+                *[{"ms": ms, "bpm": 124.0} for ms in range(90_000, 181_000, 5_000)],
+            ],
+        }
+        profile = tempo_profile(changing.music_map, 90_000, 180_000, 120.0)
+        self.assertEqual(profile["classification"], "section_tempo_changes")
+        self.assertTrue(profile["constant_stretch_safe"])
+        self.assertAlmostEqual(float(profile["window_bpm"]), 124.0, places=1)
+
+    def test_vocal_collision_vetoes_long_harmonic_blend(self) -> None:
+        vocal_curve = [
+            {"start_ms": ms, "end_ms": ms + 500, "energy": 0.9, "active_ratio": 0.95, "active": True}
+            for ms in range(0, 180_000, 500)
+        ]
+        a = self._track("vocal-a", 122, "8A", 0.64, extra_map={"automix_vocals_activity_curve": vocal_curve})
+        b = self._track("vocal-b", 122, "8A", 0.66, extra_map={"automix_vocals_activity_curve": vocal_curve})
+        metrics = transition_score(a, b, 0.5, "booking", "dynamic")
+        technique, bars, beatmatch, reasons = choose_transition(a, b, metrics, "dj")
+        self.assertGreater(metrics["vocal_collision"], 0.3)
+        self.assertTrue(beatmatch)
+        self.assertEqual(technique, "quick_mix")
+        self.assertEqual(bars, 4)
+        self.assertTrue(any("vocal" in reason for reason in reasons))
+
+    def test_clipped_master_is_not_boosted_to_chase_loudness(self) -> None:
+        poor = mastering_profile({
+            "master_qc": {
+                "technical_ready": False,
+                "integrated_lufs": -15.0,
+                "true_peak_dbtp": 0.2,
+                "clipping_ratio": 0.001,
+            },
+        })
+        clean = mastering_profile({
+            "master_qc": {
+                "technical_ready": True,
+                "integrated_lufs": -15.0,
+                "true_peak_dbtp": -3.0,
+                "clipping_ratio": 0.0,
+            },
+        })
+        self.assertEqual(_channel_gain_db(-15.0, -10.0, poor), 0.0)
+        self.assertGreater(_channel_gain_db(-15.0, -10.0, clean), 0.0)
+        self.assertGreater(clean["quality_score"], poor["quality_score"])
 
     def test_bass_swap_transition_is_finite_and_exact_length(self) -> None:
         seconds = 4
