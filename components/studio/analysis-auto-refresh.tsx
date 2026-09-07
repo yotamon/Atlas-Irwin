@@ -8,13 +8,28 @@ export function AnalysisAutoRefresh({ active }: { active: boolean }) {
 
   useEffect(() => {
     if (!active) return;
+
+    let cancelled = false;
     let refreshes = 0;
-    const timer = window.setInterval(() => {
-      refreshes += 1;
-      router.refresh();
-      if (refreshes >= 40) window.clearInterval(timer);
-    }, 3000);
-    return () => window.clearInterval(timer);
+    let timer = 0;
+
+    const schedule = () => {
+      const delay = refreshes < 24 ? 5000 : 10000;
+      timer = window.setTimeout(() => {
+        if (cancelled) return;
+        refreshes += 1;
+        router.refresh();
+        // Typical deep audio passes take several minutes. Keep the UI live for up to
+        // ten minutes without hammering the free deployment with rapid refreshes.
+        if (refreshes < 72) schedule();
+      }, delay);
+    };
+
+    schedule();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, [active, router]);
 
   return null;
