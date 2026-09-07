@@ -24,6 +24,7 @@ function missingCalibrationTable(error: { code?: string } | null) {
 }
 
 function artistFacingReleaseStage(stage: string) {
+  if (stage === "music") return "overview";
   if (stage === "plan") return "promotion";
   if (stage === "create") return "content";
   if (stage === "publish") return "distribution";
@@ -67,7 +68,7 @@ export default async function ReleaseDetail({
     { data: soundCloudPending },
     { data: spotifyPending },
     campaignResult,
-    vaultResult,
+    vaultsResult,
   ] = await Promise.all([
     music.from("releases").select("*").eq("id", id).eq("artist_id", artist.artistId).single(),
     music.from("tracks").select("*").eq("release_id", id).eq("artist_id", artist.artistId).order("display_order").order("is_primary", { ascending: false }),
@@ -82,11 +83,11 @@ export default async function ReleaseDetail({
     supabase.from("soundcloud_tracks").select("*").eq("owner_id", user.id).eq("reconcile_status", "pending"),
     supabase.from("spotify_tracks").select("*").eq("owner_id", user.id).eq("reconcile_status", "pending"),
     marketing.from("campaigns").select("id,name,status,mode,objective,primary_kpi").eq("owner_id", user.id).eq("artist_id", artist.artistId).eq("release_id", id).not("status", "in", '("archived")').order("updated_at", { ascending: false }).limit(1).maybeSingle(),
-    growth.from("track_vault").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).eq("linked_release_id", id).order("updated_at", { ascending: false }).limit(1).maybeSingle(),
+    growth.from("track_vault").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).eq("linked_release_id", id).order("updated_at", { ascending: false }),
   ]);
   if (!release) notFound();
   if (campaignResult.error) throw new Error(campaignResult.error.message);
-  if (vaultResult.error) throw new Error(vaultResult.error.message);
+  if (vaultsResult.error) throw new Error(vaultsResult.error.message);
 
   const trackIds = (tracks ?? []).map((track) => track.id);
   const { data: externalTrackIds } = trackIds.length
@@ -150,8 +151,8 @@ export default async function ReleaseDetail({
 
   if (!advanced) {
     return <>
-      <ReleaseWorkspaceV2 artistId={artist.artistId} release={release} tracks={tracks ?? []} contentItems={contentItems ?? []} metrics={metrics ?? []} campaign={campaignResult.data} stage={simpleStage} renderedAt={renderedAt} playbookTasks={playbookTasks ?? []} providerScheduledCount={providerScheduledCount ?? 0} vaultTrack={vaultResult.data} />
-      {(simpleStage === "music" || stage === "create") ? <MomentReviewPanel releaseId={release.id} moments={momentCuration.curated} historicalMoments={momentCuration.historical} rawCandidateCount={momentCuration.raw_active_count} suppressedCount={momentCuration.suppressed_count} tracks={(tracks ?? []).map((track) => ({ id: track.id, title: track.title, audio_url: track.audio_url }))} performance={momentPerformance ?? []} lyricSources={lyricSources ?? []} calibrationEvents={calibrationEvents} /> : null}
+      <ReleaseWorkspaceV2 artistId={artist.artistId} release={release} tracks={tracks ?? []} contentItems={contentItems ?? []} metrics={metrics ?? []} campaign={campaignResult.data} stage={simpleStage} renderedAt={renderedAt} playbookTasks={playbookTasks ?? []} providerScheduledCount={providerScheduledCount ?? 0} vaultTracks={vaultsResult.data ?? []} />
+      {stage === "create" ? <MomentReviewPanel releaseId={release.id} moments={momentCuration.curated} historicalMoments={momentCuration.historical} rawCandidateCount={momentCuration.raw_active_count} suppressedCount={momentCuration.suppressed_count} tracks={(tracks ?? []).map((track) => ({ id: track.id, title: track.title, audio_url: track.audio_url }))} performance={momentPerformance ?? []} lyricSources={lyricSources ?? []} calibrationEvents={calibrationEvents} /> : null}
     </>;
   }
 
