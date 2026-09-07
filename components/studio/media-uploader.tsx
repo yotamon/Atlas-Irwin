@@ -9,7 +9,11 @@ import {
   registerMediaUpload,
 } from "@/app/studio/catalog-actions";
 import { attachContentMediaV2 } from "@/app/studio/content-actions-v2";
-import { attachReleaseMasterFromMedia, createVaultTrackFromMedia } from "@/app/studio/growth-media-actions-safe";
+import {
+  attachCatalogTrackMasterFromMedia,
+  attachReleaseMasterFromMedia,
+  createVaultTrackFromMedia,
+} from "@/app/studio/growth-media-actions-safe";
 import { createClient } from "@/lib/supabase/client";
 import { ResumableUploadAuthorizationError, uploadResumableMedia } from "@/lib/supabase/resumable-upload";
 import {
@@ -94,6 +98,7 @@ async function mediaDimensions(file: File) {
 
 export function MediaUploader({
   releaseId,
+  trackId,
   contentItemId,
   artistId,
   defaultRole = "cover",
@@ -102,6 +107,7 @@ export function MediaUploader({
   releaseMasterMode = false,
 }: {
   releaseId?: string;
+  trackId?: string;
   contentItemId?: string;
   artistId?: string;
   defaultRole?: MediaType;
@@ -114,6 +120,7 @@ export function MediaUploader({
   const inputRef = useRef<HTMLInputElement>(null);
   const dragDepth = useRef(0);
   const masterIntake = vaultMode || musicIntakeMode;
+  const trackScopedMaster = Boolean(releaseMasterMode && trackId);
   const [items, setItems] = useState<UploadItem[]>([]);
   const [dragging, setDragging] = useState(false);
   const [selectionError, setSelectionError] = useState("");
@@ -142,7 +149,7 @@ export function MediaUploader({
     if (releaseMasterMode) {
       const file = next[0];
       setItems([{ file, role: "master_audio", state: "ready" }]);
-      if (next.length > 1) setSelectionError((current) => `${current ? `${current} ` : ""}Only one release master can be selected at a time.`);
+      if (next.length > 1) setSelectionError((current) => `${current ? `${current} ` : ""}Only one track master can be selected at a time.`);
       return;
     }
 
@@ -159,7 +166,7 @@ export function MediaUploader({
   async function upload() {
     if (!items.length || busy) return;
     if (releaseMasterMode && !releaseId) {
-      setItems((current) => current.map((item) => ({ ...item, state: "error", message: "A release is required for a release master." })));
+      setItems((current) => current.map((item) => ({ ...item, state: "error", message: "A release is required for a track master." })));
       return;
     }
     if (items.some((item) => !isCompatibleMediaType(item.role, item.file.type))) {
@@ -197,7 +204,7 @@ export function MediaUploader({
       } : entry));
       let uploadTarget: UploadTarget | null = item.target ?? null;
       let registered = false;
-      let releaseMasterResult: Awaited<ReturnType<typeof attachReleaseMasterFromMedia>> | null = null;
+      let releaseMasterResult: { analysisReused?: boolean; analysisQueued?: boolean } | null = null;
 
       try {
         const [contentHash, dimensions] = await Promise.all([
@@ -250,7 +257,7 @@ export function MediaUploader({
           title: items.length === 1 ? title : "",
           description,
           tags: releaseMasterMode
-            ? [scopedTags, "release-master"].filter(Boolean).join(",")
+            ? [scopedTags, trackId ? `track:${trackId}` : "release-master"].filter(Boolean).join(",")
             : musicIntakeMode
               ? [scopedTags, "unreleased", "music"].filter(Boolean).join(",")
               : vaultMode
@@ -280,7 +287,12 @@ export function MediaUploader({
           const masterForm = new FormData();
           masterForm.set("media_asset_id", result.id);
           masterForm.set("release_id", releaseId);
-          releaseMasterResult = await attachReleaseMasterFromMedia(masterForm);
+          if (trackId) {
+            masterForm.set("track_id", trackId);
+            await attachCatalogTrackMasterFromMedia(masterForm);
+          } else {
+            releaseMasterResult = await attachReleaseMasterFromMedia(masterForm);
+          }
         }
 
         completedThisRun += 1;
@@ -290,11 +302,13 @@ export function MediaUploader({
           progress: 1,
           target: undefined,
           message: releaseMasterMode
-            ? releaseMasterResult?.analysisReused
-              ? "Master attached. Existing Music Intelligence was reused instantly."
-              : releaseMasterResult?.analysisQueued
-                ? "Master attached. Ensemblis is analyzing its structure and strongest hooks."
-                : "Master attached. Analysis can be retried from the release when the media worker is available."
+            ? trackScopedMaster
+              ? "Master attached to this track. Ensemblis is analyzing its structure and strongest moments."
+              : releaseMasterResult?.analysisReused
+                ? "Master attached. Existing Music Intelligence was reused instantly."
+                : releaseMasterResult?.analysisQueued
+                  ? "Master attached. Ensemblis is analyzing its structure and strongest hooks."
+                  : "Master attached. Analysis can be retried from the release when the media worker is available."
             : musicIntakeMode
               ? "Master added to Music. Ensemblis is understanding its structure and strongest moments."
               : vaultMode
@@ -366,8 +380,8 @@ export function MediaUploader({
         }}
       >
         <FiUploadCloud aria-hidden />
-        <strong>{releaseMasterMode ? "Drop the release master here" : musicIntakeMode ? "Drop mastered tracks here" : vaultMode ? "Drop unreleased masters here" : "Drop media here"}</strong>
-        <span>{releaseMasterMode ? "WAV, MP3 or another audio master. Ensemblis will attach it to this release and analyze its structure and strongest hooks." : musicIntakeMode ? "Audio only. Title is optional; Ensemblis starts understanding structure and strongest moments automatically." : vaultMode ? "Audio masters only. Each file becomes an independent Vault track." : "Images, video, audio, masters, stems, or ZIP files"}</span>
+        <strong>{releaseMasterMode ? trackScopedMaster ? "Drop this track's master here" : "Drop the release master here" : musicIntakeMode ? "Drop mastered tracks here" : vaultMode ? "Drop unreleased masters here" : "Drop media here"}</strong>
+        <span>{releaseMasterMode ? trackScopedMaster ? "WAV, MP3 or another audio master. It stays attached to this exact song and receives its own Music Intelligence." : "WAV, MP3 or another audio master. Ensemblis will attach it to this release and analyze its structure and strongest hooks." : musicIntakeMode ? "Audio only. Title is optional; Ensemblis starts understanding structure and strongest moments automatically." : vaultMode ? "Audio masters only. Each file becomes an independent Vault track." : "Images, video, audio, masters, stems, or ZIP files"}</span>
         <small>Maximum {humanSize(PUBLIC_LIMIT)} per file. Files over 6 MB use resumable chunks and retry automatically if the network drops.</small>
         <span className="button media-dropzone-cta" aria-hidden="true">{pickerLabel}</span>
       </label>
@@ -422,7 +436,7 @@ export function MediaUploader({
         <button className="button primary" type="button" disabled={!items.length || busy || !hasPending} onClick={upload}>
           {busy ? `Uploading ${activeUploads || 1} file${activeUploads === 1 ? "" : "s"}…` : completed === items.length && items.length ? "Upload complete" : releaseMasterMode ? "Upload & analyze master" : musicIntakeMode ? `Add ${items.length || ""} mastered track${items.length === 1 ? "" : "s"}` : vaultMode ? `Import ${items.length || ""} to Vault` : contextualAttach ? "Upload and attach" : `Add ${items.length || ""} to library`}
         </button>
-        {completed ? <span>{completed} of {items.length} ready</span> : <span>{releaseMasterMode ? "The previous master stays in Media Library history when you replace it." : musicIntakeMode ? "Each master stays reusable in Media Library. Track Intelligence starts automatically after upload." : vaultMode ? "Upload is reusable in Media Library; audio analysis does not spend an AI call." : contentItemId ? "Media will be attached to this content item." : "Media is published to the public asset library."}</span>}
+        {completed ? <span>{completed} of {items.length} ready</span> : <span>{releaseMasterMode ? trackScopedMaster ? "This upload changes only this song. Other tracks in the release keep their own masters and analysis." : "The previous master stays in Media Library history when you replace it." : musicIntakeMode ? "Each master stays reusable in Media Library. Track Intelligence starts automatically after upload." : vaultMode ? "Upload is reusable in Media Library; audio analysis does not spend an AI call." : contentItemId ? "Media will be attached to this content item." : "Media is published to the public asset library."}</span>}
       </div>
     </div>
   );
