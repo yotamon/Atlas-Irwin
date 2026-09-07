@@ -92,6 +92,7 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
   }
 
   const analysis = describeTrackAnalysis(vaultTrack.analysis, vaultTrack.audio_profile);
+  const analysisNeedsRecovery = analysis.needsRecovery;
   const musicMap = asRecord(vaultTrack.audio_profile);
   const sections = Array.isArray(musicMap.sections) ? musicMap.sections.length : 0;
   const hooks = Array.isArray(musicMap.hook_candidates) ? musicMap.hook_candidates.length : 0;
@@ -113,7 +114,7 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
       ? analysis.isRefreshing ? "Refreshing" : "Ready"
       : analysis.isActive
         ? "Listening"
-        : analysis.needsRecovery ? "Needs attention" : "Pending";
+        : analysisNeedsRecovery ? "Needs attention" : "Pending";
 
   return (
     <div className="studio-v2-page track-object-page">
@@ -136,7 +137,7 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
         ]}
         actions={release
           ? <Link className="button primary" href={href(`/studio/releases/${release.id}`)}>Open release</Link>
-          : analysis.hasMusicMap && !analysis.needsRecovery
+          : analysis.hasMusicMap && !analysisNeedsRecovery
             ? <Link className="button primary" href={createHref}>Create from this track</Link>
             : <Link className="button" href="#intelligence">Track Intelligence</Link>}
         tabs={tabs}
@@ -151,7 +152,7 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
         </div>
         <aside className="track-object-decision">
           <span className="section-label">Recommended next move</span>
-          {analysis.needsRecovery ? (
+          {analysisNeedsRecovery ? (
             <>
               <strong>{analysis.isPartial ? "Finish the full intelligence pass" : "Analysis needs attention"}</strong>
               <p>{analysis.isPartial ? "Verified results are still available, but the latest full pass stopped before completion." : "The master is safe. Retry only the intelligence step."}</p>
@@ -189,7 +190,7 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
         <div className="v2-section-heading">
           <div>
             <span className="section-label">Track Intelligence</span>
-            <h2>{analysis.isPartial ? "Verified intelligence, full pass needs recovery" : analysis.isRefreshing ? "Current intelligence while Ensemblis refreshes" : analysis.hasMusicMap ? "What Ensemblis hears" : analysis.needsRecovery ? "Understanding needs recovery" : "Ensemblis is understanding the track"}</h2>
+            <h2>{analysis.isPartial ? "Verified intelligence, full pass needs recovery" : analysis.isRefreshing ? "Current intelligence while Ensemblis refreshes" : analysis.hasMusicMap ? "What Ensemblis hears" : analysisNeedsRecovery ? "Understanding needs recovery" : "Ensemblis is understanding the track"}</h2>
           </div>
           {vaultTrack.audio_url ? <span className="growth-active-label">{analysis.label}</span> : null}
         </div>
@@ -210,8 +211,8 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
           </div>
         ) : !analysis.hasMusicMap ? (
           <div className="v2-calm-state compact">
-            <strong>{analysis.needsRecovery ? "The source master is safe." : analysis.isActive ? "Nothing to fill in manually." : vaultTrack.audio_url ? "Master ready for analysis." : "No source audio yet."}</strong>
-            <p>{analysis.needsRecovery ? analysis.failureCopy : analysis.isActive ? "Structure and strongest Moments appear here automatically when analysis completes." : vaultTrack.audio_url ? "Run Track Intelligence to generate music-aware structure, Moments and mastering checks." : "Add a master first."}</p>
+            <strong>{analysisNeedsRecovery ? "The source master is safe." : analysis.isActive ? "Nothing to fill in manually." : vaultTrack.audio_url ? "Master ready for analysis." : "No source audio yet."}</strong>
+            <p>{analysisNeedsRecovery ? analysis.failureCopy : analysis.isActive ? "Structure and strongest Moments appear here automatically when analysis completes." : vaultTrack.audio_url ? "Run Track Intelligence to generate music-aware structure, Moments and mastering checks." : "Add a master first."}</p>
           </div>
         ) : null}
 
@@ -228,15 +229,15 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
         </details>
 
         {vaultTrack.audio_url && !analysis.isActive ? (
-          <details className="track-object-advanced" id="analysis-recovery" open={analysis.needsRecovery || undefined}>
-            <summary>{analysis.needsRecovery ? "Analysis recovery" : "Analysis controls"}</summary>
-            <p className="v2-muted-copy">{analysis.needsRecovery ? "Retry only the intelligence step. The canonical master and any verified results remain untouched until a new full result succeeds." : "Re-run Track Intelligence only when you intentionally want a fresh pass. The canonical master stays unchanged."}</p>
+          <details className="track-object-advanced" id="analysis-recovery" open={analysisNeedsRecovery || undefined}>
+            <summary>{analysisNeedsRecovery ? "Retry Track Intelligence" : "Analysis controls"}</summary>
+            <p className="v2-muted-copy">{analysisNeedsRecovery ? "Analysis recovery retries only the intelligence step. The canonical master and any verified results remain untouched until a new full result succeeds." : "Re-run Track Intelligence only when you intentionally want a fresh pass. The canonical master stays unchanged."}</p>
             <form action={analyzeMusicTrack}>
               <input type="hidden" name="id" value={vaultTrack.id} />
               <AnalysisSubmitButton
-                className={analysis.needsRecovery ? "button primary" : "button"}
+                className={analysisNeedsRecovery ? "button primary" : "button"}
                 idleLabel={analysis.actionLabel}
-                pendingLabel={analysis.needsRecovery ? "Retrying analysis…" : "Starting analysis…"}
+                pendingLabel={analysisNeedsRecovery ? "Retrying analysis…" : "Starting analysis…"}
               />
             </form>
           </details>
