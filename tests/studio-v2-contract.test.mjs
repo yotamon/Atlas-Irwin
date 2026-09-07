@@ -27,7 +27,7 @@ test("Studio V2 keeps every specialist route present even when navigation is sim
 test("Ensemblis navigation exposes durable artist workspaces while specialist domains remain contextual", async () => {
   const product = await readFile("lib/ensemblis-product.ts", "utf8");
   const sidebar = await readFile("components/studio/sidebar.tsx", "utf8");
-  const musicPage = await readFile("app/studio/(protected)/music/page.tsx", "utf8");
+  const musicNav = await readFile("components/studio/music-library-nav.tsx", "utf8");
   const workStart = product.indexOf("export const ENSEMBLIS_WORK_NAV");
   const moreStart = product.indexOf("export const ENSEMBLIS_MORE_NAV");
   const mobileMoreStart = product.indexOf("export const ENSEMBLIS_MOBILE_MORE_NAV");
@@ -49,7 +49,9 @@ test("Ensemblis navigation exposes durable artist workspaces while specialist do
   assert.ok(product.includes('{ prefix: "/studio/releases", area: "Music", parentHref: "/studio/music" }'));
   assert.ok(product.includes('href: "/studio/create"'));
   assert.ok(product.includes('label: "Create"'));
-  assert.ok(musicPage.includes('label: "Releases"'));
+  assert.ok(musicNav.includes("Tracks"));
+  assert.ok(musicNav.includes("Releases"));
+  assert.ok(musicNav.includes('ensemblisArtistHref("/studio/releases", artistId)'));
 
   for (const route of ["/studio/library", "/studio/sites"]) {
     assert.ok(moreSource.includes(route), `${route} is missing from cross-workflow More utilities`);
@@ -186,12 +188,15 @@ test("generic product surfaces contain no hardcoded Atlas user-facing language",
 
 test("release workspace is one Mission object with tracks visible before release work and an advanced escape hatch", async () => {
   const workspace = await readFile("components/studio/release-workspace-v2.tsx", "utf8");
+  const tracklist = await readFile("components/studio/release-tracklist.tsx", "utf8");
   const mission = await readFile("lib/studio/release-mission.ts", "utf8");
   for (const facet of ["Overview", "Release work", "Content", "Promotion", "Distribution", "Results"]) assert.ok(workspace.includes(facet), `release workspace lost ${facet}`);
   assert.equal(workspace.includes('{ label: "Music", href:'), false, "Release must not hide tracks behind a duplicate Music tab");
-  for (const alias of ['stage === "plan"', 'stage === "create"', 'stage === "publish"', 'stage === "learn"']) assert.ok(workspace.includes(alias), `release compatibility lost ${alias}`);
-  assert.ok(workspace.includes("release-track-summary"));
-  assert.ok(workspace.indexOf("release-track-summary") < workspace.indexOf("release-mission-hero"), "tracklist must appear before release workflow detail");
+  for (const alias of ['stage === "music"', 'stage === "plan"', 'stage === "create"', 'stage === "publish"', 'stage === "learn"']) assert.ok(workspace.includes(alias), `release compatibility lost ${alias}`);
+  assert.ok(workspace.includes("<ReleaseTracklist"));
+  assert.ok(workspace.indexOf("<ReleaseTracklist") < workspace.indexOf("release-mission-hero"), "tracklist must appear before release workflow detail");
+  assert.ok(tracklist.includes("Every song has its own master and Music Intelligence"));
+  assert.ok(tracklist.includes("trackId={track.id}"));
   assert.ok(workspace.includes("Advanced view"));
   assert.ok(workspace.includes("/studio/production"));
   assert.ok(workspace.includes("/studio/video?release="));
