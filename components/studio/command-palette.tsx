@@ -6,7 +6,7 @@ import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 
 type Command = {
   label: string;
-  group: "Navigate" | "Create" | "Manage";
+  group: "Go to" | "Create" | "Tools";
   keywords: string;
   href: string;
 };
@@ -24,25 +24,28 @@ export function CommandPalette({ artistId }: { artistId: string }) {
   const [query, setQuery] = useState("");
   const [objectResults, setObjectResults] = useState<ObjectSearchResult[]>([]);
   const [searchingObjects, setSearchingObjects] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const [retryKey, setRetryKey] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const dialogRef = useRef<HTMLElement | null>(null);
   const resultsRef = useRef<HTMLDivElement | null>(null);
   const commands = useMemo<Command[]>(() => [
-    { label: "Today", group: "Navigate", keywords: "home next action needs you working", href: ensemblisArtistHref("/studio", artistId) },
-    { label: "Music", group: "Navigate", keywords: "tracks vault intelligence stems lyrics", href: ensemblisArtistHref("/studio/music", artistId) },
-    { label: "Releases", group: "Navigate", keywords: "catalog upcoming live release", href: ensemblisArtistHref("/studio/releases", artistId) },
-    { label: "Create", group: "Navigate", keywords: "creative content generate", href: ensemblisArtistHref("/studio/create", artistId) },
-    { label: "Grow", group: "Navigate", keywords: "growth performance opportunities campaigns", href: ensemblisArtistHref("/studio/growth", artistId) },
-    { label: "Audience", group: "Navigate", keywords: "comments messages replies community", href: ensemblisArtistHref("/studio/audience", artistId) },
-    { label: "Library", group: "Navigate", keywords: "media assets images video audio", href: ensemblisArtistHref("/studio/library", artistId) },
+    { label: "Today", group: "Go to", keywords: "home next action needs you working", href: ensemblisArtistHref("/studio", artistId) },
+    { label: "Music", group: "Go to", keywords: "tracks vault intelligence stems lyrics", href: ensemblisArtistHref("/studio/music", artistId) },
+    { label: "Releases", group: "Go to", keywords: "catalog upcoming live release", href: ensemblisArtistHref("/studio/releases", artistId) },
+    { label: "Grow", group: "Go to", keywords: "growth performance opportunities campaigns audience", href: ensemblisArtistHref("/studio/growth", artistId) },
+    { label: "Library", group: "Go to", keywords: "media assets images video audio", href: ensemblisArtistHref("/studio/library", artistId) },
+    { label: "Sites", group: "Go to", keywords: "website domains pages", href: ensemblisArtistHref("/studio/sites", artistId) },
+    { label: "Create", group: "Create", keywords: "creative content generate", href: ensemblisArtistHref("/studio/create", artistId) },
     { label: "New release", group: "Create", keywords: "release create add", href: ensemblisArtistHref("/studio/releases/new", artistId) },
     { label: "Generate music", group: "Create", keywords: "music lab ai track draft", href: ensemblisArtistHref("/studio/music?view=generate", artistId) },
     { label: "Video Director", group: "Create", keywords: "video music video motion", href: ensemblisArtistHref("/studio/video", artistId) },
-    { label: "Campaigns", group: "Create", keywords: "campaign marketing content", href: ensemblisArtistHref("/studio/campaigns", artistId) },
-    { label: "Distribution", group: "Manage", keywords: "dsp delivery stores", href: ensemblisArtistHref("/studio/distribution", artistId) },
-    { label: "Connections", group: "Manage", keywords: "spotify instagram tiktok youtube accounts", href: ensemblisArtistHref("/studio/connections", artistId) },
-    { label: "Settings", group: "Manage", keywords: "preferences ai brand", href: ensemblisArtistHref("/studio/settings", artistId) },
+    { label: "Campaigns", group: "Tools", keywords: "campaign marketing content growth", href: ensemblisArtistHref("/studio/campaigns", artistId) },
+    { label: "Audience", group: "Tools", keywords: "comments messages replies community growth", href: ensemblisArtistHref("/studio/audience", artistId) },
+    { label: "Distribution", group: "Tools", keywords: "dsp delivery stores releases", href: ensemblisArtistHref("/studio/distribution", artistId) },
+    { label: "Connections", group: "Tools", keywords: "spotify instagram tiktok youtube accounts settings", href: ensemblisArtistHref("/studio/connections", artistId) },
+    { label: "Settings", group: "Tools", keywords: "preferences ai brand", href: ensemblisArtistHref("/studio/settings", artistId) },
   ], [artistId]);
 
   const normalized = query.trim().toLowerCase();
@@ -54,6 +57,7 @@ export function CommandPalette({ artistId }: { artistId: string }) {
     setOpen(false);
     setObjectResults([]);
     setSearchingObjects(false);
+    setSearchError("");
     requestAnimationFrame(() => triggerRef.current?.focus());
   }, []);
 
@@ -61,6 +65,7 @@ export function CommandPalette({ artistId }: { artistId: string }) {
     setQuery("");
     setObjectResults([]);
     setSearchingObjects(false);
+    setSearchError("");
     setOpen(true);
   }, []);
 
@@ -146,15 +151,22 @@ export function CommandPalette({ artistId }: { artistId: string }) {
     if (!open || normalized.length < 2) return;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
+      setSearchError("");
       const params = new URLSearchParams({ q: query.trim(), artist: artistId });
       void fetch(`/api/studio/search?${params.toString()}`, { signal: controller.signal })
-        .then((response) => response.ok ? response.json() as Promise<{ results?: ObjectSearchResult[] }> : null)
+        .then(async (response) => {
+          if (!response.ok) throw new Error("Search is temporarily unavailable.");
+          return response.json() as Promise<{ results?: ObjectSearchResult[] }>;
+        })
         .then((payload) => {
-          if (!controller.signal.aborted) setObjectResults(payload?.results ?? []);
+          if (!controller.signal.aborted) setObjectResults(payload.results ?? []);
         })
         .catch((error) => {
           if (error instanceof DOMException && error.name === "AbortError") return;
-          if (!controller.signal.aborted) setObjectResults([]);
+          if (!controller.signal.aborted) {
+            setObjectResults([]);
+            setSearchError(error instanceof Error ? error.message : "Search is temporarily unavailable.");
+          }
         })
         .finally(() => {
           if (!controller.signal.aborted) setSearchingObjects(false);
@@ -164,11 +176,12 @@ export function CommandPalette({ artistId }: { artistId: string }) {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [artistId, normalized, open, query]);
+  }, [artistId, normalized, open, query, retryKey]);
 
   function changeQuery(value: string) {
     setQuery(value);
     setObjectResults([]);
+    setSearchError("");
     setSearchingObjects(value.trim().length >= 2);
   }
 
@@ -184,7 +197,7 @@ export function CommandPalette({ artistId }: { artistId: string }) {
         onClick={openPalette}
       >
         <span>Search</span>
-        <kbd>⌘K</kbd>
+        <kbd>⌘/Ctrl K</kbd>
       </button>
       {open ? (
         <div className="ensemblis-command-backdrop" onMouseDown={(event) => {
@@ -219,7 +232,16 @@ export function CommandPalette({ artistId }: { artistId: string }) {
               <button type="button" onClick={close} aria-label="Close search">Esc</button>
             </div>
             <div className="ensemblis-command-results" id="ensemblis-command-results" ref={resultsRef}>
-              {searchingObjects ? <div className="ensemblis-command-searching" role="status">Searching {"\u2026"}</div> : null}
+              {searchingObjects ? <div className="ensemblis-command-searching" role="status">Searching…</div> : null}
+              {searchError ? (
+                <div className="ensemblis-command-error" role="alert">
+                  <span>{searchError}</span>
+                  <button type="button" className="text-button" onClick={() => {
+                    setSearchingObjects(true);
+                    setRetryKey((value) => value + 1);
+                  }}>Retry</button>
+                </div>
+              ) : null}
               {objectResults.length ? (
                 <div className="ensemblis-command-group ensemblis-command-object-results">
                   <span>Artist results</span>
@@ -232,7 +254,7 @@ export function CommandPalette({ artistId }: { artistId: string }) {
                   ))}
                 </div>
               ) : null}
-              {(["Navigate", "Create", "Manage"] as const).map((group) => {
+              {(["Go to", "Create", "Tools"] as const).map((group) => {
                 const groupCommands = filtered.filter((command) => command.group === group);
                 if (!groupCommands.length) return null;
                 return (
@@ -248,7 +270,7 @@ export function CommandPalette({ artistId }: { artistId: string }) {
                   </div>
                 );
               })}
-              {!searchingObjects && !objectResults.length && !filtered.length ? <div className="ensemblis-command-empty">No matching workspace, action or artist object.</div> : null}
+              {!searchingObjects && !searchError && !objectResults.length && !filtered.length ? <div className="ensemblis-command-empty">No matching workspace, action or artist object.</div> : null}
             </div>
           </section>
         </div>
