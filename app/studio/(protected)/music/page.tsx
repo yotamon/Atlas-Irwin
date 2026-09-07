@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { MusicGenerator } from "@/components/studio/music-generator";
+import { MusicLibraryNav } from "@/components/studio/music-library-nav";
 import { MusicWorkspaceOverview } from "@/components/studio/music-workspace-overview";
 import { PageHeader, Status } from "@/components/studio/ui";
 import { loadArtistOperatingContext } from "@/lib/artist-operating/server";
@@ -50,7 +51,7 @@ export default async function MusicPage({
             <span className="create-intent-copy">
               <small>Catalog</small>
               <strong>Add or prepare a release</strong>
-              <span>Create the canonical release record and keep its music, metadata, artwork, distribution, campaign and outcomes connected.</span>
+              <span>Create the canonical release collection and keep every track, master, metadata, artwork, distribution, campaign and outcome connected.</span>
             </span>
             <b>Add release →</b>
           </Link>
@@ -172,9 +173,11 @@ export default async function MusicPage({
       .order("release_date", { ascending: false, nullsFirst: false }),
     music
       .from("tracks")
-      .select("id,title,release_id,audio_url,is_primary")
+      .select("id,title,version,release_id,audio_url,is_primary,track_number,display_order")
       .eq("owner_id", user.id)
-      .eq("artist_id", artist.artistId),
+      .eq("artist_id", artist.artistId)
+      .order("release_id")
+      .order("display_order"),
   ]);
   const firstError = [vaultResult, releasesResult, tracksResult].find((result) => result.error)?.error;
   if (firstError) throw new Error(firstError.message);
@@ -183,9 +186,10 @@ export default async function MusicPage({
     <div className="studio-v2-page music-workspace-page">
       <PageHeader
         title="Music"
-        description={`One source-material workspace for ${artist.artistName}: unreleased tracks, canonical masters, Track Intelligence and the releases those tracks become.`}
+        description={`One source-material library for ${artist.artistName}. Tracks are the musical objects; releases are the collections those tracks belong to.`}
         action={<Link className="button primary" href={href("/studio/music?view=add")}>Add music</Link>}
       />
+      <MusicLibraryNav artistId={artist.artistId} active="tracks" />
       <MusicWorkspaceOverview
         artistId={artist.artistId}
         artistName={artist.artistName}
