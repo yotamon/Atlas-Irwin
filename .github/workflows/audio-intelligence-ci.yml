@@ -9,9 +9,11 @@ on:
       - "services/media-worker/app/mastering_processor.py"
       - "services/media-worker/app/stem_intelligence*.py"
       - "services/media-worker/app/audio_intelligence_providers.py"
+      - "services/media-worker/app/automix*.py"
       - "services/media-worker/app/runner.py"
       - "services/media-worker/tests/test_music_intelligence*.py"
       - "services/media-worker/tests/test_mastering*.py"
+      - "services/media-worker/tests/test_automix*.py"
       - "services/media-worker/requirements*.txt"
       - "lib/music-intelligence/**"
       - "lib/mastering/**"
@@ -51,7 +53,7 @@ jobs:
           httpx==0.28.1
           pydantic==2.11.7
 
-      - name: Compile canonical and V4 worker modules
+      - name: Compile canonical, V4, and AutoMix worker modules
         run: >-
           python -m py_compile
           services/media-worker/app/main.py
@@ -64,6 +66,10 @@ jobs:
           services/media-worker/app/stem_intelligence.py
           services/media-worker/app/stem_intelligence_v3.py
           services/media-worker/app/social_finishing.py
+          services/media-worker/app/automix_model.py
+          services/media-worker/app/automix_planner.py
+          services/media-worker/app/automix_dsp.py
+          services/media-worker/app/automix.py
           services/media-worker/app/runner.py
 
       - name: Run complete Media Worker behavioral regression suite
