@@ -12,6 +12,8 @@ type ProcessingStateProps = {
   progress?: number;
   steps?: ProcessingStep[];
   compact?: boolean;
+  className?: string;
+  ariaLabel?: string;
 };
 
 export function ProcessingState({
@@ -21,16 +23,22 @@ export function ProcessingState({
   progress,
   steps,
   compact = false,
+  className,
+  ariaLabel,
 }: ProcessingStateProps) {
   const normalizedProgress =
     typeof progress === "number" ? Math.min(100, Math.max(0, progress)) : null;
+  const classes = ["ensemblis-processing", compact ? "is-compact" : null, className]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <section
-      className={`ensemblis-processing${compact ? " is-compact" : ""}`}
+      className={classes}
       role="status"
       aria-live="polite"
       aria-busy="true"
+      aria-label={ariaLabel}
     >
       <div className="ensemblis-processing-visual" aria-hidden="true">
         <span className="ensemblis-processing-scan" />
