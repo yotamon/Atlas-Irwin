@@ -76,7 +76,7 @@ async function prepareCatalogPayload(job: AutoMixJob) {
       .eq("owner_id", job.owner_id)
       .eq("artist_id", job.artist_id)
       .in("id", job.track_ids),
-    service.from("track_music_intelligence")
+    stemDb.from("track_music_intelligence")
       .select("track_id,analysis,analysis_version,source_audio_url")
       .eq("owner_id", job.owner_id)
       .in("track_id", job.track_ids),
