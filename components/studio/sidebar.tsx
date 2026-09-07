@@ -34,7 +34,6 @@ function navigationItems(
 }
 
 export function StudioSidebar({ artistId, artists }: StudioSidebarProps) {
-  const NeedsYou = studioIcons.mail;
   const Logout = studioIcons.logout;
   const workNavigation = navigationItems(ENSEMBLIS_WORK_NAV, artistId);
   const moreNavigation = navigationItems(ENSEMBLIS_MANAGE_NAV, artistId);
@@ -68,26 +67,17 @@ export function StudioSidebar({ artistId, artists }: StudioSidebarProps) {
         <StudioPrimaryNavigation items={workNavigation} />
       </div>
 
-      <details className="ensemblis-sidebar-group ensemblis-sidebar-manage ensemblis-sidebar-more">
-        <summary className="studio-sidebar-section-label">More</summary>
+      <div className="ensemblis-sidebar-group ensemblis-sidebar-more">
+        <span className="studio-sidebar-section-label">More</span>
         <StudioPrimaryNavigation items={moreNavigation} />
-      </details>
+      </div>
 
       <div className="studio-sidebar-foot">
         <div className="ensemblis-sidebar-settings">
           <StudioAdvancedNavigation item={settingsNavigation} />
         </div>
-        <Link
-          href={ensemblisArtistHref("/studio/needs-you", artistId)}
-          className="studio-quick"
-          aria-label="Open Needs You"
-          title="Open Needs You"
-        >
-          <NeedsYou aria-hidden />
-          <span className="studio-nav-text">Needs You</span>
-        </Link>
         <form action={signOut}>
-          <button aria-label="Sign out" title="Sign out">
+          <button aria-label="Sign out" data-tooltip="Sign out">
             <Logout aria-hidden />
             <span className="studio-nav-text">Sign out</span>
           </button>
