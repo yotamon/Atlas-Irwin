@@ -8,10 +8,10 @@
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(15rem, 0.55fr);
-  gap: clamp(var(--en-space-7), 7vw, 7rem);
+  gap: clamp(var(--en-space-8), 7vw, 7rem);
   align-items: end;
   min-height: clamp(24rem, 46vw, 38rem);
-  padding: clamp(var(--en-space-7), 6vw, 5.5rem) 0 clamp(var(--en-space-8), 7vw, 6rem);
+  padding: clamp(var(--en-space-8), 6vw, 5.5rem) 0 clamp(var(--en-space-8), 7vw, 6rem);
   overflow: hidden;
   border-top: 1px solid color-mix(in srgb, var(--en-accent) 52%, var(--en-line));
   border-bottom: 1px solid var(--en-line-strong);
@@ -103,7 +103,7 @@
 .stage {
   display: grid;
   grid-template-columns: minmax(13rem, 0.34fr) minmax(0, 0.66fr);
-  gap: clamp(var(--en-space-7), 6vw, 6rem);
+  gap: clamp(var(--en-space-8), 6vw, 6rem);
   padding-top: var(--en-space-6);
   border-top: 1px solid var(--en-line-strong);
 }
@@ -222,7 +222,7 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--en-space-4);
-  margin-top: var(--en-space-7);
+  margin-top: var(--en-space-8);
   padding-top: var(--en-space-5);
   border-top: 1px solid var(--en-line-strong);
 }
@@ -394,8 +394,8 @@
   align-items: end;
   justify-content: space-between;
   gap: var(--en-space-6);
-  margin-top: var(--en-space-7);
-  padding: clamp(var(--en-space-5), 4vw, var(--en-space-7)) 0;
+  margin-top: var(--en-space-8);
+  padding: clamp(var(--en-space-5), 4vw, var(--en-space-8)) 0;
   border-top: 1px solid color-mix(in srgb, var(--en-accent) 46%, var(--en-line));
   border-bottom: 1px solid var(--en-line);
 }
@@ -573,7 +573,7 @@
 
   .stage {
     grid-template-columns: minmax(11rem, 0.3fr) minmax(0, 0.7fr);
-    gap: var(--en-space-7);
+    gap: var(--en-space-8);
   }
 
   .controlStrip {
@@ -588,7 +588,7 @@
 
   .hero {
     grid-template-columns: 1fr;
-    gap: var(--en-space-7);
+    gap: var(--en-space-8);
     min-height: auto;
   }
 
