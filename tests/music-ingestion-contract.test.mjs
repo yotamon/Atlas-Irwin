@@ -66,8 +66,8 @@ test("Music overview presents both unreleased and release tracks without portfol
     "Add master",
     "linked_track_id",
   ]);
-  assert.ok(overview.includes("catalogTracks.map"), "release tracks must be directly visible from Music");
-  assert.ok(overview.includes("trackHref(track.id)"), "catalog rows must deep-link to the exact track object");
+  assert.ok(overview.includes("tracks.map"), "release tracks must be directly visible from Music");
+  assert.ok(overview.includes("trackHref(vault?.id ?? track.id)"), "catalog rows must deep-link to the exact track object");
   assert.doesNotMatch(overview, /rankVaultTracks|Portfolio score|Edit portfolio signals|Manage Portfolio/,
     "Music overview must not expose Growth ranking as the primary music model");
 });
