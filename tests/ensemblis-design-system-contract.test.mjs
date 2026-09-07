@@ -95,20 +95,11 @@ test("all Studio CSS Modules consume Ensemblis tokens instead of private chrome"
 test("canonical primitives own reusable control and surface chrome", async () => {
   const primitives = await source("app/studio/design-system/primitives.css");
   for (const selector of [".studio-root .button {", ".studio-root .text-button {", ".studio-root .field {", ".studio-root .studio-page-header {", ".studio-root .studio-panel {", ".studio-root .empty-state {", ".studio-root .studio-table {"]) assert.ok(primitives.includes(selector), `${selector} is not owned by primitives.css`);
-
-  const chromeOwnershipFiles = canonicalDesignFiles.filter((file) => !["primitives.css", "motion.css", "interaction-states.css"].includes(file));
-  for (const file of chromeOwnershipFiles) {
+  for (const file of canonicalDesignFiles.filter((file) => file !== "primitives.css")) {
     const css = await source(`app/studio/design-system/${file}`);
     assert.equal(css.includes(".studio-root .button {"), false, `${file} redefines Button`);
     assert.equal(css.includes(".studio-root .field {"), false, `${file} redefines Field`);
     assert.equal(css.includes(".studio-root .studio-panel {"), false, `${file} redefines Panel`);
-  }
-
-  const motion = await source("app/studio/design-system/motion.css");
-  const motionButtonBlock = motion.match(/\.studio-root \.button \{([\s\S]*?)\n\}/)?.[1] ?? "";
-  assert.ok(motionButtonBlock.includes("transform"), "motion layer must be allowed to extend Button movement");
-  for (const property of ["padding:", "min-height:", "font-size:", "border-radius:", "background:", "color:"]) {
-    assert.equal(motionButtonBlock.includes(property), false, `motion.css must not take Button chrome ownership via ${property}`);
   }
 });
 
