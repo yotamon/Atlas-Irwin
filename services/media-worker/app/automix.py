@@ -17,6 +17,7 @@ from .automix_model import (
     _list_records, _record, _safe_float, choose_showcase_window, estimate_key, normalize_dj_bpm,
 )
 from .automix_planner import build_plan
+from .mastering_inspector import enrich_music_map_with_mastering
 from .music_intelligence_v4_runtime import analyze_music as analyze_music_v4
 
 
@@ -37,6 +38,20 @@ async def _standardize(url: str, target: Path, workdir: Path, index: int) -> Non
     )
 
 
+def _attach_transition_evidence(music_map: dict[str, Any], raw: dict[str, Any]) -> dict[str, Any]:
+    result = dict(music_map)
+    stem_intelligence = _record(raw.get("stem_intelligence"))
+    if stem_intelligence:
+        result["automix_stem_intelligence"] = stem_intelligence
+    vocals = raw.get("vocal_activity_curve")
+    if isinstance(vocals, list):
+        result["automix_vocals_activity_curve"] = vocals
+    bass = raw.get("bass_activity_curve")
+    if isinstance(bass, list):
+        result["automix_bass_activity_curve"] = bass
+    return result
+
+
 async def prepare_tracks(payload_tracks: list[dict[str, Any]], workdir: Path, purpose: Purpose, target_duration_ms: int) -> list[TrackDescriptor]:
     if not 2 <= len(payload_tracks) <= MAX_TRACKS:
         raise ValueError(f"AutoMix requires 2-{MAX_TRACKS} tracks")
@@ -54,7 +69,14 @@ async def prepare_tracks(payload_tracks: list[dict[str, Any]], workdir: Path, pu
         if not music_map or int(music_map.get("duration_ms") or 0) <= 0:
             source_audio = {"url": url, "media_asset_id": raw.get("media_asset_id")}
             music_map = await asyncio.to_thread(analyze_music_v4, target, source_audio)
+        music_map = _attach_transition_evidence(music_map, raw)
+        if not _record(music_map.get("mastering_inspector")) or not _record(music_map.get("beat_stability")):
+            music_map = await asyncio.to_thread(enrich_music_map_with_mastering, music_map, target)
+
         bpm = _safe_float(music_map.get("bpm"), 0.0)
+        if bpm <= 0:
+            beat_stability = _record(music_map.get("beat_stability"))
+            bpm = _safe_float(beat_stability.get("median_bpm"), 0.0)
         if bpm <= 0:
             y, sr = librosa.load(target, sr=22050, mono=True, duration=300.0, res_type="soxr_hq")
             tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
@@ -96,26 +118,44 @@ async def automix_job(payload: dict[str, Any], workdir: Path) -> dict[str, Any]:
     wav_path, render_meta = await asyncio.to_thread(render_plan, tracks, plan, workdir)
 
     output_format = str(payload.get("output_format") or "mp3").lower()
+    if output_format not in {"wav", "mp3"}:
+        raise ValueError("AutoMix output_format must be wav or mp3")
     if output_format == "wav":
         output_path = wav_path
         mime_type = "audio/wav"
     else:
         output_path = workdir / "automix.mp3"
+        output_sr = str(int(render_meta.get("sample_rate") or 48000))
         await worker_main.ffmpeg(
-            "-i", str(wav_path), "-c:a", "libmp3lame", "-b:a", "320k", "-ar", str(SAMPLE_RATE), str(output_path),
+            "-i", str(wav_path), "-c:a", "libmp3lame", "-b:a", "320k", "-ar", output_sr, str(output_path),
         )
         mime_type = "audio/mpeg"
     await worker_main.upload_file(upload_url, output_path, mime_type)
+    sha256 = await asyncio.to_thread(worker_main.sha256_file, output_path)
+    warnings: list[dict[str, Any]] = []
+    for item in _list_records(plan.get("tracks")):
+        mastering = _record(item.get("mastering"))
+        tempo = _record(item.get("tempo"))
+        if not bool(mastering.get("technical_ready", True)):
+            warnings.append({"track_id": item.get("track_id"), "code": "source_master_review", "message": "Source master contains technical issues; AutoMix used conservative gain staging and did not attempt destructive repair."})
+        if str(tempo.get("classification") or "") in {"drifting", "section_tempo_changes", "unstable"}:
+            warnings.append({"track_id": item.get("track_id"), "code": "variable_tempo", "classification": tempo.get("classification"), "message": "Transition planning used local tempo evidence and avoided forcing unsafe fixed-grid sync."})
     return {
         "uploaded": True,
         "file_size": output_path.stat().st_size,
         "mime_type": mime_type,
+        "sha256": sha256,
+        "output": {"file_size": output_path.stat().st_size, "mime_type": mime_type, "sha256": sha256},
         "plan": plan,
         "render": render_meta,
+        "warnings": warnings,
         "engine": {
             "version": AUTOMIX_VERSION,
             "time_stretch": "Signalsmith Stretch via python-stretch",
             "pitch_shift": "disabled",
+            "mastering_analysis": "Ensemblis Mastering Inspector",
+            "tempo_strategy": "local tempo evidence; unstable tempo is never forced to a constant grid",
+            "loudness_strategy": "selected-window channel gain plus two-pass final mix loudness normalization",
             "quality_mode": "offline_high_quality",
         },
     }
