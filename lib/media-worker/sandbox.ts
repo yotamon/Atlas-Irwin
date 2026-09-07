@@ -4,8 +4,8 @@ import { createHash, randomBytes } from "node:crypto";
 import { Sandbox } from "@vercel/sandbox";
 
 export const MEDIA_WORKER_CALLBACK_HASH_KEY = "__atlas_callback_token_sha256";
-const MEDIA_WORKER_RUNTIME_VERSION = 10;
-const MEDIA_WORKER_BOOTSTRAP_VERSION = 7;
+const MEDIA_WORKER_RUNTIME_VERSION = 11;
+const MEDIA_WORKER_BOOTSTRAP_VERSION = 8;
 const MEDIA_WORKER_PYTHON_VERSION = "3.13.14";
 const MEDIA_WORKER_SANDBOX_IMAGE = "vercel/sandbox/universal@sha256:0e3e3617e824397f170fc7c43ccaa565dd7ac36518e83ead3d41e077cd9f6ec7";
 const HOBBY_MAX_SANDBOX_MS = 45 * 60 * 1000;
@@ -184,6 +184,7 @@ files = {
     "app/stem_intelligence_v3.py": f"{base}/app/stem_intelligence_v3.py",
     "app/social_finishing.py": f"{base}/app/social_finishing.py",
     "app/automix_model.py": f"{base}/app/automix_model.py",
+    "app/automix_intelligence.py": f"{base}/app/automix_intelligence.py",
     "app/automix_planner.py": f"{base}/app/automix_planner.py",
     "app/automix_dsp.py": f"{base}/app/automix_dsp.py",
     "app/automix.py": f"{base}/app/automix.py",
@@ -309,7 +310,7 @@ export function scheduleMediaWorkerSandboxCleanup() {
       // The Sandbox may already be stopped or have reached its Hobby timeout.
     }
     // Terminal callbacks invoke this only after durable state has been reconciled. Give the
-    // detached runner a moment to release its lock, then dispatch the oldest queued job.
+    // detached runner a moment to release its lock, then dispatch the oldest durable workload.
     await new Promise((resolve) => setTimeout(resolve, 1200));
     let dispatched = false;
     try {
@@ -317,7 +318,7 @@ export function scheduleMediaWorkerSandboxCleanup() {
       const result = await kickMediaWorkerQueue();
       dispatched = result.dispatched;
     } catch {
-      // Existing queue work is durable. Give Active Mastering a chance below.
+      // Existing media work is durable. Give Active Mastering a chance below.
     }
     if (!dispatched) {
       try {
@@ -325,7 +326,16 @@ export function scheduleMediaWorkerSandboxCleanup() {
         const result = await kickMasteringQueue();
         dispatched = result.dispatched;
       } catch {
-        // Mastering work is durable. Give marketing finishing a chance below.
+        // Mastering work is durable. Give AutoMix a chance below.
+      }
+    }
+    if (!dispatched) {
+      try {
+        const { kickAutoMixQueue } = await import("@/lib/automix/jobs");
+        const result = await kickAutoMixQueue();
+        dispatched = result.dispatched;
+      } catch {
+        // AutoMix work is durable. Give marketing finishing a chance below.
       }
     }
     if (!dispatched) {
