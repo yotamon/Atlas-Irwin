@@ -102,11 +102,14 @@ export async function POST(request: Request) {
   }
 
   if (status === "running") {
+    const previousResult = record(job.result_payload);
+    const mergedResult = Object.keys(result).length ? { ...previousResult, ...result } : previousResult;
     const update = await db.from("automix_jobs").update({
       status: "running",
+      result_payload: json(mergedResult),
       started_at: job.started_at || new Date().toISOString(),
       error: null,
-    }).eq("id", job.id).eq("owner_id", job.owner_id);
+    }).eq("id", job.id).eq("owner_id", job.owner_id).in("status", ["queued", "running"]);
     if (update.error) return NextResponse.json({ error: update.error.message }, { status: 500 });
     return NextResponse.json({ ok: true });
   }
