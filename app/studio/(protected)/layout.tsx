@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { dismissOnboardingAction } from "@/app/studio/onboarding/actions";
 import { StudioContextBar } from "@/components/studio/context-bar";
 import { StudioMobileNavigation } from "@/components/studio/mobile-navigation";
 import { StudioMotionStage } from "@/components/studio/studio-motion-stage";
@@ -35,9 +36,11 @@ export default async function ProtectedStudioLayout({
     .eq("owner_id", user.id)
     .eq("artist_id", artist.artistId)
     .in("event_type", ["first_moment_approved", "onboarding_dismissed"]);
-  if (activationError) throw new Error(activationError.message);
   const activationEvents = new Set((activation ?? []).map((event) => event.event_type));
-  const showFirstUseGuide = !activationEvents.has("first_moment_approved") && !activationEvents.has("onboarding_dismissed");
+  // A non-essential onboarding lookup must never take down the working Studio.
+  const showFirstUseGuide = !activationError
+    && !activationEvents.has("first_moment_approved")
+    && !activationEvents.has("onboarding_dismissed");
 
   return (
     <div className="studio-shell">
@@ -47,7 +50,13 @@ export default async function ProtectedStudioLayout({
         {showFirstUseGuide ? (
           <aside className="ensemblis-first-use-nudge" aria-label="First useful Ensemblis loop">
             <span><strong>Start with the music</strong><small>Finish the first track → intelligence → Moment loop when it is useful.</small></span>
-            <Link href={`/studio/onboarding?artist=${encodeURIComponent(artist.artistId)}`}>Continue first-use guide</Link>
+            <div className="ensemblis-first-use-actions">
+              <Link href={`/studio/onboarding?artist=${encodeURIComponent(artist.artistId)}`}>Continue guide</Link>
+              <form action={dismissOnboardingAction}>
+                <input type="hidden" name="artist_id" value={artist.artistId} />
+                <button className="text-button" type="submit">Dismiss</button>
+              </form>
+            </div>
           </aside>
         ) : null}
         <main className="studio-main">
