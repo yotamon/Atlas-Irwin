@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.automix_dsp import _apply_ceiling, _channel_gain_db, _scan_peaks, mix_transition
+from app.automix_dsp import _apply_ceiling, _channel_gain_db, _scan_peaks, _stretch_audio, mix_transition
 from app.automix_intelligence import mastering_profile, tempo_profile
 from app.automix_model import (
     MAX_BEATMATCH_STRETCH,
@@ -137,6 +137,14 @@ class AutoMixEngineTest(unittest.TestCase):
         self.assertEqual([item["track_id"] for item in plan["tracks"]], ["opening", "middle", "closing"])
         for item in plan["tracks"]:
             self.assertLessEqual(abs(float(item["time_factor"]) - 1.0), MAX_BEATMATCH_STRETCH + 1e-6)
+
+    def test_time_factor_above_one_speeds_up_and_shortens_audio(self) -> None:
+        audio = np.zeros((SAMPLE_RATE, 2), dtype=np.float32)
+        playback_rate = 1.05
+        rendered = _stretch_audio(audio, playback_rate)
+        expected = int(round(len(audio) / playback_rate))
+        self.assertLess(len(rendered), len(audio))
+        self.assertLessEqual(abs(len(rendered) - expected), 1)
 
     def test_large_tempo_gap_is_not_forced_into_beatmatch(self) -> None:
         a = self._track("slow", 90, "4A", 0.55)
