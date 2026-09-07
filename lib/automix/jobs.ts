@@ -8,6 +8,7 @@ import {
 } from "@/lib/media-worker/sandbox";
 import { asStemClient } from "@/lib/music-intelligence/stem-scenes";
 import { getSiteUrl } from "@/lib/site-url";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { AutoMixDatabase, AutoMixJob } from "@/types/automix-database";
 import type { Database, Json } from "@/types/database";
@@ -67,9 +68,10 @@ function bestStemByCategory(stems: TrackStem[], category: "vocals" | "bass") {
 async function prepareCatalogPayload(job: AutoMixJob) {
   const service = createServiceClient();
   const db = asAutoMixClient(service);
+  const musicDb = asArtistScopedMusicClient(service);
   const stemDb = asStemClient(service) as SupabaseClient<StemDatabase>;
   const [trackResult, intelligenceResult, stemResult] = await Promise.all([
-    service.from("tracks")
+    musicDb.from("tracks")
       .select("id,title,audio_url,artist_id,owner_id")
       .eq("owner_id", job.owner_id)
       .eq("artist_id", job.artist_id)
