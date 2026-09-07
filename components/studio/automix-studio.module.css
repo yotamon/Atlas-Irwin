@@ -132,7 +132,7 @@
   line-height: 1.55;
 }
 
-.stageIntro > .button {
+.stageIntro > :global(.button) {
   justify-self: start;
 }
 
@@ -666,7 +666,7 @@
     flex-direction: column;
   }
 
-  .createBar .button {
+  .createBar :global(.button) {
     width: 100%;
   }
 
