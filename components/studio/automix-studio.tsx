@@ -497,7 +497,7 @@ export function AutoMixStudio({ artistId, artistName, tracks }: AutoMixStudioPro
             <div>
               <span className={styles.readiness}>{selectedIds.length >= 2 ? "READY FOR ANALYSIS" : "NEEDS MUSIC"}</span>
               <strong>{selectedIds.length >= 2 ? `${selectedIds.length} tracks selected by you` : "Choose at least two tracks"}</strong>
-              <small>Pitch preserved · fixed-grid stretch capped by the engine's quality contract · final loudness measured · -1.0 dBTP safety ceiling enforced</small>
+              <small>Pitch preserved · fixed-grid stretch capped by the engine&apos;s quality contract · final loudness measured · -1.0 dBTP safety ceiling enforced</small>
             </div>
             <button className="button primary" type="button" disabled={creating || selectedIds.length < 2} onClick={createMix}><FiZap /> {creating ? "Starting engine…" : "Analyze, plan & render"}</button>
           </div>
