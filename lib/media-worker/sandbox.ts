@@ -93,7 +93,7 @@ if [ -d ${LOCKDIR} ]; then
     rm -rf ${LOCKDIR}
   fi
 fi
-if ! mkdir ${LOCKDIR} 2>//null; then
+if ! mkdir ${LOCKDIR} 2>/dev/null; then
   echo "The free Media Worker is already processing another job." >&2
   exit 75
 fi
