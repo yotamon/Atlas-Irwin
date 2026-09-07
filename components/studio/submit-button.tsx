@@ -44,12 +44,18 @@ export function ConfirmButton({
   disabled = false,
   title = "Confirm this action",
   confirmLabel = "Continue",
+  className = "text-button danger-text",
+  confirmClassName = "button ensemblis-danger-button",
+  pendingLabel = "Working…",
 }: {
   children: ReactNode;
   message: string;
   disabled?: boolean;
   title?: string;
   confirmLabel?: string;
+  className?: string;
+  confirmClassName?: string;
+  pendingLabel?: ReactNode;
 }) {
   const { pending } = useFormStatus();
   const [confirming, setConfirming] = useState(false);
@@ -65,13 +71,13 @@ export function ConfirmButton({
     <>
       <button
         ref={triggerRef}
-        className="text-button danger-text"
+        className={className}
         type="button"
         disabled={disabled || pending}
         aria-busy={pending}
         onClick={() => setConfirming(true)}
       >
-        {pending ? <PendingSignal label="Working…" /> : children}
+        {pending ? <PendingSignal label={pendingLabel} /> : children}
       </button>
       <Dialog
         open={confirming}
@@ -83,7 +89,7 @@ export function ConfirmButton({
         <p className="ensemblis-confirm-copy">{message}</p>
         <div className="ensemblis-confirm-actions">
           <button className="button" type="button" onClick={() => setConfirming(false)}>Cancel</button>
-          <button className="button ensemblis-danger-button" type="button" onClick={submitConfirmedAction}>{confirmLabel}</button>
+          <button className={confirmClassName} type="button" onClick={submitConfirmedAction}>{confirmLabel}</button>
         </div>
       </Dialog>
     </>
