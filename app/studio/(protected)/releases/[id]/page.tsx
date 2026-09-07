@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createMediaPreviewMap } from "@/lib/studio/media-previews";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { ensemblisArtistHref } from "@/lib/ensemblis-product";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 import { asMomentsClient } from "@/lib/studio/moments-db";
@@ -35,15 +36,16 @@ export default async function ReleaseDetail({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string; stage?: string; view?: string }>;
+  searchParams: Promise<{ tab?: string; stage?: string; view?: string; artist?: string }>;
 }) {
   const { id } = await params;
-  const { tab = "overview", stage = "overview", view } = await searchParams;
+  const { tab = "overview", stage = "overview", view, artist: requestedArtistId } = await searchParams;
   const simpleStage = artistFacingReleaseStage(stage);
   const advanced = view === "advanced";
   const renderedAt = new Date().toISOString();
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user, requestedArtistId);
+  const scopedHref = (path: string) => ensemblisArtistHref(path, artist.artistId);
   const music = asArtistScopedMusicClient(supabase);
   const operational = asArtistScopedOperationalClient(supabase);
   const momentsDb = asMomentsClient(supabase);
@@ -148,7 +150,7 @@ export default async function ReleaseDetail({
 
   if (!advanced) {
     return <>
-      <ReleaseWorkspaceV2 release={release} tracks={tracks ?? []} contentItems={contentItems ?? []} metrics={metrics ?? []} campaign={campaignResult.data} stage={simpleStage} renderedAt={renderedAt} playbookTasks={playbookTasks ?? []} providerScheduledCount={providerScheduledCount ?? 0} vaultTrack={vaultResult.data} />
+      <ReleaseWorkspaceV2 artistId={artist.artistId} release={release} tracks={tracks ?? []} contentItems={contentItems ?? []} metrics={metrics ?? []} campaign={campaignResult.data} stage={simpleStage} renderedAt={renderedAt} playbookTasks={playbookTasks ?? []} providerScheduledCount={providerScheduledCount ?? 0} vaultTrack={vaultResult.data} />
       {(simpleStage === "music" || stage === "create") ? <MomentReviewPanel releaseId={release.id} moments={momentCuration.curated} historicalMoments={momentCuration.historical} rawCandidateCount={momentCuration.raw_active_count} suppressedCount={momentCuration.suppressed_count} tracks={(tracks ?? []).map((track) => ({ id: track.id, title: track.title, audio_url: track.audio_url }))} performance={momentPerformance ?? []} lyricSources={lyricSources ?? []} calibrationEvents={calibrationEvents} /> : null}
     </>;
   }
@@ -167,7 +169,7 @@ export default async function ReleaseDetail({
   const publicReleases = (await getPublicReleases()).filter((item) => item.artist === artist.artistName);
 
   return <>
-    <div className="v2-advanced-banner"><div><strong>Advanced workspace</strong><span>Legacy controls for exceptional cases, migrations and debugging.</span></div><Link className="button" href={`/studio/releases/${release.id}`}>Back to simple view</Link></div>
+    <div className="v2-advanced-banner"><div><strong>Specialist workspace</strong><span>Legacy controls for exceptional cases, migrations and debugging.</span></div><Link className="button" href={scopedHref(`/studio/releases/${release.id}`)}>Back to release</Link></div>
     {tab === "campaign" ? <ReleaseCampaignBridge campaign={campaignResult.data} /> : null}
     <ReleaseCockpit release={release} tracks={tracks ?? []} placement={placement} mediaLinks={mediaLinks ?? []} mediaAssets={mediaAssets ?? []} mediaPreviewUrls={mediaPreviewUrls} externalLinks={externalLinks ?? []} externalTrackIds={externalTrackIds ?? []} contentCount={contentCount ?? 0} contactCount={contactCount ?? 0} contentItems={contentItems ?? []} metrics={metrics ?? []} unmatchedSoundCloud={relevantSoundCloud} unmatchedSpotify={relevantSpotify} publicReleases={publicReleases} videoProjects={videoProjects} moments={momentCuration.curated} tab={tab} />
   </>;
