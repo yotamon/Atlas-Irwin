@@ -6,7 +6,7 @@ from typing import Any
 import numpy as np
 
 from .automix_model import (
-    MAX_BEATMATCH_STRETCH, EnergyProfile, Purpose, TrackDescriptor, TransitionStyle,
+    AUTOMIX_VERSION, MAX_BEATMATCH_STRETCH, EnergyProfile, Purpose, TrackDescriptor, TransitionStyle,
     _clip01, _list_records, harmonic_compatibility, bpm_compatibility,
 )
 
@@ -128,7 +128,7 @@ def _cluster_playback_bpms(ordered: list[TrackDescriptor], transitions: list[dic
         cluster = ordered[index:end + 1]
         if len(cluster) > 1:
             median = float(np.median([track.dj_bpm for track in cluster]))
-            if all(abs(track.dj_bpm / median - 1.0) <= MAX_BEATMATCH_STRETCH for track in cluster):
+            if all(abs(median / max(1e-6, track.dj_bpm) - 1.0) <= MAX_BEATMATCH_STRETCH for track in cluster):
                 for offset in range(index, end + 1):
                     targets[offset] = median
         index = max(index + 1, end + 1)
