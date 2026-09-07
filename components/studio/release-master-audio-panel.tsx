@@ -27,6 +27,7 @@ export function ReleaseMasterAudioPanel({
   const currentDuration = vaultTrack?.duration_seconds ?? primaryTrack?.duration ?? null;
   const hasMaster = Boolean(audioUrl);
   const analysis = describeTrackAnalysis(vaultTrack?.analysis, vaultTrack?.audio_profile);
+  const analysisFailureCopy = analysis.failureCopy;
 
   return (
     <>
@@ -65,7 +66,7 @@ export function ReleaseMasterAudioPanel({
             ) : analysis.isPartial ? (
               <div className="v2-calm-state compact" id="analysis-recovery">
                 <strong>Verified results are still available.</strong>
-                <p>{analysis.failureCopy}</p>
+                <p>{analysisFailureCopy}</p>
               </div>
             ) : !analysis.hasMusicMap && analysis.isActive ? (
               <div className="v2-calm-state compact">
@@ -73,7 +74,7 @@ export function ReleaseMasterAudioPanel({
                 <p>Structure, sections, mastering checks and ranked Moments will appear here automatically. You can leave this page while the free Media Worker runs.</p>
               </div>
             ) : !analysis.hasMusicMap && analysis.needsRecovery ? (
-              <div className="notice" id="analysis-recovery">{analysis.failureCopy}</div>
+              <div className="notice" id="analysis-recovery">{analysisFailureCopy}</div>
             ) : !analysis.hasMusicMap ? (
               <div className="v2-calm-state compact"><strong>Master attached, intelligence not generated yet.</strong><p>Run the analysis to map sections, mastering checks and the strongest Moment windows.</p></div>
             ) : null}
