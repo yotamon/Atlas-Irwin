@@ -73,13 +73,15 @@ export const ENSEMBLIS_ROUTE_CONTEXTS: readonly RouteContext[] = [
   { prefix: "/studio/audience", area: "Grow", parentHref: "/studio/growth" },
   { prefix: "/studio/campaigns", area: "Grow", parentHref: "/studio/growth" },
   { prefix: "/studio/calendar", area: "Grow", parentHref: "/studio/growth" },
+  { prefix: "/studio/outreach", area: "Grow", parentHref: "/studio/growth" },
+  { prefix: "/studio/learn", area: "Grow", parentHref: "/studio/growth" },
   { prefix: "/studio/library", area: "Library", parentHref: "/studio/library" },
   { prefix: "/studio/sites", area: "Sites", parentHref: "/studio/sites" },
   { prefix: "/studio/settings", area: "Settings", parentHref: "/studio/settings" },
   { prefix: "/studio/connections", area: "Settings", parentHref: "/studio/settings" },
   { prefix: "/studio/brand", area: "Settings", parentHref: "/studio/settings" },
+  { prefix: "/studio/memory", area: "Settings", parentHref: "/studio/settings" },
   { prefix: "/studio/data-health", area: "Settings", parentHref: "/studio/settings" },
-  { prefix: "/studio/learn", area: "Settings", parentHref: "/studio/settings" },
 ];
 
 function normalizedPathname(pathname: string) {
