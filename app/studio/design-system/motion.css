@@ -87,40 +87,6 @@
   }
 }
 
-/* Controls move with the restraint of physical studio hardware. */
-.studio-root .button {
-  position: relative;
-  overflow: clip;
-  isolation: isolate;
-  transform: translateZ(0);
-}
-
-.studio-root .button::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background: linear-gradient(110deg, transparent 22%, color-mix(in srgb, var(--en-white) 7%, transparent) 48%, transparent 72%);
-  transform: translateX(-115%);
-  transition: transform 620ms var(--en-ease-emphasized);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .studio-root .button:hover {
-    transform: translateY(-1px);
-  }
-
-  .studio-root .button:hover::after {
-    transform: translateX(115%);
-  }
-}
-
-.studio-root .button:active {
-  transform: translateY(1px) scale(0.985);
-  transition-duration: 70ms;
-}
-
 .studio-root :where(.studio-tabs a, .ensemblis-object-tabs a) {
   position: relative;
   transition:
