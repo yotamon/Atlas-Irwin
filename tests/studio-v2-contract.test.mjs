@@ -29,9 +29,10 @@ test("Ensemblis navigation exposes durable artist workspaces while specialist do
   const sidebar = await readFile("components/studio/sidebar.tsx", "utf8");
   const musicNav = await readFile("components/studio/music-library-nav.tsx", "utf8");
   const workStart = product.indexOf("export const ENSEMBLIS_WORK_NAV");
+  const createStart = product.indexOf("export const ENSEMBLIS_CREATE_ACTION");
   const moreStart = product.indexOf("export const ENSEMBLIS_MORE_NAV");
   const mobileMoreStart = product.indexOf("export const ENSEMBLIS_MOBILE_MORE_NAV");
-  const workSource = product.slice(workStart, moreStart);
+  const workSource = product.slice(workStart, createStart);
   const moreSource = product.slice(moreStart, mobileMoreStart);
 
   assert.ok(product.includes("ENSEMBLIS_WORK_NAV"));
@@ -223,7 +224,7 @@ test("Growth OS keeps planning and diagnosis deterministic before paid creative"
 
 test("unreleased masters are independent from releases and reuse the shared durable media worker", async () => {
   const migration = await readFile("supabase/migrations/20260819183500_artist_growth_os.sql", "utf8");
-  const lineageMigration = await readFile("supabase/migrations/20260907145000_track_vault_track_lineage.sql", "utf8");
+  const lineageMigration = await readFile("supabase/migrations/20260907144500_track_vault_track_lineage.sql", "utf8");
   const mediaAction = await readFile("app/studio/growth-media-actions.ts", "utf8");
   const workerReadiness = await readFile("lib/studio/vault-analysis.ts", "utf8");
   const workerQueue = await readFile("lib/media-worker/queue.ts", "utf8");
