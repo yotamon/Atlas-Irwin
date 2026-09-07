@@ -4,6 +4,7 @@
 create table if not exists public.automix_jobs (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references auth.users(id) on delete cascade,
+  artist_id uuid not null,
   name text not null default 'AutoMix',
   purpose text not null default 'booking'
     check (purpose in ('booking','soundcloud','journey','peak_time','warm_up','discovery')),
@@ -36,10 +37,10 @@ create table if not exists public.automix_jobs (
 );
 
 create index if not exists automix_jobs_owner_idx
-  on public.automix_jobs(owner_id, created_at desc);
+  on public.automix_jobs(owner_id, artist_id, created_at desc);
 
 create unique index if not exists automix_jobs_one_active_identical_idx
-  on public.automix_jobs(owner_id, idempotency_key)
+  on public.automix_jobs(owner_id, artist_id, idempotency_key)
   where status in ('planned','queued','running');
 
 create or replace function private.validate_automix_job_tracks()
@@ -51,6 +52,7 @@ as $$
 declare
   v_track_id uuid;
   v_owner uuid;
+  v_artist uuid;
 begin
   if cardinality(new.track_ids) < 2 or cardinality(new.track_ids) > 20 then
     raise exception 'AutoMix requires between 2 and 20 tracks';
@@ -59,9 +61,10 @@ begin
     raise exception 'AutoMix track list cannot contain duplicates';
   end if;
   foreach v_track_id in array new.track_ids loop
-    select t.owner_id into v_owner from public.tracks t where t.id = v_track_id;
+    select t.owner_id, t.artist_id into v_owner, v_artist from public.tracks t where t.id = v_track_id;
     if v_owner is null then raise exception 'AutoMix track % does not exist', v_track_id; end if;
     if v_owner <> new.owner_id then raise exception 'AutoMix tracks must belong to the job owner'; end if;
+    if v_artist <> new.artist_id then raise exception 'AutoMix tracks must belong to the selected artist'; end if;
   end loop;
   return new;
 end;
@@ -71,7 +74,7 @@ revoke all on function private.validate_automix_job_tracks() from public, anon, 
 
 drop trigger if exists automix_jobs_validate_tracks on public.automix_jobs;
 create trigger automix_jobs_validate_tracks
-  before insert or update of owner_id, track_ids
+  before insert or update of owner_id, artist_id, track_ids
   on public.automix_jobs
   for each row execute function private.validate_automix_job_tracks();
 
@@ -101,4 +104,4 @@ create policy "automix_jobs_update_own"
 grant select, insert, update on public.automix_jobs to authenticated;
 
 comment on table public.automix_jobs is
-  'Durable Ensemblis AutoMix jobs. Inputs are canonical track masters with Music, Mastering and optional Stem Intelligence lineage.';
+  'Durable artist-scoped Ensemblis AutoMix jobs. Inputs are canonical track masters with Music, Mastering and optional Stem Intelligence lineage.';
