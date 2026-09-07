@@ -204,7 +204,7 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
             <p>The current verified results stay available while the free Media Worker runs. They are replaced only after a complete result returns.</p>
           </div>
         ) : analysis.isPartial ? (
-          <div className="v2-calm-state compact" id="analysis-recovery">
+          <div className="v2-calm-state compact">
             <strong>Partial does not mean lost.</strong>
             <p>{analysis.failureCopy}</p>
           </div>
