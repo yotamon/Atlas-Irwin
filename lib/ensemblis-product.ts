@@ -10,14 +10,13 @@ export const ENSEMBLIS_ACTIVE_ARTIST_COOKIE = "ensemblis_active_artist";
 /**
  * Artist-facing information architecture.
  *
- * Primary navigation is intentionally outcome-driven and identical on desktop
- * and mobile. Create is an action, not a destination competing with the places
- * where work lives.
+ * Today is the operating surface, Music owns source material plus release
+ * collections, and Grow owns audience/outcome work. Create stays an action,
+ * not a destination competing with the places where work lives.
  */
 export const ENSEMBLIS_WORK_NAV = [
   { href: "/studio", label: "Today", icon: "dashboard" },
   { href: "/studio/music", label: "Music", icon: "musicLab" },
-  { href: "/studio/releases", label: "Releases", icon: "releases" },
   { href: "/studio/growth", label: "Grow", icon: "analytics" },
 ] as const;
 
@@ -63,8 +62,8 @@ export const ENSEMBLIS_ROUTE_CONTEXTS: readonly RouteContext[] = [
   { prefix: "/studio/inbox", area: "Today", parentHref: "/studio" },
   { prefix: "/studio/autopilot", area: "Today", parentHref: "/studio" },
   { prefix: "/studio/music", area: "Music", parentHref: "/studio/music" },
-  { prefix: "/studio/releases", area: "Releases", parentHref: "/studio/releases" },
-  { prefix: "/studio/distribution", area: "Releases", parentHref: "/studio/releases" },
+  { prefix: "/studio/releases", area: "Music", parentHref: "/studio/music" },
+  { prefix: "/studio/distribution", area: "Music", parentHref: "/studio/music" },
   { prefix: "/studio/create", area: "Create", parentHref: "/studio/create" },
   { prefix: "/studio/video", area: "Create", parentHref: "/studio/create" },
   { prefix: "/studio/production", area: "Create", parentHref: "/studio/create" },
