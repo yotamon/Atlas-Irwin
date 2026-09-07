@@ -5,6 +5,7 @@ import { MediaUploader } from "@/components/studio/media-uploader";
 import { Field, PageHeader, Submit } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 import { mediaMetadata, mediaTypeLabel } from "@/lib/studio/media";
 
@@ -45,10 +46,11 @@ export default async function BrandPage() {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveDefaultArtistContext(supabase, user);
   const operational = asArtistScopedOperationalClient(supabase);
+  const music = asArtistScopedMusicClient(supabase);
   const [settingsResult, assetsResult, releasesResult] = await Promise.all([
     operational.from("brand_settings").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId),
     supabase.from("media_assets").select("*").eq("owner_id", user.id).order("updated_at", { ascending: false }),
-    operational.from("releases").select("title,artwork_url").eq("owner_id", user.id).eq("artist_id", artist.artistId),
+    music.from("releases").select("title,artwork_url").eq("owner_id", user.id).eq("artist_id", artist.artistId),
   ]);
   if (settingsResult.error) throw new Error(settingsResult.error.message);
   if (assetsResult.error) throw new Error(assetsResult.error.message);
