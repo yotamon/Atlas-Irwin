@@ -2,6 +2,10 @@ import { createHash, randomUUID } from "node:crypto";
 import { after, NextResponse } from "next/server";
 import { asAutoMixClient, autoMixOutputPath, kickAutoMixQueue } from "@/lib/automix/jobs";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import {
+  MEDIA_WORKER_CALLBACK_HASH_KEY,
+  scheduleMediaWorkerSandboxCleanup,
+} from "@/lib/media-worker/sandbox";
 import { resolveArtistContext } from "@/lib/studio/artist-context";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import type {
@@ -35,10 +39,24 @@ function enumValue<T extends string>(value: unknown, allowed: Set<T>, fallback: 
   return typeof value === "string" && allowed.has(value as T) ? value as T : fallback;
 }
 
+function publicJobError(status: string, hasError: boolean) {
+  if (!hasError) return null;
+  if (status === "cancelled") return "This session was cancelled before it became an active mix.";
+  return "The DJ engine could not complete this session. The source masters were not changed.";
+}
+
+function cleanRequestPayload(value: unknown) {
+  const next = { ...record(value) };
+  delete next[MEDIA_WORKER_CALLBACK_HASH_KEY];
+  delete next.upload_url;
+  delete next.tracks;
+  return next;
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const artistId = url.searchParams.get("artist")?.trim() || "";
-  if (!artistId) return NextResponse.json({ error: "artist is required" }, { status: 400 });
+  if (!UUID_RE.test(artistId)) return NextResponse.json({ error: "A valid artist is required." }, { status: 400 });
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveArtistContext(supabase, user, artistId);
   const db = asAutoMixClient(supabase);
@@ -48,16 +66,18 @@ export async function GET(request: Request) {
     .eq("artist_id", artist.artistId)
     .order("created_at", { ascending: false })
     .limit(30);
-  if (jobs.error) return NextResponse.json({ error: jobs.error.message }, { status: 500 });
+  if (jobs.error) return NextResponse.json({ error: "Could not load AutoMix sessions." }, { status: 500 });
   const assetIds = (jobs.data ?? []).map((job) => job.output_asset_id).filter((id): id is string => Boolean(id));
   const assets = assetIds.length
     ? await supabase.from("media_assets").select("id,public_url,mime_type,duration_ms").eq("owner_id", user.id).in("id", assetIds)
     : { data: [], error: null };
-  if (assets.error) return NextResponse.json({ error: assets.error.message }, { status: 500 });
+  if (assets.error) return NextResponse.json({ error: "Could not load rendered mix assets." }, { status: 500 });
   const assetById = new Map((assets.data ?? []).map((asset) => [asset.id, asset]));
   return NextResponse.json({
     jobs: (jobs.data ?? []).map((job) => ({
       ...job,
+      error: publicJobError(job.status, Boolean(job.error)),
+      request_payload: cleanRequestPayload(job.request_payload),
       output: job.output_asset_id ? assetById.get(job.output_asset_id) ?? null : null,
     })),
   });
@@ -69,12 +89,12 @@ export async function POST(request: Request) {
   const trackIds = Array.isArray(body.trackIds)
     ? body.trackIds.filter((value): value is string => typeof value === "string" && Boolean(value.trim())).map((value) => value.trim())
     : [];
-  if (!artistId) return NextResponse.json({ error: "artistId is required" }, { status: 400 });
+  if (!UUID_RE.test(artistId)) return NextResponse.json({ error: "A valid artist is required." }, { status: 400 });
   if (trackIds.length < 2 || trackIds.length > 20 || new Set(trackIds).size !== trackIds.length) {
     return NextResponse.json({ error: "Choose 2-20 unique tracks." }, { status: 400 });
   }
   if (trackIds.some((id) => !UUID_RE.test(id))) {
-    return NextResponse.json({ error: "Every selected track id must be a valid UUID." }, { status: 400 });
+    return NextResponse.json({ error: "Every selected track must be valid." }, { status: 400 });
   }
 
   const purpose = enumValue(body.purpose, PURPOSES, "booking");
@@ -95,7 +115,7 @@ export async function POST(request: Request) {
     .eq("owner_id", user.id)
     .eq("artist_id", artist.artistId)
     .in("id", trackIds);
-  if (tracks.error) return NextResponse.json({ error: tracks.error.message }, { status: 500 });
+  if (tracks.error) return NextResponse.json({ error: "Could not validate the selected catalog tracks." }, { status: 500 });
   const trackById = new Map((tracks.data ?? []).map((track) => [track.id, track]));
   const invalid = trackIds.find((id) => !trackById.get(id)?.audio_url);
   if (invalid) return NextResponse.json({ error: "Every selected track must have a canonical master." }, { status: 400 });
@@ -133,7 +153,7 @@ export async function POST(request: Request) {
     output_bucket: "public-media",
     output_path: outputPath,
     request_payload: json({ name, purpose, energy_profile: energyProfile, transition_style: transitionStyle, duration_ms: durationMs, output_format: outputFormat }),
-    result_payload: json({}),
+    result_payload: json({ phase: "queued" }),
   }).select("*").single();
 
   if (inserted.error) {
@@ -141,11 +161,52 @@ export async function POST(request: Request) {
       const existing = await db.from("automix_jobs").select("*").eq("idempotency_key", idempotencyKey).maybeSingle();
       if (existing.data) return NextResponse.json({ job: existing.data, duplicate: true }, { status: 202 });
     }
-    return NextResponse.json({ error: inserted.error.message }, { status: 500 });
+    return NextResponse.json({ error: "Could not create the AutoMix session." }, { status: 500 });
   }
 
   after(async () => {
     await kickAutoMixQueue().catch(() => undefined);
   });
   return NextResponse.json({ job: inserted.data }, { status: 202 });
+}
+
+export async function DELETE(request: Request) {
+  const body = record(await request.json().catch(() => null));
+  const artistId = typeof body.artistId === "string" ? body.artistId.trim() : "";
+  const jobId = typeof body.jobId === "string" ? body.jobId.trim() : "";
+  if (!UUID_RE.test(artistId) || !UUID_RE.test(jobId)) {
+    return NextResponse.json({ error: "A valid artist and session are required." }, { status: 400 });
+  }
+
+  const { supabase, user } = await requireStudioAdmin();
+  const artist = await resolveArtistContext(supabase, user, artistId);
+  const db = asAutoMixClient(supabase);
+  const current = await db.from("automix_jobs")
+    .select("id,status,request_payload")
+    .eq("id", jobId)
+    .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId)
+    .maybeSingle();
+  if (current.error) return NextResponse.json({ error: "Could not cancel this session." }, { status: 500 });
+  if (!current.data) return NextResponse.json({ error: "Session not found." }, { status: 404 });
+  if (!["planned", "queued", "running"].includes(current.data.status)) {
+    return NextResponse.json({ error: "Only an active AutoMix session can be cancelled." }, { status: 409 });
+  }
+
+  const cancelled = await db.from("automix_jobs").update({
+    status: "cancelled",
+    request_payload: json(cleanRequestPayload(current.data.request_payload)),
+    error: "Cancelled by the artist before completion.",
+    completed_at: new Date().toISOString(),
+  }).eq("id", jobId)
+    .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId)
+    .in("status", ["planned", "queued", "running"])
+    .select("id")
+    .maybeSingle();
+  if (cancelled.error) return NextResponse.json({ error: "Could not cancel this session." }, { status: 500 });
+  if (!cancelled.data) return NextResponse.json({ error: "The session already changed state. Refresh and try again." }, { status: 409 });
+
+  after(scheduleMediaWorkerSandboxCleanup());
+  return NextResponse.json({ cancelled: true, jobId });
 }
