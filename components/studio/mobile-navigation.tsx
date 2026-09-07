@@ -36,10 +36,14 @@ export function StudioMobileNavigation({ artistId, artists }: StudioMobileNaviga
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const SettingsIcon = studioIcons[ENSEMBLIS_SETTINGS_NAV.icon];
   const CreateIcon = studioIcons[ENSEMBLIS_CREATE_ACTION.icon];
+  const settingsActive = routeIsActive(pathname, ENSEMBLIS_SETTINGS_NAV.href)
+    || context.parentHref === ENSEMBLIS_SETTINGS_NAV.href;
+  const createActive = routeIsActive(pathname, ENSEMBLIS_CREATE_ACTION.href)
+    || context.parentHref === ENSEMBLIS_CREATE_ACTION.href;
   const moreActive = ENSEMBLIS_MOBILE_MORE_NAV.some((item) => routeIsActive(pathname, item.href) || context.parentHref === item.href)
-    || routeIsActive(pathname, ENSEMBLIS_SETTINGS_NAV.href)
+    || settingsActive
     || routeIsActive(pathname, "/studio/needs-you")
-    || routeIsActive(pathname, ENSEMBLIS_CREATE_ACTION.href);
+    || createActive;
 
   useEffect(() => setOpen(false), [pathname]);
 
@@ -83,7 +87,12 @@ export function StudioMobileNavigation({ artistId, artists }: StudioMobileNaviga
         className="ensemblis-mobile-more-dialog"
         returnFocusRef={triggerRef}
       >
-        <Link className="button primary ensemblis-mobile-create" href={ensemblisArtistHref(ENSEMBLIS_CREATE_ACTION.href, artistId)} onClick={() => setOpen(false)}>
+        <Link
+          className={`button primary ensemblis-mobile-create${createActive ? " is-active" : ""}`}
+          aria-current={createActive ? "page" : undefined}
+          href={ensemblisArtistHref(ENSEMBLIS_CREATE_ACTION.href, artistId)}
+          onClick={() => setOpen(false)}
+        >
           <CreateIcon aria-hidden />
           <span>Create</span>
         </Link>
@@ -114,8 +123,8 @@ export function StudioMobileNavigation({ artistId, artists }: StudioMobileNaviga
           })}
           <Link
             href={ensemblisArtistHref(ENSEMBLIS_SETTINGS_NAV.href, artistId)}
-            className={routeIsActive(pathname, ENSEMBLIS_SETTINGS_NAV.href) ? "is-active" : undefined}
-            aria-current={routeIsActive(pathname, ENSEMBLIS_SETTINGS_NAV.href) ? "page" : undefined}
+            className={settingsActive ? "is-active" : undefined}
+            aria-current={settingsActive ? "page" : undefined}
             onClick={() => setOpen(false)}
           >
             <SettingsIcon aria-hidden />
