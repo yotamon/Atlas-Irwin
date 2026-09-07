@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { ArtistSwitcher } from "./artist-switcher";
 import { Dialog } from "./dialog";
 import { studioIcons } from "./icons";
@@ -32,7 +32,9 @@ function routeIsActive(pathname: string, route: string) {
 export function StudioMobileNavigation({ artistId, artists }: StudioMobileNavigationProps) {
   const pathname = usePathname();
   const context = resolveEnsemblisRouteContext(pathname);
-  const [open, setOpen] = useState(false);
+  const [dialogState, setDialogState] = useState({ pathname, open: false });
+  const open = dialogState.pathname === pathname && dialogState.open;
+  const setOpen = (nextOpen: boolean) => setDialogState({ pathname, open: nextOpen });
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const SettingsIcon = studioIcons[ENSEMBLIS_SETTINGS_NAV.icon];
   const CreateIcon = studioIcons[ENSEMBLIS_CREATE_ACTION.icon];
@@ -44,8 +46,6 @@ export function StudioMobileNavigation({ artistId, artists }: StudioMobileNaviga
     || settingsActive
     || routeIsActive(pathname, "/studio/needs-you")
     || createActive;
-
-  useEffect(() => setOpen(false), [pathname]);
 
   return (
     <nav className="ensemblis-mobile-navigation" aria-label="Ensemblis mobile navigation">
