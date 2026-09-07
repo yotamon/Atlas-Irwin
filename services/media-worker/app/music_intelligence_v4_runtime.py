@@ -5,7 +5,11 @@ from typing import Any
 
 import numpy as np
 
-from .audio_intelligence_providers import provider_capabilities, run_beat_this_shadow
+from .audio_intelligence_providers import (
+    provider_capabilities,
+    run_beat_this_shadow,
+    run_clap_audio_semantics,
+)
 from .mastering_inspector import enrich_music_map_with_mastering
 from .music_intelligence_v4 import analyze_music as analyze_music_v4_core
 
@@ -78,6 +82,70 @@ def _attach_shadow_rhythm(result: dict[str, Any], path: Path) -> None:
         shadow_entry["overall_agreement"] = round(sum(scores) / len(scores), 4)
 
 
+def _semantic_windows(result: dict[str, Any]) -> list[dict[str, Any]]:
+    moments = result.get("musical_moments") or result.get("hook_candidates") or []
+    windows: list[dict[str, Any]] = []
+    for moment in moments:
+        if not isinstance(moment, dict):
+            continue
+        start_ms = int(moment.get("start_ms") or 0)
+        end_ms = int(moment.get("end_ms") or 0)
+        if end_ms - start_ms < 1000:
+            continue
+        windows.append({
+            "id": str(moment.get("id") or f"moment-{start_ms}-{end_ms}"),
+            "start_ms": start_ms,
+            "end_ms": end_ms,
+        })
+        if len(windows) >= 5:
+            break
+    return windows
+
+
+def _attach_cross_modal_semantics(result: dict[str, Any], path: Path) -> None:
+    semantic = run_clap_audio_semantics(path, _semantic_windows(result))
+    result["semantic_intelligence"] = semantic
+
+    analysis = result.setdefault("analysis", {})
+    semantic_status = {
+        key: semantic.get(key)
+        for key in ("status", "provider", "model", "revision", "embedding_dim", "reason")
+        if semantic.get(key) is not None
+    }
+    analysis["semantic_intelligence"] = semantic_status
+
+    if semantic.get("status") != "completed":
+        return
+
+    by_id = {
+        str(item.get("id")): item
+        for item in semantic.get("items") or []
+        if isinstance(item, dict) and item.get("id") is not None
+    }
+    for collection_name in ("musical_moments", "hook_candidates"):
+        for moment in result.get(collection_name) or []:
+            if not isinstance(moment, dict):
+                continue
+            item = by_id.get(str(moment.get("id")))
+            if not item:
+                continue
+            # Consumers normally need explainable descriptors. Full normalized vectors stay
+            # in semantic_intelligence so the moment payload itself remains compact.
+            moment["semantic_descriptors"] = item.get("descriptors") or []
+            moment["semantic_embedding_ref"] = {
+                "provider": semantic.get("provider"),
+                "model": semantic.get("model"),
+                "revision": semantic.get("revision"),
+                "window_id": item.get("id"),
+            }
+
+    tiers = result.setdefault("analysis_tiers", {})
+    semantic_tier = tiers.setdefault("semantic", {"status": "completed", "includes": []})
+    includes = semantic_tier.setdefault("includes", [])
+    if "clap_moment_semantics" not in includes:
+        includes.append("clap_moment_semantics")
+
+
 def analyze_music(path: Path, source_audio: dict[str, Any] | None = None) -> dict[str, Any]:
     result = analyze_music_v4_core(path, source_audio)
     _compatibility_enrich(result)
@@ -86,6 +154,7 @@ def analyze_music(path: Path, source_audio: dict[str, Any] | None = None) -> dic
     analysis = result.setdefault("analysis", {})
     analysis["provider_capabilities"] = capabilities
     _attach_shadow_rhythm(result, path)
+    _attach_cross_modal_semantics(result, path)
 
     # Mastering Inspector runs after the canonical musical grid exists so beat stability
     # can distinguish drift/jitter from section-aligned tempo changes. It enriches the
