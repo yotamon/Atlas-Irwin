@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { StudioContextBar } from "@/components/studio/context-bar";
 import { StudioMobileNavigation } from "@/components/studio/mobile-navigation";
+import { StudioMotionStage } from "@/components/studio/studio-motion-stage";
 import { StudioSidebar } from "@/components/studio/sidebar";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import {
@@ -49,7 +50,9 @@ export default async function ProtectedStudioLayout({
             <Link href={`/studio/onboarding?artist=${encodeURIComponent(artist.artistId)}`}>Continue first-use guide</Link>
           </aside>
         ) : null}
-        <main className="studio-main">{children}</main>
+        <main className="studio-main">
+          <StudioMotionStage>{children}</StudioMotionStage>
+        </main>
       </div>
       <StudioMobileNavigation artistId={artist.artistId} artists={navigationArtists} />
     </div>
