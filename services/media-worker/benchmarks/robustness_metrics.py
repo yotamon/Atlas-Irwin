@@ -78,6 +78,22 @@ def _descriptor_set(analysis: dict[str, Any], moment_limit: int = 3, descriptor_
     return descriptors
 
 
+def _semantic_identity(analysis: dict[str, Any]) -> tuple[str, str, str] | None:
+    semantic = analysis.get("semantic_intelligence")
+    if not isinstance(semantic, dict):
+        nested_analysis = analysis.get("analysis")
+        if isinstance(nested_analysis, dict):
+            semantic = nested_analysis.get("semantic_intelligence")
+    if not isinstance(semantic, dict) or semantic.get("status") != "completed":
+        return None
+    provider = str(semantic.get("provider") or "").strip()
+    model = str(semantic.get("model") or "").strip()
+    revision = str(semantic.get("revision") or "").strip()
+    if not provider or not model or not revision:
+        return None
+    return provider, model, revision
+
+
 def compare_analyses(
     baseline: dict[str, Any],
     candidate: dict[str, Any],
@@ -91,11 +107,18 @@ def compare_analyses(
     boundary_drift = _nearest_median(_section_boundaries(baseline), _section_boundaries(candidate))
     moment_recall = _moment_recall(_moment_windows(baseline), _moment_windows(candidate))
 
-    baseline_descriptors = _descriptor_set(baseline)
-    candidate_descriptors = _descriptor_set(candidate)
+    baseline_semantic_identity = _semantic_identity(baseline)
+    candidate_semantic_identity = _semantic_identity(candidate)
+    semantic_comparable = (
+        baseline_semantic_identity is not None
+        and baseline_semantic_identity == candidate_semantic_identity
+    )
     descriptor_overlap = None
-    if baseline_descriptors:
-        descriptor_overlap = len(baseline_descriptors & candidate_descriptors) / len(baseline_descriptors)
+    if semantic_comparable:
+        baseline_descriptors = _descriptor_set(baseline)
+        candidate_descriptors = _descriptor_set(candidate)
+        if baseline_descriptors:
+            descriptor_overlap = len(baseline_descriptors & candidate_descriptors) / len(baseline_descriptors)
 
     checks = {
         "bpm": bpm_relative_error is None or bpm_relative_error <= limits["max_bpm_relative_error"],
@@ -109,6 +132,11 @@ def compare_analyses(
             "section_boundary_median_drift_ms": round(boundary_drift, 2) if boundary_drift is not None else None,
             "moment_top3_temporal_recall": round(moment_recall, 4) if moment_recall is not None else None,
             "semantic_descriptor_top3_overlap": round(descriptor_overlap, 4) if descriptor_overlap is not None else None,
+        },
+        "semantic_comparison": {
+            "comparable": semantic_comparable,
+            "baseline_identity": list(baseline_semantic_identity) if baseline_semantic_identity else None,
+            "candidate_identity": list(candidate_semantic_identity) if candidate_semantic_identity else None,
         },
         "thresholds": limits,
         "checks": checks,
