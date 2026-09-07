@@ -63,7 +63,7 @@
     align-items: flex-start;
   }
 
-  .today-v3-context > summary :global(.status-chip) {
+  .today-v3-context > summary .status-chip {
     display: none;
   }
 }
