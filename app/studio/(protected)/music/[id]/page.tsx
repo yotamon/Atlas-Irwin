@@ -41,10 +41,17 @@ function masteringStatus(value: unknown) {
   return null;
 }
 
-export default async function TrackWorkspacePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function TrackWorkspacePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ artist?: string }>;
+}) {
   const { id } = await params;
+  const { artist: requestedArtistId } = await searchParams;
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveActiveArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user, requestedArtistId);
   const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
   const growth = asGrowthClient(supabase);
   const music = asArtistScopedMusicClient(supabase);
