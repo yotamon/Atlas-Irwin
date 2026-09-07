@@ -136,6 +136,45 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: https://your-project.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: your-publishable-or-legacy-anon-key
 
+  e2e:
+    name: browser smoke
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install application dependencies
+        timeout-minutes: 8
+        run: npm ci --no-audit --fetch-retries=2 --fetch-timeout=60000 --fetch-retry-mintimeout=1000 --fetch-retry-maxtimeout=5000
+
+      # Keep browser tooling out of the production dependency graph. The exact
+      # Playwright version is pinned here and installed ephemerally for CI.
+      - name: Install pinned Playwright test runner
+        run: npm install --no-save --package-lock=false @playwright/test@1.63.0
+
+      - name: Install Chromium runtime
+        run: npx playwright install --with-deps chromium
+
+      - name: Run browser smoke suite
+        run: npm run test:e2e
+        env:
+          NEXT_PUBLIC_SITE_URL: http://127.0.0.1:3100
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
+
   database:
     name: database migrations and behavior
     if: github.event_name != 'pull_request'
