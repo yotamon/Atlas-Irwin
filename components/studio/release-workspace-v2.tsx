@@ -2,19 +2,21 @@ import Link from "next/link";
 import { MediaUploader } from "@/components/studio/media-uploader";
 import { ObjectHeader } from "@/components/studio/object-header";
 import { ReleaseForm } from "@/components/studio/release-form";
-import { ReleaseMasterAudioPanel } from "@/components/studio/release-master-audio-panel";
+import { ReleaseTracklist } from "@/components/studio/release-tracklist";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { lifecycleLabel, releaseLifecycle } from "@/lib/marketing/release-lifecycle";
 import { deriveReleaseMission } from "@/lib/studio/release-mission";
 import type { ContentItem, MetricSnapshot, Release, Track } from "@/types/database";
 import type { VaultTrack } from "@/types/growth-database";
 
-const STAGES = ["overview", "music", "content", "promotion", "distribution", "results"] as const;
+const STAGES = ["overview", "content", "promotion", "distribution", "results"] as const;
+const RELEASE_WORK_SECTIONS = ["Content", "Promotion", "Distribution"] as const;
 type Stage = (typeof STAGES)[number];
 type CampaignSummary = { id:string; name:string; status:string; mode:string; objective:string; primary_kpi:string } | null;
 type PlaybookTask = { id:string; title:string; status:string; priority:string; due_at:string | null };
 
 function normalizeStage(stage: string): Stage {
+  if (stage === "music") return "overview";
   if (stage === "plan") return "promotion";
   if (stage === "create") return "content";
   if (stage === "publish") return "distribution";
@@ -41,7 +43,7 @@ function resultInsight(metrics: MetricSnapshot[]) {
   return "There is listening activity, but not enough durable intent yet to declare a winning creative angle. Keep testing from the strongest musical Moments.";
 }
 
-export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, campaign, stage, renderedAt, artistId, playbookTasks = [], providerScheduledCount = 0, vaultTrack = null }: {
+export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, campaign, stage, renderedAt, artistId, playbookTasks = [], providerScheduledCount = 0, vaultTracks = [] }: {
   release: Release;
   tracks: Track[];
   contentItems: ContentItem[];
@@ -52,7 +54,7 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
   artistId: string;
   playbookTasks?: PlaybookTask[];
   providerScheduledCount?: number;
-  vaultTrack?: VaultTrack | null;
+  vaultTracks?: VaultTrack[];
 }) {
   const href = (path: string) => ensemblisArtistHref(path, artistId);
   const renderTime = new Date(renderedAt);
@@ -63,8 +65,10 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
   const planned = contentItems.filter((item) => item.scheduled_at && item.status !== "Published" && Date.parse(item.scheduled_at) >= now - 3_600_000).sort((a,b) => Date.parse(a.scheduled_at!) - Date.parse(b.scheduled_at!));
   const scheduled = contentItems.filter((item) => item.status === "Scheduled");
   const missingAsset = contentItems.filter((item) => item.scheduled_at && Date.parse(item.scheduled_at) >= now - 3_600_000 && !item.asset_url && item.status !== "Published");
-  const primaryTrack = tracks.find((track) => track.is_primary) ?? tracks[0] ?? null;
-  const hasMasterAudio = Boolean(primaryTrack?.audio_url || vaultTrack?.audio_url);
+  const vaultByTrack = new Map(vaultTracks.filter((vault) => vault.linked_track_id).map((vault) => [vault.linked_track_id as string, vault]));
+  const legacySingleVault = tracks.length === 1 ? vaultTracks.find((vault) => !vault.linked_track_id) ?? null : null;
+  const mastersReady = tracks.filter((track) => Boolean(track.audio_url || vaultByTrack.get(track.id)?.audio_url || legacySingleVault?.audio_url)).length;
+  const hasMasterAudio = tracks.length > 0 && mastersReady === tracks.length;
   const releaseDateLocked = providerScheduledCount > 0;
   const openPlaybook = playbookTasks.filter((task) => !["Done", "Skipped"].includes(task.status));
   const mission = deriveReleaseMission({
@@ -87,7 +91,6 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
   const playlistAdds = total(metrics, "playlist_adds");
   const topTabs = [
     { label: "Overview", href: href(`/studio/releases/${release.id}?stage=overview`), active: activeStage === "overview" },
-    { label: "Music", href: href(`/studio/releases/${release.id}?stage=music`), active: activeStage === "music" },
     { label: "Release work", href: href(`/studio/releases/${release.id}?stage=promotion`), active: releaseWorkActive },
     { label: "Results", href: href(`/studio/releases/${release.id}?stage=results`), active: activeStage === "results" },
   ];
@@ -95,7 +98,7 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
   return <div className="studio-v2-page release-workspace-v2 release-object-workspace ensemblis-release-mission">
     <ObjectHeader
       backHref={href("/studio/releases")}
-      backLabel="Releases"
+      backLabel="Music · Releases"
       eyebrow={lifecycleLabel(lifecycle)}
       title={release.title}
       subtitle={`${release.release_type} · ${shortDate(release.release_date)}`}
@@ -105,18 +108,21 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
         { label: "Mission", value: mission.label },
         { label: "Needs attention", value: missionAttention.length },
         { label: "Tracks", value: tracks.length },
-        { label: "Content", value: contentItems.length },
+        { label: "Masters", value: tracks.length ? `${mastersReady}/${tracks.length}` : "None" },
       ]}
       tabs={topTabs}
     />
 
     {releaseWorkActive ? <nav className="release-work-subnav" aria-label="Release work">
-      <Link href={href(`/studio/releases/${release.id}?stage=content`)} aria-current={activeStage === "content" ? "page" : undefined} className={activeStage === "content" ? "is-active" : undefined}>Content</Link>
-      <Link href={href(`/studio/releases/${release.id}?stage=promotion`)} aria-current={activeStage === "promotion" ? "page" : undefined} className={activeStage === "promotion" ? "is-active" : undefined}>Promotion</Link>
-      <Link href={href(`/studio/releases/${release.id}?stage=distribution`)} aria-current={activeStage === "distribution" ? "page" : undefined} className={activeStage === "distribution" ? "is-active" : undefined}>Distribution</Link>
+      {RELEASE_WORK_SECTIONS.map((label) => {
+        const value = label.toLowerCase() as "content" | "promotion" | "distribution";
+        return <Link key={label} href={href(`/studio/releases/${release.id}?stage=${value}`)} aria-current={activeStage === value ? "page" : undefined} className={activeStage === value ? "is-active" : undefined}>{label}</Link>;
+      })}
     </nav> : null}
 
     {activeStage === "overview" ? <div className="release-mission-overview">
+      <ReleaseTracklist releaseId={release.id} artistId={artistId} tracks={tracks} vaultTracks={vaultTracks} />
+
       <section className="release-mission-hero" data-status={mission.status}>
         <div>
           <span className="section-label">Release Mission</span>
@@ -127,7 +133,7 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
       </section>
 
       <section className="release-mission-checklist" aria-label="Release readiness">
-        <div><span className={hasMasterAudio ? "is-ready" : ""} aria-hidden>●</span><strong>Music</strong><small>{hasMasterAudio ? "Master ready" : "Master needed"}</small></div>
+        <div><span className={hasMasterAudio ? "is-ready" : ""} aria-hidden>●</span><strong>Music</strong><small>{tracks.length ? `${mastersReady}/${tracks.length} masters ready` : "Tracks needed"}</small></div>
         <div><span className={release.artwork_url || release.cover_asset ? "is-ready" : ""} aria-hidden>●</span><strong>Identity</strong><small>{release.artwork_url || release.cover_asset ? "Artwork ready" : "Artwork needed"}</small></div>
         <div><span className={campaign ? "is-ready" : ""} aria-hidden>●</span><strong>Promotion</strong><small>{campaign ? "Plan active" : "Plan preparing"}</small></div>
         <div><span className={release.smart_link_url || release.spotify_url || release.soundcloud_url || release.youtube_url ? "is-ready" : ""} aria-hidden>●</span><strong>Listening</strong><small>{release.smart_link_url || release.spotify_url || release.soundcloud_url || release.youtube_url ? "Destination ready" : "Destination needed"}</small></div>
@@ -147,21 +153,10 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
       </details>
 
       <details className="v2-advanced-disclosure release-specialist-tools">
-        <summary>Specialist tools</summary>
+        <summary>Advanced view · specialist tools</summary>
         <p className="v2-muted-copy">Legacy migration, exceptional provider controls and debugging tools. Normal release work should not require this workspace.</p>
         <Link className="button" href={href(`/studio/releases/${release.id}?view=advanced`)}>Open specialist workspace</Link>
       </details>
-    </div> : null}
-
-    {activeStage === "music" ? <div className="release-music-workspace">
-      <section className="v2-section release-stage-intro-card">
-        <div className="v2-section-heading"><div><span className="section-label">Music first</span><h2>The master and the strongest Moments are the creative source of truth</h2><p>Track, lyric and stem intelligence stay attached to the music. Marketing tools consume that evidence instead of asking you to restate the song.</p></div></div>
-      </section>
-      <ReleaseMasterAudioPanel releaseId={release.id} primaryTrack={primaryTrack} vaultTrack={vaultTrack} />
-      <section className="release-track-summary">
-        {tracks.map((track) => <Link href={href(`/studio/music/${(track.is_primary || tracks.length === 1) && vaultTrack ? vaultTrack.id : track.id}`)} key={track.id}><span>{track.is_primary ? "Primary track" : "Track"}</span><strong>{track.title}</strong><small>{track.audio_url ? "Audio ready · open intelligence" : "Audio source needed"}</small><b aria-hidden>→</b></Link>)}
-      </section>
-      <div className="release-moments-anchor"><span className="section-label">Best Moments</span><p>Ensemblis shows only a small editorial selection of complete, usable musical passages below.</p></div>
     </div> : null}
 
     {activeStage === "content" ? <div className="release-content-workspace">
