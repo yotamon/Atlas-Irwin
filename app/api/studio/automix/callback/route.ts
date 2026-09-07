@@ -61,13 +61,19 @@ async function canonicalMastersStillMatch(job: AutoMixJob) {
   if (tracks.error) throw new Error(tracks.error.message);
   const current = new Map((tracks.data ?? []).map((track) => [track.id, track.audio_url]));
   const fingerprints = Array.isArray(job.source_fingerprints) ? job.source_fingerprints : [];
-  if (current.size !== job.track_ids.length) return false;
-  return fingerprints.every((value) => {
+  if (current.size !== job.track_ids.length || fingerprints.length !== job.track_ids.length) return false;
+
+  const expectedTrackIds = new Set(job.track_ids);
+  const seenTrackIds = new Set<string>();
+  const allMatch = fingerprints.every((value) => {
     const item = record(value);
     const trackId = typeof item.track_id === "string" ? item.track_id : "";
     const audioUrl = typeof item.audio_url === "string" ? item.audio_url : "";
-    return Boolean(trackId && audioUrl && current.get(trackId) === audioUrl);
+    if (!trackId || !audioUrl || !expectedTrackIds.has(trackId) || seenTrackIds.has(trackId)) return false;
+    seenTrackIds.add(trackId);
+    return current.get(trackId) === audioUrl;
   });
+  return allMatch && seenTrackIds.size === expectedTrackIds.size;
 }
 
 export async function POST(request: Request) {
