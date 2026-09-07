@@ -1,0 +1,683 @@
+/* Ensemblis art direction.
+   This layer deliberately breaks the generic dashboard-card silhouette on the
+   core creative surfaces. It owns composition, emphasis and visual rhythm,
+   while primitives continue to own reusable control anatomy. */
+
+/* Shared editorial rhythm ------------------------------------------------ */
+.studio-root :where(
+  .ensemblis-today-page,
+  .music-workspace-page,
+  .ensemblis-release-mission,
+  .ensemblis-create-page
+) {
+  position: relative;
+}
+
+.studio-root :where(
+  .ensemblis-today-page,
+  .music-workspace-page,
+  .ensemblis-release-mission,
+  .ensemblis-create-page
+) > .studio-page-header {
+  padding-top: clamp(0.5rem, 1.4vw, 1.25rem);
+}
+
+.studio-root :where(
+  .ensemblis-today-page,
+  .music-workspace-page,
+  .ensemblis-create-page
+) > .studio-page-header h1 {
+  max-width: 10ch;
+  font-size: clamp(3.2rem, 7.4vw, 6.6rem);
+  line-height: 0.88;
+  letter-spacing: -0.072em;
+}
+
+.studio-root :where(
+  .ensemblis-today-page,
+  .music-workspace-page,
+  .ensemblis-create-page
+) > .studio-page-header p {
+  max-width: 38rem;
+  font-size: var(--en-text-md);
+}
+
+/* TODAY ------------------------------------------------------------------ */
+.studio-root .ensemblis-today-page .en-priority-hero {
+  position: relative;
+  display: grid;
+  min-height: clamp(21rem, 38vw, 31rem);
+  align-content: center;
+  gap: clamp(1.25rem, 2.4vw, 2.2rem);
+  margin-top: clamp(0.5rem, 1.5vw, 1.4rem);
+  padding: clamp(2.2rem, 5vw, 4.6rem) clamp(0rem, 1vw, 0.75rem);
+  overflow: visible;
+  border: 0;
+  border-top: 1px solid var(--en-line-strong);
+  border-bottom: 1px solid var(--en-line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.studio-root .ensemblis-today-page .en-priority-hero::before {
+  content: "NOW";
+  position: absolute;
+  top: 50%;
+  right: clamp(-0.25rem, 1vw, 1.5rem);
+  z-index: -1;
+  color: color-mix(in srgb, var(--en-ink) 3.2%, transparent);
+  font-size: clamp(6rem, 20vw, 17rem);
+  font-weight: var(--en-weight-bold);
+  letter-spacing: -0.09em;
+  line-height: 0.72;
+  transform: translateY(-47%);
+  pointer-events: none;
+  user-select: none;
+}
+
+.studio-root .ensemblis-today-page .en-priority-hero::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: min(22rem, 36%);
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--en-accent));
+  transform-origin: right;
+  animation: ensemblis-editorial-rule 760ms var(--en-ease-emphasized) both;
+}
+
+.studio-root .ensemblis-today-page .en-priority-hero-heading {
+  align-items: flex-start;
+}
+
+.studio-root .ensemblis-today-page .en-priority-hero-copy {
+  display: grid;
+  gap: var(--en-space-3);
+}
+
+.studio-root .ensemblis-today-page .en-priority-hero .en-eyebrow {
+  color: var(--en-accent);
+  font-size: var(--en-text-xs);
+  font-weight: var(--en-weight-semibold);
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.studio-root .ensemblis-today-page .en-priority-hero h2 {
+  max-width: 14ch;
+  margin: 0;
+  font-size: clamp(2.45rem, 6.4vw, 5.9rem);
+  font-weight: var(--en-weight-semibold);
+  line-height: 0.94;
+  letter-spacing: -0.067em;
+  text-wrap: balance;
+}
+
+.studio-root .ensemblis-today-page .en-priority-hero-description {
+  max-width: 42rem;
+  font-size: clamp(var(--en-text-md), 1.45vw, var(--en-text-xl));
+  line-height: 1.55;
+}
+
+.studio-root .ensemblis-today-page .en-priority-hero .status-chip,
+.studio-root .ensemblis-today-page .en-priority-hero .status-pill {
+  margin-top: 0.2rem;
+  border-color: var(--en-line-strong);
+  background: color-mix(in srgb, var(--en-bg) 76%, transparent);
+  color: var(--en-muted);
+}
+
+.studio-root .ensemblis-today-page .en-priority-hero-actions {
+  gap: var(--en-space-4);
+}
+
+.studio-root .ensemblis-today-focus-grid {
+  grid-template-columns: minmax(0, 1.28fr) minmax(18rem, 0.72fr);
+  gap: clamp(2rem, 5vw, 5rem);
+  margin-top: clamp(1.8rem, 4vw, 3.8rem);
+}
+
+.studio-root .ensemblis-today-page :where(.en-decision-queue, .today-v3-section) {
+  padding-top: var(--en-space-5);
+  border-top: 1px solid var(--en-line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.studio-root .ensemblis-today-page .today-v3-section {
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+}
+
+.studio-root .ensemblis-today-page .en-decision-row {
+  padding-block: 1.15rem;
+}
+
+.studio-root .ensemblis-today-page .en-decision-copy strong {
+  font-size: clamp(var(--en-text-lg), 1.8vw, 1.15rem);
+}
+
+/* MUSIC ------------------------------------------------------------------ */
+.studio-root .music-workspace-summary {
+  margin: clamp(0.5rem, 1.4vw, 1.2rem) 0 clamp(2rem, 4vw, 3.8rem);
+  border-top-color: var(--en-line-strong);
+}
+
+.studio-root .music-workspace-summary > div {
+  min-height: 6.6rem;
+  align-content: center;
+  padding: var(--en-space-4) clamp(0.8rem, 2vw, 1.6rem);
+}
+
+.studio-root .music-workspace-summary strong {
+  font-size: clamp(1.8rem, 4vw, 3.3rem);
+  font-weight: var(--en-weight-medium);
+  letter-spacing: -0.06em;
+}
+
+.studio-root .music-workspace-summary span {
+  color: var(--en-muted);
+  font-size: var(--en-text-xs);
+  letter-spacing: 0.03em;
+  text-transform: none;
+}
+
+.studio-root .music-workspace-focus-grid {
+  grid-template-columns: minmax(0, 1.58fr) minmax(16rem, 0.42fr);
+  gap: clamp(2rem, 5vw, 5.25rem);
+}
+
+.studio-root .music-workspace-focus {
+  position: relative;
+  padding: clamp(2rem, 4.2vw, 4rem) 0;
+  overflow: visible;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--en-accent) 52%, var(--en-line));
+  border-bottom: 1px solid var(--en-line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.studio-root .music-workspace-focus::before {
+  content: "SOURCE";
+  position: absolute;
+  top: -0.58rem;
+  right: 0;
+  padding-left: var(--en-space-3);
+  background: var(--en-bg);
+  color: var(--en-subtle);
+  font-size: var(--en-text-2xs);
+  font-weight: var(--en-weight-semibold);
+  letter-spacing: 0.13em;
+}
+
+.studio-root .music-workspace-focus h2 {
+  max-width: 16ch;
+  font-size: clamp(2.15rem, 5vw, 4.7rem);
+  line-height: 0.96;
+  letter-spacing: -0.062em;
+}
+
+.studio-root .music-workspace-focus .music-score {
+  min-width: auto;
+  min-height: auto;
+  padding: 0.35rem 0;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--en-accent) 52%, var(--en-line));
+  border-radius: 0;
+  background: transparent;
+  font-size: var(--en-text-sm);
+  letter-spacing: 0.03em;
+}
+
+.studio-root .music-track-meta-line {
+  gap: 0;
+  margin: 1rem 0 1.25rem;
+}
+
+.studio-root .music-track-meta-line span {
+  padding: 0 0.7rem;
+  border: 0;
+  border-right: 1px solid var(--en-line);
+  border-radius: 0;
+  font-size: var(--en-text-xs);
+}
+
+.studio-root .music-track-meta-line span:first-child { padding-left: 0; }
+.studio-root .music-track-meta-line span:last-child { border-right: 0; }
+
+.studio-root .music-catalog-glance {
+  padding-top: var(--en-space-5);
+  border-top-color: var(--en-line-strong);
+}
+
+.studio-root .music-catalog-list > a {
+  grid-template-columns: 3.15rem minmax(0, 1fr) auto;
+  padding-block: 0.9rem;
+  transition: transform var(--en-duration-normal) var(--en-ease-emphasized), color var(--en-duration-fast) ease;
+}
+
+.studio-root .music-catalog-list > a:hover,
+.studio-root .music-catalog-list > a:focus-visible {
+  transform: translateX(3px);
+}
+
+.studio-root .music-catalog-artwork {
+  width: 3.15rem;
+  border-radius: var(--en-radius-xs);
+}
+
+.studio-root .music-unreleased-section {
+  margin-top: clamp(2.6rem, 6vw, 5.5rem);
+  padding-top: var(--en-space-5);
+  border-top-color: var(--en-line-strong);
+}
+
+.studio-root .music-track-row {
+  min-height: 4.75rem;
+  padding-block: 1rem;
+  transition: background-color var(--en-duration-fast) ease, transform var(--en-duration-normal) var(--en-ease-emphasized);
+}
+
+.studio-root .music-track-row:hover {
+  background: color-mix(in srgb, var(--en-white) 1.5%, transparent);
+  transform: translateX(2px);
+}
+
+.studio-root .music-workspace-create-callout {
+  margin-top: clamp(3.4rem, 7vw, 7rem);
+  padding: clamp(2rem, 4vw, 3.8rem) 0;
+  border: 0;
+  border-top: 1px solid var(--en-line-strong);
+  border-bottom: 1px solid var(--en-line);
+  border-radius: 0;
+  background: transparent;
+}
+
+.studio-root .music-workspace-create-callout h2 {
+  max-width: 17ch;
+  font-size: clamp(2rem, 4vw, 3.6rem);
+  line-height: 1;
+}
+
+/* RELEASE MISSION -------------------------------------------------------- */
+.studio-root .ensemblis-release-mission .ensemblis-object-header {
+  gap: clamp(1.4rem, 3vw, 2.6rem);
+  margin-bottom: clamp(2rem, 4vw, 4rem);
+  padding-bottom: clamp(1.4rem, 3vw, 2.5rem);
+  border-bottom-color: var(--en-line-strong);
+}
+
+.studio-root .ensemblis-release-mission .ensemblis-object-identity {
+  grid-template-columns: clamp(8rem, 15vw, 12.5rem) minmax(0, 1fr);
+  gap: clamp(1.6rem, 4vw, 4rem);
+}
+
+.studio-root .ensemblis-release-mission .ensemblis-object-artwork {
+  width: 100%;
+  border-radius: var(--en-radius-xs);
+  box-shadow: 0 28px 70px color-mix(in srgb, var(--en-black) 30%, transparent);
+  transform: rotate(-1.25deg);
+  transition: transform 620ms var(--en-ease-emphasized), box-shadow 620ms var(--en-ease-emphasized);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio-root .ensemblis-release-mission .ensemblis-object-artwork:hover {
+    transform: rotate(0deg) scale(1.015);
+    box-shadow: 0 38px 90px color-mix(in srgb, var(--en-black) 36%, transparent);
+  }
+}
+
+.studio-root .ensemblis-release-mission .ensemblis-object-copy h1 {
+  max-width: 12ch;
+  font-size: clamp(3rem, 7vw, 6.8rem);
+  line-height: 0.88;
+  letter-spacing: -0.072em;
+}
+
+.studio-root .ensemblis-release-mission .ensemblis-object-copy > p {
+  margin-top: var(--en-space-4);
+  font-size: var(--en-text-lg);
+}
+
+.studio-root .ensemblis-release-mission .ensemblis-object-facts {
+  margin-top: var(--en-space-6);
+}
+
+.studio-root .ensemblis-release-mission .ensemblis-object-facts > div {
+  min-width: 7rem;
+  padding: 0 var(--en-space-5) 0 0;
+}
+
+.studio-root .ensemblis-release-mission .ensemblis-object-tabs {
+  padding-top: var(--en-space-3);
+  border-top: 1px solid var(--en-line);
+}
+
+.studio-root .ensemblis-release-mission .ensemblis-object-tabs a {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.studio-root .ensemblis-release-mission .ensemblis-object-tabs a.active {
+  box-shadow: inset 0 -1px var(--en-accent);
+}
+
+.studio-root .release-mission-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: clamp(1.5rem, 4vw, 4rem);
+  min-height: clamp(16rem, 27vw, 23rem);
+  padding: clamp(2rem, 4vw, 4rem) 0;
+  overflow: hidden;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--en-accent) 44%, var(--en-line));
+  border-bottom: 1px solid var(--en-line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.studio-root .release-mission-hero::after {
+  content: "MISSION";
+  position: absolute;
+  right: -0.03em;
+  bottom: -0.14em;
+  z-index: -1;
+  color: color-mix(in srgb, var(--en-ink) 2.8%, transparent);
+  font-size: clamp(5rem, 16vw, 13rem);
+  font-weight: var(--en-weight-bold);
+  line-height: 0.8;
+  letter-spacing: -0.08em;
+  pointer-events: none;
+}
+
+.studio-root .release-mission-hero h2 {
+  max-width: 16ch;
+  margin: var(--en-space-3) 0 0;
+  color: var(--en-ink);
+  font-size: clamp(2.2rem, 5vw, 4.8rem);
+  font-weight: var(--en-weight-semibold);
+  line-height: 0.98;
+  letter-spacing: -0.062em;
+  text-wrap: balance;
+}
+
+.studio-root .release-mission-hero p {
+  max-width: 42rem;
+  color: var(--en-muted);
+  font-size: var(--en-text-lg);
+  line-height: var(--en-leading-body);
+}
+
+.studio-root .release-mission-checklist {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  border-top: 1px solid var(--en-line);
+  border-bottom: 1px solid var(--en-line);
+  border-radius: 0;
+  background: transparent;
+}
+
+.studio-root .release-mission-checklist > div {
+  min-height: 6.4rem;
+  align-content: center;
+  padding: var(--en-space-4) var(--en-space-5);
+  border-right: 1px solid var(--en-line);
+  background: transparent;
+}
+
+.studio-root .release-mission-checklist > div:last-child { border-right: 0; }
+
+.studio-root .release-stage-intro-card {
+  padding: clamp(1.6rem, 3.6vw, 3rem) 0;
+  border: 0;
+  border-top: 1px solid var(--en-line-strong);
+  border-bottom: 1px solid var(--en-line);
+  border-radius: 0;
+  background: transparent;
+}
+
+/* CREATE ----------------------------------------------------------------- */
+.studio-root .create-context-strip {
+  padding: var(--en-space-4) 0;
+  border: 0;
+  border-top: 1px solid var(--en-line-strong);
+  border-bottom: 1px solid var(--en-line);
+  border-radius: 0;
+  background: transparent;
+}
+
+.studio-root .create-deliverable-section {
+  margin-top: clamp(1.2rem, 3vw, 2.5rem);
+}
+
+.studio-root .create-deliverable-section > .v2-section-heading {
+  margin-bottom: clamp(1.4rem, 3vw, 2.6rem);
+}
+
+.studio-root .create-deliverable-section > .v2-section-heading h2 {
+  max-width: 14ch;
+  font-size: clamp(2.4rem, 5.5vw, 5rem);
+  line-height: 0.94;
+  letter-spacing: -0.064em;
+}
+
+.studio-root .create-deliverable-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border-top: 1px solid var(--en-line-strong);
+  border-bottom: 1px solid var(--en-line);
+  background: var(--en-line);
+}
+
+.studio-root .create-deliverable-card {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: var(--en-space-4);
+  min-width: 0;
+  padding: clamp(1.5rem, 3.5vw, 3rem);
+  border: 0;
+  border-radius: 0;
+  background: var(--en-bg-elevated);
+  box-shadow: none;
+  transition: background-color var(--en-duration-normal) ease, transform var(--en-duration-slow) var(--en-ease-emphasized);
+}
+
+.studio-root .create-deliverable-card.is-recommended {
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) minmax(15rem, 0.62fr);
+  column-gap: clamp(2rem, 5vw, 5rem);
+  background:
+    linear-gradient(110deg, color-mix(in srgb, var(--en-accent) 5%, transparent), transparent 48%),
+    var(--en-bg-elevated);
+}
+
+.studio-root .create-deliverable-card.is-recommended > :where(.create-deliverable-head, h3, p, .create-direction-action) {
+  grid-column: 1;
+}
+
+.studio-root .create-deliverable-card.is-recommended .create-source-preview {
+  grid-column: 2;
+  grid-row: 1 / span 5;
+  align-self: stretch;
+  padding-left: clamp(1.2rem, 3vw, 2.6rem);
+  border-left: 1px solid var(--en-line);
+}
+
+.studio-root .create-deliverable-card.is-recommended .create-evidence-details {
+  grid-column: 1 / -1;
+}
+
+.studio-root .create-deliverable-card h3 {
+  max-width: 13ch;
+  margin: 0;
+  color: var(--en-ink);
+  font-size: clamp(1.8rem, 3.6vw, 3.4rem);
+  font-weight: var(--en-weight-semibold);
+  line-height: 0.98;
+  letter-spacing: -0.055em;
+}
+
+.studio-root .create-deliverable-card.is-recommended h3 {
+  font-size: clamp(2.5rem, 5.5vw, 5.2rem);
+}
+
+.studio-root .create-deliverable-card > p {
+  max-width: 40rem;
+  color: var(--en-muted);
+  line-height: var(--en-leading-body);
+}
+
+.studio-root .create-source-preview {
+  display: grid;
+  align-content: start;
+  gap: var(--en-space-2);
+  padding-top: var(--en-space-4);
+  border-top: 1px solid var(--en-line);
+  background: transparent;
+}
+
+.studio-root .create-source-preview > strong {
+  color: var(--en-ink);
+  font-size: var(--en-text-xl);
+  letter-spacing: -0.03em;
+}
+
+.studio-root .create-direction-rationale {
+  padding-left: var(--en-space-4);
+  border-left: 1px solid color-mix(in srgb, var(--en-accent) 48%, var(--en-line));
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio-root .create-deliverable-card:hover {
+    z-index: 1;
+    background: var(--en-surface);
+    transform: translateY(-2px);
+  }
+}
+
+.studio-root .create-next-action-callout {
+  margin-top: clamp(2.8rem, 6vw, 5.5rem);
+  padding: clamp(1.8rem, 3vw, 2.8rem) 0;
+  border: 0;
+  border-top: 1px solid var(--en-line-strong);
+  border-bottom: 1px solid var(--en-line);
+  border-radius: 0;
+  background: transparent;
+}
+
+/* Quiet the generic “card wall” vocabulary on core creative screens. */
+.studio-root :where(.music-workspace-page, .ensemblis-release-mission, .ensemblis-create-page) .v2-calm-state {
+  border-radius: var(--en-radius-xs);
+  background: color-mix(in srgb, var(--en-surface-raised) 30%, transparent);
+}
+
+@keyframes ensemblis-editorial-rule {
+  from { transform: scaleX(0); opacity: 0; }
+  to { transform: scaleX(1); opacity: 1; }
+}
+
+@media (max-width: 980px) {
+  .studio-root .ensemblis-today-focus-grid,
+  .studio-root .music-workspace-focus-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .studio-root .ensemblis-release-mission .ensemblis-object-identity {
+    grid-template-columns: clamp(6.5rem, 20vw, 9rem) minmax(0, 1fr);
+  }
+
+  .studio-root .release-mission-hero {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+}
+
+@media (max-width: 720px) {
+  .studio-root :where(
+    .ensemblis-today-page,
+    .music-workspace-page,
+    .ensemblis-create-page
+  ) > .studio-page-header h1 {
+    font-size: clamp(3rem, 15vw, 5.5rem);
+  }
+
+  .studio-root .ensemblis-today-page .en-priority-hero {
+    min-height: 0;
+    padding-block: 2.2rem;
+  }
+
+  .studio-root .ensemblis-today-page .en-priority-hero::before,
+  .studio-root .release-mission-hero::after {
+    opacity: 0.72;
+  }
+
+  .studio-root .ensemblis-today-page .en-priority-hero-heading {
+    flex-direction: column;
+  }
+
+  .studio-root .music-workspace-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .studio-root .music-workspace-focus {
+    padding-block: 1.8rem;
+  }
+
+  .studio-root .ensemblis-release-mission .ensemblis-object-identity {
+    grid-template-columns: 1fr;
+  }
+
+  .studio-root .ensemblis-release-mission .ensemblis-object-artwork {
+    width: min(46vw, 8.5rem);
+  }
+
+  .studio-root .release-mission-checklist {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .studio-root .release-mission-checklist > div:nth-child(2) { border-right: 0; }
+  .studio-root .release-mission-checklist > div:nth-child(-n + 2) { border-bottom: 1px solid var(--en-line); }
+
+  .studio-root .create-deliverable-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .studio-root .create-deliverable-card.is-recommended {
+    grid-column: auto;
+    grid-template-columns: 1fr;
+  }
+
+  .studio-root .create-deliverable-card.is-recommended > *,
+  .studio-root .create-deliverable-card.is-recommended .create-source-preview,
+  .studio-root .create-deliverable-card.is-recommended .create-evidence-details {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .studio-root .create-deliverable-card.is-recommended .create-source-preview {
+    padding-left: 0;
+    border-left: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-root .ensemblis-today-page .en-priority-hero::after,
+  .studio-root .ensemblis-release-mission .ensemblis-object-artwork {
+    animation: none;
+    transition: none;
+  }
+}
