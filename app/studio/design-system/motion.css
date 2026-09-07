@@ -87,6 +87,21 @@
   }
 }
 
+/* Button chrome stays in primitives.css; this layer owns motion only. */
+.studio-root .button {
+  transform: translateZ(0);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio-root .button:hover {
+    transform: translateY(-1px);
+  }
+}
+
+.studio-root .button:active {
+  transform: translateY(1px) scale(0.985);
+}
+
 .studio-root :where(.studio-tabs a, .ensemblis-object-tabs a) {
   position: relative;
   transition:
