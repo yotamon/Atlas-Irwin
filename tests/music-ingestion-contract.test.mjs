@@ -58,13 +58,16 @@ test("new master state and analysis are explicitly scoped to the active artist",
     "master intake, release linking and analysis recovery should stay artist-local");
 });
 
-test("Music overview describes understanding instead of portfolio scores", async () => {
+test("Music overview presents both unreleased and release tracks without portfolio scoring", async () => {
   const overview = await requireSnippets("components/studio/music-workspace-overview.tsx", [
-    "Track understanding",
+    "Catalog tracks",
     "Understanding ready",
     "Create from this track",
     "Add master",
+    "linked_track_id",
   ]);
+  assert.ok(overview.includes("catalogTracks.map"), "release tracks must be directly visible from Music");
+  assert.ok(overview.includes("trackHref(track.id)"), "catalog rows must deep-link to the exact track object");
   assert.doesNotMatch(overview, /rankVaultTracks|Portfolio score|Edit portfolio signals|Manage Portfolio/,
     "Music overview must not expose Growth ranking as the primary music model");
 });
