@@ -28,6 +28,25 @@ test("multi-track releases preserve exact track identity from catalog click thro
   assert.match(safeActions, /linked_track_id: track\.id/);
 });
 
+test("legacy release-level masters cannot mutate a multi-track release", async () => {
+  const [legacyActions, legacyPanel] = await Promise.all([
+    source("app/studio/growth-media-actions.ts"),
+    source("components/studio/release-master-audio-panel.tsx"),
+  ]);
+
+  const guardPosition = legacyActions.indexOf("if (currentTracks.length > 1)");
+  const trackMutationPosition = legacyActions.indexOf('music.from("tracks").update({');
+  assert.ok(guardPosition >= 0, "release-level master action must reject multi-track releases");
+  assert.ok(trackMutationPosition > guardPosition, "multi-track guard must run before the legacy action mutates a track");
+  assert.match(legacyActions, /Multi-track releases require a separate master for each track/);
+  assert.match(legacyActions, /linked_track_id: canonicalTrack\.id/);
+
+  assert.match(legacyPanel, /trackCount: number/);
+  assert.match(legacyPanel, /if \(trackCount > 1\)/);
+  assert.match(legacyPanel, /Multi-track releases do not have a release-level canonical audio file/);
+  assert.match(legacyPanel, /trackId=\{primaryTrack\?\.id\}/);
+});
+
 test("Music owns release collections and release overview surfaces tracks before workflow detail", async () => {
   const [product, musicPage, releasesPage, releaseWorkspace, tracklist] = await Promise.all([
     source("lib/ensemblis-product.ts"),
