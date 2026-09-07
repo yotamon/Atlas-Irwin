@@ -98,18 +98,18 @@ export default async function TodayPage() {
       ? { href: href(visibleMissionAction.href), label: visibleMissionAction.title }
       : primaryMission
         ? handsOff
-          ? { href: "#today-context", label: "See background context" }
+          ? { href: "#ensemblis-handling", label: "See what Ensemblis is handling" }
           : { href: href(primaryMission.href), label: "Open Mission" }
         : actionableNext && actionableNextHref
           ? { href: actionableNextHref, label: "Act on this" }
           : handsOff
-            ? { href: "#today-context", label: "See background context" }
+            ? { href: "#ensemblis-handling", label: "See what Ensemblis is handling" }
             : { href: href(strategy.recommendedMission.href), label: "Open recommended Mission" };
 
   const remainingDecisions = topDecision
     ? needsYou.filter((item) => item.id !== topDecision.id)
     : needsYou;
-  const decisionPreview = remainingDecisions.slice(0, 3);
+  const decisionPreview = topDecision ? remainingDecisions.slice(0, 3) : needsYou.slice(0, 3);
   const handling = [
     ...working.map((item) => ({ ...item, activity: "Working now" })),
     ...managerPlan.map((item) => ({ ...item, activity: "Planned" })),
@@ -142,7 +142,7 @@ export default async function TodayPage() {
           <Link className="button primary" href={heroPrimary.href}>{heroPrimary.label}</Link>
           {topDecision
             ? remainingDecisions.length
-              ? <Link href="#today-context">{remainingDecisions.length} more decision{remainingDecisions.length === 1 ? "" : "s"}</Link>
+              ? <Link href="#ensemblis-handling">{remainingDecisions.length} more decision{remainingDecisions.length === 1 ? "" : "s"}</Link>
               : <Link href={href("/studio/needs-you")}>Decision history</Link>
             : primaryMission?.kind === "release" && activeRelease
               ? <Link href={href(`/studio/releases/${activeRelease.id}`)}>View release Mission</Link>
@@ -150,7 +150,7 @@ export default async function TodayPage() {
         </>}
       />
 
-      <details className="today-v3-context" id="today-context">
+      <details className="today-v3-context" id="ensemblis-handling">
         <summary>
           <span>
             <strong>Everything else today</strong>
