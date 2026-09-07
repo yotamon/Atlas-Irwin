@@ -1,13 +1,18 @@
-import { EnsemblisMark } from "@/components/ensemblis-logo";
+import { ProcessingState } from "@/components/studio/processing-state";
 
 export default function Loading() {
   return (
-    <div className="ensemblis-loading" role="status" aria-live="polite">
-      <EnsemblisMark />
-      <div>
-        <strong>Ensemblis</strong>
-        <span>Loading artist context…</span>
-      </div>
+    <div className="ensemblis-loading">
+      <ProcessingState
+        eyebrow="Studio signal"
+        title="Tuning your artist workspace"
+        detail="Loading music, context, and the latest decisions into one coherent view."
+        steps={[
+          { label: "Artist context", state: "complete" },
+          { label: "Music intelligence", state: "active" },
+          { label: "Workspace", state: "waiting" },
+        ]}
+      />
     </div>
   );
 }
