@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createActiveMaster, promoteActiveMaster } from "@/app/studio/mastering-actions";
+import { ProcessingState } from "@/components/studio/processing-state";
 import type { Json } from "@/types/database";
 import styles from "./active-mastering-panel.module.css";
 
@@ -70,6 +71,7 @@ export function ActiveMasteringControls({
 
   const completed = jobs.filter((job) => job.status === "completed" && job.outputUrl);
   const latestActive = jobs.find((job) => ["planned", "queued", "running"].includes(job.status));
+  const activePreset = latestActive ? title(latestActive.preset) : null;
 
   return (
     <section className={styles.root} aria-label="Active Mastering">
@@ -82,19 +84,38 @@ export function ActiveMasteringControls({
         {latestActive ? <span className={styles.running}>{latestActive.status === "running" ? "Mastering…" : "Queued"}</span> : null}
       </header>
 
-      <div className={styles.presets}>
-        {presets.map((preset) => (
-          <form action={createCandidate} className={styles.preset} key={preset.id}>
-            <input type="hidden" name="track_id" value={trackId} />
-            <input type="hidden" name="preset" value={preset.id} />
-            <strong>{preset.title}</strong>
-            <p>{preset.copy}</p>
-            <button className="button" type="submit" disabled={!sourceAudioUrl || hasActive}>
-              {hasActive ? "Mastering in progress" : `Create ${preset.title} master`}
-            </button>
-          </form>
-        ))}
-      </div>
+      {latestActive ? (
+        <ProcessingState
+          className={styles.processing}
+          compact
+          eyebrow={`${activePreset} master`}
+          title={latestActive.status === "running" ? "Shaping the candidate" : "Preparing the mastering chain"}
+          detail={latestActive.status === "running"
+            ? "Rendering with constrained DSP, then measuring loudness, peak safety and preserved dynamics before the candidate is shown."
+            : "The source is queued. Ensemblis will keep the original untouched and move directly into verification after render."}
+          steps={[
+            { label: "Source protected", state: "complete" },
+            { label: "Render", state: latestActive.status === "running" ? "active" : "waiting" },
+            { label: "Measure", state: "waiting" },
+            { label: "Verify", state: "waiting" },
+          ]}
+        />
+      ) : (
+        <div className={styles.presets}>
+          {presets.map((preset) => (
+            <form action={createCandidate} className={styles.preset} key={preset.id}>
+              <input type="hidden" name="track_id" value={trackId} />
+              <input type="hidden" name="preset" value={preset.id} />
+              <span className={styles.presetIndex}>0{presets.findIndex((item) => item.id === preset.id) + 1}</span>
+              <strong>{preset.title}</strong>
+              <p>{preset.copy}</p>
+              <button className="button" type="submit" disabled={!sourceAudioUrl}>
+                Create {preset.title} master
+              </button>
+            </form>
+          ))}
+        </div>
+      )}
 
       {jobs.some((job) => job.status === "failed") ? (
         <div className={styles.error}>

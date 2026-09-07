@@ -1,0 +1,96 @@
+/* Ensemblis motion choreography.
+   Small staggered reveals make hierarchy legible without turning the product
+   into an animation demo. Processing motion remains reserved for real work. */
+
+.studio-root .ensemblis-motion-stage > .studio-v2-page > :where(
+  .studio-page-header,
+  .ensemblis-object-header,
+  section,
+  aside,
+  details,
+  .music-workspace-overview,
+  .release-mission-overview,
+  .release-music-workspace,
+  .release-content-workspace,
+  .release-promotion-workspace
+) {
+  animation: ensemblis-content-enter 520ms var(--en-ease-emphasized) both;
+}
+
+.studio-root .ensemblis-motion-stage > .studio-v2-page > :nth-child(2) { animation-delay: 45ms; }
+.studio-root .ensemblis-motion-stage > .studio-v2-page > :nth-child(3) { animation-delay: 85ms; }
+.studio-root .ensemblis-motion-stage > .studio-v2-page > :nth-child(4) { animation-delay: 120ms; }
+.studio-root .ensemblis-motion-stage > .studio-v2-page > :nth-child(5) { animation-delay: 150ms; }
+.studio-root .ensemblis-motion-stage > .studio-v2-page > :nth-child(n + 6) { animation-delay: 175ms; }
+
+.studio-root :where(
+  .v2-advanced-disclosure,
+  .track-object-advanced,
+  .studio-advanced-details,
+  .create-evidence-details
+)[open] > :not(summary) {
+  animation: ensemblis-disclosure-enter 280ms var(--en-ease-emphasized) both;
+}
+
+.studio-root :where(
+  .en-decision-trailing,
+  .today-v3-arrow,
+  .release-catalog-arrow,
+  .music-catalog-list b,
+  .music-row-link
+) {
+  transition:
+    color var(--en-duration-fast) var(--en-ease-standard),
+    transform var(--en-duration-normal) var(--en-ease-emphasized);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio-root :where(
+    .en-decision-row,
+    .today-v3-upcoming-row,
+    .release-catalog-row,
+    .music-catalog-list > a
+  ):hover :where(
+    .en-decision-trailing,
+    .today-v3-arrow,
+    .release-catalog-arrow,
+    .music-catalog-list b
+  ) {
+    color: var(--en-accent);
+    transform: translateX(3px);
+  }
+}
+
+@keyframes ensemblis-content-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ensemblis-disclosure-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-root .ensemblis-motion-stage > .studio-v2-page > *,
+  .studio-root :where(
+    .v2-advanced-disclosure,
+    .track-object-advanced,
+    .studio-advanced-details,
+    .create-evidence-details
+  )[open] > :not(summary) {
+    animation: none !important;
+  }
+}

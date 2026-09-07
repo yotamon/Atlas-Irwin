@@ -1,0 +1,500 @@
+/* Ensemblis motion and material language.
+   Motion should communicate musical continuity, hierarchy, and system activity.
+   Avoid decorative bounce, generic shimmer, or motion with no product meaning. */
+
+.studio-root .ensemblis-motion-stage {
+  min-width: 0;
+  transform-origin: 50% 0;
+}
+
+/* Give the workspace a quieter, more editorial material hierarchy. */
+.studio-root .studio-main {
+  perspective: 1200px;
+}
+
+.studio-root .studio-page-header {
+  position: relative;
+  overflow: visible;
+}
+
+.studio-root .studio-page-header::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--en-accent) 76%, transparent) 0%,
+    color-mix(in srgb, var(--en-mint) 34%, transparent) 18%,
+    var(--en-line) 48%,
+    transparent 100%
+  );
+  transform-origin: left center;
+  animation: ensemblis-line-reveal 720ms var(--en-ease-emphasized) both;
+}
+
+.studio-root .studio-page-header h1 {
+  text-wrap: balance;
+  text-shadow: 0 18px 48px color-mix(in srgb, var(--en-black) 32%, transparent);
+}
+
+/* Panels should read as sheets of content, not a wall of SaaS cards. */
+.studio-root .studio-panel.feature {
+  position: relative;
+  overflow: clip;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--en-white) 1.7%, transparent), transparent 36%),
+    color-mix(in srgb, var(--en-surface) 95%, transparent);
+  box-shadow:
+    inset 0 1px color-mix(in srgb, var(--en-white) 3.6%, transparent),
+    0 26px 70px color-mix(in srgb, var(--en-black) 12%, transparent);
+  transition:
+    border-color var(--en-duration-normal) var(--en-ease-standard),
+    background var(--en-duration-normal) var(--en-ease-standard),
+    transform var(--en-duration-slow) var(--en-ease-emphasized),
+    box-shadow var(--en-duration-slow) var(--en-ease-emphasized);
+}
+
+.studio-root .studio-panel.feature::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: clamp(1rem, 3vw, 2rem);
+  width: clamp(3.5rem, 9vw, 7rem);
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, var(--en-accent), color-mix(in srgb, var(--en-mint) 68%, transparent), transparent);
+  opacity: 0.58;
+  transform-origin: left;
+  transition: width var(--en-duration-slow) var(--en-ease-emphasized), opacity var(--en-duration-normal) ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio-root .studio-panel.feature:hover {
+    border-color: color-mix(in srgb, var(--en-line-strong) 80%, var(--en-accent));
+    transform: translateY(-2px);
+    box-shadow:
+      inset 0 1px color-mix(in srgb, var(--en-white) 4.5%, transparent),
+      0 34px 90px color-mix(in srgb, var(--en-black) 18%, transparent);
+  }
+
+  .studio-root .studio-panel.feature:hover::before {
+    width: clamp(6rem, 18vw, 13rem);
+    opacity: 0.92;
+  }
+}
+
+/* Button chrome stays in primitives.css; this layer owns motion only. */
+.studio-root .button {
+  transform: translateZ(0);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio-root .button:hover {
+    transform: translateY(-1px);
+  }
+}
+
+.studio-root .button:active {
+  transform: translateY(1px) scale(0.985);
+}
+
+.studio-root :where(.studio-tabs a, .ensemblis-object-tabs a) {
+  position: relative;
+  transition:
+    color var(--en-duration-normal) var(--en-ease-standard),
+    background-color var(--en-duration-normal) var(--en-ease-standard),
+    border-color var(--en-duration-normal) var(--en-ease-standard),
+    transform var(--en-duration-normal) var(--en-ease-emphasized);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio-root :where(.studio-tabs a, .ensemblis-object-tabs a):hover {
+    transform: translateY(-1px);
+  }
+}
+
+/* Sidebar feels continuous rather than a list of independent buttons. */
+.studio-root .studio-sidebar nav a {
+  position: relative;
+}
+
+.studio-root .studio-sidebar nav a::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0.1rem;
+  width: 2px;
+  height: 0;
+  border-radius: var(--en-radius-pill);
+  background: var(--en-accent);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--en-accent) 35%, transparent);
+  transform: translateY(-50%);
+  transition: height var(--en-duration-slow) var(--en-ease-emphasized);
+}
+
+.studio-root .studio-sidebar nav a.is-active::after,
+.studio-root .studio-sidebar nav a:hover::after,
+.studio-root .studio-sidebar nav a:focus-visible::after {
+  height: 54%;
+}
+
+/* Music-native processing state. */
+.ensemblis-loading {
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: clamp(1.2rem, 4vw, 3rem);
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--en-accent) 7%, transparent), transparent 34%),
+    radial-gradient(circle at 62% 52%, color-mix(in srgb, var(--en-violet) 6%, transparent), transparent 28%),
+    var(--en-bg);
+}
+
+.studio-root .ensemblis-processing,
+.ensemblis-loading .ensemblis-processing {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(12rem, 0.82fr) minmax(15rem, 1fr);
+  align-items: center;
+  gap: clamp(1.5rem, 5vw, 4.8rem);
+  width: min(100%, 58rem);
+  min-height: 20rem;
+  padding: clamp(1.4rem, 4vw, 3.4rem);
+  overflow: clip;
+  border: 1px solid color-mix(in srgb, var(--en-line) 88%, var(--en-accent));
+  border-radius: clamp(var(--en-radius-lg), 2.2vw, var(--en-radius-xl));
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--en-white) 2.5%, transparent), transparent 38%),
+    color-mix(in srgb, var(--en-surface) 91%, transparent);
+  box-shadow:
+    inset 0 1px color-mix(in srgb, var(--en-white) 4%, transparent),
+    0 40px 120px color-mix(in srgb, var(--en-black) 35%, transparent);
+}
+
+.studio-root .ensemblis-processing::before,
+.ensemblis-loading .ensemblis-processing::before {
+  content: "";
+  position: absolute;
+  inset: -45% -20%;
+  pointer-events: none;
+  background: conic-gradient(
+    from 90deg,
+    transparent 0 39%,
+    color-mix(in srgb, var(--en-accent) 8%, transparent) 46%,
+    color-mix(in srgb, var(--en-violet) 7%, transparent) 54%,
+    transparent 61% 100%
+  );
+  animation: ensemblis-ambient-turn 12s linear infinite;
+}
+
+.studio-root .ensemblis-processing-visual,
+.ensemblis-loading .ensemblis-processing-visual {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 13rem;
+  isolation: isolate;
+}
+
+.studio-root .ensemblis-processing-visual::before,
+.studio-root .ensemblis-processing-visual::after,
+.ensemblis-loading .ensemblis-processing-visual::before,
+.ensemblis-loading .ensemblis-processing-visual::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.studio-root .ensemblis-processing-visual::before,
+.ensemblis-loading .ensemblis-processing-visual::before {
+  width: min(15rem, 78%);
+  aspect-ratio: 1;
+  border: 1px solid color-mix(in srgb, var(--en-line-strong) 76%, var(--en-accent));
+  box-shadow:
+    inset 0 0 48px color-mix(in srgb, var(--en-accent) 4%, transparent),
+    0 0 60px color-mix(in srgb, var(--en-black) 22%, transparent);
+  animation: ensemblis-orbit-breathe 3.8s var(--en-ease-emphasized) infinite alternate;
+}
+
+.studio-root .ensemblis-processing-visual::after,
+.ensemblis-loading .ensemblis-processing-visual::after {
+  width: min(9rem, 49%);
+  aspect-ratio: 1;
+  border: 1px solid color-mix(in srgb, var(--en-mint) 28%, transparent);
+  box-shadow: 0 0 44px color-mix(in srgb, var(--en-mint) 8%, transparent);
+  animation: ensemblis-orbit-turn 8s linear infinite reverse;
+}
+
+.studio-root .ensemblis-processing-scan,
+.ensemblis-loading .ensemblis-processing-scan {
+  position: absolute;
+  z-index: 0;
+  width: min(14rem, 74%);
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--en-accent) 72%, var(--en-white)), transparent);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--en-accent) 34%, transparent);
+  animation: ensemblis-scan 2.8s var(--en-ease-emphasized) infinite;
+}
+
+.studio-root .ensemblis-processing-wave,
+.ensemblis-loading .ensemblis-processing-wave {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(0.17rem, 0.55vw, 0.34rem);
+  width: min(12rem, 66%);
+  height: 7rem;
+}
+
+.studio-root .ensemblis-processing-wave i,
+.ensemblis-loading .ensemblis-processing-wave i {
+  display: block;
+  width: clamp(2px, 0.36vw, 4px);
+  height: 36%;
+  min-height: 0.65rem;
+  max-height: 4.8rem;
+  border-radius: var(--en-radius-pill);
+  background: linear-gradient(180deg, var(--en-accent), color-mix(in srgb, var(--en-mint) 72%, var(--en-accent)));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--en-accent) 14%, transparent);
+  transform-origin: center;
+  animation: ensemblis-wave 1.35s var(--en-ease-emphasized) infinite alternate;
+  animation-delay: calc(var(--wave-index) * -74ms);
+  opacity: 0.64;
+}
+
+.studio-root .ensemblis-processing-wave i:nth-child(1),
+.studio-root .ensemblis-processing-wave i:nth-child(13),
+.ensemblis-loading .ensemblis-processing-wave i:nth-child(1),
+.ensemblis-loading .ensemblis-processing-wave i:nth-child(13) { height: 20%; opacity: 0.44; }
+
+.studio-root .ensemblis-processing-wave i:nth-child(2),
+.studio-root .ensemblis-processing-wave i:nth-child(12),
+.ensemblis-loading .ensemblis-processing-wave i:nth-child(2),
+.ensemblis-loading .ensemblis-processing-wave i:nth-child(12) { height: 34%; opacity: 0.52; }
+
+.studio-root .ensemblis-processing-wave i:nth-child(3),
+.studio-root .ensemblis-processing-wave i:nth-child(11),
+.ensemblis-loading .ensemblis-processing-wave i:nth-child(3),
+.ensemblis-loading .ensemblis-processing-wave i:nth-child(11) { height: 50%; opacity: 0.62; }
+
+.studio-root .ensemblis-processing-wave i:nth-child(4),
+.studio-root .ensemblis-processing-wave i:nth-child(10),
+.ensemblis-loading .ensemblis-processing-wave i:nth-child(4),
+.ensemblis-loading .ensemblis-processing-wave i:nth-child(10) { height: 66%; opacity: 0.74; }
+
+.studio-root .ensemblis-processing-wave i:nth-child(5),
+.studio-root .ensemblis-processing-wave i:nth-child(9),
+.ensemblis-loading .ensemblis-processing-wave i:nth-child(5),
+.ensemblis-loading .ensemblis-processing-wave i:nth-child(9) { height: 82%; opacity: 0.84; }
+
+.studio-root .ensemblis-processing-wave i:nth-child(6),
+.studio-root .ensemblis-processing-wave i:nth-child(8),
+.ensemblis-loading .ensemblis-processing-wave i:nth-child(6),
+.ensemblis-loading .ensemblis-processing-wave i:nth-child(8) { height: 58%; opacity: 0.72; }
+
+.studio-root .ensemblis-processing-wave i:nth-child(7),
+.ensemblis-loading .ensemblis-processing-wave i:nth-child(7) { height: 92%; opacity: 0.96; }
+
+.studio-root .ensemblis-processing-copy,
+.ensemblis-loading .ensemblis-processing-copy {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: var(--en-space-3);
+}
+
+.studio-root .ensemblis-processing-eyebrow,
+.ensemblis-loading .ensemblis-processing-eyebrow {
+  color: color-mix(in srgb, var(--en-accent) 76%, var(--en-muted));
+  font-size: var(--en-text-2xs);
+  font-weight: var(--en-weight-bold);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.studio-root .ensemblis-processing h2,
+.ensemblis-loading .ensemblis-processing h2 {
+  max-width: 12ch;
+  margin: 0;
+  color: var(--en-ink);
+  font: var(--en-weight-semibold) clamp(2rem, 5vw, 4.6rem) / 0.96 var(--font-body), sans-serif;
+  letter-spacing: -0.058em;
+  text-wrap: balance;
+}
+
+.studio-root .ensemblis-processing p,
+.ensemblis-loading .ensemblis-processing p {
+  max-width: 34rem;
+  margin: 0;
+  color: var(--en-muted);
+  font-size: var(--en-text-md);
+  line-height: var(--en-leading-body);
+}
+
+.studio-root .ensemblis-processing-progress,
+.ensemblis-loading .ensemblis-processing-progress {
+  width: min(100%, 28rem);
+  height: 2px;
+  margin-top: var(--en-space-2);
+  overflow: hidden;
+  border-radius: var(--en-radius-pill);
+  background: var(--en-line);
+}
+
+.studio-root .ensemblis-processing-progress span,
+.ensemblis-loading .ensemblis-processing-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--en-accent), var(--en-mint));
+  box-shadow: 0 0 18px color-mix(in srgb, var(--en-accent) 28%, transparent);
+  transition: width 520ms var(--en-ease-emphasized);
+}
+
+.studio-root .ensemblis-processing-steps,
+.ensemblis-loading .ensemblis-processing-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--en-space-2) var(--en-space-4);
+  margin: var(--en-space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.studio-root .ensemblis-processing-steps li,
+.ensemblis-loading .ensemblis-processing-steps li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--en-space-2);
+  color: var(--en-subtle);
+  font-size: var(--en-text-xs);
+}
+
+.studio-root .ensemblis-processing-steps li > span,
+.ensemblis-loading .ensemblis-processing-steps li > span {
+  width: 0.38rem;
+  height: 0.38rem;
+  border-radius: 50%;
+  background: var(--en-line-strong);
+}
+
+.studio-root .ensemblis-processing-steps li[data-state="active"],
+.ensemblis-loading .ensemblis-processing-steps li[data-state="active"] {
+  color: var(--en-ink);
+}
+
+.studio-root .ensemblis-processing-steps li[data-state="active"] > span,
+.ensemblis-loading .ensemblis-processing-steps li[data-state="active"] > span {
+  background: var(--en-accent);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--en-accent) 52%, transparent);
+  animation: ensemblis-state-pulse 1.15s ease-in-out infinite;
+}
+
+.studio-root .ensemblis-processing-steps li[data-state="complete"],
+.ensemblis-loading .ensemblis-processing-steps li[data-state="complete"] {
+  color: var(--en-muted);
+}
+
+.studio-root .ensemblis-processing-steps li[data-state="complete"] > span,
+.ensemblis-loading .ensemblis-processing-steps li[data-state="complete"] > span {
+  background: var(--en-mint);
+}
+
+.studio-root .ensemblis-processing.is-compact {
+  grid-template-columns: 7rem minmax(0, 1fr);
+  min-height: 10rem;
+  gap: var(--en-space-5);
+  padding: var(--en-space-5);
+}
+
+.studio-root .ensemblis-processing.is-compact .ensemblis-processing-visual {
+  min-height: 7rem;
+}
+
+.studio-root .ensemblis-processing.is-compact h2 {
+  font-size: clamp(1.35rem, 3vw, 2rem);
+}
+
+@keyframes ensemblis-line-reveal {
+  from { transform: scaleX(0); opacity: 0; }
+  to { transform: scaleX(1); opacity: 1; }
+}
+
+@keyframes ensemblis-ambient-turn {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes ensemblis-orbit-breathe {
+  from { transform: scale(0.96); opacity: 0.58; }
+  to { transform: scale(1.035); opacity: 0.94; }
+}
+
+@keyframes ensemblis-orbit-turn {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes ensemblis-scan {
+  0%, 100% { transform: translateY(-3.5rem) scaleX(0.62); opacity: 0; }
+  18% { opacity: 0.82; }
+  50% { transform: translateY(0) scaleX(1); opacity: 1; }
+  82% { opacity: 0.82; }
+  100% { transform: translateY(3.5rem) scaleX(0.62); opacity: 0; }
+}
+
+@keyframes ensemblis-wave {
+  0% { transform: scaleY(0.42); filter: saturate(0.85); }
+  45% { transform: scaleY(1.08); }
+  100% { transform: scaleY(0.68); filter: saturate(1.12); }
+}
+
+@keyframes ensemblis-state-pulse {
+  50% { opacity: 0.42; transform: scale(0.72); }
+}
+
+@media (max-width: 720px) {
+  .studio-root .ensemblis-processing,
+  .ensemblis-loading .ensemblis-processing {
+    grid-template-columns: 1fr;
+    gap: var(--en-space-5);
+  }
+
+  .studio-root .ensemblis-processing-visual,
+  .ensemblis-loading .ensemblis-processing-visual {
+    min-height: 10.5rem;
+  }
+
+  .studio-root .ensemblis-processing h2,
+  .ensemblis-loading .ensemblis-processing h2 {
+    max-width: 15ch;
+  }
+
+  .studio-root .ensemblis-processing.is-compact {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-root .studio-page-header::after,
+  .studio-root .ensemblis-processing::before,
+  .studio-root .ensemblis-processing-visual::before,
+  .studio-root .ensemblis-processing-visual::after,
+  .studio-root .ensemblis-processing-scan,
+  .studio-root .ensemblis-processing-wave i,
+  .studio-root .ensemblis-processing-steps li[data-state="active"] > span,
+  .ensemblis-loading .ensemblis-processing::before,
+  .ensemblis-loading .ensemblis-processing-visual::before,
+  .ensemblis-loading .ensemblis-processing-visual::after,
+  .ensemblis-loading .ensemblis-processing-scan,
+  .ensemblis-loading .ensemblis-processing-wave i,
+  .ensemblis-loading .ensemblis-processing-steps li[data-state="active"] > span {
+    animation: none !important;
+  }
+}
