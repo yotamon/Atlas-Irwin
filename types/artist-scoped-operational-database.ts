@@ -29,6 +29,7 @@ type CoreOperationalScopedTableName =
   | "metric_snapshots"
   | "brand_settings"
   | "tasks"
+  | "releases"
   | "release_learnings";
 
 export type ArtistScopedCoreOperationalDatabase = Omit<Database, "public"> & {
@@ -57,7 +58,7 @@ type MarketingScopedTableName =
   | "outreach_messages";
 
 export type ArtistScopedMarketingDatabase = Omit<MarketingDatabase, "public"> & {
-  public: Omit<MarketingDatabase["public"], "Tables"> & {
+  public: Omit<MarketingDatabase["public"], "Tables" | "Functions"> & {
     Tables: ScopeTables<MarketingDatabase["public"]["Tables"], MarketingScopedTableName>;
   };
 };
