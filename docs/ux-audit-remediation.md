@@ -1,18 +1,27 @@
 # Ensemblis UI/UX audit remediation
 
-This branch remediates the complete 80-item Studio + public-site UX audit. The checklist is grouped by root cause so fixes remain systemic rather than one-off patches.
+This branch remediates the Studio + public-site UX audit by root cause so fixes remain systemic rather than one-off patches. The user-facing remediation is complete on this branch; the final gate below records build/test validation. One intentionally retained migration layer is documented separately because deleting it before specialist-route replacement would create a regression rather than improve the product.
 
 ## Foundation and information architecture
 - [x] Shared readable typography/control scale
 - [x] Canonical interaction primitives for dialogs, confirmation, status, field help/error, progress and skeleton states
 - [x] Desktop/mobile primary navigation uses the same outcome model
-- [x] Create is a global action instead of duplicate destination/navigation
-- [x] Specialist routes retain a visible parent context
+- [x] Primary workspaces are reduced to Today / Music / Grow
+- [x] Create is a global action instead of a duplicate destination/navigation item
+- [x] Music owns release collections; Releases remains a compatible deep-link route rather than a competing primary workspace
+- [x] Release overview surfaces the complete tracklist before release workflow detail
+- [x] Track Vault preserves exact catalog-track lineage for multi-track releases
+- [x] Settings is configuration/control only rather than a second tool directory
+- [x] Audience/Outreach and Learnings resolve under Grow; Memory/Connections resolve under Settings
+- [x] Specialist routes retain a visible parent context on desktop and mobile
 - [x] Needs You has one global placement rather than duplicated sidebar chrome
 - [x] Artist switching discards stale object IDs and workflow query state
-- [x] Deep release links preserve explicit artist context
+- [x] Deep release and track links preserve explicit artist context
 - [x] Non-critical onboarding activation lookup cannot crash the Studio shell
-- [ ] Retire the generated legacy compatibility bridge without regressing specialist routes
+- [x] New/remediated UX cannot add rules to the legacy compatibility layer; it is isolated as read-only containment
+
+### Deliberately retained migration containment
+`legacy-compat.generated.css` still contains tokenized layout rules required by specialist routes that have not yet been recomposed with canonical Ensemblis components. It is not a source for new work: the empty `legacy-migration-note.css`, Design System layering, and contract suite enforce that boundary. Fully deleting the bridge is a separate structural migration and must happen route-by-route with visual regression coverage; doing it inside this stabilization pass without replacements would knowingly break specialist surfaces.
 
 ## Interaction, accessibility and states
 - [x] Mobile More uses a modal dialog with backdrop, focus trap, Escape and focus return
@@ -31,6 +40,7 @@ This branch remediates the complete 80-item Studio + public-site UX audit. The c
 ## Mobile and upload UX
 - [x] Primary/mobile labels use readable text scale and touch-safe targets
 - [x] Mobile More is a focused utility sheet instead of a miniature competing sidebar
+- [x] Mobile deep routes use the same route ownership model as desktop
 - [x] Invalid upload selections explain the rejection
 - [x] Dropzone itself is keyboard/click operable
 - [x] 100 MB limit is visible before upload
@@ -40,6 +50,7 @@ This branch remediates the complete 80-item Studio + public-site UX audit. The c
 - [x] Upload errors are translated to product-safe messages
 - [x] Drag leave no longer flickers on child traversal
 - [x] Upload completion avoids unnecessary route refresh when context does not require it
+- [x] Release master intake targets an exact track rather than a release-level “primary” song
 
 ## Active Mastering
 - [x] Full verification evidence is presented as a human-readable report
@@ -69,7 +80,10 @@ This branch remediates the complete 80-item Studio + public-site UX audit. The c
 
 ## Release workspace
 - [x] Release links preserve artist context
-- [x] Six top-level tabs reduced to four; Content/Promotion/Distribution are nested under Release work
+- [x] Duplicate Music tab removed; tracks are visible directly in Overview
+- [x] Release work groups Content / Promotion / Distribution under one parent
+- [x] Every release track has its own master state and exact Music Intelligence identity
+- [x] Clicking a release track resolves that exact track, never the first/primary song by release ID
 - [x] Specialist/legacy workspace is progressively disclosed rather than competing with the normal workflow
 - [x] Overview keeps release details and exceptional controls collapsed by default
 
@@ -89,4 +103,7 @@ This branch remediates the complete 80-item Studio + public-site UX audit. The c
 - [ ] ESLint
 - [ ] Studio tests
 - [ ] Production build
-- [ ] PR diff review against all 80 findings
+- [ ] Browser smoke
+- [ ] Database migration validation
+- [ ] Audio Intelligence CI
+- [ ] PR diff review against the audit and the final Music / Releases IA
