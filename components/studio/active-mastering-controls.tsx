@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createActiveMaster, promoteActiveMaster } from "@/app/studio/mastering-actions";
+import { MasteringABPlayer } from "@/components/studio/mastering-ab-player";
+import { MasteringAnalysisReport } from "@/components/studio/mastering-analysis-report";
 import { ProcessingState } from "@/components/studio/processing-state";
+import { ConfirmButton, SubmitButton } from "@/components/studio/submit-button";
 import type { Json } from "@/types/database";
 import styles from "./active-mastering-panel.module.css";
 
@@ -42,26 +45,53 @@ const presets = [
 ] as const;
 
 export function ActiveMasteringControls({
+  artistId,
   trackId,
   sourceAudioUrl,
   jobs,
 }: {
+  artistId: string;
   trackId: string;
   sourceAudioUrl: string | null;
   jobs: Job[];
 }) {
   const router = useRouter();
-  const hasActive = jobs.some((job) => ["planned", "queued", "running"].includes(job.status));
+  const [displayJobs, setDisplayJobs] = useState(jobs);
+  const [pollError, setPollError] = useState("");
+  const hasActive = displayJobs.some((job) => ["planned", "queued", "running"].includes(job.status));
+
+  useEffect(() => setDisplayJobs(jobs), [jobs]);
+
+  const refreshJobs = useCallback(async () => {
+    const params = new URLSearchParams({ artist: artistId, track: trackId });
+    const response = await fetch(`/api/studio/mastering/jobs?${params.toString()}`, { cache: "no-store" });
+    const body = await response.json().catch(() => null) as { jobs?: Job[]; error?: string } | null;
+    if (!response.ok || !body?.jobs) throw new Error(body?.error || "Could not refresh mastering runs.");
+    setDisplayJobs(body.jobs);
+    setPollError("");
+  }, [artistId, trackId]);
 
   useEffect(() => {
     if (!hasActive) return;
-    const timer = window.setInterval(() => router.refresh(), 4000);
-    return () => window.clearInterval(timer);
-  }, [hasActive, router]);
+    let cancelled = false;
+    async function poll() {
+      if (cancelled || document.visibilityState === "hidden") return;
+      try {
+        await refreshJobs();
+      } catch {
+        if (!cancelled) setPollError("Live mastering status is temporarily unavailable. The render itself can continue in the background queue.");
+      }
+    }
+    const timer = window.setInterval(() => void poll(), 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [hasActive, refreshJobs]);
 
   async function createCandidate(formData: FormData) {
     await createActiveMaster(formData);
-    router.refresh();
+    await refreshJobs().catch(() => router.refresh());
   }
 
   async function promoteCandidate(formData: FormData) {
@@ -69,8 +99,9 @@ export function ActiveMasteringControls({
     router.refresh();
   }
 
-  const completed = jobs.filter((job) => job.status === "completed" && job.outputUrl);
-  const latestActive = jobs.find((job) => ["planned", "queued", "running"].includes(job.status));
+  const completed = displayJobs.filter((job) => job.status === "completed" && job.outputUrl);
+  const latestActive = displayJobs.find((job) => ["planned", "queued", "running"].includes(job.status));
+  const failed = displayJobs.find((job) => job.status === "failed");
   const activePreset = latestActive ? title(latestActive.preset) : null;
 
   return (
@@ -102,25 +133,27 @@ export function ActiveMasteringControls({
         />
       ) : (
         <div className={styles.presets}>
-          {presets.map((preset) => (
+          {presets.map((preset, index) => (
             <form action={createCandidate} className={styles.preset} key={preset.id}>
               <input type="hidden" name="track_id" value={trackId} />
               <input type="hidden" name="preset" value={preset.id} />
-              <span className={styles.presetIndex}>0{presets.findIndex((item) => item.id === preset.id) + 1}</span>
+              <span className={styles.presetIndex}>0{index + 1}</span>
               <strong>{preset.title}</strong>
               <p>{preset.copy}</p>
-              <button className="button" type="submit" disabled={!sourceAudioUrl}>
+              <SubmitButton className="button" pendingLabel={`Creating ${preset.title.toLowerCase()} master…`} disabled={!sourceAudioUrl}>
                 Create {preset.title} master
-              </button>
+              </SubmitButton>
             </form>
           ))}
         </div>
       )}
 
-      {jobs.some((job) => job.status === "failed") ? (
-        <div className={styles.error}>
+      {pollError ? <div className={styles.error} role="status"><strong>Live status paused.</strong><p>{pollError}</p><button type="button" className="text-button" onClick={() => void refreshJobs()}>Retry status</button></div> : null}
+
+      {failed ? (
+        <div className={styles.error} role="alert">
           <strong>The last mastering attempt needs attention.</strong>
-          <p>{jobs.find((job) => job.status === "failed")?.error || "The worker could not complete the render."}</p>
+          <p>{failed.error || "The mastering worker could not complete the render. Choose a preset above to retry from the untouched source."}</p>
         </div>
       ) : null}
 
@@ -136,6 +169,8 @@ export function ActiveMasteringControls({
             const afterDynamics = record(after.dynamics);
             const checks = record(result.final_checks);
             const iterations = Array.isArray(result.iterations) ? result.iterations.length : 0;
+            const beforeIntegrated = number(beforeLoudness.integrated_lufs);
+            const afterIntegrated = number(afterLoudness.integrated_lufs);
             return (
               <article className={styles.candidate} key={job.id}>
                 <div className={styles.candidateHead}>
@@ -145,22 +180,44 @@ export function ActiveMasteringControls({
                   </div>
                   <small>{iterations} render pass{iterations === 1 ? "" : "es"}</small>
                 </div>
+
                 <div className={styles.metrics}>
-                  <div><span>Integrated</span><strong>{metric(number(beforeLoudness.integrated_lufs), " LUFS")}</strong><b>→</b><strong>{metric(number(afterLoudness.integrated_lufs), " LUFS")}</strong></div>
+                  <div><span>Integrated</span><strong>{metric(beforeIntegrated, " LUFS")}</strong><b>→</b><strong>{metric(afterIntegrated, " LUFS")}</strong></div>
                   <div><span>True peak</span><strong>{metric(number(beforeLoudness.true_peak_dbtp), " dBTP", 2)}</strong><b>→</b><strong>{metric(number(afterLoudness.true_peak_dbtp), " dBTP", 2)}</strong></div>
                   <div><span>PLR</span><strong>{metric(number(beforeDynamics.peak_to_loudness_ratio_lu), " LU")}</strong><b>→</b><strong>{metric(number(afterDynamics.peak_to_loudness_ratio_lu), " LU")}</strong></div>
                 </div>
-                <div className={styles.ab}>
-                  {sourceAudioUrl ? <label><span>Original</span><audio controls preload="metadata" src={sourceAudioUrl} /></label> : null}
-                  <label><span>Mastered</span><audio controls preload="metadata" src={job.outputUrl || undefined} /></label>
-                </div>
+
+                {sourceAudioUrl && job.outputUrl ? (
+                  <MasteringABPlayer
+                    originalUrl={sourceAudioUrl}
+                    masteredUrl={job.outputUrl}
+                    originalLufs={beforeIntegrated}
+                    masteredLufs={afterIntegrated}
+                  />
+                ) : null}
+
+                <details className="mastering-report-disclosure">
+                  <summary>Full verification report</summary>
+                  <p className="v2-muted-copy">Every measured mastering result is translated into readable evidence here; no analysis is hidden behind a raw JSON payload.</p>
+                  <MasteringAnalysisReport result={job.result} />
+                </details>
+
                 <div className={styles.actions}>
                   <div className={styles.actionButtons}>
                     <a className="button" href={job.outputUrl || "#"} download>Download 24-bit WAV</a>
                     {checks.pass === true ? (
                       <form action={promoteCandidate}>
                         <input type="hidden" name="job_id" value={job.id} />
-                        <button className="button primary" type="submit">Use as canonical master</button>
+                        <ConfirmButton
+                          className="button primary"
+                          confirmClassName="button primary"
+                          title="Use this verified master?"
+                          message="This will make the rendered candidate the canonical master for the track and trigger fresh Track Intelligence from that audio. The previous source remains in media history."
+                          confirmLabel="Use as canonical master"
+                          pendingLabel="Promoting master…"
+                        >
+                          Use as canonical master
+                        </ConfirmButton>
                       </form>
                     ) : null}
                   </div>
