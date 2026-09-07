@@ -39,7 +39,10 @@ export function ReleaseMasterAudioPanel({
             <span className="section-label">Master & Music Intelligence</span>
             <h2>{hasMaster ? primaryTrack?.title || vaultTrack?.title || "Release master" : "Add the audio Ensemblis should understand"}</h2>
           </div>
-          <span className={hasMaster ? "growth-active-label" : "v2-count has-items"}>{hasMaster ? analysis.label : "Missing"}</span>
+          <div className="actions">
+            <span className={hasMaster ? "growth-active-label" : "v2-count has-items"}>{hasMaster ? analysis.label : "Missing"}</span>
+            {analysis.hasMusicMap && vaultTrack ? <a className="button" href="#mastering">Mastering report</a> : null}
+          </div>
         </div>
 
         {!hasMaster ? (
