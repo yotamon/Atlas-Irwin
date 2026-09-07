@@ -48,7 +48,7 @@ export default async function BrandPage() {
   const [settingsResult, assetsResult, releasesResult] = await Promise.all([
     operational.from("brand_settings").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId),
     supabase.from("media_assets").select("*").eq("owner_id", user.id).order("updated_at", { ascending: false }),
-    supabase.from("releases").select("title,artwork_url").eq("owner_id", user.id).eq("artist_id", artist.artistId),
+    operational.from("releases").select("title,artwork_url").eq("owner_id", user.id).eq("artist_id", artist.artistId),
   ]);
   if (settingsResult.error) throw new Error(settingsResult.error.message);
   if (assetsResult.error) throw new Error(assetsResult.error.message);
