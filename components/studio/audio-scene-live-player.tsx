@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useId, useMemo, useRef, useState } from "react";
 import { FiPause, FiPlay } from "react-icons/fi";
+import { metadataReady } from "@/lib/audio/metadata-ready";
 import styles from "./audio-scene-live-player.module.css";
 import type { Json } from "@/types/database";
 
@@ -49,28 +50,6 @@ function clock(ms: number) {
   const minutes = Math.floor(seconds / 60);
   const remainder = seconds - minutes * 60;
   return `${minutes}:${remainder.toFixed(1).padStart(4, "0")}`;
-}
-
-function metadataReady(element: HTMLAudioElement) {
-  if (element.readyState >= HTMLMediaElement.HAVE_METADATA) return Promise.resolve();
-  return new Promise<void>((resolve, reject) => {
-    const timeout = window.setTimeout(() => reject(new Error("Audio source took too long to become playable.")), 10000);
-    const done = () => {
-      window.clearTimeout(timeout);
-      element.removeEventListener("loadedmetadata", done);
-      element.removeEventListener("error", failed);
-      resolve();
-    };
-    const failed = () => {
-      window.clearTimeout(timeout);
-      element.removeEventListener("loadedmetadata", done);
-      element.removeEventListener("error", failed);
-      reject(new Error("One of the Audio Scene sources could not be loaded."));
-    };
-    element.addEventListener("loadedmetadata", done, { once: true });
-    element.addEventListener("error", failed, { once: true });
-    element.load();
-  });
 }
 
 export function AudioSceneLivePlayer({
@@ -134,11 +113,13 @@ export function AudioSceneLivePlayer({
   const busRef = useRef<DynamicsCompressorNode | null>(null);
   const frameRef = useRef<number | null>(null);
   const playingRef = useRef(false);
+  const operationRef = useRef<AbortController | null>(null);
   const basePositionRef = useRef(0);
   const startedAtRef = useRef(0);
   const lastUiRef = useRef(0);
   const lastSyncRef = useRef(0);
   const [playing, setPlaying] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [positionMs, setPositionMs] = useState(0);
   const [error, setError] = useState("");
 
@@ -174,18 +155,21 @@ export function AudioSceneLivePlayer({
     const context = contextRef.current;
     const bus = busRef.current;
     if (!context || !bus) throw new Error("Could not initialize the live Audio Scene mixer.");
+    for (const [key, graph] of graphs.current) {
+      if (audioRefs.current.get(key) === graph.element) continue;
+      graph.element.pause();
+      graph.source.disconnect();
+      graph.gain.disconnect();
+      graphs.current.delete(key);
+    }
     for (const layer of layers) {
       const element = audioRefs.current.get(layer.key);
       if (!element) continue;
       const existing = graphs.current.get(layer.key);
       if (existing?.element === element) continue;
-      if (existing) {
-        existing.source.disconnect();
-        existing.gain.disconnect();
-        graphs.current.delete(layer.key);
-      }
       const source = context.createMediaElementSource(element);
       const gain = context.createGain();
+      gain.gain.value = 0;
       source.connect(gain).connect(bus);
       graphs.current.set(layer.key, { element, source, gain });
     }
@@ -202,11 +186,16 @@ export function AudioSceneLivePlayer({
     }
   }
 
-  async function alignSources(position: number, shouldPlay: boolean) {
+  async function alignSources(position: number, signal: AbortSignal) {
+    // Prepare every layer before any starts playing, especially on a cold load.
+    await Promise.all(layers.map((layer) => {
+      const element = audioRefs.current.get(layer.key);
+      return element ? metadataReady(element, signal) : undefined;
+    }));
+    signal.throwIfAborted();
     await Promise.all(layers.map(async (layer) => {
       const element = audioRefs.current.get(layer.key);
       if (!element) return;
-      await metadataReady(element);
       const expectedMs = expectedSourceMs(layer, position);
       if (expectedMs < 0) {
         element.pause();
@@ -216,11 +205,13 @@ export function AudioSceneLivePlayer({
       const expectedSeconds = expectedMs / 1000;
       const maxTime = Number.isFinite(element.duration) ? Math.max(0, element.duration - 0.01) : expectedSeconds;
       element.currentTime = Math.min(expectedSeconds, maxTime);
-      if (shouldPlay) await element.play();
+      await element.play();
     }));
   }
 
   function pause(reset = false) {
+    operationRef.current?.abort();
+    operationRef.current = null;
     if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
     frameRef.current = null;
     if (playingRef.current && !reset) {
@@ -228,11 +219,14 @@ export function AudioSceneLivePlayer({
     }
     playingRef.current = false;
     for (const element of audioRefs.current.values()) element.pause();
+    // Removed layers may already have lost their React ref.
+    for (const graph of graphs.current.values()) graph.element.pause();
     const next = reset ? 0 : basePositionRef.current;
     if (reset) basePositionRef.current = 0;
     applyGains(next);
     setPositionMs(next);
     setPlaying(false);
+    setLoading(false);
   }
 
   function tick() {
@@ -271,16 +265,22 @@ export function AudioSceneLivePlayer({
   }
 
   async function play() {
+    if (operationRef.current || playingRef.current) return;
     if (!layers.length) {
       setError("This scene has no playable sources yet.");
       return;
     }
     setError("");
+    const operation = new AbortController();
+    operationRef.current = operation;
+    setLoading(true);
     try {
       window.dispatchEvent(new CustomEvent("atlas-audio-scene-play", { detail: instanceId }));
       await ensureGraph();
-      await alignSources(basePositionRef.current, true);
+      operation.signal.throwIfAborted();
       applyGains(basePositionRef.current);
+      await alignSources(basePositionRef.current, operation.signal);
+      operation.signal.throwIfAborted();
       playingRef.current = true;
       startedAtRef.current = performance.now();
       lastUiRef.current = 0;
@@ -288,50 +288,62 @@ export function AudioSceneLivePlayer({
       setPlaying(true);
       frameRef.current = requestAnimationFrame(tick);
     } catch (cause) {
+      if (operation.signal.aborted) return;
       pause(false);
       setError(cause instanceof Error ? cause.message : "Could not start the live Audio Scene.");
+    } finally {
+      if (operationRef.current === operation) {
+        operationRef.current = null;
+        setLoading(false);
+      }
     }
   }
 
   async function seek(next: number) {
+    const wasPlaying = playingRef.current || operationRef.current !== null;
+    pause();
     const bounded = Math.max(0, Math.min(durationMs, next));
     basePositionRef.current = bounded;
     setPositionMs(bounded);
     applyGains(bounded);
-    try {
-      await alignSources(bounded, playingRef.current);
-      if (playingRef.current) startedAtRef.current = performance.now();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not seek the live Audio Scene.");
-    }
+    // While paused, keep only the intended position. Loading waits for Play.
+    if (wasPlaying) await play();
   }
 
+  const stopPlayback = useEffectEvent((reset = false) => pause(reset));
+
   useEffect(() => {
+    const audioElements = audioRefs.current;
+    const layerGraphs = graphs.current;
     const stopOtherPlayer = (event: Event) => {
       const detail = (event as CustomEvent<string>).detail;
-      if (detail !== instanceId && playingRef.current) pause(false);
+      if (detail !== instanceId) stopPlayback();
     };
     window.addEventListener("atlas-audio-scene-play", stopOtherPlayer);
     return () => {
       window.removeEventListener("atlas-audio-scene-play", stopOtherPlayer);
+      operationRef.current?.abort();
+      operationRef.current = null;
+      playingRef.current = false;
       if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
-      for (const element of audioRefs.current.values()) element.pause();
-      for (const graph of graphs.current.values()) {
+      for (const element of audioElements.values()) element.pause();
+      for (const graph of layerGraphs.values()) {
+        graph.element.pause();
         graph.source.disconnect();
         graph.gain.disconnect();
       }
-      graphs.current.clear();
-      void contextRef.current?.close();
+      layerGraphs.clear();
+      busRef.current?.disconnect();
+      busRef.current = null;
+      void contextRef.current?.close().catch(() => undefined);
+      contextRef.current = null;
     };
-    // pause() deliberately reads the latest refs; re-registering this global listener on every render is unnecessary.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instanceId]);
 
   useEffect(() => {
-    pause(true);
+    stopPlayback(true);
     // Keep existing MediaElementSource nodes attached. Browsers allow only one source node per media element.
     // ensureGraph() reconnects only when React has actually replaced an element.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recipe, resolvedStartMs, resolvedEndMs]);
 
   return (
@@ -344,7 +356,7 @@ export function AudioSceneLivePlayer({
             else audioRefs.current.delete(layer.key);
           }}
           crossOrigin="anonymous"
-          preload="metadata"
+          preload="none"
           src={layer.url}
           aria-label={layer.label}
           hidden
@@ -354,10 +366,10 @@ export function AudioSceneLivePlayer({
         <button
           type="button"
           className="button"
-          onClick={() => playing ? pause(false) : void play()}
+          onClick={() => playing || loading ? pause(false) : void play()}
           disabled={!layers.length}
         >
-          {playing ? <><FiPause /> Pause live mix</> : <><FiPlay /> Play live mix</>}
+          {loading ? "Cancel loading" : playing ? <><FiPause /> Pause live mix</> : <><FiPlay /> Play live mix</>}
         </button>
         <span className={styles.status}><strong>Live from stems</strong><small>{layers.length} layer{layers.length === 1 ? "" : "s"}</small></span>
       </div>
