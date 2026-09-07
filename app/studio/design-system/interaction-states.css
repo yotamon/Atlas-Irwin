@@ -1,0 +1,55 @@
+/* Shared micro interaction states. */
+
+.studio-root .ensemblis-button-pending {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--en-space-2);
+}
+
+.studio-root .ensemblis-button-signal {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 0.8rem;
+}
+
+.studio-root .ensemblis-button-signal i {
+  display: block;
+  width: 2px;
+  height: 0.35rem;
+  border-radius: var(--en-radius-pill);
+  background: currentColor;
+  transform-origin: center;
+  animation: ensemblis-button-wave 680ms var(--en-ease-emphasized) infinite alternate;
+}
+
+.studio-root .ensemblis-button-signal i:nth-child(2) {
+  height: 0.7rem;
+  animation-delay: -180ms;
+}
+
+.studio-root .ensemblis-button-signal i:nth-child(3) {
+  height: 0.48rem;
+  animation-delay: -360ms;
+}
+
+.studio-root .button[aria-busy="true"] {
+  cursor: progress;
+  opacity: 0.82;
+}
+
+.studio-root .button.primary[aria-busy="true"] {
+  box-shadow: 0 10px 34px color-mix(in srgb, var(--en-accent) 18%, transparent);
+}
+
+@keyframes ensemblis-button-wave {
+  from { transform: scaleY(0.42); opacity: 0.58; }
+  to { transform: scaleY(1); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-root .ensemblis-button-signal i {
+    animation: none;
+  }
+}
