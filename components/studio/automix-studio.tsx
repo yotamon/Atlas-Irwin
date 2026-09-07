@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FiCheck,
   FiDownload,
-  FiGripVertical,
+  FiMoreVertical,
   FiMusic,
   FiRefreshCw,
   FiX,
@@ -474,7 +474,7 @@ export function AutoMixStudio({ artistId, artistName, tracks }: AutoMixStudioPro
                 onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }}
                 onDrop={(event) => { event.preventDefault(); const sourceId = event.dataTransfer.getData("text/plain") || draggedId; if (sourceId) moveTrack(sourceId, track.id); setDraggedId(null); }}
               >
-                <span className={styles.grip} aria-hidden><FiGripVertical /></span>
+                <span className={styles.grip} aria-hidden><FiMoreVertical /></span>
                 <span className={styles.orderIndex}>{String(index + 1).padStart(2, "0")}</span>
                 <div className={styles.orderCopy}><strong>{track.title}</strong><small>{purpose === "journey" ? "Locked narrative position" : "Seed position · planner can improve it after analysis"}</small></div>
                 <div className={styles.orderActions}>
