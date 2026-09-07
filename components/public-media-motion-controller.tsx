@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
+import { useLayoutEffect } from "react";
 
 export function PublicMediaMotionController() {
-  useEffect(() => {
+  useLayoutEffect(() => {
     const root = document.getElementById("release-widget");
     if (!root) return;
 
@@ -55,6 +55,10 @@ export function PublicMediaMotionController() {
     }
 
     function sync() {
+      const stageLabel = Array.from(root.querySelectorAll<HTMLElement>("p"))
+        .find((element) => element.textContent?.trim() === "New Release");
+      if (stageLabel) stageLabel.textContent = "Selected Release";
+
       const videos = Array.from(root.querySelectorAll<HTMLVideoElement>("video"));
       videos.forEach(configureVideo);
       for (const video of cleanups.keys()) {
