@@ -125,13 +125,15 @@ export function ensemblisArtistSwitchHref(pathname: string, artistId: string) {
 
 export function ensemblisArtistHref(href: string, artistId: string) {
   const hashIndex = href.indexOf("#");
-  const base = hashIndex >= 0 ? href.slice(0, hashIndex) : href;
+  const rawBase = hashIndex >= 0 ? href.slice(0, hashIndex) : href;
   const fragment = hashIndex >= 0 ? href.slice(hashIndex) : "";
-  const queryIndex = base.indexOf("?");
-  const pathname = queryIndex >= 0 ? base.slice(0, queryIndex) : base;
-  const query = queryIndex >= 0 ? base.slice(queryIndex + 1) : "";
+  const queryIndex = rawBase.indexOf("?");
+  const pathname = queryIndex >= 0 ? rawBase.slice(0, queryIndex) : rawBase;
+  const query = queryIndex >= 0 ? rawBase.slice(queryIndex + 1) : "";
   const params = new URLSearchParams(query);
-  params.set("artist", artistId);
+  params.delete("artist");
   const serialized = params.toString();
-  return `${pathname}${serialized ? `?${serialized}` : ""}${fragment}`;
+  const base = `${pathname}${serialized ? `?${serialized}` : ""}`;
+  const separator = serialized ? "&" : "?";
+  return `${base}${separator}artist=${encodeURIComponent(artistId)}${fragment}`;
 }
