@@ -148,8 +148,12 @@ def _energy_from_map(music_map: dict[str, Any]) -> float:
     values = [value for value in values if value >= 0.0]
     if values:
         return _clip01(float(np.percentile(values, 72)))
-    moments = _list_records(music_map.get("moments"))
-    scores = [_safe_float(item.get("score"), 0.0) for item in moments]
+    moment_groups = _record(music_map.get("moments"))
+    scores = [
+        _safe_float(item.get("score"), 0.0)
+        for group in moment_groups.values()
+        for item in _list_records(group)
+    ]
     return _clip01(float(np.mean(scores))) if scores else 0.5
 
 
@@ -200,7 +204,16 @@ def _boundary_points(music_map: dict[str, Any]) -> list[tuple[int, float, str]]:
 
 def _moment_anchor(music_map: dict[str, Any], purpose: Purpose) -> tuple[int, int, float]:
     intent = _intent_for_purpose(purpose)
-    candidates = _list_records(music_map.get("moments")) or _list_records(music_map.get("hook_candidates"))
+    ranked_moments = _list_records(_record(music_map.get("moments")).get(intent))
+    if ranked_moments:
+        selected = ranked_moments[0]
+        return (
+            int(selected.get("start_ms") or 0),
+            int(selected.get("end_ms") or 0),
+            _clip01(_safe_float(selected.get("score"), 0.72)),
+        )
+
+    candidates = _list_records(music_map.get("hook_candidates"))
     ranked: list[tuple[float, dict[str, Any]]] = []
     for item in candidates:
         intents = _record(item.get("intent_scores"))
@@ -250,4 +263,3 @@ def choose_showcase_window(music_map: dict[str, Any], desired_ms: int, purpose: 
         return best[1], best[2], best[0]
     start = max(0, min(duration - desired, anchor_start - desired // 3))
     return start, min(duration, start + desired), _clip01(anchor_score * 0.82)
-
