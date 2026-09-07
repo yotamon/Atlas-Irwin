@@ -12,6 +12,7 @@ import {
   ENSEMBLIS_MOBILE_WORK_NAV,
   ENSEMBLIS_SETTINGS_NAV,
   ensemblisArtistHref,
+  resolveEnsemblisRouteContext,
 } from "@/lib/ensemblis-product";
 
 type StudioMobileNavigationProps = {
@@ -30,13 +31,15 @@ function routeIsActive(pathname: string, route: string) {
 
 export function StudioMobileNavigation({ artistId, artists }: StudioMobileNavigationProps) {
   const pathname = usePathname();
+  const context = resolveEnsemblisRouteContext(pathname);
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const SettingsIcon = studioIcons[ENSEMBLIS_SETTINGS_NAV.icon];
   const CreateIcon = studioIcons[ENSEMBLIS_CREATE_ACTION.icon];
-  const moreActive = ENSEMBLIS_MOBILE_MORE_NAV.some((item) => routeIsActive(pathname, item.href))
+  const moreActive = ENSEMBLIS_MOBILE_MORE_NAV.some((item) => routeIsActive(pathname, item.href) || context.parentHref === item.href)
     || routeIsActive(pathname, ENSEMBLIS_SETTINGS_NAV.href)
-    || routeIsActive(pathname, "/studio/needs-you");
+    || routeIsActive(pathname, "/studio/needs-you")
+    || routeIsActive(pathname, ENSEMBLIS_CREATE_ACTION.href);
 
   useEffect(() => setOpen(false), [pathname]);
 
@@ -44,7 +47,7 @@ export function StudioMobileNavigation({ artistId, artists }: StudioMobileNaviga
     <nav className="ensemblis-mobile-navigation" aria-label="Ensemblis mobile navigation">
       {ENSEMBLIS_MOBILE_WORK_NAV.map((item) => {
         const Icon = studioIcons[item.icon];
-        const active = routeIsActive(pathname, item.href);
+        const active = routeIsActive(pathname, item.href) || context.parentHref === item.href;
         return (
           <Link
             href={ensemblisArtistHref(item.href, artistId)}
@@ -95,7 +98,7 @@ export function StudioMobileNavigation({ artistId, artists }: StudioMobileNaviga
         <div className="ensemblis-mobile-more-links">
           {ENSEMBLIS_MOBILE_MORE_NAV.map((item) => {
             const Icon = studioIcons[item.icon];
-            const active = routeIsActive(pathname, item.href);
+            const active = routeIsActive(pathname, item.href) || context.parentHref === item.href;
             return (
               <Link
                 href={ensemblisArtistHref(item.href, artistId)}
