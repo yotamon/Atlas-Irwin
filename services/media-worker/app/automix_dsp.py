@@ -306,9 +306,11 @@ def render_plan(tracks: list[TrackDescriptor], plan: dict[str, Any], workdir: Pa
     duration_ms = int(round(final_info.duration * 1000.0))
     final_lufs = None
     try:
-        with sf.SoundFile(final_path) as handle:
-            data = handle.read(dtype="float32", always_2d=True)
-        final_lufs = _integrated_loudness(data)
+        final_measurement = _measure_loudnorm(final_path, loudnorm_target)
+        measured_i = final_measurement.get("input_i")
+        if isinstance(measured_i, (int, float, str)):
+            parsed = float(measured_i)
+            final_lufs = parsed if math.isfinite(parsed) else None
     except Exception:
         pass
     return final_path, {
