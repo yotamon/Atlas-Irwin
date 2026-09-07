@@ -1,8 +1,8 @@
 import "server-only";
 
+import { dispatchMediaWorkerJob } from "@/lib/media-worker/dispatcher";
 import {
   createMediaWorkerCallbackCredential,
-  dispatchMediaWorkerJob,
   MEDIA_WORKER_CALLBACK_HASH_KEY,
   mediaWorkerReadiness,
 } from "@/lib/media-worker/sandbox";

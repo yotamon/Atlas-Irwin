@@ -7,7 +7,7 @@ import {
   createMediaUploadTarget,
   discardMediaUpload,
   registerMediaUpload,
-} from "@/app/studio/catalog-actions-safe";
+} from "@/app/studio/catalog-actions";
 import { attachContentMediaV2 } from "@/app/studio/content-actions-v2";
 import { attachReleaseMasterFromMedia, createVaultTrackFromMedia } from "@/app/studio/growth-media-actions-safe";
 import { createClient } from "@/lib/supabase/client";

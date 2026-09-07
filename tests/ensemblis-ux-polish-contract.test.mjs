@@ -120,7 +120,7 @@ test("Track Intelligence exposes a real native waveform plus semantic musical ti
 test("Media Library uses signed resumable TUS above 6 MB without expanding storage policy", async () => {
   const uploader = await source("components/studio/media-uploader.tsx");
   const resumable = await source("lib/supabase/resumable-upload.ts");
-  const catalog = await source("app/studio/catalog-actions.ts");
+  const catalog = await source("app/studio/catalog-actions-internal.ts");
   const interactions = await source("app/studio/shared-interactions.css");
   const packageJson = JSON.parse(await source("package.json"));
 

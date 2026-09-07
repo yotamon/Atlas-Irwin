@@ -1,9 +1,9 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { dispatchMediaWorkerJob } from "@/lib/media-worker/dispatcher";
 import {
   createMediaWorkerCallbackCredential,
-  dispatchMediaWorkerJob,
   MEDIA_WORKER_CALLBACK_HASH_KEY,
 } from "@/lib/media-worker/sandbox";
 import { asStemClient } from "@/lib/music-intelligence/stem-scenes";
