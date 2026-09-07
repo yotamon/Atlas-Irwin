@@ -58,7 +58,7 @@ type MarketingScopedTableName =
   | "outreach_messages";
 
 export type ArtistScopedMarketingDatabase = Omit<MarketingDatabase, "public"> & {
-  public: Omit<MarketingDatabase["public"], "Tables" | "Functions"> & {
+  public: Omit<MarketingDatabase["public"], "Tables"> & {
     Tables: ScopeTables<MarketingDatabase["public"]["Tables"], MarketingScopedTableName>;
   };
 };
