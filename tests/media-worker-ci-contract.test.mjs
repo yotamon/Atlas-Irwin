@@ -12,6 +12,22 @@ test("deep main CI installs and compiles every Active Mastering runtime dependen
   assert.ok(ci.includes("numpy librosa soundfile pyloudnorm imageio-ffmpeg httpx pydantic"));
 });
 
+test("deep audio regressions install benchmark-only dependencies without bloating production runtime", async () => {
+  const ci = await readFile(".github/workflows/ci.yml", "utf8");
+  const benchmark = await readFile("services/media-worker/requirements-audio-benchmark.txt", "utf8");
+  const production = await readFile("services/media-worker/requirements.txt", "utf8");
+  const sandbox = await readFile("lib/media-worker/sandbox.ts", "utf8");
+
+  assert.ok(benchmark.includes("mir-eval==0.8.2"));
+  assert.ok(benchmark.includes("audiomentations==0.43.1"));
+  assert.ok(ci.includes("-r services/media-worker/requirements-audio-benchmark.txt"));
+  assert.ok(ci.includes("Run Track Intelligence behavioral regression tests"));
+
+  assert.ok(!production.includes("mir-eval"));
+  assert.ok(!production.includes("audiomentations"));
+  assert.ok(!sandbox.includes("requirements-audio-benchmark.txt"));
+});
+
 test("Vercel Sandbox bootstrap ships every module imported by the production runner", async () => {
   const sandbox = await readFile("lib/media-worker/sandbox.ts", "utf8");
   const runner = await readFile("services/media-worker/app/runner.py", "utf8");
