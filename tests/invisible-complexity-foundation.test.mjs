@@ -79,20 +79,25 @@ test("Today is a thin Manager renderer over one canonical operating snapshot", a
   assert.equal(snapshot.includes("/100 signal"), false, "Manager should not expose pseudo-precise ranking scores as artist truth");
 });
 
-test("primary navigation exposes five outcomes and internal domains are owned contextually", async () => {
+test("primary navigation exposes durable workspaces while releases and create stay contextual", async () => {
   const product = await source("lib/ensemblis-product.ts");
   const sidebar = await source("components/studio/sidebar.tsx");
   const grow = await source("app/studio/(protected)/growth/page.tsx");
   const settings = await source("app/studio/(protected)/settings/page.tsx");
   const release = await source("components/studio/release-workspace-v2.tsx");
+  const music = await source("app/studio/(protected)/music/page.tsx");
   const workStart = product.indexOf("export const ENSEMBLIS_WORK_NAV");
   const moreStart = product.indexOf("export const ENSEMBLIS_MORE_NAV");
   const mobileMoreStart = product.indexOf("export const ENSEMBLIS_MOBILE_MORE_NAV");
   const workSource = product.slice(workStart, moreStart);
   const moreSource = product.slice(moreStart, mobileMoreStart);
 
-  for (const label of ["Today", "Music", "Releases", "Create", "Grow"]) assert.ok(workSource.includes(`label: "${label}"`));
-  for (const label of ["Audience", "Library", "Memory", "Sites", "Distribution", "Connections"]) assert.equal(workSource.includes(`label: "${label}"`), false, `${label} must not compete in primary navigation`);
+  for (const label of ["Today", "Music", "Grow"]) assert.ok(workSource.includes(`label: "${label}"`));
+  for (const label of ["Releases", "Create", "Audience", "Library", "Memory", "Sites", "Distribution", "Connections"]) assert.equal(workSource.includes(`label: "${label}"`), false, `${label} must not compete in primary navigation`);
+  assert.ok(product.includes('ENSEMBLIS_CREATE_ACTION'));
+  assert.ok(product.includes('label: "Create"'));
+  assert.ok(product.includes('{ prefix: "/studio/releases", area: "Music", parentHref: "/studio/music" }'));
+  assert.ok(music.includes('label: "Releases"'));
   for (const label of ["Library", "Sites"]) assert.ok(moreSource.includes(`label: "${label}"`), `${label} remains a cross-workflow utility`);
   for (const label of ["Audience", "Memory", "Distribution", "Connections"]) assert.equal(moreSource.includes(`label: "${label}"`), false, `${label} must be owned by its parent workflow rather than More`);
 
