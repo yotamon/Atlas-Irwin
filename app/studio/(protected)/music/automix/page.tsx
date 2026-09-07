@@ -19,10 +19,10 @@ export default async function AutoMixPage() {
   const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
 
   return (
-    <div className="studio-v2-page music-workspace-page">
+    <div className="studio-v2-page automix-workspace-page">
       <PageHeader
         title="AutoMix"
-        description={`Turn ${artist.artistName}'s own catalog into a professionally planned DJ mix. Ensemblis uses musical structure, local tempo, mastering evidence and stem activity when available, then renders the set offline at high quality.`}
+        description={`Professional set planning and offline rendering from ${artist.artistName}'s mastered catalog.`}
         action={<Link className="button" href={href("/studio/music")}>Back to music</Link>}
       />
       <AutoMixStudio
