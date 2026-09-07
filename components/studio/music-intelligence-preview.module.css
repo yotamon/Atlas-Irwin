@@ -240,10 +240,20 @@
   position: absolute;
   height: 100%;
   min-width: 2px;
+  overflow: hidden;
   border-radius: var(--en-radius-pill);
+  background: color-mix(in srgb, var(--en-accent) 34%, transparent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--en-accent) 16%, transparent);
+  opacity: 0.92;
+}
+
+.hookOverlay > span > i {
+  position: absolute;
+  inset-block: 0;
+  min-width: 2px;
+  border-radius: inherit;
   background: var(--en-accent);
-  box-shadow: 0 0 10px color-mix(in srgb, var(--en-accent) 22%, transparent);
-  opacity: 0.88;
+  box-shadow: 0 0 8px color-mix(in srgb, var(--en-accent-strong) 34%, transparent);
 }
 
 .playhead {
