@@ -277,7 +277,7 @@
 .ensemblis-loading .ensemblis-processing-wave i {
   display: block;
   width: clamp(2px, 0.36vw, 4px);
-  height: calc(18% + (var(--wave-index) % 5) * 9%);
+  height: 36%;
   min-height: 0.65rem;
   max-height: 4.8rem;
   border-radius: var(--en-radius-pill);
@@ -286,8 +286,41 @@
   transform-origin: center;
   animation: ensemblis-wave 1.35s var(--en-ease-emphasized) infinite alternate;
   animation-delay: calc(var(--wave-index) * -74ms);
-  opacity: calc(0.42 + (var(--wave-index) % 4) * 0.12);
+  opacity: 0.64;
 }
+
+.studio-root .ensemblis-processing-wave i:nth-child(1),
+.studio-root .ensemblis-processing-wave i:nth-child(13),
+.ensemblis-loading .ensemblis-processing-wave i:nth-child(1),
+.ensemblis-loading .ensemblis-processing-wave i:nth-child(13) { height: 20%; opacity: 0.44; }
+
+.studio-root .ensemblis-processing-wave i:nth-child(2),
+.studio-root .ensemblis-processing-wave i:nth-child(12),
+.ensemblis-loading .ensemblis-processing-wave i:nth-child(2),
+.ensemblis-loading .ensemblis-processing-wave i:nth-child(12) { height: 34%; opacity: 0.52; }
+
+.studio-root .ensemblis-processing-wave i:nth-child(3),
+.studio-root .ensemblis-processing-wave i:nth-child(11),
+.ensemblis-loading .ensemblis-processing-wave i:nth-child(3),
+.ensemblis-loading .ensemblis-processing-wave i:nth-child(11) { height: 50%; opacity: 0.62; }
+
+.studio-root .ensemblis-processing-wave i:nth-child(4),
+.studio-root .ensemblis-processing-wave i:nth-child(10),
+.ensemblis-loading .ensemblis-processing-wave i:nth-child(4),
+.ensemblis-loading .ensemblis-processing-wave i:nth-child(10) { height: 66%; opacity: 0.74; }
+
+.studio-root .ensemblis-processing-wave i:nth-child(5),
+.studio-root .ensemblis-processing-wave i:nth-child(9),
+.ensemblis-loading .ensemblis-processing-wave i:nth-child(5),
+.ensemblis-loading .ensemblis-processing-wave i:nth-child(9) { height: 82%; opacity: 0.84; }
+
+.studio-root .ensemblis-processing-wave i:nth-child(6),
+.studio-root .ensemblis-processing-wave i:nth-child(8),
+.ensemblis-loading .ensemblis-processing-wave i:nth-child(6),
+.ensemblis-loading .ensemblis-processing-wave i:nth-child(8) { height: 58%; opacity: 0.72; }
+
+.studio-root .ensemblis-processing-wave i:nth-child(7),
+.ensemblis-loading .ensemblis-processing-wave i:nth-child(7) { height: 92%; opacity: 0.96; }
 
 .studio-root .ensemblis-processing-copy,
 .ensemblis-loading .ensemblis-processing-copy {
@@ -405,7 +438,7 @@
   min-height: 7rem;
 }
 
-.studio-root .ensemblis-processing.is-compact .ensemblis-processing h2 {
+.studio-root .ensemblis-processing.is-compact h2 {
   font-size: clamp(1.35rem, 3vw, 2rem);
 }
 
