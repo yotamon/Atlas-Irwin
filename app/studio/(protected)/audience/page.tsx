@@ -3,6 +3,7 @@ import { approveAudienceReply, ignoreAudienceInteraction, syncAudienceNow } from
 import { PageHeader } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { loadFanGraphSummary } from "@/lib/audience/fan-graph-server";
+import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { createAutonomyServiceClient } from "@/lib/marketing/autonomy-db";
 import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 
@@ -22,6 +23,7 @@ function percent(value: number) {
 export default async function AudiencePage() {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveDefaultArtistContext(supabase, user);
+  const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
   const db = createAutonomyServiceClient();
   const [interactionsResult, fanGraph] = await Promise.all([
     db.from("audience_interactions").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).not("status", "in", "(ignored,replied)").order("occurred_at", { ascending: false }).limit(100),
@@ -52,7 +54,7 @@ export default async function AudiencePage() {
           <span>{fanGraph.activeRelationshipCount} active · {fanGraph.engagedFanCount} engaged</span>
         </div>
         {recentRelationships.length ? <div className="fan-relationship-list">
-          {recentRelationships.map((profile) => <Link href={`/studio/audience/fans/${profile.id}`} className="fan-relationship-row" key={profile.id}>
+          {recentRelationships.map((profile) => <Link href={href(`/studio/audience/fans/${profile.id}`)} className="fan-relationship-row" key={profile.id}>
             <div className="fan-relationship-person"><strong>{profile.displayName}</strong><span>{readable(profile.qualityBand, "New")} fan · {profile.interactionCount} interaction{profile.interactionCount === 1 ? "" : "s"}</span></div>
             <div className="fan-channel-chips">{profile.identities.slice(0, 4).map((identity) => <span key={identity.id}>{readable(identity.channel, "Channel")} · {identity.label}</span>)}</div>
             <div className="fan-relationship-context"><span>{profile.qualityReasons.slice(0, 2).join(" · ")}</span>{profile.nextAction ? <strong>{profile.nextAction.title}</strong> : <small>{profile.ownedReachable ? "Permissioned direct relationship" : `Last seen ${shortDate(profile.lastSeenAt)}`}</small>}</div>
@@ -76,9 +78,12 @@ export default async function AudiencePage() {
       </section>
 
       <details className="v2-advanced-disclosure">
-        <summary>Advanced data controls</summary>
-        <p className="v2-muted-copy">Use this only when you need an immediate conversation refresh.</p>
-        <form action={syncAudienceNow}><button className="button" type="submit">Refresh conversations now</button></form>
+        <summary>Advanced audience tools</summary>
+        <p className="v2-muted-copy">Refresh conversation evidence on demand or open the specialist outreach workspace when relationship work needs more than the normal Audience queue.</p>
+        <div className="actions">
+          <form action={syncAudienceNow}><button className="button" type="submit">Refresh conversations now</button></form>
+          <Link className="button" href={href("/studio/outreach")}>Advanced outreach</Link>
+        </div>
       </details>
     </div>
   );
