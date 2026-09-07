@@ -6,6 +6,7 @@ export function PublicMediaMotionController() {
   useLayoutEffect(() => {
     const root = document.getElementById("release-widget");
     if (!root) return;
+    const releaseRoot = root;
 
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     const cleanups = new Map<HTMLVideoElement, () => void>();
@@ -55,11 +56,11 @@ export function PublicMediaMotionController() {
     }
 
     function sync() {
-      const stageLabel = Array.from(root.querySelectorAll<HTMLElement>("p"))
+      const stageLabel = Array.from(releaseRoot.querySelectorAll<HTMLElement>("p"))
         .find((element) => element.textContent?.trim() === "New Release");
       if (stageLabel) stageLabel.textContent = "Selected Release";
 
-      const videos = Array.from(root.querySelectorAll<HTMLVideoElement>("video"));
+      const videos = Array.from(releaseRoot.querySelectorAll<HTMLVideoElement>("video"));
       videos.forEach(configureVideo);
       for (const video of cleanups.keys()) {
         if (!videos.includes(video)) {
@@ -70,7 +71,7 @@ export function PublicMediaMotionController() {
     }
 
     const observer = new MutationObserver(sync);
-    observer.observe(root, { childList: true, subtree: true });
+    observer.observe(releaseRoot, { childList: true, subtree: true });
     reducedMotion.addEventListener("change", sync);
     sync();
 
