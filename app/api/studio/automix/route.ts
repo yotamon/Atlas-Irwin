@@ -193,6 +193,7 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "Only an active AutoMix session can be cancelled." }, { status: 409 });
   }
 
+  const previousStatus = current.data.status;
   const cancelled = await db.from("automix_jobs").update({
     status: "cancelled",
     request_payload: json(cleanRequestPayload(current.data.request_payload)),
@@ -207,6 +208,10 @@ export async function DELETE(request: Request) {
   if (cancelled.error) return NextResponse.json({ error: "Could not cancel this session." }, { status: 500 });
   if (!cancelled.data) return NextResponse.json({ error: "The session already changed state. Refresh and try again." }, { status: 409 });
 
-  after(scheduleMediaWorkerSandboxCleanup());
+  if (previousStatus === "queued" || previousStatus === "running") {
+    after(scheduleMediaWorkerSandboxCleanup());
+  } else {
+    after(async () => { await kickAutoMixQueue().catch(() => undefined); });
+  }
   return NextResponse.json({ cancelled: true, jobId });
 }
