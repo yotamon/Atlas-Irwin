@@ -3,6 +3,7 @@ import Link from "next/link";
 import { SubmitButton } from "./submit-button";
 
 type ButtonVariant = "default" | "primary" | "danger";
+export type StatusTone = "neutral" | "accent" | "success" | "attention" | "danger";
 
 function buttonClassName(variant: ButtonVariant, className = "") {
   const variantClass = variant === "primary" ? " primary" : variant === "danger" ? " danger-text" : "";
@@ -32,8 +33,22 @@ export function IconButton({
   children,
   className = "",
   ...props
-}: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "aria-label"> & { label: string; children: ReactNode }) {
-  return <Button {...props} aria-label={label} title={props.title ?? label} className={className}>{children}</Button>;
+}: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "aria-label" | "title"> & { label: string; children: ReactNode }) {
+  return (
+    <Button
+      {...props}
+      aria-label={label}
+      data-icon-button
+      data-tooltip={label}
+      className={className}
+    >
+      {children}
+    </Button>
+  );
+}
+
+export function Tooltip({ label, children }: { label: string; children: ReactNode }) {
+  return <span className="ensemblis-tooltip-anchor" data-tooltip={label}>{children}</span>;
 }
 
 export function PageHeader({
@@ -105,25 +120,65 @@ export function EmptyState({
   );
 }
 
-export function Status({ children }: { children: ReactNode }) {
-  return <span className="status-chip">{children}</span>;
+export function Status({ children, tone = "accent" }: { children: ReactNode; tone?: StatusTone }) {
+  return <span className="status-chip" data-tone={tone}>{children}</span>;
+}
+
+export function Notice({
+  children,
+  tone = "neutral",
+  role,
+}: {
+  children: ReactNode;
+  tone?: StatusTone;
+  role?: "status" | "alert";
+}) {
+  return <div className="ensemblis-notice" data-tone={tone} role={role}>{children}</div>;
 }
 
 export function Field({
   label,
   children,
   wide = false,
+  hint,
+  error,
+  required = false,
 }: {
   label: string;
   children: ReactNode;
   wide?: boolean;
+  hint?: ReactNode;
+  error?: ReactNode;
+  required?: boolean;
 }) {
   return (
-    <label className={wide ? "field wide" : "field"}>
-      <span>{label}</span>
+    <label className={wide ? "field wide" : "field"} data-invalid={Boolean(error) || undefined}>
+      <span>{label}{required ? <small aria-hidden> · required</small> : null}</span>
       {children}
+      {hint ? <small className="field-hint">{hint}</small> : null}
+      {error ? <small className="field-error" role="alert">{error}</small> : null}
     </label>
   );
+}
+
+export function Progress({ value, label }: { value: number; label: string }) {
+  const normalized = Math.min(100, Math.max(0, value));
+  return (
+    <div
+      className="ensemblis-progress"
+      role="progressbar"
+      aria-label={label}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(normalized)}
+    >
+      <span style={{ width: `${normalized}%` }} />
+    </div>
+  );
+}
+
+export function Skeleton({ className = "", label = "Loading" }: { className?: string; label?: string }) {
+  return <span className={`ensemblis-skeleton${className ? ` ${className}` : ""}`} role="status" aria-label={label} />;
 }
 
 export function Tabs({
