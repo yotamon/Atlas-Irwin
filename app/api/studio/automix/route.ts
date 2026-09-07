@@ -19,6 +19,7 @@ const PURPOSES = new Set<AutoMixPurpose>(["booking", "soundcloud", "journey", "p
 const ENERGY = new Set<AutoMixEnergyProfile>(["smooth", "dynamic", "peak"]);
 const STYLES = new Set<AutoMixTransitionStyle>(["clean", "dj", "creative"]);
 const FORMATS = new Set<AutoMixOutputFormat>(["mp3", "wav"]);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -72,12 +73,17 @@ export async function POST(request: Request) {
   if (trackIds.length < 2 || trackIds.length > 20 || new Set(trackIds).size !== trackIds.length) {
     return NextResponse.json({ error: "Choose 2-20 unique tracks." }, { status: 400 });
   }
+  if (trackIds.some((id) => !UUID_RE.test(id))) {
+    return NextResponse.json({ error: "Every selected track id must be a valid UUID." }, { status: 400 });
+  }
 
   const purpose = enumValue(body.purpose, PURPOSES, "booking");
   const energyProfile = enumValue(body.energyProfile, ENERGY, "dynamic");
   const transitionStyle = enumValue(body.transitionStyle, STYLES, "dj");
   const outputFormat = enumValue(body.outputFormat, FORMATS, "mp3");
-  const durationMsRaw = typeof body.durationMs === "number" ? Math.round(body.durationMs) : 20 * 60 * 1000;
+  const durationMsRaw = typeof body.durationMs === "number" && Number.isFinite(body.durationMs)
+    ? Math.round(body.durationMs)
+    : 20 * 60 * 1000;
   const durationMs = Math.max(90_000, Math.min(60 * 60 * 1000, durationMsRaw));
   const name = typeof body.name === "string" && body.name.trim() ? body.name.trim().slice(0, 120) : "AutoMix";
 
