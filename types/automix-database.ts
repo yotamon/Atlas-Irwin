@@ -16,6 +16,7 @@ export type AutoMixJobStatus = "planned" | "queued" | "running" | "completed" | 
 export type AutoMixJob = {
   id: string;
   owner_id: string;
+  artist_id: string;
   name: string;
   purpose: AutoMixPurpose;
   energy_profile: AutoMixEnergyProfile;
