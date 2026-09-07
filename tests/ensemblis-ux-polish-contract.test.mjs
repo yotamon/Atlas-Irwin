@@ -51,13 +51,15 @@ test("global command search is keyboard accessible, artist aware and object awar
 test("compact Studio navigation keeps accessible names and coarse-pointer targets", async () => {
   const navigation = await source("components/studio/sidebar-navigation.tsx");
   const sidebar = await source("components/studio/sidebar.tsx");
+  const context = await source("components/studio/context-bar.tsx");
   const responsive = await source("app/studio/responsive-polish.css");
   assert.ok(navigation.includes('<span className="studio-nav-text">{label}</span>'));
   assert.ok(navigation.includes('aria-current={active ? "page" : undefined}'));
   assert.equal(navigation.includes("title={label}"), false, "native title tooltips must not be required for navigation labels");
-  assert.ok(sidebar.includes('aria-label="Open Needs You"'));
+  assert.ok(context.includes('href={ensemblisArtistHref("/studio/needs-you", artistId)}'));
+  assert.ok(context.includes("Needs You"), "Needs You must have a visible accessible label in the global context bar");
   assert.ok(sidebar.includes('aria-label="Sign out"'));
-  assert.equal(sidebar.includes('aria-label="Add unreleased tracks"'), false, "Music owns Add music; the persistent shortcut is reserved for human decisions");
+  assert.equal(sidebar.includes('aria-label="Add unreleased tracks"'), false, "Music owns Add music; persistent navigation must not duplicate intake shortcuts");
   assert.ok(responsive.includes("@media (pointer: coarse)"));
   assert.ok(responsive.includes("min-height: 2.75rem"));
   assert.ok(responsive.includes(".studio-root .studio-nav-text"));
