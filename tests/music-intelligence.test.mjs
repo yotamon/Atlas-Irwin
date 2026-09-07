@@ -75,29 +75,29 @@ test("Studio exposes a playable, explainable v3 production review inspector", as
   assert.ok(workspace.includes("TrackIntelligenceInspector"));
 });
 
-test("release workspace queues the same canonical analysis pipeline without a second direct worker path", async () => {
+test("release tracklist queues the same canonical analysis pipeline per exact track", async () => {
   const releaseWorkspace = await readFile("components/studio/release-workspace-v2.tsx", "utf8");
+  const releaseTracklist = await readFile("components/studio/release-tracklist.tsx", "utf8");
   const releaseMission = await readFile("lib/studio/release-mission.ts", "utf8");
-  const panel = await readFile("components/studio/release-master-audio-panel.tsx", "utf8");
   const uploader = await readFile("components/studio/media-uploader.tsx", "utf8");
   const actions = await readFile("app/studio/growth-media-actions.ts", "utf8");
   const callback = await readFile("app/api/studio/growth/audio-callback/route.ts", "utf8");
   const vaultBridge = await readFile("lib/studio/vault-analysis.ts", "utf8");
 
-  assert.ok(releaseWorkspace.includes("ReleaseMasterAudioPanel"));
+  assert.ok(releaseWorkspace.includes("ReleaseTracklist"));
   assert.ok(releaseWorkspace.includes("deriveReleaseMission"));
+  assert.ok(releaseTracklist.includes("Every song has its own master and Music Intelligence"));
+  assert.ok(releaseTracklist.includes("trackId={track.id}"));
+  assert.ok(releaseTracklist.includes("releaseMasterMode"));
   assert.ok(releaseMission.includes("#master-audio"));
   assert.ok(releaseMission.includes("Add the canonical master"));
-  assert.ok(panel.includes("MusicIntelligencePreview"));
-  assert.ok(panel.includes("AnalysisAutoRefresh"));
-  assert.ok(panel.includes("Replace master audio"));
-  assert.ok(panel.includes("analysisFailureCopy"));
-  assert.equal(panel.includes('analysis.message ? `: ${analysis.message}`'), false);
   assert.ok(uploader.includes("releaseMasterMode"));
+  assert.ok(uploader.includes("trackId?: string"));
   assert.ok(uploader.includes("attachReleaseMasterFromMedia"));
   assert.ok(actions.includes("analysisReused"));
   assert.ok(actions.includes("kickMediaWorkerQueue"));
   assert.ok(actions.includes("source_media_asset_id"));
+  assert.ok(actions.includes("linked_track_id"));
   assert.equal(actions.includes("queueVaultAudioAnalysis"), false);
   assert.equal(vaultBridge.includes("dispatchMediaWorkerJob"), false);
   assert.ok(callback.includes("stale: true"));
