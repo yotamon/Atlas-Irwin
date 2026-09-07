@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CommandPalette } from "@/components/studio/command-palette";
+import { StudioLocationTrail } from "@/components/studio/location-trail";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 
 export function StudioContextBar({
@@ -11,10 +12,7 @@ export function StudioContextBar({
 }) {
   return (
     <header className="ensemblis-context-bar">
-      <div className="ensemblis-context-identity" aria-label={`Active artist: ${artistName}`}>
-        <span className="ensemblis-context-kicker">Active artist</span>
-        <strong>{artistName}</strong>
-      </div>
+      <StudioLocationTrail artistId={artistId} artistName={artistName} />
 
       <nav className="ensemblis-context-actions" aria-label="Global workspace actions">
         <CommandPalette artistId={artistId} />
