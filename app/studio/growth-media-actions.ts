@@ -11,6 +11,8 @@ import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { vaultAnalysisReadiness } from "@/lib/studio/vault-analysis";
 import type { Json } from "@/types/database";
 
+const DISPATCHED_ANALYSIS_STATUSES = new Set(["queued", "dispatched", "running"]);
+
 function value(form: FormData, key: string) {
   return String(form.get(key) ?? "").trim();
 }
@@ -34,6 +36,19 @@ function analysisMatchesAsset(profile: Json, asset: { id: string; public_url: st
   if (typeof source.media_asset_id === "string") return source.media_asset_id === asset.id;
   return Boolean(asset.public_url) && typeof source.url === "string" && source.url === asset.public_url;
 }
+function analysisAttempt(analysis: Record<string, unknown>) {
+  if (typeof analysis.attempt === "number" && Number.isInteger(analysis.attempt) && analysis.attempt > 0) return analysis.attempt;
+  return typeof analysis.request_id === "string" && analysis.request_id ? 1 : 0;
+}
+function previousFailure(analysis: Record<string, unknown>) {
+  const status = typeof analysis.status === "string" ? analysis.status : "";
+  if (status !== "failed" && status !== "unavailable") return null;
+  return {
+    status,
+    message: typeof analysis.message === "string" ? analysis.message : null,
+    completed_at: typeof analysis.completed_at === "string" ? analysis.completed_at : null,
+  };
+}
 
 async function dispatchAnalysis(
   trackId: string,
@@ -43,12 +58,44 @@ async function dispatchAnalysis(
 ) {
   const { supabase, user } = await requireStudioAdmin();
   const growth = asGrowthClient(supabase);
-  if (!vaultAnalysisReadiness().configured) {
-    await growth.from("track_vault").update({
-      analysis: json({ status: "unavailable", message: "Vercel Sandbox is unavailable in this deployment." }),
-    }).eq("id", trackId).eq("owner_id", user.id).eq("artist_id", artistId);
-    return { queued: false };
+  const { data: currentTrack, error: currentError } = await growth.from("track_vault")
+    .select("id,analysis")
+    .eq("id", trackId)
+    .eq("owner_id", user.id)
+    .eq("artist_id", artistId)
+    .maybeSingle();
+  if (currentError) throw new Error(currentError.message);
+  if (!currentTrack) throw new Error("Track not found for analysis.");
+
+  const currentAnalysis = record(currentTrack.analysis);
+  const currentStatus = typeof currentAnalysis.status === "string" ? currentAnalysis.status : "";
+  if (DISPATCHED_ANALYSIS_STATUSES.has(currentStatus)) {
+    return {
+      queued: true,
+      alreadyActive: true,
+      requestId: typeof currentAnalysis.request_id === "string" ? currentAnalysis.request_id : null,
+    };
   }
+
+  const attempt = analysisAttempt(currentAnalysis) + 1;
+  const previous = previousFailure(currentAnalysis);
+  if (!vaultAnalysisReadiness().configured) {
+    const { error } = await growth.from("track_vault").update({
+      analysis: json({
+        status: "unavailable",
+        message: "Vercel Sandbox is unavailable in this deployment. Ensemblis will not use a paid fallback.",
+        attempt,
+        requested_at: new Date().toISOString(),
+        source_audio_url: audioUrl,
+        source_media_asset_id: mediaAssetId,
+        music_intelligence_version: 4,
+        previous_attempt: previous,
+      }),
+    }).eq("id", trackId).eq("owner_id", user.id).eq("artist_id", artistId);
+    if (error) throw new Error(error.message);
+    return { queued: false, unavailable: true };
+  }
+
   const requestId = randomUUID();
   const { error } = await growth.from("track_vault").update({
     analysis: json({
@@ -57,15 +104,17 @@ async function dispatchAnalysis(
       requested_at: new Date().toISOString(),
       source_audio_url: audioUrl,
       source_media_asset_id: mediaAssetId,
-      music_intelligence_version: 3,
+      music_intelligence_version: 4,
+      attempt,
+      previous_attempt: previous,
     }),
   }).eq("id", trackId).eq("owner_id", user.id).eq("artist_id", artistId);
   if (error) throw new Error(error.message);
 
-  // The request is durable before dispatch. A busy worker leaves it queued and the next
-  // terminal callback drains it automatically rather than turning contention into failure.
+  // The request is durable before dispatch. A busy free worker leaves it queued and the
+  // next terminal callback drains it automatically instead of creating a paid fallback.
   await kickMediaWorkerQueue().catch(() => undefined);
-  return { queued: true };
+  return { queued: true, alreadyActive: false, requestId };
 }
 
 export async function createVaultTrackFromMedia(form: FormData) {
@@ -211,7 +260,7 @@ export async function attachReleaseMasterFromMedia(form: FormData) {
     audio_profile: reusableAnalysis && assetVault ? assetVault.audio_profile : json({}),
     analysis: reusableAnalysis && assetVault
       ? assetVault.analysis
-      : json({ status: "pending", requested_from: "release_workspace", music_intelligence_version: 3 }),
+      : json({ status: "pending", requested_from: "release_workspace", music_intelligence_version: 4 }),
   };
 
   const { data: vaultTrack, error: vaultError } = existingVault
@@ -245,9 +294,10 @@ export async function analyzeVaultTrack(form: FormData) {
     .single();
   if (error || !track) throw new Error(error?.message || "Track not found.");
   if (!track.audio_url) throw new Error("Add a master before analysis.");
-  await dispatchAnalysis(track.id, artist.artistId, track.audio_url, track.media_asset_id);
+  const result = await dispatchAnalysis(track.id, artist.artistId, track.audio_url, track.media_asset_id);
   revalidatePath("/studio/music");
   revalidatePath(`/studio/music/${track.id}`);
   revalidatePath("/studio/growth");
   if (track.linked_release_id) revalidatePath(`/studio/releases/${track.linked_release_id}`);
+  return result;
 }
