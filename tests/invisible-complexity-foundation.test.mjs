@@ -85,7 +85,7 @@ test("primary navigation exposes durable workspaces while releases and create st
   const grow = await source("app/studio/(protected)/growth/page.tsx");
   const settings = await source("app/studio/(protected)/settings/page.tsx");
   const release = await source("components/studio/release-workspace-v2.tsx");
-  const music = await source("app/studio/(protected)/music/page.tsx");
+  const musicNav = await source("components/studio/music-library-nav.tsx");
   const workStart = product.indexOf("export const ENSEMBLIS_WORK_NAV");
   const moreStart = product.indexOf("export const ENSEMBLIS_MORE_NAV");
   const mobileMoreStart = product.indexOf("export const ENSEMBLIS_MOBILE_MORE_NAV");
@@ -97,7 +97,8 @@ test("primary navigation exposes durable workspaces while releases and create st
   assert.ok(product.includes('ENSEMBLIS_CREATE_ACTION'));
   assert.ok(product.includes('label: "Create"'));
   assert.ok(product.includes('{ prefix: "/studio/releases", area: "Music", parentHref: "/studio/music" }'));
-  assert.ok(music.includes('label: "Releases"'));
+  assert.ok(musicNav.includes("Releases"));
+  assert.ok(musicNav.includes('ensemblisArtistHref("/studio/releases", artistId)'));
   for (const label of ["Library", "Sites"]) assert.ok(moreSource.includes(`label: "${label}"`), `${label} remains a cross-workflow utility`);
   for (const label of ["Audience", "Memory", "Distribution", "Connections"]) assert.equal(moreSource.includes(`label: "${label}"`), false, `${label} must be owned by its parent workflow rather than More`);
 
