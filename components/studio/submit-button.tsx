@@ -1,7 +1,8 @@
 "use client";
 
+import { useRef, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
-import type { ReactNode } from "react";
+import { Dialog } from "./dialog";
 
 function PendingSignal({ label }: { label: ReactNode }) {
   return (
@@ -41,23 +42,50 @@ export function ConfirmButton({
   children,
   message,
   disabled = false,
+  title = "Confirm this action",
+  confirmLabel = "Continue",
 }: {
   children: ReactNode;
   message: string;
   disabled?: boolean;
+  title?: string;
+  confirmLabel?: string;
 }) {
   const { pending } = useFormStatus();
+  const [confirming, setConfirming] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+
+  function submitConfirmedAction() {
+    const form = triggerRef.current?.form;
+    setConfirming(false);
+    window.requestAnimationFrame(() => form?.requestSubmit());
+  }
+
   return (
-    <button
-      className="text-button danger-text"
-      type="submit"
-      disabled={disabled || pending}
-      aria-busy={pending}
-      onClick={(event) => {
-        if (!window.confirm(message)) event.preventDefault();
-      }}
-    >
-      {pending ? <PendingSignal label="Working…" /> : children}
-    </button>
+    <>
+      <button
+        ref={triggerRef}
+        className="text-button danger-text"
+        type="button"
+        disabled={disabled || pending}
+        aria-busy={pending}
+        onClick={() => setConfirming(true)}
+      >
+        {pending ? <PendingSignal label="Working…" /> : children}
+      </button>
+      <Dialog
+        open={confirming}
+        onClose={() => setConfirming(false)}
+        title={title}
+        description="This action is intentionally paused until you confirm it."
+        returnFocusRef={triggerRef}
+      >
+        <p className="ensemblis-confirm-copy">{message}</p>
+        <div className="ensemblis-confirm-actions">
+          <button className="button" type="button" onClick={() => setConfirming(false)}>Cancel</button>
+          <button className="button ensemblis-danger-button" type="button" onClick={submitConfirmedAction}>{confirmLabel}</button>
+        </div>
+      </Dialog>
+    </>
   );
 }
