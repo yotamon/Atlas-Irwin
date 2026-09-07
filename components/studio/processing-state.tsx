@@ -1,3 +1,5 @@
+import type { CSSProperties } from "react";
+
 type ProcessingStep = {
   label: string;
   state?: "waiting" | "active" | "complete";
@@ -34,7 +36,7 @@ export function ProcessingState({
         <span className="ensemblis-processing-scan" />
         <div className="ensemblis-processing-wave">
           {Array.from({ length: 13 }, (_, index) => (
-            <i key={index} style={{ "--wave-index": index } as React.CSSProperties} />
+            <i key={index} style={{ "--wave-index": index } as CSSProperties} />
           ))}
         </div>
       </div>
@@ -47,7 +49,10 @@ export function ProcessingState({
         {normalizedProgress !== null ? (
           <div
             className="ensemblis-processing-progress"
-            aria-label={`${Math.round(normalizedProgress)}% complete`}
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(normalizedProgress)}
           >
             <span style={{ width: `${normalizedProgress}%` }} />
           </div>
