@@ -10,9 +10,11 @@ export function PublicMediaMotionController() {
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     const cleanups = new Map<HTMLVideoElement, () => void>();
 
-    function configureVideo(video: HTMLVideoElement, index: number) {
+    function configureVideo(video: HTMLVideoElement) {
       cleanups.get(video)?.();
       video.muted = true;
+      const trigger = video.closest("button");
+      const isFeaturedCanvas = !trigger;
 
       if (reducedMotion.matches) {
         video.autoplay = false;
@@ -22,7 +24,7 @@ export function PublicMediaMotionController() {
         return;
       }
 
-      if (index === 0) {
+      if (isFeaturedCanvas) {
         video.autoplay = true;
         video.preload = "metadata";
         void video.play().catch(() => undefined);
@@ -33,11 +35,6 @@ export function PublicMediaMotionController() {
       video.autoplay = false;
       video.preload = "none";
       video.pause();
-      const trigger = video.closest("button");
-      if (!trigger) {
-        cleanups.set(video, () => undefined);
-        return;
-      }
 
       const playPreview = () => void video.play().catch(() => undefined);
       const pausePreview = () => {
@@ -59,7 +56,7 @@ export function PublicMediaMotionController() {
 
     function sync() {
       const videos = Array.from(root.querySelectorAll<HTMLVideoElement>("video"));
-      videos.forEach((video, index) => configureVideo(video, index));
+      videos.forEach(configureVideo);
       for (const video of cleanups.keys()) {
         if (!videos.includes(video)) {
           cleanups.get(video)?.();
