@@ -14,6 +14,7 @@ type ProcessingStateProps = {
   compact?: boolean;
   className?: string;
   ariaLabel?: string;
+  announce?: boolean;
 };
 
 export function ProcessingState({
@@ -25,6 +26,7 @@ export function ProcessingState({
   compact = false,
   className,
   ariaLabel,
+  announce = true,
 }: ProcessingStateProps) {
   const normalizedProgress =
     typeof progress === "number" ? Math.min(100, Math.max(0, progress)) : null;
@@ -35,10 +37,10 @@ export function ProcessingState({
   return (
     <section
       className={classes}
-      role="status"
-      aria-live="polite"
-      aria-busy="true"
-      aria-label={ariaLabel}
+      role={announce ? "status" : undefined}
+      aria-live={announce ? "polite" : undefined}
+      aria-busy={announce ? true : undefined}
+      aria-label={announce ? ariaLabel : undefined}
     >
       <div className="ensemblis-processing-visual" aria-hidden="true">
         <span className="ensemblis-processing-scan" />
