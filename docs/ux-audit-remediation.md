@@ -1,6 +1,6 @@
 # Ensemblis UI/UX audit remediation
 
-This branch remediates the Studio + public-site UX audit by root cause so fixes remain systemic rather than one-off patches. The user-facing remediation is complete on this branch; the final gate below records build/test validation. One intentionally retained migration layer is documented separately because deleting it before specialist-route replacement would create a regression rather than improve the product.
+This remediation addresses the Studio + public-site UX audit by root cause so the fixes remain systemic rather than one-off patches. The user-facing remediation shipped in PR #181, and the final gate below records the validation that passed on the final PR head and on the merged `main` commit.
 
 ## Foundation and information architecture
 - [x] Shared readable typography/control scale
@@ -21,7 +21,7 @@ This branch remediates the Studio + public-site UX audit by root cause so fixes 
 - [x] New/remediated UX cannot add rules to the legacy compatibility layer; it is isolated as read-only containment
 
 ### Deliberately retained migration containment
-`legacy-compat.generated.css` still contains tokenized layout rules required by specialist routes that have not yet been recomposed with canonical Ensemblis components. It is not a source for new work: the empty `legacy-migration-note.css`, Design System layering, and contract suite enforce that boundary. Fully deleting the bridge is a separate structural migration and must happen route-by-route with visual regression coverage; doing it inside this stabilization pass without replacements would knowingly break specialist surfaces.
+`legacy-compat.generated.css` still contains tokenized layout rules required by specialist routes that have not yet been recomposed with canonical Ensemblis components. It is not a source for new work. The generated bridge is placed below canonical primitives in the cascade, the compiler strips legacy token declarations and raw product chrome, and the Design System contract suite prevents it from taking ownership of canonical visual primitives. Fully deleting the bridge remains a separate route-by-route structural migration with visual regression coverage; deleting it before those replacements exist would knowingly break specialist surfaces.
 
 ## Interaction, accessibility and states
 - [x] Mobile More uses a modal dialog with backdrop, focus trap, Escape and focus return
@@ -69,7 +69,7 @@ This branch remediates the Studio + public-site UX audit by root cause so fixes 
 - [x] Setup is explicit that pre-render order is a seed, not a verified plan
 - [x] Actual worker-generated DJ plan streams into the running session after analysis
 - [x] Active sessions can be safely cancelled
-- [x] Final ceiling is shown only from measured render data
+- [x] Final loudness is shown as measured evidence while the configured -1.0 dBTP guard is correctly labeled as a safety ceiling
 - [x] Output action is a real download action
 - [x] API/worker errors are translated before display
 
@@ -99,11 +99,16 @@ This branch remediates the Studio + public-site UX audit by root cause so fixes 
 - [x] Excessive uppercase tracking is reduced for player readability
 
 ## Final gate
-- [ ] TypeScript
-- [ ] ESLint
-- [ ] Studio tests
-- [ ] Production build
-- [ ] Browser smoke
-- [ ] Database migration validation
-- [ ] Audio Intelligence CI
-- [ ] PR diff review against the audit and the final Music / Releases IA
+- [x] TypeScript
+- [x] ESLint
+- [x] Studio tests
+- [x] Production build
+- [x] Browser smoke
+- [x] Database migration validation
+- [x] Audio Intelligence CI
+- [x] PR diff review against the audit and the final Music / Releases IA
+
+### Validation evidence
+- Final PR head `91c79614a4ed57e06e83ca8836ce01cae396c685`: CI, PR Typecheck Diagnostics, Audio Intelligence CI, and Database PR all passed.
+- Merged `main` commit `4640394d2aeed812d23aaeff9741bb3d230bdd0d`: deep CI passed Studio contracts, TypeScript, ESLint, production dependency audit, Media Worker Python compilation, Track Intelligence behavioral regressions, production build, browser smoke, clean Supabase migration replay, Postgres lint, and database behavior tests.
+- Vercel deployment status for the merge commit passed.
