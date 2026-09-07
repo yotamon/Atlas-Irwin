@@ -83,6 +83,7 @@ export function MusicWorkspaceOverview({
   const addHref = ensemblisArtistHref("/studio/music?view=add", artistId);
   const importHref = ensemblisArtistHref("/studio/music/import", artistId);
   const generateHref = ensemblisArtistHref("/studio/music?view=generate", artistId);
+  const automixHref = ensemblisArtistHref("/studio/music/automix", artistId);
   const trackHref = (trackId: string) => ensemblisArtistHref(`/studio/music/${trackId}`, artistId);
   const createHref = (trackId: string) => ensemblisArtistHref(`/studio/create?intent=asset&track=${trackId}`, artistId);
 
@@ -201,12 +202,13 @@ export function MusicWorkspaceOverview({
 
       <section className="music-workspace-create-callout">
         <div>
-          <span className="section-label">Bring music into Ensemblis</span>
-          <h2>Start with the song, however it was made.</h2>
-          <p>Upload an existing master, prepare a catalog release, or create a new draft with AI.</p>
+          <span className="section-label">Use the catalog</span>
+          <h2>Turn the music into the next useful asset.</h2>
+          <p>Create a professional DJ mix from mastered catalog tracks, add more music, or generate a new draft when AI is part of this artist&apos;s process.</p>
         </div>
         <div className="actions">
-          <Link className="button primary" href={addHref}>Add music</Link>
+          {tracks.filter((track) => Boolean(track.audio_url)).length >= 2 ? <Link className="button primary" href={automixHref}>Create DJ mix</Link> : null}
+          <Link className={tracks.filter((track) => Boolean(track.audio_url)).length >= 2 ? "button" : "button primary"} href={addHref}>Add music</Link>
           <Link className="button" href={generateHref}>Create with AI</Link>
         </div>
       </section>
