@@ -56,18 +56,17 @@ export function ActiveMasteringControls({
   jobs: Job[];
 }) {
   const router = useRouter();
-  const [displayJobs, setDisplayJobs] = useState(jobs);
+  const [refreshedJobs, setRefreshedJobs] = useState<{ trackId: string; jobs: Job[] } | null>(null);
   const [pollError, setPollError] = useState("");
+  const displayJobs = refreshedJobs?.trackId === trackId ? refreshedJobs.jobs : jobs;
   const hasActive = displayJobs.some((job) => ["planned", "queued", "running"].includes(job.status));
-
-  useEffect(() => setDisplayJobs(jobs), [jobs]);
 
   const refreshJobs = useCallback(async () => {
     const params = new URLSearchParams({ artist: artistId, track: trackId });
     const response = await fetch(`/api/studio/mastering/jobs?${params.toString()}`, { cache: "no-store" });
     const body = await response.json().catch(() => null) as { jobs?: Job[]; error?: string } | null;
     if (!response.ok || !body?.jobs) throw new Error(body?.error || "Could not refresh mastering runs.");
-    setDisplayJobs(body.jobs);
+    setRefreshedJobs({ trackId, jobs: body.jobs });
     setPollError("");
   }, [artistId, trackId]);
 
@@ -91,11 +90,15 @@ export function ActiveMasteringControls({
 
   async function createCandidate(formData: FormData) {
     await createActiveMaster(formData);
-    await refreshJobs().catch(() => router.refresh());
+    await refreshJobs().catch(() => {
+      setRefreshedJobs(null);
+      router.refresh();
+    });
   }
 
   async function promoteCandidate(formData: FormData) {
     await promoteActiveMaster(formData);
+    setRefreshedJobs(null);
     router.refresh();
   }
 
