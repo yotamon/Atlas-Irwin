@@ -5,6 +5,7 @@ import {
   MEDIA_WORKER_CALLBACK_HASH_KEY,
   scheduleMediaWorkerSandboxCleanup,
 } from "@/lib/media-worker/sandbox";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { AutoMixJob } from "@/types/automix-database";
 import type { Json } from "@/types/database";
@@ -53,7 +54,8 @@ function scheduleCleanup() {
 
 async function canonicalMastersStillMatch(job: AutoMixJob) {
   const service = createServiceClient();
-  const tracks = await service.from("tracks")
+  const musicDb = asArtistScopedMusicClient(service);
+  const tracks = await musicDb.from("tracks")
     .select("id,audio_url")
     .eq("owner_id", job.owner_id)
     .eq("artist_id", job.artist_id)
