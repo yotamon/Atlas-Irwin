@@ -107,10 +107,16 @@ jobs:
 
       - name: Install Media Worker audio regression dependencies
         if: github.event_name != 'pull_request'
-        run: >-
-          python -m pip install
-          -c services/media-worker/requirements.txt
-          numpy librosa soundfile pyloudnorm imageio-ffmpeg httpx pydantic
+        run: |
+          python -m pip install \
+            -c services/media-worker/requirements.txt \
+            numpy librosa soundfile pyloudnorm imageio-ffmpeg httpx pydantic
+          # MIR scoring and robustness transforms are CI/private-catalog tooling only.
+          # Keep them out of the production Sandbox environment while making the
+          # deep regression suite truthful and self-contained.
+          python -m pip install \
+            -c services/media-worker/requirements.txt \
+            -r services/media-worker/requirements-audio-benchmark.txt
 
       - name: Run Track Intelligence behavioral regression tests
         if: github.event_name != 'pull_request'
