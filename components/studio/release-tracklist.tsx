@@ -5,8 +5,8 @@ import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import type { Track } from "@/types/database";
 import type { VaultTrack } from "@/types/growth-database";
 
-function trackLabel(track: Track, index: number) {
-  return track.track_number ?? track.display_order + 1 ?? index + 1;
+function trackLabel(track: Track) {
+  return track.track_number ?? track.display_order + 1;
 }
 
 function analysisState(vault: VaultTrack | null) {
@@ -46,14 +46,14 @@ export function ReleaseTracklist({
 
       {tracks.length ? (
         <div className="v2-inbox release-tracklist-rows">
-          {tracks.map((track, index) => {
+          {tracks.map((track) => {
             const vault = exactVaults.get(track.id) ?? legacySingleVault;
             const hasMaster = Boolean(track.audio_url || vault?.audio_url);
             const trackHref = ensemblisArtistHref(`/studio/music/${vault?.id ?? track.id}`, artistId);
             return (
               <div className="v2-inbox-item release-track-row" key={track.id}>
                 <Link className="release-track-main" href={trackHref}>
-                  <span className="release-track-number" aria-label={`Track ${trackLabel(track, index)}`}>{trackLabel(track, index)}</span>
+                  <span className="release-track-number" aria-label={`Track ${trackLabel(track)}`}>{trackLabel(track)}</span>
                   <span className="release-track-copy">
                     <strong>{track.title}{track.version ? ` · ${track.version}` : ""}</strong>
                     <small>{hasMaster ? `${analysisState(vault ?? null)} · open track workspace` : "Master needed · add it here or open the track"}</small>
