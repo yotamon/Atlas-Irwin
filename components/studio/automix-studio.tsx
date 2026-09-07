@@ -9,6 +9,7 @@ import type {
   AutoMixPurpose,
   AutoMixTransitionStyle,
 } from "@/types/automix-database";
+import { ProcessingState } from "./processing-state";
 import styles from "./automix-studio.module.css";
 
 type TrackOption = {
@@ -67,6 +68,26 @@ function statusLabel(status: AutoMixJob["status"]) {
 function responseError(value: unknown, fallback: string) {
   if (value && typeof value === "object" && "error" in value && typeof value.error === "string") return value.error;
   return fallback;
+}
+
+function activeMixSteps(status: AutoMixJob["status"]) {
+  const waiting = "waiting" as const;
+  const active = "active" as const;
+  const complete = "complete" as const;
+
+  if (status === "running") {
+    return [
+      { label: "Queue", state: complete },
+      { label: "DJ plan + render", state: active },
+      { label: "Master verify", state: waiting },
+    ];
+  }
+
+  return [
+    { label: "Queue", state: active },
+    { label: "DJ plan + render", state: waiting },
+    { label: "Master verify", state: waiting },
+  ];
 }
 
 export function AutoMixStudio({ artistId, artistName, tracks }: AutoMixStudioProps) {
@@ -185,57 +206,61 @@ export function AutoMixStudio({ artistId, artistName, tracks }: AutoMixStudioPro
 
   return (
     <div className={styles.workspace}>
-      <section className={styles.heroCard}>
-        <div>
-          <span className="section-label">Professional DJ engine</span>
-          <h2>Build the set, not a playlist crossfade</h2>
+      <section className={styles.hero}>
+        <div className={styles.heroCopy}>
+          <span className="section-label">Professional DJ engine / artist catalog only</span>
+          <h2>Build the set,<br />not a crossfade.</h2>
           <p>
             AutoMix reads phrasing, downbeats, local tempo, harmonic compatibility, vocal and bass activity,
             mastering quality and the real loudness of the audio windows it uses. Unstable BPM is never forced onto a grid.
           </p>
         </div>
-        <div className={styles.qualityPills} aria-label="AutoMix quality protections">
-          <span>Variable-tempo aware</span>
-          <span>Vocal collision veto</span>
-          <span>True-peak safe</span>
-          <span>Master-preserving</span>
+        <div className={styles.technicalRider} aria-label="AutoMix quality protections">
+          <span className={styles.riderLabel}>Technical rider</span>
+          <ol>
+            <li><span>01</span><strong>Variable-tempo aware</strong></li>
+            <li><span>02</span><strong>Vocal collision veto</strong></li>
+            <li><span>03</span><strong>True-peak safe</strong></li>
+            <li><span>04</span><strong>Master-preserving</strong></li>
+          </ol>
         </div>
       </section>
 
-      <div className={styles.builderGrid}>
-        <section className={styles.panel}>
-          <div className={styles.panelHeading}>
-            <div>
-              <span className="section-label">01 / Set intent</span>
-              <h2>Tell the engine what this mix is for</h2>
-            </div>
-          </div>
+      <section className={styles.stage}>
+        <div className={styles.stageIntro}>
+          <span className="section-label">01 / Set intent</span>
+          <h2>What room is this set for?</h2>
+          <p>{purposeCopy}</p>
+        </div>
 
+        <div className={styles.stageBody}>
           <label className="field">
             <span>Mix name</span>
             <input value={name} maxLength={120} onChange={(event) => setName(event.target.value)} />
           </label>
 
-          <div className={styles.intentGrid}>
-            {PURPOSES.map((item) => (
+          <div className={styles.intentList}>
+            {PURPOSES.map((item, index) => (
               <button
-                className={`${styles.intentCard} ${purpose === item.id ? styles.selectedIntent : ""}`}
+                className={`${styles.intentChoice} ${purpose === item.id ? styles.selectedIntent : ""}`}
                 type="button"
                 key={item.id}
+                aria-pressed={purpose === item.id}
                 onClick={() => {
                   setPurpose(item.id);
                   if (item.id === "booking" && name.endsWith("Booking Mix") === false) setName(`${artistName} Booking Mix`);
                   if (item.id === "journey") setName(`${artistName} Artist Journey`);
                 }}
               >
+                <span className={styles.intentIndex}>{String(index + 1).padStart(2, "0")}</span>
                 <strong>{item.label}</strong>
-                <span>{item.description}</span>
+                <span className={styles.intentDescription}>{item.description}</span>
+                <span className={styles.intentMark} aria-hidden="true" />
               </button>
             ))}
           </div>
-          <p className={styles.intentNote}>{purposeCopy}</p>
 
-          <div className="form-grid">
+          <div className={styles.controlStrip}>
             <label className="field">
               <span>Target length</span>
               <select value={durationMinutes} onChange={(event) => setDurationMinutes(Number(event.target.value))}>
@@ -266,130 +291,154 @@ export function AutoMixStudio({ artistId, artistName, tracks }: AutoMixStudioPro
               </select>
             </label>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <section className={styles.panel}>
-          <div className={styles.panelHeading}>
-            <div>
-              <span className="section-label">02 / Source material</span>
-              <h2>Choose the catalog</h2>
-              <p>{selectedIds.length} selected · 2–20 tracks</p>
-            </div>
-          </div>
-
+      <section className={styles.stage}>
+        <div className={styles.stageIntro}>
+          <span className="section-label">02 / Source material</span>
+          <h2>Choose the records.</h2>
+          <p>{selectedIds.length} selected · 2–20 mastered tracks</p>
+        </div>
+        <div className={styles.stageBody}>
           <div className={styles.catalogList}>
-            {available.map((track) => {
+            {available.map((track, index) => {
               const active = selectedIds.includes(track.id);
               return (
                 <button
                   key={track.id}
                   type="button"
                   className={`${styles.catalogTrack} ${active ? styles.catalogTrackSelected : ""}`}
+                  aria-pressed={active}
                   onClick={() => toggleTrack(track.id)}
                 >
+                  <span className={styles.catalogIndex}>{String(index + 1).padStart(2, "0")}</span>
                   <span className={styles.check}>{active ? <FiCheck /> : <FiMusic />}</span>
-                  <span>
+                  <span className={styles.catalogCopy}>
                     <strong>{track.title}</strong>
                     <small>{track.is_primary ? "Primary master" : "Canonical master"}</small>
                   </span>
+                  <span className={styles.catalogState}>{active ? "In set" : "Add"}</span>
                 </button>
               );
             })}
             {!available.length ? <p className={styles.empty}>Add at least two mastered tracks before creating a mix.</p> : null}
           </div>
-        </section>
-      </div>
-
-      <section className={styles.panel}>
-        <div className={styles.panelHeading}>
-          <div>
-            <span className="section-label">03 / Running order</span>
-            <h2>{purpose === "journey" ? "Your order is the story" : "Starting order"}</h2>
-            <p>{purpose === "journey" ? "Journey mode preserves this exact order." : "The DJ planner may reorder these tracks when a better harmonic and energy path exists."}</p>
-          </div>
-        </div>
-        <div className={styles.runningOrder}>
-          {selected.map((track, index) => (
-            <div className={styles.orderRow} key={track.id}>
-              <span className={styles.orderIndex}>{String(index + 1).padStart(2, "0")}</span>
-              <div><strong>{track.title}</strong><small>{purpose === "journey" ? "Locked narrative position" : "Eligible for intelligent sequencing"}</small></div>
-              <div className={styles.orderActions}>
-                <button type="button" aria-label={`Move ${track.title} up`} disabled={index === 0} onClick={() => moveTrack(index, -1)}><FiArrowUp /></button>
-                <button type="button" aria-label={`Move ${track.title} down`} disabled={index === selected.length - 1} onClick={() => moveTrack(index, 1)}><FiArrowDown /></button>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {error ? <div className={styles.error}>{error}</div> : null}
-        <div className={styles.createBar}>
-          <div>
-            <strong>{selectedIds.length >= 2 ? "Ready to plan the set" : "Choose at least two tracks"}</strong>
-            <span>Offline high-quality render · pitch preserved · max ±6% fixed-grid stretch</span>
-          </div>
-          <button className="button primary" type="button" disabled={creating || selectedIds.length < 2} onClick={createMix}>
-            <FiZap /> {creating ? "Starting…" : "Create professional mix"}
-          </button>
         </div>
       </section>
 
-      <section className={styles.panel}>
-        <div className={styles.panelHeading}>
-          <div>
-            <span className="section-label">04 / Mixes</span>
-            <h2>Rendered sets</h2>
+      <section className={`${styles.stage} ${styles.runningStage}`}>
+        <div className={styles.stageIntro}>
+          <span className="section-label">03 / Running order</span>
+          <h2>{purpose === "journey" ? "Your order is the story." : "Sketch the setlist."}</h2>
+          <p>{purpose === "journey" ? "Journey mode preserves this exact order." : "The DJ planner may reorder tracks when a stronger harmonic and energy path exists."}</p>
+        </div>
+        <div className={styles.stageBody}>
+          <div className={styles.runningOrder}>
+            {selected.map((track, index) => (
+              <div className={styles.orderRow} key={track.id}>
+                <span className={styles.orderIndex}>{String(index + 1).padStart(2, "0")}</span>
+                <div className={styles.orderCopy}>
+                  <strong>{track.title}</strong>
+                  <small>{purpose === "journey" ? "Locked narrative position" : "Eligible for intelligent sequencing"}</small>
+                </div>
+                <div className={styles.orderActions}>
+                  <button type="button" aria-label={`Move ${track.title} up`} disabled={index === 0} onClick={() => moveTrack(index, -1)}><FiArrowUp /></button>
+                  <button type="button" aria-label={`Move ${track.title} down`} disabled={index === selected.length - 1} onClick={() => moveTrack(index, 1)}><FiArrowDown /></button>
+                </div>
+              </div>
+            ))}
           </div>
-          <button className="button" type="button" disabled={loadingJobs} onClick={() => void loadJobs()}><FiRefreshCw /> Refresh</button>
+
+          {error ? <div className={styles.error} role="alert">{error}</div> : null}
+          <div className={styles.createBar}>
+            <div>
+              <span className={styles.readiness}>{selectedIds.length >= 2 ? "SET READY" : "NEEDS MUSIC"}</span>
+              <strong>{selectedIds.length >= 2 ? `${selectedIds.length} tracks ready for the planner` : "Choose at least two tracks"}</strong>
+              <small>Offline high-quality render · pitch preserved · max ±6% fixed-grid stretch</small>
+            </div>
+            <button className="button primary" type="button" disabled={creating || selectedIds.length < 2} onClick={createMix}>
+              <FiZap /> {creating ? "Starting engine…" : "Create professional mix"}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className={`${styles.stage} ${styles.sessionsStage}`}>
+        <div className={styles.stageIntro}>
+          <span className="section-label">04 / Sessions</span>
+          <h2>Rendered sets.</h2>
+          <p>Each session keeps its purpose, source lineage, render state and final audio together.</p>
+          <button className="button" type="button" disabled={loadingJobs} onClick={() => void loadJobs()}><FiRefreshCw /> Refresh sessions</button>
         </div>
 
-        <div className={styles.jobs}>
-          {jobs.map((job) => {
-            const result = (job.result_payload && typeof job.result_payload === "object" && !Array.isArray(job.result_payload))
-              ? job.result_payload as Record<string, unknown>
-              : {};
-            const render = (result.render && typeof result.render === "object" && !Array.isArray(result.render))
-              ? result.render as Record<string, unknown>
-              : {};
-            const warnings = Array.isArray(result.warnings) ? result.warnings : [];
-            return (
-              <article className={styles.jobCard} key={job.id}>
-                <div className={styles.jobTop}>
-                  <div>
-                    <small>{job.purpose.replaceAll("_", " ")} · {job.track_ids.length} tracks</small>
-                    <strong>{job.name}</strong>
-                  </div>
-                  <span className={`${styles.status} ${styles[`status_${job.status}`] ?? ""}`}>{statusLabel(job.status)}</span>
-                </div>
-
-                {job.status === "completed" && job.output?.public_url ? (
-                  <div className={styles.player}>
-                    <audio controls preload="metadata" src={job.output.public_url} />
-                    <div className={styles.resultMeta}>
-                      <span>{formatDuration(job.output.duration_ms || Number(render.duration_ms) || 0)}</span>
-                      {typeof render.final_measured_lufs === "number" ? <span>{render.final_measured_lufs.toFixed(1)} LUFS</span> : null}
-                      <span>-1 dBTP ceiling</span>
+        <div className={styles.stageBody}>
+          <div className={styles.jobs}>
+            {jobs.map((job, index) => {
+              const result = (job.result_payload && typeof job.result_payload === "object" && !Array.isArray(job.result_payload))
+                ? job.result_payload as Record<string, unknown>
+                : {};
+              const render = (result.render && typeof result.render === "object" && !Array.isArray(result.render))
+                ? result.render as Record<string, unknown>
+                : {};
+              const warnings = Array.isArray(result.warnings) ? result.warnings : [];
+              return (
+                <article className={`${styles.job} ${ACTIVE.has(job.status) ? styles.activeJob : ""}`} key={job.id}>
+                  <div className={styles.jobTop}>
+                    <span className={styles.jobIndex}>{String(index + 1).padStart(2, "0")}</span>
+                    <div className={styles.jobIdentity}>
+                      <small>{job.purpose.replaceAll("_", " ")} · {job.track_ids.length} tracks</small>
+                      <strong>{job.name}</strong>
                     </div>
-                    <a className="button" href={job.output.public_url} target="_blank" rel="noreferrer"><FiDownload /> Open mix</a>
+                    <span className={`${styles.status} ${styles[`status_${job.status}`] ?? ""}`}>{statusLabel(job.status)}</span>
                   </div>
-                ) : null}
 
-                {ACTIVE.has(job.status) ? (
-                  <div className={styles.progress}><span /><p>Analyzing the selected material, planning the set and rendering offline.</p></div>
-                ) : null}
+                  {job.status === "completed" && job.output?.public_url ? (
+                    <div className={styles.player}>
+                      <audio controls preload="metadata" src={job.output.public_url} />
+                      <div className={styles.resultMeta}>
+                        <span><small>Length</small>{formatDuration(job.output.duration_ms || Number(render.duration_ms) || 0)}</span>
+                        {typeof render.final_measured_lufs === "number" ? <span><small>Loudness</small>{render.final_measured_lufs.toFixed(1)} LUFS</span> : null}
+                        <span><small>Ceiling</small>-1 dBTP</span>
+                      </div>
+                      <a className="button" href={job.output.public_url} target="_blank" rel="noreferrer"><FiDownload /> Open mix</a>
+                    </div>
+                  ) : null}
 
-                {job.error ? <p className={styles.jobError}>{job.error}</p> : null}
-                {warnings.length ? <details className={styles.warnings}>
-                  <summary>{warnings.length} source note{warnings.length === 1 ? "" : "s"}</summary>
-                  {warnings.map((warning, index) => {
-                    const item = warning && typeof warning === "object" && !Array.isArray(warning) ? warning as Record<string, unknown> : {};
-                    return <p key={index}>{typeof item.message === "string" ? item.message : "Source material required conservative handling."}</p>;
-                  })}
-                </details> : null}
-              </article>
-            );
-          })}
-          {!jobs.length && !loadingJobs ? <p className={styles.empty}>No mixes yet. Your first rendered set will appear here.</p> : null}
-          {loadingJobs && !jobs.length ? <p className={styles.empty}>Loading mixes…</p> : null}
+                  {ACTIVE.has(job.status) ? (
+                    <ProcessingState
+                      className={styles.jobProcessing}
+                      compact
+                      eyebrow="AutoMix session"
+                      title={job.status === "running" ? "The DJ engine is building the set" : "The set is entering the render queue"}
+                      detail="Phrasing, tempo behavior, transition safety and final mastering evidence stay attached to this session."
+                      steps={activeMixSteps(job.status)}
+                    />
+                  ) : null}
+
+                  {job.error ? <p className={styles.jobError}>{job.error}</p> : null}
+                  {warnings.length ? <details className={styles.warnings}>
+                    <summary>{warnings.length} source note{warnings.length === 1 ? "" : "s"}</summary>
+                    {warnings.map((warning, warningIndex) => {
+                      const item = warning && typeof warning === "object" && !Array.isArray(warning) ? warning as Record<string, unknown> : {};
+                      return <p key={warningIndex}>{typeof item.message === "string" ? item.message : "Source material required conservative handling."}</p>;
+                    })}
+                  </details> : null}
+                </article>
+              );
+            })}
+            {!jobs.length && !loadingJobs ? <p className={styles.empty}>No sessions yet. Your first rendered set will appear here.</p> : null}
+            {loadingJobs && !jobs.length ? (
+              <ProcessingState
+                className={styles.sessionsLoading}
+                compact
+                eyebrow="Session archive"
+                title="Reading the mix room"
+                detail="Loading the artist's AutoMix sessions and render states."
+                steps={[{ label: "Sessions", state: "active" }]}
+              />
+            ) : null}
+          </div>
         </div>
       </section>
     </div>
