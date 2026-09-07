@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { analyzeReleaseVaultTrack } from "@/app/studio/growth-media-actions-safe";
 import { AnalysisAutoRefresh } from "@/components/studio/analysis-auto-refresh";
 import { AnalysisSubmitButton } from "@/components/studio/analysis-submit-button";
@@ -17,13 +18,30 @@ function duration(seconds: number | null | undefined) {
 
 export function ReleaseMasterAudioPanel({
   releaseId,
+  trackCount,
   primaryTrack,
   vaultTrack,
 }: {
   releaseId: string;
+  trackCount: number;
   primaryTrack: Track | null;
   vaultTrack: VaultTrack | null;
 }) {
+  if (trackCount > 1) {
+    return (
+      <section className="v2-section v2-full-column" id="master-audio">
+        <div className="v2-section-heading">
+          <div>
+            <span className="section-label">Masters & Music Intelligence</span>
+            <h2>Each track owns its own master</h2>
+            <p>Multi-track releases do not have a release-level canonical audio file. Attach or replace the master on the exact track so playback, analysis, stems, lyrics and distribution keep the correct track identity.</p>
+          </div>
+          <Link className="button primary" href={`/studio/releases/${releaseId}`}>Manage track masters</Link>
+        </div>
+      </section>
+    );
+  }
+
   const audioUrl = vaultTrack?.audio_url ?? primaryTrack?.audio_url ?? null;
   const currentDuration = vaultTrack?.duration_seconds ?? primaryTrack?.duration ?? null;
   const hasMaster = Boolean(audioUrl);
@@ -47,14 +65,14 @@ export function ReleaseMasterAudioPanel({
 
         {!hasMaster ? (
           <>
-            <p className="v2-muted-copy">Upload the canonical master here. Ensemblis will keep it with this release, add it to Media Library, and automatically map the track structure and strongest hook candidates for video and campaign creation.</p>
-            <MediaUploader releaseId={releaseId} defaultRole="master_audio" releaseMasterMode />
+            <p className="v2-muted-copy">Upload the master for this track. Ensemblis will keep it with the release, add it to Media Library, and automatically map the track structure and strongest hook candidates for video and campaign creation.</p>
+            <MediaUploader releaseId={releaseId} trackId={primaryTrack?.id} defaultRole="master_audio" releaseMasterMode />
           </>
         ) : (
           <>
             <div className="growth-action-note">
-              <strong>Canonical master</strong>
-              <span>{duration(currentDuration)} · attached to this release · reusable across Ensemblis</span>
+              <strong>Track master</strong>
+              <span>{duration(currentDuration)} · attached to this track · reusable across Ensemblis</span>
             </div>
             <audio controls preload="metadata" src={audioUrl ?? undefined} style={{ width: "100%" }} />
 
@@ -107,8 +125,8 @@ export function ReleaseMasterAudioPanel({
 
             <details className="workspace-drawer">
               <summary>Replace master audio</summary>
-              <p className="v2-muted-copy">The new file becomes the canonical master and gets a fresh analysis. The previous asset remains in Media Library history instead of being deleted.</p>
-              <MediaUploader releaseId={releaseId} defaultRole="master_audio" releaseMasterMode />
+              <p className="v2-muted-copy">The new file becomes this track&apos;s master and gets a fresh analysis. The previous asset remains in Media Library history instead of being deleted.</p>
+              <MediaUploader releaseId={releaseId} trackId={primaryTrack?.id} defaultRole="master_audio" releaseMasterMode />
             </details>
           </>
         )}

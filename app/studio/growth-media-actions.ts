@@ -189,6 +189,12 @@ export async function attachReleaseMasterFromMedia(form: FormData) {
   if (tracksError) throw new Error(tracksError.message);
   if (linkedError) throw new Error(linkedError.message);
   if (assetVaultError) throw new Error(assetVaultError.message);
+
+  const currentTracks = tracks ?? [];
+  if (currentTracks.length > 1) {
+    throw new Error("Multi-track releases require a separate master for each track. Attach this audio to the intended track instead of using the legacy release-level master action.");
+  }
+
   if (!asset.mime_type?.startsWith("audio/")) throw new Error("The release master must be an audio file.");
   if (!asset.public_url) throw new Error("Music Intelligence requires a public master URL.");
   if (assetVault?.linked_release_id && assetVault.linked_release_id !== release.id) {
@@ -196,7 +202,6 @@ export async function attachReleaseMasterFromMedia(form: FormData) {
   }
 
   const durationSeconds = asset.duration_ms ? Math.round(asset.duration_ms / 1000) : null;
-  const currentTracks = tracks ?? [];
   let canonicalTrack = currentTracks.find((track) => track.is_primary) ?? currentTracks[0] ?? null;
 
   if (canonicalTrack) {
@@ -231,7 +236,7 @@ export async function attachReleaseMasterFromMedia(form: FormData) {
 
   const existingVault = assetVault ?? linkedVault;
   if (linkedVault && existingVault && linkedVault.id !== existingVault.id) {
-    const { error } = await growth.from("track_vault").update({ linked_release_id: null, status: "hold" })
+    const { error } = await growth.from("track_vault").update({ linked_release_id: null, linked_track_id: null, status: "hold" })
       .eq("id", linkedVault.id)
       .eq("owner_id", user.id)
       .eq("artist_id", artist.artistId);
@@ -243,6 +248,7 @@ export async function attachReleaseMasterFromMedia(form: FormData) {
   const vaultValues = {
     artist_id: artist.artistId,
     linked_release_id: release.id,
+    linked_track_id: canonicalTrack.id,
     media_asset_id: asset.id,
     title: canonicalTrack.title || release.title,
     version: canonicalTrack.version,
