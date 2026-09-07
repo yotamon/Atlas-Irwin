@@ -1,10 +1,10 @@
 /* Single Ensemblis Studio stylesheet entrypoint.
    Primitive anatomy establishes safe defaults first. The tokenized compatibility
    bridge is allowed to restore contextual layout while legacy routes migrate,
-   then canonical patterns, shell, compositions, outcome-driven workflows and
-   the motion/material layer own the final product UI. */
+   then canonical patterns, shell, compositions, outcome-driven workflows,
+   motion and art direction own the final product UI. */
 
-@layer ensemblis-tokens, ensemblis-primitives, ensemblis-compat, ensemblis-patterns, ensemblis-shell, ensemblis-compositions, ensemblis-workflows, ensemblis-motion, ensemblis-accessibility;
+@layer ensemblis-tokens, ensemblis-primitives, ensemblis-compat, ensemblis-patterns, ensemblis-shell, ensemblis-compositions, ensemblis-workflows, ensemblis-motion, ensemblis-art-direction, ensemblis-accessibility;
 
 @import "./tokens.css" layer(ensemblis-tokens);
 @import "./primitives.css" layer(ensemblis-primitives);
@@ -14,4 +14,5 @@
 @import "./compositions.css" layer(ensemblis-compositions);
 @import "./workflows.css" layer(ensemblis-workflows);
 @import "./motion.css" layer(ensemblis-motion);
+@import "./art-direction.css" layer(ensemblis-art-direction);
 @import "./accessibility.css" layer(ensemblis-accessibility);
