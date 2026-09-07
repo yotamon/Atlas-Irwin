@@ -53,6 +53,13 @@ function cleanRequestPayload(value: unknown) {
   return next;
 }
 
+function terminalRequestPayload(value: unknown) {
+  const next = { ...record(value) };
+  delete next.upload_url;
+  delete next.tracks;
+  return next;
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const artistId = url.searchParams.get("artist")?.trim() || "";
@@ -196,7 +203,7 @@ export async function DELETE(request: Request) {
   const previousStatus = current.data.status;
   const cancelled = await db.from("automix_jobs").update({
     status: "cancelled",
-    request_payload: json(cleanRequestPayload(current.data.request_payload)),
+    request_payload: json(terminalRequestPayload(current.data.request_payload)),
     error: "Cancelled by the artist before completion.",
     completed_at: new Date().toISOString(),
   }).eq("id", jobId)
