@@ -16,6 +16,25 @@ function environmentName() {
   return process.env.VERCEL_ENV?.trim() === "production" ? "production" : "preview";
 }
 
+function audioEnv(primary: string, legacy: string) {
+  return process.env[primary]?.trim() || process.env[legacy]?.trim() || "";
+}
+
+function audioFlag(primary: string, legacy: string) {
+  return ["1", "true", "yes", "on"].includes(audioEnv(primary, legacy).toLowerCase());
+}
+
+function mediaWorkerAudioProfile() {
+  return {
+    beatThisEnabled: audioFlag("ENSEMBLIS_BEAT_THIS_ENABLED", "ATLAS_BEAT_THIS_ENABLED"),
+    basicPitchEnabled: audioFlag("ENSEMBLIS_BASIC_PITCH_ENABLED", "ATLAS_BASIC_PITCH_ENABLED"),
+    clapEnabled: audioFlag("ENSEMBLIS_CLAP_ENABLED", "ATLAS_CLAP_ENABLED"),
+    clapModel: audioEnv("ENSEMBLIS_CLAP_MODEL", "ATLAS_CLAP_MODEL"),
+    clapRevision: audioEnv("ENSEMBLIS_CLAP_REVISION", "ATLAS_CLAP_REVISION"),
+    clapAllowDownload: audioFlag("ENSEMBLIS_CLAP_ALLOW_DOWNLOAD", "ATLAS_CLAP_ALLOW_DOWNLOAD"),
+  };
+}
+
 export function mediaWorkerSandboxName() {
   return `atlas-media-worker-${environmentName()}-v${MEDIA_WORKER_RUNTIME_VERSION}`;
 }
@@ -30,6 +49,7 @@ export function mediaWorkerSandboxAvailable() {
 }
 
 export function mediaWorkerReadiness() {
+  const audio = mediaWorkerAudioProfile();
   return {
     configured: mediaWorkerSandboxAvailable(),
     runtime: "vercel_sandbox" as const,
@@ -38,6 +58,11 @@ export function mediaWorkerReadiness() {
     pythonVersion: MEDIA_WORKER_PYTHON_VERSION,
     workerVersion: MEDIA_WORKER_RUNTIME_VERSION,
     bootstrapVersion: MEDIA_WORKER_BOOTSTRAP_VERSION,
+    optionalAudioProfiles: {
+      beatThisShadow: audio.beatThisEnabled,
+      basicPitchExternal: audio.basicPitchEnabled,
+      clapSemantics: audio.clapEnabled,
+    },
   };
 }
 
@@ -112,6 +137,7 @@ async function releaseWorkerLock(sandbox: Sandbox) {
 function detachedWorkerScript(requestPath: string) {
   const revision = sourceRevision();
   const base = `https://raw.githubusercontent.com/yotamon/Atlas-Irwin/${revision}/services/media-worker`;
+  const audio = mediaWorkerAudioProfile();
   return `set -uo pipefail
 REQUEST=${JSON.stringify(requestPath)}
 WORKDIR=${JSON.stringify(WORKDIR)}
@@ -119,12 +145,20 @@ LOCKDIR=${JSON.stringify(LOCKDIR)}
 BASE=${JSON.stringify(base)}
 BOOTSTRAP_VERSION=${MEDIA_WORKER_BOOTSTRAP_VERSION}
 PYTHON_VERSION=${JSON.stringify(MEDIA_WORKER_PYTHON_VERSION)}
+BEAT_THIS_PROFILE=${audio.beatThisEnabled ? "1" : "0"}
+SEMANTIC_PROFILE=${audio.clapEnabled ? "1" : "0"}
 LOG=/tmp/atlas-media-worker-bootstrap.log
 export UV_PYTHON_INSTALL_DIR="$WORKDIR/.uv-python"
 export UV_CACHE_DIR="$WORKDIR/.uv-cache"
 export TORCH_HOME="$WORKDIR/.torch"
 export HF_HOME="$WORKDIR/.huggingface"
 export PYTHONPATH="$WORKDIR"
+export ENSEMBLIS_BEAT_THIS_ENABLED=${JSON.stringify(audio.beatThisEnabled ? "true" : "false")}
+export ENSEMBLIS_BASIC_PITCH_ENABLED=${JSON.stringify(audio.basicPitchEnabled ? "true" : "false")}
+export ENSEMBLIS_CLAP_ENABLED=${JSON.stringify(audio.clapEnabled ? "true" : "false")}
+export ENSEMBLIS_CLAP_MODEL=${JSON.stringify(audio.clapModel)}
+export ENSEMBLIS_CLAP_REVISION=${JSON.stringify(audio.clapRevision)}
+export ENSEMBLIS_CLAP_ALLOW_DOWNLOAD=${JSON.stringify(audio.clapAllowDownload ? "true" : "false")}
 
 cleanup() {
   rm -rf "$LOCKDIR"
@@ -190,6 +224,8 @@ files = {
     "app/automix.py": f"{base}/app/automix.py",
     "app/runner.py": f"{base}/app/runner.py",
     "requirements.txt": f"{base}/requirements.txt",
+    "requirements-audio-advanced.txt": f"{base}/requirements-audio-advanced.txt",
+    "requirements-audio-semantic.txt": f"{base}/requirements-audio-semantic.txt",
 }
 for relative, url in files.items():
     target = root / relative
@@ -197,14 +233,26 @@ for relative, url in files.items():
     target.write_bytes(urlopen(url, timeout=30).read())
 PY
 
-  requirements_sha=$(sha256sum "$WORKDIR/requirements.txt" | cut -d' ' -f1)
-  required=$(printf '%s:%s:%s' "$BOOTSTRAP_VERSION" "$PYTHON_VERSION" "$requirements_sha" | sha256sum | cut -d' ' -f1)
+  requirements_sha=$(
+    {
+      cat "$WORKDIR/requirements.txt"
+      if [ "$BEAT_THIS_PROFILE" = "1" ]; then cat "$WORKDIR/requirements-audio-advanced.txt"; fi
+      if [ "$SEMANTIC_PROFILE" = "1" ]; then cat "$WORKDIR/requirements-audio-semantic.txt"; fi
+    } | sha256sum | cut -d' ' -f1
+  )
+  required=$(printf '%s:%s:%s:%s:%s' "$BOOTSTRAP_VERSION" "$PYTHON_VERSION" "$BEAT_THIS_PROFILE" "$SEMANTIC_PROFILE" "$requirements_sha" | sha256sum | cut -d' ' -f1)
   installed=$(cat "$WORKDIR/.requirements.sha" 2>/dev/null || true)
   if [ ! -x "$WORKDIR/.venv/bin/python" ] || [ "$required" != "$installed" ]; then
     rm -rf "$WORKDIR/.venv"
     uv python install "$PYTHON_VERSION"
     uv venv --python "$PYTHON_VERSION" "$WORKDIR/.venv"
     uv pip install --python "$WORKDIR/.venv/bin/python" -r "$WORKDIR/requirements.txt"
+    if [ "$BEAT_THIS_PROFILE" = "1" ]; then
+      uv pip install --python "$WORKDIR/.venv/bin/python" -r "$WORKDIR/requirements-audio-advanced.txt"
+    fi
+    if [ "$SEMANTIC_PROFILE" = "1" ]; then
+      uv pip install --python "$WORKDIR/.venv/bin/python" -r "$WORKDIR/requirements-audio-semantic.txt"
+    fi
 
     "$WORKDIR/.venv/bin/python" - <<'PY'
 import bz2
