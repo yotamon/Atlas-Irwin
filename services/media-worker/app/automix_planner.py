@@ -5,6 +5,7 @@ from typing import Any
 
 import numpy as np
 
+from .automix_intelligence import mastering_profile, tempo_profile, transition_activity
 from .automix_model import (
     AUTOMIX_VERSION, MAX_BEATMATCH_STRETCH, EnergyProfile, Purpose, TrackDescriptor, TransitionStyle,
     _clip01, _list_records, harmonic_compatibility, bpm_compatibility,
@@ -32,14 +33,38 @@ def _energy_target(position: float, purpose: Purpose, profile: EnergyProfile) ->
     return _clip01(base)
 
 
+def _tempo(track: TrackDescriptor) -> dict[str, Any]:
+    return tempo_profile(track.music_map, track.window_start_ms, track.window_end_ms, track.dj_bpm)
+
+
 def transition_score(a: TrackDescriptor, b: TrackDescriptor, position: float, purpose: Purpose, profile: EnergyProfile) -> dict[str, float]:
+    a_tempo = _tempo(a)
+    b_tempo = _tempo(b)
+    a_exit = float(a_tempo["exit_bpm"])
+    b_entry = float(b_tempo["entry_bpm"])
+    tempo, stretch_delta = bpm_compatibility(a_exit, b_entry)
+    tempo_reliability = math.sqrt(float(a_tempo["reliability"]) * float(b_tempo["reliability"]))
+    constant_safe = float(bool(a_tempo["constant_stretch_safe"]) and bool(b_tempo["constant_stretch_safe"]))
     harmonic = harmonic_compatibility(a.key, b.key)
-    tempo, stretch_delta = bpm_compatibility(a.dj_bpm, b.dj_bpm)
     energy_target = _energy_target(position, purpose, profile)
     energy_fit = _clip01(1.0 - abs(b.energy - energy_target) / 0.65)
     flow = _clip01(1.0 - max(0.0, a.energy - b.energy - 0.18) / 0.55)
     safe_stretch = 1.0 if stretch_delta <= MAX_BEATMATCH_STRETCH else _clip01(1.0 - (stretch_delta - MAX_BEATMATCH_STRETCH) / 0.12)
-    total = _clip01(0.30 * harmonic + 0.26 * tempo + 0.20 * energy_fit + 0.12 * flow + 0.12 * safe_stretch)
+    activity = transition_activity(a.music_map, a.window_end_ms, b.music_map, b.window_start_ms, 16_000)
+    vocal_safety = 1.0 - float(activity["vocal_collision"])
+    mastering_a = mastering_profile(a.music_map)
+    mastering_b = mastering_profile(b.music_map)
+    mastering_quality = math.sqrt(float(mastering_a["quality_score"]) * float(mastering_b["quality_score"]))
+    total = _clip01(
+        0.25 * harmonic
+        + 0.22 * tempo
+        + 0.16 * energy_fit
+        + 0.10 * flow
+        + 0.10 * safe_stretch
+        + 0.09 * tempo_reliability
+        + 0.05 * vocal_safety
+        + 0.03 * mastering_quality
+    )
     return {
         "total": total,
         "harmonic": harmonic,
@@ -47,6 +72,13 @@ def transition_score(a: TrackDescriptor, b: TrackDescriptor, position: float, pu
         "energy_fit": energy_fit,
         "flow": flow,
         "stretch_delta": stretch_delta,
+        "tempo_reliability": tempo_reliability,
+        "constant_stretch_safe": constant_safe,
+        "vocal_collision": float(activity["vocal_collision"]),
+        "bass_collision": float(activity["bass_collision"]),
+        "mastering_quality": mastering_quality,
+        "a_exit_bpm": a_exit,
+        "b_entry_bpm": b_entry,
     }
 
 
@@ -59,7 +91,8 @@ def order_tracks(tracks: list[TrackDescriptor], purpose: Purpose, profile: Energ
         target = _energy_target(0.0, purpose, profile)
         identity = track.window_score
         start_fit = _clip01(1.0 - abs(track.energy - target) / 0.7)
-        beam.append((0.58 * identity + 0.42 * start_fit, (index,)))
+        quality = float(mastering_profile(track.music_map)["quality_score"])
+        beam.append((0.52 * identity + 0.38 * start_fit + 0.10 * quality, (index,)))
     beam.sort(reverse=True, key=lambda item: item[0])
     beam = beam[: min(24, len(beam))]
     for depth in range(1, n):
@@ -90,21 +123,34 @@ def _section_label_near(music_map: dict[str, Any], ms: int) -> str:
 
 def choose_transition(a: TrackDescriptor, b: TrackDescriptor, score: dict[str, float], style: TransitionStyle) -> tuple[str, int, bool, list[str]]:
     stretch_delta = score["stretch_delta"]
-    beatmatch = stretch_delta <= MAX_BEATMATCH_STRETCH
+    tempo_safe = score["tempo_reliability"] >= 0.68 and score["constant_stretch_safe"] >= 0.5
+    beatmatch = stretch_delta <= MAX_BEATMATCH_STRETCH and tempo_safe
+    vocal_collision = score["vocal_collision"]
     a_label = _section_label_near(a.music_map, a.window_end_ms)
     b_label = _section_label_near(b.music_map, b.window_start_ms)
     sparse = any(word in f"{a_label} {b_label}" for word in ("intro", "outro", "break", "bridge", "instrumental"))
     reasons: list[str] = []
 
-    if beatmatch and score["harmonic"] >= 0.84 and sparse and style != "clean":
+    if not tempo_safe:
+        beatmatch = False
+        technique, bars = "echo_out", 0
+        reasons.append("variable tempo evidence makes a sustained fixed-grid beatmatch unsafe")
+    elif vocal_collision >= 0.34:
+        if beatmatch:
+            technique, bars = "quick_mix", 4
+            reasons.append("vocal-on-vocal collision vetoed a long blend")
+        else:
+            technique, bars = "echo_out", 0
+            reasons.append("vocal collision and tempo mismatch require a phrase-safe handoff")
+    elif beatmatch and score["harmonic"] >= 0.84 and sparse and vocal_collision <= 0.18 and style != "clean":
         technique, bars = "harmonic_blend", 32
-        reasons.append("compatible key and phrase-safe sparse material")
+        reasons.append("compatible key, stable local tempo and low vocal collision support a long blend")
     elif beatmatch and score["tempo"] >= 0.78 and style != "clean":
         technique, bars = "bass_swap", 16
-        reasons.append("tempo-compatible phrase transition with controlled low-end handoff")
+        reasons.append("stable local tempo supports a phrase transition with controlled low-end handoff")
     elif beatmatch and style == "clean":
         technique, bars = "quick_mix", 8
-        reasons.append("clean beatmatched transition")
+        reasons.append("clean locally stable beatmatched transition")
     elif score["harmonic"] < 0.52 or stretch_delta > 0.10:
         technique, bars, beatmatch = "echo_out", 0, False
         reasons.append("avoids forcing an audible tempo or harmonic mismatch")
@@ -112,31 +158,35 @@ def choose_transition(a: TrackDescriptor, b: TrackDescriptor, score: dict[str, f
         technique, bars, beatmatch = "drop_cut", 0, False
         reasons.append("phrase-aligned cut preserves both masters without destructive stretching")
 
-    if style == "creative" and beatmatch and technique == "bass_swap" and sparse:
+    if style == "creative" and beatmatch and technique == "bass_swap" and sparse and vocal_collision <= 0.22:
         technique, bars = "breakdown_swap", 16
-        reasons.append("creative contrast is supported by the surrounding sections")
+        reasons.append("creative contrast is supported by sparse sections and vocal safety")
+    if score["bass_collision"] >= 0.34 and technique == "harmonic_blend":
+        technique, bars = "bass_swap", min(bars, 16)
+        reasons.append("bass activity vetoed overlapping low-end during the harmonic blend")
     return technique, bars, beatmatch, reasons
 
 
-def _cluster_playback_bpms(ordered: list[TrackDescriptor], transitions: list[dict[str, Any]]) -> list[float]:
-    targets = [track.dj_bpm for track in ordered]
+def _cluster_playback_bpms(ordered: list[TrackDescriptor], transitions: list[dict[str, Any]], tempos: list[dict[str, Any]]) -> list[float]:
+    targets = [float(item["window_bpm"]) for item in tempos]
     index = 0
     while index < len(ordered):
         end = index
         while end < len(transitions) and bool(transitions[end].get("beatmatch")):
             end += 1
-        cluster = ordered[index:end + 1]
-        if len(cluster) > 1:
-            median = float(np.median([track.dj_bpm for track in cluster]))
-            if all(abs(median / max(1e-6, track.dj_bpm) - 1.0) <= MAX_BEATMATCH_STRETCH for track in cluster):
+        cluster_tempos = tempos[index:end + 1]
+        if len(cluster_tempos) > 1 and all(bool(item["constant_stretch_safe"]) for item in cluster_tempos):
+            cluster_target = float(np.median([float(item["window_bpm"]) for item in cluster_tempos]))
+            if all(abs(cluster_target / max(1e-6, float(item["window_bpm"])) - 1.0) <= MAX_BEATMATCH_STRETCH for item in cluster_tempos):
                 for offset in range(index, end + 1):
-                    targets[offset] = median
+                    targets[offset] = cluster_target
         index = max(index + 1, end + 1)
     return targets
 
 
 def build_plan(tracks: list[TrackDescriptor], purpose: Purpose, profile: EnergyProfile, style: TransitionStyle, target_duration_ms: int) -> dict[str, Any]:
     ordered = order_tracks(tracks, purpose, profile)
+    tempos = [_tempo(track) for track in ordered]
     transitions: list[dict[str, Any]] = []
     for index, (a, b) in enumerate(zip(ordered[:-1], ordered[1:])):
         metrics = transition_score(a, b, (index + 1) / max(1, len(ordered) - 1), purpose, profile)
@@ -152,13 +202,16 @@ def build_plan(tracks: list[TrackDescriptor], purpose: Purpose, profile: EnergyP
             "reasons": reasons,
         })
 
-    playback_bpms = _cluster_playback_bpms(ordered, transitions)
+    playback_bpms = _cluster_playback_bpms(ordered, transitions, tempos)
     timeline_tracks: list[dict[str, Any]] = []
     for index, track in enumerate(ordered):
         source_start = track.window_start_ms
         source_end = track.window_end_ms
+        tempo = tempos[index]
+        source_window_bpm = float(tempo["window_bpm"])
         playback_bpm = playback_bpms[index]
-        factor = playback_bpm / max(1e-6, track.dj_bpm)
+        factor = playback_bpm / max(1e-6, source_window_bpm) if bool(tempo["constant_stretch_safe"]) else 1.0
+        mastering = mastering_profile(track.music_map)
         timeline_tracks.append({
             "track_id": track.id,
             "title": track.title,
@@ -168,6 +221,8 @@ def build_plan(tracks: list[TrackDescriptor], purpose: Purpose, profile: EnergyP
             "dj_bpm": round(track.dj_bpm, 4),
             "playback_bpm": round(playback_bpm, 4),
             "time_factor": round(factor, 7),
+            "tempo": tempo,
+            "mastering": mastering,
             "key": {"label": track.key.label, "camelot": track.key.camelot, "confidence": round(track.key.confidence, 4)},
             "energy": round(track.energy, 4),
             "window_score": round(track.window_score, 4),
@@ -180,8 +235,8 @@ def build_plan(tracks: list[TrackDescriptor], purpose: Purpose, profile: EnergyP
             bpm = playback_bpms[index]
             beat_ms = 60_000.0 / max(1.0, bpm)
             requested = int(round(transition["bars"] * 4 * beat_ms))
-            max_a = int((a.window_end_ms - a.window_start_ms) * a.dj_bpm / max(1.0, bpm) * 0.42)
-            max_b = int((b.window_end_ms - b.window_start_ms) * b.dj_bpm / max(1.0, bpm) * 0.42)
+            max_a = int((a.window_end_ms - a.window_start_ms) * 0.42)
+            max_b = int((b.window_end_ms - b.window_start_ms) * 0.42)
             overlap = max(0, min(requested, max_a, max_b))
             if overlap < int(round(4 * beat_ms)):
                 transition["technique"] = "drop_cut"
@@ -194,6 +249,7 @@ def build_plan(tracks: list[TrackDescriptor], purpose: Purpose, profile: EnergyP
         else:
             overlap = 0
         transition["overlap_ms"] = overlap
+        transition["activity"] = transition_activity(a.music_map, a.window_end_ms, b.music_map, b.window_start_ms, overlap)
 
     estimated = 0
     for track, item in zip(ordered, timeline_tracks):
@@ -214,6 +270,9 @@ def build_plan(tracks: list[TrackDescriptor], purpose: Purpose, profile: EnergyP
             "master_preservation": True,
             "phrase_aligned": True,
             "harmonic_ordering": True,
+            "vocal_collision_veto": True,
             "low_end_collision_control": True,
+            "variable_tempo_aware": True,
+            "unstable_tempo_never_forced_to_grid": True,
         },
     }
