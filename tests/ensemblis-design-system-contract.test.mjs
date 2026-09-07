@@ -45,9 +45,9 @@ test("Studio has one canonical Design System stylesheet entrypoint with contextu
   assert.deepEqual(imports, ["./design-system/index.css"]);
   const index = await source("app/studio/design-system/index.css");
   for (const file of ["legacy-compat.generated.css", "tokens.css", ...canonicalDesignFiles]) assert.ok(index.includes(file), `${file} is missing from the Design System entrypoint`);
-  assert.ok(index.indexOf("ensemblis-tokens") < index.indexOf("ensemblis-primitives"));
-  assert.ok(index.indexOf("ensemblis-primitives") < index.indexOf("ensemblis-compat"), "legacy contextual layout must be able to override primitive anatomy while it is migrated");
-  assert.ok(index.indexOf("ensemblis-compat") < index.indexOf("ensemblis-patterns"));
+  assert.ok(index.indexOf("ensemblis-tokens") < index.indexOf("ensemblis-compat"));
+  assert.ok(index.indexOf("ensemblis-compat") < index.indexOf("ensemblis-primitives"), "legacy compatibility must stay below canonical primitives so primitive anatomy remains authoritative");
+  assert.ok(index.indexOf("ensemblis-primitives") < index.indexOf("ensemblis-patterns"));
   assert.ok(index.indexOf("ensemblis-patterns") < index.indexOf("ensemblis-shell"));
   assert.ok(index.indexOf("ensemblis-shell") < index.indexOf("ensemblis-compositions"));
   assert.ok(index.indexOf("ensemblis-compositions") < index.indexOf("ensemblis-workflows"));
