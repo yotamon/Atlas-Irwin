@@ -1,4 +1,4 @@
-# Atlas Track Intelligence v3
+# Atlas Track Intelligence v4
 
 Track Intelligence is the canonical musical understanding layer for Atlas Studio. A master is analyzed once, tied to the exact audio that produced the analysis, inspected by the artist, and then reused by Growth OS, Marketing, Content Lab, Video Director and derived renders.
 
@@ -30,6 +30,7 @@ Master / Vault audio
   -> librosa temporal / harmonic / rhythm features
   -> bars + phrase grid with provenance
   -> purpose-specific candidate ranking
+  -> strongest-moment context expansion
   -> 6s / 8s / 15s / 30s primary + alternate cuts
   -> master QC
   -> canonical track_music_intelligence cache
@@ -44,7 +45,7 @@ The Media Worker runs only in Vercel Sandbox. Heavy work is serialized through d
 
 ## Exact-master identity
 
-A v3 result contains:
+A v3+ result contains:
 
 ```json
 {
@@ -92,9 +93,9 @@ If All-In-One cannot complete, librosa produces explicit fallback structure and 
 
 ## Semantic recurrence
 
-v2 compared averaged 12-bin chroma fingerprints. That remains useful as `harmonic_recurrence`, but it cannot reliably distinguish two passages that share harmony while carrying different musical ideas.
+The v3 baseline compared averaged 12-bin chroma fingerprints. That remains useful as `harmonic_recurrence`, but it cannot reliably distinguish two passages that share harmony while carrying different musical ideas.
 
-v3 summarizes All-In-One embeddings inside each candidate window and compares non-overlapping windows of similar duration. This produces `semantic_recurrence`, which is the preferred repetition/identity signal.
+The current pipeline summarizes All-In-One embeddings inside each candidate window and compares non-overlapping windows of similar duration. This produces `semantic_recurrence`, which is the preferred repetition/identity signal.
 
 Compatibility aliases remain temporarily available:
 
@@ -119,9 +120,30 @@ The canonical `score` remains for backward-compatible overall ranking, but produ
 
 For example, `instant_hook` emphasizes immediate lift, rhythmic activity and recurrence, while `story_arc` emphasizes internal development, structural position, novelty and payoff.
 
+## Strongest Moments presentation contract
+
+Scoring windows and artist-facing listening moments are deliberately separate concepts. A 6–10 second window can be excellent evidence for ranking without being enough context for a person to hear why the moment works.
+
+The worker therefore persists `strongest_moments` as a presentation layer derived from the short scoring windows:
+
+- the original analysis window is preserved as `peak_window`
+- playback context targets about 20 seconds
+- normal visible duration is constrained to 12–32 seconds
+- starts and ends prefer section, phrase, bar and verified-downbeat boundaries in that order of musical usefulness
+- a complete detected section can win even when it is a little shorter than the 20-second target
+- the visible range must always contain the scoring peak
+- selected visible moments cannot overlap
+- moments closer than 24 seconds receive a ranking penalty
+- no more than two selected moments may share the same section type when alternatives exist
+- intent and section diversity receive positive ranking weight
+
+This layer does **not** lengthen `hook_candidates_v3` or the duration-specific social cuts. Short analysis windows remain available for scoring traceability and media generation. Existing v3/v4 maps without `strongest_moments` are contextualized by the Studio client using the same duration and diversity policy, so artists do not need to re-analyze old masters just to get useful playback.
+
+In the Studio timeline the broader bar represents the audible musical context and the brighter inner marker represents the original scoring peak.
+
 ## Social cuts
 
-v3 stores both:
+The v3 baseline stores both:
 
 - `social_cuts` — the backward-compatible primary choice
 - `social_cut_options` — up to three musically distinct alternatives per duration
@@ -139,7 +161,7 @@ Cuts stay near musically meaningful boundaries, so exact duration can differ sli
 
 ## Candidate metrics
 
-The explainable v3 feature set includes:
+The explainable feature set includes:
 
 - energy
 - energy lift
@@ -197,6 +219,8 @@ The Video Director inspector lets the artist hear:
 - primary social cuts
 - alternate social cuts
 
+The Music surface exposes Strongest Moments as musical-context playback rather than raw scoring windows. Each row shows the audible range and duration, while the timeline keeps the underlying scoring peak visible inside that context.
+
 It also displays:
 
 - detected vs inferred rhythm provenance
@@ -212,7 +236,7 @@ This review surface is intentionally upstream of expensive image/video generatio
 
 `public.track_music_intelligence` stores one canonical analysis per `tracks.id`, plus exact-master provenance columns.
 
-A v3 result can arrive from either Video Director or a release-linked Vault entry. Both converge into the same canonical row only when they refer to the current master.
+A v3+ result can arrive from either Video Director or a release-linked Vault entry. Both converge into the same canonical row only when they refer to the current master.
 
 Worker contention is not an error. Video jobs remain `planned`; Vault analyses remain `queued`; Atlas dispatches the oldest eligible job and keeps Sandbox concurrency at one.
 
@@ -243,6 +267,6 @@ The benchmark corpus should contain representative Atlas tracks with human label
 
 Track improvements should be evaluated on boundary error, BPM error, top-1 / top-3 preferred-window recall and artist preference, not just whether the worker returned JSON.
 
-The CI synthetic-audio test protects deterministic v3 behavior. A private real-track benchmark remains the gate for tuning ranking weights against Atlas's actual catalog.
+The CI synthetic-audio test protects deterministic baseline behavior. A private real-track benchmark remains the gate for tuning ranking weights against Atlas's actual catalog.
 
 See `services/media-worker/README.md` for runtime details and `docs/track-intelligence-benchmark.md` for the calibration workflow.
