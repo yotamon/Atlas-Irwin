@@ -1,6 +1,8 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { asSitesClient } from "@/lib/sites/db";
+import { parseSiteViewModel } from "@/lib/sites/domain";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import type { ArtistContext } from "@/lib/studio/artist-context";
 import type { Database } from "@/types/database";
@@ -34,6 +36,60 @@ function publicHttpUrl(value: string | null | undefined) {
   }
 }
 
+async function loadPreviousSiteSnapshot(
+  client: SupabaseClient<Database>,
+  artistId: string,
+) {
+  const sites = asSitesClient(client);
+  const siteResult = await sites
+    .from("artist_sites")
+    .select("id,draft_version_id,published_version_id")
+    .eq("artist_id", artistId)
+    .maybeSingle();
+  if (siteResult.error) throw new Error(siteResult.error.message);
+  if (!siteResult.data) return null;
+
+  const versionId = siteResult.data.draft_version_id ?? siteResult.data.published_version_id;
+  if (!versionId) return null;
+
+  const versionResult = await sites
+    .from("artist_site_versions")
+    .select("content_snapshot")
+    .eq("id", versionId)
+    .eq("site_id", siteResult.data.id)
+    .maybeSingle();
+  if (versionResult.error) throw new Error(versionResult.error.message);
+  return versionResult.data?.content_snapshot ?? null;
+}
+
+export function mergeArtistSiteSnapshotRefresh(
+  fresh: SiteViewModel,
+  previous: unknown,
+): SiteViewModel {
+  if (!previous) return fresh;
+
+  try {
+    const prior = parseSiteViewModel(previous);
+    return {
+      ...fresh,
+      artist: {
+        ...fresh.artist,
+        bio: prior.artist.bio ?? fresh.artist.bio,
+      },
+      socialLinks: prior.socialLinks.length ? prior.socialLinks : fresh.socialLinks,
+      contact: prior.contact.email ? prior.contact : fresh.contact,
+      seo: {
+        ...fresh.seo,
+        title: prior.seo.title,
+        description: prior.seo.description,
+      },
+    };
+  } catch {
+    // Legacy or malformed snapshots must never prevent a safe catalog refresh.
+    return fresh;
+  }
+}
+
 export async function buildArtistSiteSnapshot(
   client: SupabaseClient<Database>,
   context: ArtistContext,
@@ -41,7 +97,7 @@ export async function buildArtistSiteSnapshot(
   const artistDb = client as unknown as SupabaseClient<EnsemblisDatabase>;
   const music = asArtistScopedMusicClient(client);
 
-  const [artistResult, releasesResult, linksResult, tracksResult] = await Promise.all([
+  const [artistResult, releasesResult, linksResult, tracksResult, previousSnapshot] = await Promise.all([
     artistDb
       .from("artists")
       .select("id,workspace_id,name,slug,project_type,status,avatar_url,accent_color,legacy_owner_id,created_at,updated_at")
@@ -64,6 +120,7 @@ export async function buildArtistSiteSnapshot(
       .select("id,artist_id,release_id,title,track_number,display_order,duration,audio_url,soundcloud_url,spotify_url,is_primary")
       .eq("artist_id", context.artistId)
       .order("display_order", { ascending: true }),
+    loadPreviousSiteSnapshot(client, context.artistId),
   ]);
 
   if (artistResult.error) throw new Error(artistResult.error.message);
@@ -133,7 +190,7 @@ export async function buildArtistSiteSnapshot(
   const description = latestRelease?.story?.trim()
     || (latestRelease ? `${artist.name} — ${latestRelease.title}, music and official releases.` : `${artist.name} — official music and artist site.`);
 
-  return {
+  const fresh: SiteViewModel = {
     schemaVersion: 1,
     artist: {
       id: artist.id,
@@ -152,4 +209,6 @@ export async function buildArtistSiteSnapshot(
       imageUrl: publicHttpUrl(latestRelease?.artworkUrl || artist.avatar_url),
     },
   };
+
+  return mergeArtistSiteSnapshotRefresh(fresh, previousSnapshot);
 }
