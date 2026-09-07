@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Literal
 
+import httpx
 import librosa
 import numpy as np
 from pydantic import BaseModel, Field
@@ -36,6 +37,33 @@ async def _standardize(url: str, target: Path, workdir: Path, index: int) -> Non
         "-i", str(source), "-vn", "-ac", "2", "-ar", str(SAMPLE_RATE),
         "-c:a", "pcm_f32le", str(target),
     )
+
+
+async def _upload_streaming(upload_url: str, path: Path, content_type: str) -> None:
+    """Upload large AutoMix renders without materializing the entire file in memory."""
+    worker_main.validate_remote_url(upload_url)
+    file_size = path.stat().st_size
+
+    async def chunks():
+        with path.open("rb") as handle:
+            while True:
+                chunk = await asyncio.to_thread(handle.read, 1024 * 1024)
+                if not chunk:
+                    break
+                yield chunk
+
+    async with httpx.AsyncClient(timeout=httpx.Timeout(900.0, connect=20.0)) as client:
+        response = await client.put(
+            upload_url,
+            content=chunks(),
+            headers={
+                "content-type": content_type,
+                "content-length": str(file_size),
+                "cache-control": "max-age=31536000",
+                "x-upsert": "false",
+            },
+        )
+        response.raise_for_status()
 
 
 def _attach_transition_evidence(music_map: dict[str, Any], raw: dict[str, Any]) -> dict[str, Any]:
@@ -130,7 +158,7 @@ async def automix_job(payload: dict[str, Any], workdir: Path) -> dict[str, Any]:
             "-i", str(wav_path), "-c:a", "libmp3lame", "-b:a", "320k", "-ar", output_sr, str(output_path),
         )
         mime_type = "audio/mpeg"
-    await worker_main.upload_file(upload_url, output_path, mime_type)
+    await _upload_streaming(upload_url, output_path, mime_type)
     sha256 = await asyncio.to_thread(worker_main.sha256_file, output_path)
     warnings: list[dict[str, Any]] = []
     for item in _list_records(plan.get("tracks")):
