@@ -55,33 +55,35 @@ export function MasteringABPlayer({
     const original = originalRef.current;
     const mastered = masteredRef.current;
     if (!original || !mastered) return;
+    const originalAudio = original;
+    const masteredAudio = mastered;
 
     function syncTime() {
-      setCurrentTime(original.currentTime);
-      if (Math.abs(mastered.currentTime - original.currentTime) > 0.08 && !mastered.seeking) {
-        mastered.currentTime = original.currentTime;
+      setCurrentTime(originalAudio.currentTime);
+      if (Math.abs(masteredAudio.currentTime - originalAudio.currentTime) > 0.08 && !masteredAudio.seeking) {
+        masteredAudio.currentTime = originalAudio.currentTime;
       }
     }
     function readDuration() {
-      const next = Number.isFinite(original.duration) ? original.duration : mastered.duration;
+      const next = Number.isFinite(originalAudio.duration) ? originalAudio.duration : masteredAudio.duration;
       if (Number.isFinite(next) && next > 0) setDuration(next);
     }
     function ended() {
       setPlaying(false);
       setCurrentTime(0);
-      original.currentTime = 0;
-      mastered.currentTime = 0;
+      originalAudio.currentTime = 0;
+      masteredAudio.currentTime = 0;
     }
 
-    original.addEventListener("timeupdate", syncTime);
-    original.addEventListener("loadedmetadata", readDuration);
-    mastered.addEventListener("loadedmetadata", readDuration);
-    original.addEventListener("ended", ended);
+    originalAudio.addEventListener("timeupdate", syncTime);
+    originalAudio.addEventListener("loadedmetadata", readDuration);
+    masteredAudio.addEventListener("loadedmetadata", readDuration);
+    originalAudio.addEventListener("ended", ended);
     return () => {
-      original.removeEventListener("timeupdate", syncTime);
-      original.removeEventListener("loadedmetadata", readDuration);
-      mastered.removeEventListener("loadedmetadata", readDuration);
-      original.removeEventListener("ended", ended);
+      originalAudio.removeEventListener("timeupdate", syncTime);
+      originalAudio.removeEventListener("loadedmetadata", readDuration);
+      masteredAudio.removeEventListener("loadedmetadata", readDuration);
+      originalAudio.removeEventListener("ended", ended);
     };
   }, []);
 
