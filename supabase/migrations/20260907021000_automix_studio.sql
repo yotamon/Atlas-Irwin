@@ -78,10 +78,24 @@ create trigger automix_jobs_validate_tracks
   on public.automix_jobs
   for each row execute function private.validate_automix_job_tracks();
 
+create or replace function private.touch_automix_job_updated_at()
+returns trigger
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+revoke all on function private.touch_automix_job_updated_at() from public, anon, authenticated;
+
 drop trigger if exists set_automix_jobs_updated_at on public.automix_jobs;
 create trigger set_automix_jobs_updated_at
   before update on public.automix_jobs
-  for each row execute function private.set_updated_at();
+  for each row execute function private.touch_automix_job_updated_at();
 
 alter table public.automix_jobs enable row level security;
 
