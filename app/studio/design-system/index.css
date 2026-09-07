@@ -15,6 +15,7 @@
 @import "./workflows.css" layer(ensemblis-workflows);
 @import "./motion.css" layer(ensemblis-motion);
 @import "./choreography.css" layer(ensemblis-motion);
+@import "./interaction-states.css" layer(ensemblis-motion);
 @import "./atmosphere.css" layer(ensemblis-art-direction);
 @import "./art-direction.css" layer(ensemblis-art-direction);
 @import "./accessibility.css" layer(ensemblis-accessibility);
