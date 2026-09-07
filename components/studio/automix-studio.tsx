@@ -90,23 +90,41 @@ export function AutoMixStudio({ artistId, artistName, tracks }: AutoMixStudioPro
   });
   const purposeCopy = PURPOSES.find((item) => item.id === purpose)?.description ?? "";
 
+  const fetchJobs = useCallback(async (): Promise<JobView[]> => {
+    const response = await fetch(`/api/studio/automix?artist=${encodeURIComponent(artistId)}`, { cache: "no-store" });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(responseError(body, "Could not load AutoMix jobs."));
+    return Array.isArray(body?.jobs) ? body.jobs : [];
+  }, [artistId]);
+
   const loadJobs = useCallback(async (quiet = false) => {
     if (!quiet) setLoadingJobs(true);
     try {
-      const response = await fetch(`/api/studio/automix?artist=${encodeURIComponent(artistId)}`, { cache: "no-store" });
-      const body = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(responseError(body, "Could not load AutoMix jobs."));
-      setJobs(Array.isArray(body?.jobs) ? body.jobs : []);
+      setJobs(await fetchJobs());
     } catch (loadError) {
       if (!quiet) setError(loadError instanceof Error ? loadError.message : "Could not load AutoMix jobs.");
     } finally {
       if (!quiet) setLoadingJobs(false);
     }
-  }, [artistId]);
+  }, [fetchJobs]);
 
   useEffect(() => {
-    void loadJobs();
-  }, [loadJobs]);
+    let active = true;
+    async function loadInitialJobs() {
+      try {
+        const nextJobs = await fetchJobs();
+        if (active) setJobs(nextJobs);
+      } catch (loadError) {
+        if (active) setError(loadError instanceof Error ? loadError.message : "Could not load AutoMix jobs.");
+      } finally {
+        if (active) setLoadingJobs(false);
+      }
+    }
+    void loadInitialJobs();
+    return () => {
+      active = false;
+    };
+  }, [fetchJobs]);
 
   useEffect(() => {
     if (!jobs.some((job) => ACTIVE.has(job.status))) return;
