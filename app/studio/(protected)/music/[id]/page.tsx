@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { analyzeMusicTrack } from "@/app/studio/growth-media-actions-safe";
 import { ActiveMasteringPanel } from "@/components/studio/active-mastering-panel";
 import { AnalysisAutoRefresh } from "@/components/studio/analysis-auto-refresh";
@@ -56,7 +56,32 @@ export default async function TrackWorkspacePage({ params }: { params: Promise<{
     .eq("artist_id", artist.artistId)
     .maybeSingle();
   if (vaultError) throw new Error(vaultError.message);
-  if (!vaultTrack) notFound();
+
+  if (!vaultTrack) {
+    const aliasTrackResult = await music
+      .from("tracks")
+      .select("id,release_id")
+      .eq("id", id)
+      .eq("artist_id", artist.artistId)
+      .maybeSingle();
+    if (aliasTrackResult.error) throw new Error(aliasTrackResult.error.message);
+
+    if (aliasTrackResult.data?.release_id) {
+      const aliasVaultResult = await growth
+        .from("track_vault")
+        .select("id")
+        .eq("owner_id", user.id)
+        .eq("artist_id", artist.artistId)
+        .eq("linked_release_id", aliasTrackResult.data.release_id)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (aliasVaultResult.error) throw new Error(aliasVaultResult.error.message);
+      if (aliasVaultResult.data) redirect(href(`/studio/music/${aliasVaultResult.data.id}`));
+    }
+
+    notFound();
+  }
 
   const { data: catalogTracks, error: catalogError } = await growth
     .from("track_vault")
