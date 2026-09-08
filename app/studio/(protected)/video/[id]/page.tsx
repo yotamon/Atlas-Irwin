@@ -4,9 +4,10 @@ import { loadArtistCreativeMemory } from "@/lib/creative-memory/server";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { createServiceClient } from "@/lib/supabase/service";
+import { resolveProjectAudioUrl } from "@/lib/video-director/context";
+import { projectMediaLinkScopeFilter } from "@/lib/video-director/media-scope";
 import { openAIDirectorReadiness } from "@/lib/video-director/openai-director";
 import { mediaWorkerReadiness } from "@/lib/video-director/worker";
-import { resolveProjectAudioUrl } from "@/lib/video-director/context";
 import { higgsfieldReadiness } from "@/lib/video-providers/higgsfield/client";
 import { VideoProjectWorkspace } from "@/components/studio/video-director/project-workspace";
 import type { Json, MediaAsset } from "@/types/database";
@@ -84,7 +85,7 @@ export default async function VideoProjectPage({
     videoDb.from("music_video_worker_jobs").select("*").eq("project_id", project.id).eq("owner_id", user.id).order("created_at", { ascending: false }).limit(50),
     music.from("media_links").select("id,media_asset_id,role,release_id,track_id,artist_id")
       .eq("owner_id", user.id).eq("artist_id", artist.artistId)
-      .or(`release_id.eq.${project.release_id},track_id.eq.${project.track_id}`),
+      .or(projectMediaLinkScopeFilter(project.release_id, project.track_id)),
     db.from("media_assets").select("*")
       .eq("owner_id", user.id)
       .eq("asset_type", "thumbnail")
