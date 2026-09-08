@@ -226,7 +226,7 @@ export function MusicIntelligencePreview({
     audio.currentTime = startMs / 1000;
 
     if (options.smoothMoment) {
-      const { fadeInMs, fadeOutMs } = momentFadeDurations(map.bpm, stopMs - startMs);
+      const { fadeInMs, fadeOutMs } = momentFadeDurations(map?.bpm, stopMs - startMs);
       auditionEnvelopeRef.current = { startMs, endMs: stopMs, fadeInMs, fadeOutMs };
       audio.volume = 0;
     } else {
