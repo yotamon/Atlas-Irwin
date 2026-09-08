@@ -28,13 +28,15 @@ import {
 import type { MediaAsset } from "@/types/database";
 import type { ExtendedMusicVideoShot } from "@/types/video-database";
 import type { VideoWorkspaceData } from "../workspace-types";
+import { ProgramMonitor } from "./program-monitor";
 import { ShotVariantLab } from "./shot-variant-lab";
+import { SourceAssemblyControls } from "./source-assembly-controls";
 import { StemActivityLane } from "./stem-activity-lane";
+import { useVideoEditorPlayback } from "./use-video-editor-playback";
 
 type PaletteTab = "story" | "media" | "cast" | "lyrics" | "music";
 type SnapMode = "off" | "beats" | "smart";
 type DragKind = "move" | "start" | "end";
-
 type DraftTiming = { startMs: number; endMs: number };
 type DragState = DraftTiming & { shotId: string; kind: DragKind; originX: number };
 
@@ -49,7 +51,7 @@ function numberValue(value: unknown, fallback: number) {
 function isVideoAsset(asset: MediaAsset | undefined) {
   if (!asset) return false;
   const url = asset.public_url?.toLowerCase() ?? "";
-  return /\.(mp4|mov|webm|m4v)(\?|$)/.test(url) || String(asset.asset_type).includes("video");
+  return asset.mime_type?.startsWith("video/") === true || /\.(mp4|mov|webm|m4v)(\?|$)/.test(url) || /video|footage|clip/.test(asset.asset_type.toLowerCase());
 }
 
 function downloadText(name: string, content: string, type: string) {
@@ -68,47 +70,9 @@ function editableTarget(target: EventTarget | null) {
   return target instanceof HTMLElement && Boolean(target.closest("input,textarea,select,[contenteditable='true']"));
 }
 
-function assetForShot(data: VideoWorkspaceData, shot: ExtendedMusicVideoShot | null) {
-  if (!shot) return null;
-  const latestCompleted = [...data.generations]
-    .reverse()
-    .find((generation) => generation.shot_id === shot.id && generation.status === "completed" && generation.result_asset_id);
-  const id = shot.selected_asset_id ?? latestCompleted?.result_asset_id ?? shot.start_asset_id ?? null;
-  return id ? data.assets.find((asset) => asset.id === id) ?? null : null;
-}
-
-function PlaybackPreview({
-  data,
-  shot,
-  playheadMs,
-}: {
-  data: VideoWorkspaceData;
-  shot: ExtendedMusicVideoShot | null;
-  playheadMs: number;
-}) {
-  const asset = assetForShot(data, shot);
-  const caption = shot ? record(shot.lyrics_config) : {};
-  const captionEnabled = caption.enabled === true && typeof caption.text === "string" && caption.text.trim();
-  return (
-    <div className="video-editor-preview-stage" aria-label="Video preview">
-      {asset?.public_url ? (
-        isVideoAsset(asset) ? (
-          <video key={asset.id} src={asset.public_url} muted playsInline autoPlay={false} preload="metadata" />
-        ) : (
-          <img src={asset.public_url} alt="Selected shot visual" />
-        )
-      ) : (
-        <div className="video-editor-preview-empty">
-          <span>{shot ? `Shot ${shot.display_order + 1}` : "Director preview"}</span>
-          <strong>{shot?.description ?? "Choose a shot on the timeline"}</strong>
-          <p>{shot ? "Generate a variant or attach source media to preview the visual here." : "The preview follows your timeline selection and original master audio."}</p>
-        </div>
-      )}
-      {captionEnabled ? <div className={`video-editor-caption caption-${String(caption.style ?? "clean")}`}>{String(caption.text)}</div> : null}
-      <div className="video-editor-preview-timecode">{formatEditorTime(playheadMs)}</div>
-      {shot ? <div className="video-editor-preview-shot-label">{shot.shot_type.replaceAll("_", " ")}</div> : null}
-    </div>
-  );
+function sourceSuggestion(shot: ExtendedMusicVideoShot) {
+  const suggestion = record(record(shot.editor_config).source_suggestion);
+  return typeof suggestion.assetId === "string" ? suggestion : null;
 }
 
 function Palette({
@@ -153,7 +117,9 @@ function Palette({
     return (
       <div className="video-editor-palette-content">
         <div className="video-editor-panel-heading"><span>Media library</span><strong>{data.assets.length} assets</strong></div>
-        <p className="video-editor-panel-hint">Use real footage whenever it serves the film better. Assigning media locks it as the source for the selected shot.</p>
+        <SourceAssemblyControls data={data} selectedShot={selectedShot} />
+        <div className="video-editor-subheading">Manual source</div>
+        <p className="video-editor-panel-hint">Pick a specific real asset when you want to override the rough-cut suggestion. Manual assignment is always explicit.</p>
         <div className="video-editor-media-grid">
           {data.assets.map((asset) => (
             <button key={asset.id} type="button" className={selectedMediaId === asset.id ? "is-selected" : ""} onClick={() => setSelectedMediaId(asset.id)}>
@@ -166,10 +132,8 @@ function Palette({
           className="button primary video-editor-palette-action"
           type="button"
           disabled={!selectedShot || !selectedMediaId || pending}
-          onClick={() => selectedShot && selectedMediaId && startTransition(() => assignVideoSourceAsset({ projectId: data.project.id, shotId: selectedShot.id, assetId: selectedMediaId }))}
-        >
-          {pending ? "Assigning..." : "Use as shot source"}
-        </button>
+          onClick={() => selectedShot && selectedMediaId && startTransition(() => assignVideoSourceAsset({ projectId: data.project.id, shotId: selectedShot.id, assetId: selectedMediaId, sourceOffsetMs: 0 }))}
+        >{pending ? "Assigning..." : "Use as shot source"}</button>
       </div>
     );
   }
@@ -178,7 +142,7 @@ function Palette({
     return (
       <div className="video-editor-palette-content">
         <div className="video-editor-panel-heading"><span>Cast and identity</span><strong>{data.characters.length} saved</strong></div>
-        <p className="video-editor-panel-hint">A cast identity keeps approved references and continuity rules reusable across every performance or narrative shot.</p>
+        <p className="video-editor-panel-hint">Artist Cast keeps approved identity references and continuity rules reusable across projects.</p>
         <div className="video-editor-cast-list">
           {data.characters.map((character) => (
             <article key={character.id}>
@@ -189,17 +153,11 @@ function Palette({
         </div>
         <div className="video-editor-inline-form">
           <input value={characterName} onChange={(event) => setCharacterName(event.target.value)} placeholder="New character name" aria-label="New character name" />
-          <button
-            className="button"
-            type="button"
-            disabled={!characterName.trim() || pending}
-            onClick={() => startTransition(async () => {
-              await createVideoCharacter({ projectId: data.project.id, name: characterName, role: "character", identityPrompt: "", referenceAssetIds: selectedMediaId ? [selectedMediaId] : [] });
-              setCharacterName("");
-            })}
-          >Add</button>
+          <button className="button" type="button" disabled={!characterName.trim() || pending} onClick={() => startTransition(async () => {
+            await createVideoCharacter({ projectId: data.project.id, name: characterName, role: "character", identityPrompt: "", referenceAssetIds: selectedMediaId ? [selectedMediaId] : [] });
+            setCharacterName("");
+          })}>Add</button>
         </div>
-        <small className="video-editor-muted">Select an asset in Media first if you want it to become the new character's first identity reference.</small>
       </div>
     );
   }
@@ -208,7 +166,7 @@ function Palette({
     return (
       <div className="video-editor-palette-content">
         <div className="video-editor-panel-heading"><span>Lyrics</span><strong>{data.lyricCues.length} timed lines</strong></div>
-        <p className="video-editor-panel-hint">Timed canonical lyrics are shown directly from Lyrics Intelligence. Select a line, then use it from the shot Inspector.</p>
+        <p className="video-editor-panel-hint">These are canonical Lyrics Intelligence cues on the same master clock as the timeline.</p>
         <div className="video-editor-lyrics-list">
           {data.lyricCues.length ? data.lyricCues.map((cue) => (
             <button key={cue.id} type="button" onClick={() => navigator.clipboard?.writeText(cue.text)}>
@@ -225,21 +183,16 @@ function Palette({
       <div className="video-editor-panel-heading"><span>Music intelligence</span><strong>{data.stems.length} stems</strong></div>
       <div className="video-editor-stem-list">
         {data.stems.map((stem) => (
-          <article key={stem.id}>
-            <span className={`stem-dot stem-${stem.category}`} />
-            <div><strong>{stem.label}</strong><small>{stem.category} · {stem.status}</small></div>
-          </article>
+          <article key={stem.id}><span className={`stem-dot stem-${stem.category}`} /><div><strong>{stem.label}</strong><small>{stem.category} · {stem.status}</small></div></article>
         ))}
       </div>
       {data.audioScenes.length ? <>
         <div className="video-editor-subheading">Audio Scenes</div>
         <div className="video-editor-audio-scenes">
-          {data.audioScenes.map((scene) => (
-            <article key={scene.id}><strong>{scene.name}</strong><small>{scene.startMs !== null ? `${formatEditorTime(scene.startMs)} - ${formatEditorTime(scene.endMs ?? scene.startMs)}` : scene.sceneType}</small></article>
-          ))}
+          {data.audioScenes.map((scene) => <article key={scene.id}><strong>{scene.name}</strong><small>{scene.startMs !== null ? `${formatEditorTime(scene.startMs)} - ${formatEditorTime(scene.endMs ?? scene.startMs)}` : scene.sceneType}</small></article>)}
         </div>
       </> : null}
-      <p className="video-editor-panel-hint">Per-stem visual response is edited on the selected shot under Sync. Timeline lanes below use measured 500 ms Stem Intelligence activity rather than decorative waveforms.</p>
+      <p className="video-editor-panel-hint">Stem lanes use measured 500 ms activity from Stem Intelligence, not decorative waveforms.</p>
     </div>
   );
 }
@@ -296,7 +249,7 @@ function ShotInspector({ data, shot }: { data: VideoWorkspaceData; shot: Extende
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shot?.id]);
 
-  if (!shot) return <aside className="video-editor-inspector"><div className="video-editor-inspector-empty"><strong>No shot selected</strong><p>Select a clip in the timeline to edit its creative, cast, sync and generation settings.</p></div></aside>;
+  if (!shot) return <aside className="video-editor-inspector"><div className="video-editor-inspector-empty"><strong>No shot selected</strong><p>Select a timeline clip to edit it. The Program Monitor can continue following playback independently.</p></div></aside>;
 
   const shotId = shot.id;
   const readiness = shotReadiness(shot, data.characters, data.contextSignals.hasAudio);
@@ -325,27 +278,15 @@ function ShotInspector({ data, shot }: { data: VideoWorkspaceData; shot: Extende
 
   return (
     <aside className="video-editor-inspector">
-      <div className="video-editor-inspector-head">
-        <div><span>Shot {shot.display_order + 1}</span><strong>{formatEditorTime(shot.start_ms)} - {formatEditorTime(shot.end_ms)}</strong></div>
-        <div className={`video-editor-readiness ${readiness.ready ? "is-ready" : ""}`} title={readiness.issues.join(", ") || "Ready"}>{readiness.score}</div>
-      </div>
-
-      <label className="video-editor-field"><span>Shot type</span><select value={shotType} onChange={(event) => setShotType(event.target.value as typeof shotType)}>
-        <option value="generated">Generated</option>
-        <option value="performance">Performance</option>
-        <option value="source_media">Source footage</option>
-        <option value="graphic">Graphic / type</option>
-        <option value="hold">Hold / freeze</option>
-      </select></label>
-
+      <div className="video-editor-inspector-head"><div><span>Shot {shot.display_order + 1}</span><strong>{formatEditorTime(shot.start_ms)} - {formatEditorTime(shot.end_ms)}</strong></div><div className={`video-editor-readiness ${readiness.ready ? "is-ready" : ""}`} title={readiness.issues.join(", ") || "Ready"}>{readiness.score}</div></div>
+      <label className="video-editor-field"><span>Shot type</span><select value={shotType} onChange={(event) => setShotType(event.target.value as typeof shotType)}><option value="generated">Generated</option><option value="performance">Performance</option><option value="source_media">Source footage</option><option value="graphic">Graphic / type</option><option value="hold">Hold / freeze</option></select></label>
       <label className="video-editor-field"><span>Editorial intent</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} /></label>
-
       {(shotType === "generated" || shotType === "performance") ? <label className="video-editor-field"><span>Generation prompt</span><textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={5} placeholder="Describe subject, action, camera and visual intent" /></label> : null}
 
       <div className="video-editor-inspector-section">
         <div className="video-editor-subheading">Cast and performance</div>
         <label className="video-editor-field"><span>Character lock</span><select value={characterId} onChange={(event) => setCharacterId(event.target.value)}><option value="">No locked identity</option>{data.characters.map((character) => <option key={character.id} value={character.id}>{character.name}</option>)}</select></label>
-        {shotType === "performance" ? <label className="video-editor-toggle"><input type="checkbox" checked={lipSync} onChange={(event) => setLipSync(event.target.checked)} /><span><strong>Sync performance to vocal</strong><small>Routes to an audio-reference-capable continuity model and supplies the track as reference.</small></span></label> : null}
+        {shotType === "performance" ? <label className="video-editor-toggle"><input type="checkbox" checked={lipSync} onChange={(event) => setLipSync(event.target.checked)} /><span><strong>Sync performance to vocal</strong><small>Routes through audio-reference-capable continuity generation. Final lip-sync still requires exact human attestation.</small></span></label> : null}
         <label className="video-editor-field"><span>Camera intent</span><input value={cameraIntent} onChange={(event) => setCameraIntent(event.target.value)} placeholder="e.g. slow dolly-in, locked profile close-up" /></label>
       </div>
 
@@ -356,12 +297,8 @@ function ShotInspector({ data, shot }: { data: VideoWorkspaceData; shot: Extende
 
       <div className="video-editor-inspector-section">
         <div className="video-editor-subheading">Lyrics and captions</div>
-        <label className="video-editor-toggle"><input type="checkbox" checked={captionEnabled} onChange={(event) => setCaptionEnabled(event.target.checked)} /><span><strong>Show caption</strong><small>{timedLyrics.length ? `${timedLyrics.length} timed lyric line${timedLyrics.length === 1 ? "" : "s"} overlap this shot.` : "No timed lyric line overlaps this shot."}</small></span></label>
-        {captionEnabled ? <>
-          {timedLyrics.length ? <div className="video-editor-lyric-suggestions">{timedLyrics.map((cue) => <button type="button" key={cue.id} onClick={() => setCaptionText(cue.text)}>{cue.text}</button>)}</div> : null}
-          <textarea className="video-editor-caption-input" value={captionText} onChange={(event) => setCaptionText(event.target.value)} rows={2} placeholder="Caption text" />
-          <select value={captionStyle} onChange={(event) => setCaptionStyle(event.target.value as typeof captionStyle)}><option value="clean">Clean</option><option value="editorial">Editorial</option><option value="karaoke">Karaoke</option><option value="poster">Poster</option></select>
-        </> : null}
+        <label className="video-editor-toggle"><input type="checkbox" checked={captionEnabled} onChange={(event) => setCaptionEnabled(event.target.checked)} /><span><strong>Show caption</strong><small>{timedLyrics.length ? `${timedLyrics.length} canonical timed line${timedLyrics.length === 1 ? "" : "s"} overlap this shot.` : "No timed lyric line overlaps this shot."}</small></span></label>
+        {captionEnabled ? <>{timedLyrics.length ? <div className="video-editor-lyric-suggestions">{timedLyrics.map((cue) => <button type="button" key={cue.id} onClick={() => setCaptionText(cue.text)}>{cue.text}</button>)}</div> : null}<textarea className="video-editor-caption-input" value={captionText} onChange={(event) => setCaptionText(event.target.value)} rows={2} placeholder="Caption text" /><select value={captionStyle} onChange={(event) => setCaptionStyle(event.target.value as typeof captionStyle)}><option value="clean">Clean</option><option value="editorial">Editorial</option><option value="karaoke">Karaoke</option><option value="poster">Poster</option></select></> : null}
       </div>
 
       <div className="video-editor-inspector-section video-editor-generation-summary">
@@ -369,7 +306,6 @@ function ShotInspector({ data, shot }: { data: VideoWorkspaceData; shot: Extende
         <dl><div><dt>Model</dt><dd>{shot.selected_model ?? "Auto"}</dd></div><div><dt>Priority</dt><dd>{shotType === "performance" ? "Consistency" : shot.generation_priority}</dd></div><div><dt>Prompt version</dt><dd>v{shot.prompt_version}</dd></div></dl>
         {readiness.issues.length ? <ul>{readiness.issues.map((issue) => <li key={issue}>{issue}</li>)}</ul> : <p className="video-editor-ready-note">Shot is production-ready.</p>}
       </div>
-
       <ShotVariantLab data={data} shot={shot} />
       <button className="button primary video-editor-save" type="button" onClick={save} disabled={pending || !description.trim()}>{pending ? "Saving..." : saved ? "Saved" : "Save shot"}</button>
     </aside>
@@ -378,69 +314,51 @@ function ShotInspector({ data, shot }: { data: VideoWorkspaceData; shot: Extende
 
 export function VideoDirectorProEditor({ data }: { data: VideoWorkspaceData }) {
   const editorState = record(data.project.editor_state);
-  const fallbackDuration = Math.max(
-    numberValue(data.track.duration, 0) * 1000,
-    ...data.shots.map((shot) => shot.end_ms),
-    1,
-  );
+  const fallbackDuration = Math.max(numberValue(data.track.duration, 0) * 1000, ...data.shots.map((shot) => shot.end_ms), 1);
   const musicMap = useMemo(() => parseEditorMusicMap(data.project.music_map, fallbackDuration), [data.project.music_map, fallbackDuration]);
   const [paletteTab, setPaletteTab] = useState<PaletteTab>("story");
   const [selectedShotId, setSelectedShotId] = useState(data.shots[0]?.id ?? null);
   const [zoom, setZoom] = useState(Math.max(0.7, Math.min(4, numberValue(editorState.zoom, 1))));
   const [snapMode, setSnapMode] = useState<SnapMode>(["off", "beats", "smart"].includes(String(editorState.snap_mode)) ? String(editorState.snap_mode) as SnapMode : "smart");
-  const [playheadMs, setPlayheadMs] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [loopSelected, setLoopSelected] = useState(false);
   const [draftTimings, setDraftTimings] = useState<Record<string, DraftTiming>>({});
   const [drag, setDrag] = useState<DragState | null>(null);
   const [, startTransition] = useTransition();
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const timelineContentRef = useRef<HTMLDivElement | null>(null);
   const selectedShot = data.shots.find((shot) => shot.id === selectedShotId) ?? null;
+  const loopRange = loopSelected && selectedShot ? { startMs: selectedShot.start_ms, endMs: selectedShot.end_ms } : null;
+  const { audioRef, playheadMs, isPlaying, seek, togglePlayback, audioProps } = useVideoEditorPlayback({ durationMs: musicMap.durationMs, loopRange });
+  const activeShot = useMemo(() => {
+    const exact = data.shots.find((shot) => playheadMs >= shot.start_ms && playheadMs < shot.end_ms);
+    if (exact) return exact;
+    if (playheadMs >= musicMap.durationMs - 5) return [...data.shots].sort((a, b) => b.end_ms - a.end_ms)[0] ?? null;
+    return null;
+  }, [data.shots, musicMap.durationMs, playheadMs]);
   const hardBudget = Number(data.project.hard_budget_credits || 0);
   const committed = Number(data.project.spent_credits || 0) + Number(data.project.reserved_credits || 0);
   const budgetPercent = hardBudget > 0 ? Math.min(100, (committed / hardBudget) * 100) : 0;
 
-  const togglePlayback = useCallback(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    if (audio.paused) void audio.play(); else audio.pause();
-  }, []);
+  const selectShot = useCallback((id: string, cue = true) => {
+    setSelectedShotId(id);
+    if (cue) {
+      const shot = data.shots.find((item) => item.id === id);
+      if (shot) seek(shot.start_ms);
+    }
+  }, [data.shots, seek]);
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (editableTarget(event.target)) return;
-      if (event.code === "Space") {
-        event.preventDefault();
-        togglePlayback();
-      }
-      if ((event.metaKey || event.ctrlKey) && (event.key === "+" || event.key === "=")) {
-        event.preventDefault();
-        setZoom((value) => Math.min(4, value + 0.25));
-      }
-      if ((event.metaKey || event.ctrlKey) && event.key === "-") {
-        event.preventDefault();
-        setZoom((value) => Math.max(0.7, value - 0.25));
-      }
-      if (event.key === "ArrowLeft" && !event.metaKey && !event.ctrlKey) {
-        const next = Math.max(0, playheadMs - (event.shiftKey ? 5000 : 1000));
-        setPlayheadMs(next);
-        if (audioRef.current) audioRef.current.currentTime = next / 1000;
-      }
-      if (event.key === "ArrowRight" && !event.metaKey && !event.ctrlKey) {
-        const next = Math.min(musicMap.durationMs, playheadMs + (event.shiftKey ? 5000 : 1000));
-        setPlayheadMs(next);
-        if (audioRef.current) audioRef.current.currentTime = next / 1000;
-      }
+      if (event.code === "Space") { event.preventDefault(); togglePlayback(); return; }
+      if ((event.metaKey || event.ctrlKey) && (event.key === "+" || event.key === "=")) { event.preventDefault(); setZoom((value) => Math.min(4, value + 0.25)); return; }
+      if ((event.metaKey || event.ctrlKey) && event.key === "-") { event.preventDefault(); setZoom((value) => Math.max(0.7, value - 0.25)); return; }
+      if (event.key.toLowerCase() === "l" && selectedShot) { event.preventDefault(); setLoopSelected((value) => !value); return; }
+      if (event.key === "ArrowLeft" && !event.metaKey && !event.ctrlKey) seek(playheadMs - (event.shiftKey ? 5000 : 1000));
+      if (event.key === "ArrowRight" && !event.metaKey && !event.ctrlKey) seek(playheadMs + (event.shiftKey ? 5000 : 1000));
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [musicMap.durationMs, playheadMs, togglePlayback]);
-
-  function seek(ms: number) {
-    const next = Math.max(0, Math.min(musicMap.durationMs, ms));
-    setPlayheadMs(next);
-    if (audioRef.current) audioRef.current.currentTime = next / 1000;
-  }
+  }, [playheadMs, seek, selectedShot, togglePlayback]);
 
   function timingFor(shot: ExtendedMusicVideoShot) {
     return draftTimings[shot.id] ?? { startMs: shot.start_ms, endMs: shot.end_ms };
@@ -451,7 +369,7 @@ export function VideoDirectorProEditor({ data }: { data: VideoWorkspaceData }) {
     event.currentTarget.setPointerCapture(event.pointerId);
     const timing = timingFor(shot);
     setDrag({ shotId: shot.id, kind, originX: event.clientX, ...timing });
-    setSelectedShotId(shot.id);
+    selectShot(shot.id, false);
   }
 
   function moveDrag(event: ReactPointerEvent) {
@@ -509,6 +427,7 @@ export function VideoDirectorProEditor({ data }: { data: VideoWorkspaceData }) {
         <div className="video-editor-transport">
           <button type="button" className="video-editor-icon-button" onClick={() => seek(0)} aria-label="Go to beginning">|‹</button>
           <button type="button" className="video-editor-play" onClick={togglePlayback} disabled={!data.audioUrl}>{isPlaying ? "Pause" : "Play"}</button>
+          <button type="button" className={`video-editor-icon-button video-editor-loop ${loopSelected ? "is-active" : ""}`} aria-pressed={loopSelected} disabled={!selectedShot} onClick={() => setLoopSelected((value) => !value)} title="Loop selected shot (L)">↻</button>
           <span className="video-editor-time">{formatEditorTime(playheadMs)}</span>
           <span className="video-editor-bpm">{musicMap.bpm ? `${Math.round(musicMap.bpm)} BPM` : "Music map"}</span>
         </div>
@@ -522,17 +441,15 @@ export function VideoDirectorProEditor({ data }: { data: VideoWorkspaceData }) {
         </div>
       </header>
 
-      {data.audioUrl ? <audio ref={audioRef} src={data.audioUrl} preload="metadata" onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onTimeUpdate={(event) => setPlayheadMs(event.currentTarget.currentTime * 1000)} onEnded={() => setIsPlaying(false)} /> : null}
+      {data.audioUrl ? <audio ref={audioRef} src={data.audioUrl} preload="metadata" {...audioProps} /> : null}
 
       <div className="video-editor-workbench">
-        <nav className="video-editor-palette-tabs" aria-label="Editor tools">
-          {(["story", "media", "cast", "lyrics", "music"] as PaletteTab[]).map((tab) => <button type="button" key={tab} className={paletteTab === tab ? "is-active" : ""} onClick={() => setPaletteTab(tab)}>{tab}</button>)}
-        </nav>
-        <aside className="video-editor-palette"><Palette data={data} tab={paletteTab} selectedShot={selectedShot} onSelectShot={setSelectedShotId} /></aside>
+        <nav className="video-editor-palette-tabs" aria-label="Editor tools">{(["story", "media", "cast", "lyrics", "music"] as PaletteTab[]).map((tab) => <button type="button" key={tab} className={paletteTab === tab ? "is-active" : ""} onClick={() => setPaletteTab(tab)}>{tab}</button>)}</nav>
+        <aside className="video-editor-palette"><Palette data={data} tab={paletteTab} selectedShot={selectedShot} onSelectShot={(id) => selectShot(id)} /></aside>
         <main className="video-editor-canvas">
-          <div className="video-editor-canvas-head"><div><span>Program</span><strong>{selectedShot ? `Shot ${selectedShot.display_order + 1}` : data.project.title}</strong></div><div><span>{data.project.primary_aspect_ratio}</span><span>{data.project.target_resolution}</span></div></div>
-          <PlaybackPreview data={data} shot={selectedShot} playheadMs={playheadMs} />
-          <div className="video-editor-canvas-note"><span>Space</span> play/pause <span>← →</span> seek <span>Shift + ← →</span> 5 seconds <span>⌘ +/-</span> zoom</div>
+          <div className="video-editor-canvas-head"><div><span>Program</span><strong>{activeShot ? `Shot ${activeShot.display_order + 1}` : data.project.title}</strong></div><div>{selectedShot && activeShot?.id !== selectedShot.id ? <span className="video-editor-selection-note">Inspector: Shot {selectedShot.display_order + 1}</span> : null}<span>{data.project.primary_aspect_ratio}</span><span>{data.project.target_resolution}</span></div></div>
+          <ProgramMonitor data={data} shot={activeShot} playheadMs={playheadMs} isPlaying={isPlaying} />
+          <div className="video-editor-canvas-note"><span>Space</span> play/pause <span>← →</span> seek <span>Shift + ← →</span> 5 sec <span>L</span> loop selected <span>⌘ +/-</span> zoom</div>
         </main>
         <ShotInspector key={selectedShot?.id ?? "none"} data={data} shot={selectedShot} />
       </div>
@@ -542,25 +459,27 @@ export function VideoDirectorProEditor({ data }: { data: VideoWorkspaceData }) {
         <div className="video-editor-timeline-scroll">
           <div ref={timelineContentRef} className="video-editor-timeline-content" style={{ width: `${Math.max(100, zoom * 100)}%` }} onPointerDown={timelineSeek}>
             <div className="video-editor-ruler">{Array.from({ length: Math.max(2, Math.ceil(musicMap.durationMs / 10000) + 1) }, (_, index) => index * 10000).filter((ms) => ms <= musicMap.durationMs).map((ms) => <span key={ms} style={{ left: `${(ms / musicMap.durationMs) * 100}%` }}>{formatEditorTime(ms).slice(0, 5)}</span>)}</div>
-            <div className="video-editor-structure-lane">{musicMap.sections.map((section) => <div key={section.id} style={{ left: `${(section.startMs / musicMap.durationMs) * 100}%`, width: `${((section.endMs - section.startMs) / musicMap.durationMs) * 100}%` }}><span>{section.label}</span></div>)}</div>
-            <div className="video-editor-lyrics-lane">{data.lyricCues.map((cue) => <div key={cue.id} title={cue.text} style={{ left: `${(cue.startMs / musicMap.durationMs) * 100}%`, width: `${Math.max(0.25, ((cue.endMs - cue.startMs) / musicMap.durationMs) * 100)}%` }} />)}</div>
+            <div className="video-editor-structure-lane">{musicMap.sections.map((section) => <div key={section.id} className={playheadMs >= section.startMs && playheadMs < section.endMs ? "is-active" : ""} style={{ left: `${(section.startMs / musicMap.durationMs) * 100}%`, width: `${((section.endMs - section.startMs) / musicMap.durationMs) * 100}%` }}><span>{section.label}</span></div>)}</div>
+            <div className="video-editor-lyrics-lane">{data.lyricCues.map((cue) => <div key={cue.id} className={playheadMs >= cue.startMs && playheadMs < cue.endMs ? "is-active" : ""} title={cue.text} style={{ left: `${(cue.startMs / musicMap.durationMs) * 100}%`, width: `${Math.max(0.25, ((cue.endMs - cue.startMs) / musicMap.durationMs) * 100)}%` }} />)}</div>
             {data.stems.slice(0, 4).map((stem) => <StemActivityLane key={stem.id} analysis={stem.analysis} durationMs={musicMap.durationMs} />)}
             <div className="video-editor-video-lane">
               {data.shots.map((shot) => {
                 const timing = timingFor(shot);
                 const readiness = shotReadiness(shot, data.characters, data.contextSignals.hasAudio);
+                const suggested = sourceSuggestion(shot);
                 return <div
                   key={shot.id}
-                  className={`video-editor-clip clip-${shot.shot_type} ${selectedShotId === shot.id ? "is-selected" : ""} ${readiness.ready ? "is-ready" : "has-issues"}`}
+                  className={`video-editor-clip clip-${shot.shot_type} ${selectedShotId === shot.id ? "is-selected" : ""} ${activeShot?.id === shot.id ? "is-active-playback" : ""} ${readiness.ready ? "is-ready" : "has-issues"}`}
                   style={{ left: `${(timing.startMs / musicMap.durationMs) * 100}%`, width: `${Math.max(0.35, ((timing.endMs - timing.startMs) / musicMap.durationMs) * 100)}%` }}
                   onPointerDown={(event) => beginDrag(event, shot, "move")}
                   onPointerMove={moveDrag}
                   onPointerUp={endDrag}
-                  onDoubleClick={() => setSelectedShotId(shot.id)}
+                  onDoubleClick={() => selectShot(shot.id)}
                   title={`${formatEditorTime(timing.startMs)} - ${formatEditorTime(timing.endMs)} · ${shot.description}`}
                 >
                   <button type="button" className="video-editor-trim-handle trim-start" aria-label="Trim shot start" onPointerDown={(event) => beginDrag(event, shot, "start")} />
                   <span><small>{shot.display_order + 1}</small><strong>{shot.description}</strong></span>
+                  {suggested && !shot.selected_asset_id ? <i className="video-editor-source-badge">SRC?</i> : null}
                   {shot.character_id ? <i className="video-editor-character-badge">ID</i> : null}
                   {record(shot.performance_config).lip_sync === true ? <i className="video-editor-sync-badge">SYNC</i> : null}
                   <button type="button" className="video-editor-trim-handle trim-end" aria-label="Trim shot end" onPointerDown={(event) => beginDrag(event, shot, "end")} />
