@@ -20,6 +20,16 @@ function credits(value: number) {
   return `${Number(value || 0).toFixed(1)} cr`;
 }
 
+function estimate(preview: VideoProductionProfilePreview | null) {
+  if (!preview) return "Planning required";
+  if (preview.expectedUsd !== null) {
+    const expected = money(preview.expectedUsd);
+    const reserve = money(preview.reserveUsd);
+    return reserve && reserve !== expected ? `${expected} expected · ${reserve} reserved max` : expected;
+  }
+  return `${credits(preview.expectedCredits)} expected · ${credits(preview.reserveCredits)} reserve`;
+}
+
 export function ProductionProfileControl({
   projectId,
   initialProfile,
@@ -40,26 +50,15 @@ export function ProductionProfileControl({
   const definition = VIDEO_PRODUCTION_PROFILE_DEFINITIONS[index] ?? VIDEO_PRODUCTION_PROFILE_DEFINITIONS[2];
   const preview = previews.find((item) => item.profile === profile) ?? null;
   const parsedMax = maxBudget.trim() ? Number(maxBudget) : null;
-  const overCap = Boolean(
-    preview?.expectedUsd !== null
+  const expectedUsd = preview?.expectedUsd ?? null;
+  const overCap = expectedUsd !== null
     && parsedMax !== null
     && Number.isFinite(parsedMax)
-    && preview!.expectedUsd! > parsedMax,
-  );
-  const capDifference = overCap && preview?.expectedUsd !== null && parsedMax !== null
-    ? preview.expectedUsd - parsedMax
-    : 0;
+    && expectedUsd > parsedMax;
+  const capDifference = overCap && parsedMax !== null ? expectedUsd - parsedMax : 0;
   const hasRouting = Boolean(preview?.shots.length);
 
-  const estimateLabel = useMemo(() => {
-    if (!preview) return "Planning required";
-    if (preview.expectedUsd !== null) {
-      const expected = money(preview.expectedUsd);
-      const reserve = money(preview.reserveUsd);
-      return reserve && reserve !== expected ? `${expected} expected · ${reserve} reserved max` : expected;
-    }
-    return `${credits(preview.expectedCredits)} expected · ${credits(preview.reserveCredits)} reserve`;
-  }, [preview]);
+  const estimateLabel = useMemo(() => estimate(preview), [preview]);
 
   return (
     <section className="video-production-control" aria-labelledby="production-quality-title">
@@ -117,31 +116,75 @@ export function ProductionProfileControl({
             <div><span className="section-label">Exact routing preview</span><h4>{hasRouting ? "Models this setting will use" : "Model routing appears after the storyboard"}</h4></div>
             {preview ? <span>{preview.shots.length} paid source shot{preview.shots.length === 1 ? "" : "s"}</span> : null}
           </div>
-          {hasRouting ? (
-            <div className="video-model-mix">
-              {preview!.modelMix.map((item) => (
-                <article key={`${item.provider}:${item.model}`}>
-                  <div className="video-model-mix__identity">
-                    <span>{item.providerLabel}</span>
-                    <strong>{item.modelLabel}</strong>
-                  </div>
-                  <div className="video-model-mix__share" aria-label={`${item.share}% of generated footage`}>
-                    <span style={{ width: `${Math.max(3, item.share)}%` }} />
-                  </div>
-                  <dl>
-                    <div><dt>Footage</dt><dd>{item.share}%</dd></div>
-                    <div><dt>Shots</dt><dd>{item.shotCount}</dd></div>
-                    <div><dt>Estimate</dt><dd>{money(item.expectedUsd) ?? credits(item.expectedCredits)}</dd></div>
-                  </dl>
-                </article>
-              ))}
-            </div>
+          {hasRouting && preview ? (
+            <>
+              <div className="video-model-mix">
+                {preview.modelMix.map((item) => (
+                  <article key={`${item.provider}:${item.model}`}>
+                    <div className="video-model-mix__identity">
+                      <span>{item.providerLabel}</span>
+                      <strong>{item.modelLabel}</strong>
+                    </div>
+                    <div className="video-model-mix__share" aria-label={`${item.share}% of generated footage`}>
+                      <span style={{ width: `${Math.max(3, item.share)}%` }} />
+                    </div>
+                    <dl>
+                      <div><dt>Footage</dt><dd>{item.share}%</dd></div>
+                      <div><dt>Shots</dt><dd>{item.shotCount}</dd></div>
+                      <div><dt>Estimate</dt><dd>{money(item.expectedUsd) ?? credits(item.expectedCredits)}</dd></div>
+                    </dl>
+                  </article>
+                ))}
+              </div>
+
+              <details className="video-shot-routing-disclosure">
+                <summary>See the exact model for every paid shot</summary>
+                <div className="video-shot-routing-list">
+                  {[...preview.shots].sort((a, b) => a.displayOrder - b.displayOrder).map((shot) => (
+                    <article key={shot.shotId}>
+                      <span className="video-shot-routing-list__number">{String(shot.displayOrder + 1).padStart(2, "0")}</span>
+                      <div className="video-shot-routing-list__model">
+                        <small>{shot.providerLabel}</small>
+                        <strong>{shot.modelLabel}</strong>
+                        <span>{shot.generationSeconds}s generation · {money(shot.expectedUsd) ?? credits(shot.expectedCredits)}</span>
+                      </div>
+                      <p>{shot.reason}</p>
+                      <div className="video-shot-routing-list__alternatives">
+                        <small>Alternatives</small>
+                        {shot.alternatives.map((item) => (
+                          <span key={`${item.provider}:${item.model}`}>{item.modelLabel} · {item.providerLabel}</span>
+                        ))}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </details>
+            </>
           ) : (
             <div className="video-production-routing-empty">
               <strong>No paid motion has been planned yet.</strong>
               <p>Ensemblis will apply this profile when the production plan is created, then show the exact provider and model for every shot before you approve spend.</p>
             </div>
           )}
+
+          <details className="video-profile-comparison">
+            <summary>Compare all quality settings and their model mix</summary>
+            <div className="video-profile-comparison__grid">
+              {previews.map((item) => (
+                <article key={item.profile} data-selected={item.profile === profile || undefined}>
+                  <div><small>{VIDEO_PRODUCTION_PROFILE_DEFINITIONS.find((definitionItem) => definitionItem.id === item.profile)?.eyebrow}</small><strong>{item.label}</strong></div>
+                  <span>{estimate(item)}</span>
+                  {item.modelMix.length ? (
+                    <ul>
+                      {item.modelMix.map((model) => (
+                        <li key={`${model.provider}:${model.model}`}><strong>{model.modelLabel}</strong><span>{model.providerLabel} · {model.share}%</span></li>
+                      ))}
+                    </ul>
+                  ) : <p>Exact model mix becomes available after storyboard planning.</p>}
+                </article>
+              ))}
+            </div>
+          </details>
         </div>
 
         <div className="video-budget-cap">
