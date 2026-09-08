@@ -51,11 +51,12 @@ export function ProductionProfileControl({
   const preview = previews.find((item) => item.profile === profile) ?? null;
   const parsedMax = maxBudget.trim() ? Number(maxBudget) : null;
   const expectedUsd = preview?.expectedUsd ?? null;
-  const overCap = expectedUsd !== null
-    && parsedMax !== null
-    && Number.isFinite(parsedMax)
-    && expectedUsd > parsedMax;
-  const capDifference = overCap && parsedMax !== null ? expectedUsd - parsedMax : 0;
+  const reserveUsd = preview?.reserveUsd ?? expectedUsd;
+  const hasValidCap = parsedMax !== null && Number.isFinite(parsedMax);
+  const expectedOverCap = expectedUsd !== null && hasValidCap && expectedUsd > parsedMax;
+  const reserveOverCap = reserveUsd !== null && hasValidCap && reserveUsd > parsedMax;
+  const overCap = reserveOverCap;
+  const capDifference = overCap && parsedMax !== null && reserveUsd !== null ? reserveUsd - parsedMax : 0;
   const hasRouting = Boolean(preview?.shots.length);
 
   const estimateLabel = useMemo(() => estimate(preview), [preview]);
@@ -211,9 +212,11 @@ export function ProductionProfileControl({
           </div>
           <div className="video-budget-cap__state" data-over-cap={overCap || undefined} aria-live="polite">
             {overCap ? (
-              <><strong>Current profile is about {money(capDifference)} over this cap.</strong><span>Move the quality control left or raise the ceiling before approving generation.</span></>
+              expectedOverCap
+                ? <><strong>Expected production is about {money(expectedUsd !== null && parsedMax !== null ? expectedUsd - parsedMax : capDifference)} over this ceiling.</strong><span>The conservative reserve is higher still. Move quality left or raise the ceiling before generation.</span></>
+                : <><strong>Expected spend fits, but the conservative reserve is about {money(capDifference)} over this ceiling.</strong><span>Raise the ceiling or reduce quality so the hard safety cap will not surprise you at approval time.</span></>
             ) : parsedMax !== null && Number.isFinite(parsedMax) ? (
-              <><strong>Within your {money(parsedMax)} ceiling.</strong><span>Every paid batch still requires explicit approval.</span></>
+              <><strong>Expected spend and reserve fit within your {money(parsedMax)} ceiling.</strong><span>Every paid batch still requires explicit approval.</span></>
             ) : (
               <><strong>No USD ceiling.</strong><span>The provider credit safety cap and approval envelopes still protect spend.</span></>
             )}
