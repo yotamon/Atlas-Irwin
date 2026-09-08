@@ -78,9 +78,9 @@ function isLikelyGenerated(context: SourceAssetContext) {
 function preferredOffsetMs(context: SourceAssetContext, shotDurationMs: number) {
   const metadata = record(context.asset.metadata);
   const raw = [metadata.preferred_start_ms, metadata.source_offset_ms, metadata.in_ms]
-    .find((value) => typeof value === "number" && Number.isFinite(value) && value >= 0);
+    .find((value): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0);
   const duration = context.asset.duration_ms ?? 0;
-  const requested = typeof raw === "number" ? raw : 0;
+  const requested = raw ?? 0;
   return duration > shotDurationMs ? Math.min(requested, Math.max(0, duration - shotDurationMs)) : 0;
 }
 
