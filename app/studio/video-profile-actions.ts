@@ -67,18 +67,38 @@ export async function updateVideoProductionProfile(form: FormData) {
     throw new Error("The global production profile is locked after motion generation begins. Change individual future shots instead so completed spend stays auditable.");
   }
 
+  const currentBrief = record(project.creative_brief);
+  const storedBaseCap = typeof currentBrief.provider_credit_safety_cap === "number"
+    ? currentBrief.provider_credit_safety_cap
+    : Number(project.hard_budget_credits);
+  const baseProviderCap = Math.max(storedBaseCap, Number(project.spent_credits) + Number(project.reserved_credits));
   const usdPerCredit = Number(process.env.HIGGSFIELD_USD_PER_CREDIT);
-  if (maxBudgetUsd !== null && Number.isFinite(usdPerCredit) && usdPerCredit > 0) {
-    const committedUsd = (Number(project.spent_credits) + Number(project.reserved_credits)) * usdPerCredit;
-    if (maxBudgetUsd + 0.0001 < committedUsd) {
-      throw new Error(`The max spend cannot be lower than the $${committedUsd.toFixed(2)} already spent or reserved.`);
+  const hasUsdRate = Number.isFinite(usdPerCredit) && usdPerCredit > 0;
+  const committedCredits = Number(project.spent_credits) + Number(project.reserved_credits);
+
+  let effectiveProviderCap = baseProviderCap;
+  if (maxBudgetUsd !== null) {
+    if (!hasUsdRate) {
+      if (committedCredits > 0) {
+        throw new Error("A USD max spend cannot be changed after spend exists until HIGGSFIELD_USD_PER_CREDIT is configured, because Ensemblis cannot guarantee the ceiling without a trusted conversion rate.");
+      }
+      // Fail closed: with a user-requested USD ceiling and no trusted conversion rate,
+      // no provider credits can be approved until pricing is configured.
+      effectiveProviderCap = 0;
+    } else {
+      const committedUsd = committedCredits * usdPerCredit;
+      if (maxBudgetUsd + 0.0001 < committedUsd) {
+        throw new Error(`The max spend cannot be lower than the $${committedUsd.toFixed(2)} already spent or reserved.`);
+      }
+      effectiveProviderCap = Math.min(baseProviderCap, maxBudgetUsd / usdPerCredit);
     }
   }
 
   const creativeBrief = {
-    ...record(project.creative_brief),
+    ...currentBrief,
     production_profile: profile,
     max_budget_usd: maxBudgetUsd,
+    provider_credit_safety_cap: baseProviderCap,
   };
 
   const { data: shots, error: shotsError } = await db.from("music_video_shots")
@@ -147,6 +167,7 @@ export async function updateVideoProductionProfile(form: FormData) {
 
   const update: Record<string, unknown> = {
     creative_brief: json(creativeBrief),
+    hard_budget_credits: Number(effectiveProviderCap.toFixed(2)),
     estimated_credits: nextCost.total_credits,
   };
   if (Object.keys(plan).length) update.production_plan = json({ ...plan, cost_estimate: nextCost });
