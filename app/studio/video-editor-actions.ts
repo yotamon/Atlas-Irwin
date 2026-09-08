@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { createServiceClient } from "@/lib/supabase/service";
 import { loadVideoProjectContext, resolveProjectAudioUrl } from "@/lib/video-director/context";
 import {
@@ -14,6 +15,7 @@ import {
 } from "@/lib/video-director/generation";
 import { routeVideoShot } from "@/lib/video-director/model-router";
 import { recordDirectorPreference } from "@/lib/video-director/preferences";
+import { buildSourceAssemblyPlan } from "@/lib/video-director/source-auto-edit";
 import type { Json } from "@/types/database";
 import type { VideoDatabase, VideoShotType } from "@/types/video-database";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -45,8 +47,37 @@ async function session(projectId: string) {
     artist,
     context,
     baseDb,
+    music: asArtistScopedMusicClient(baseDb),
     db: baseDb as unknown as SupabaseClient<VideoDatabase>,
   };
+}
+
+async function allowedProjectSourceAsset(input: {
+  projectId: string;
+  assetId: string;
+  ownerId: string;
+  artistId: string;
+  releaseId: string;
+  trackId: string;
+  db: SupabaseClient<VideoDatabase>;
+  music: ReturnType<typeof asArtistScopedMusicClient>;
+}) {
+  const [linked, generated] = await Promise.all([
+    input.music.from("media_links").select("media_asset_id")
+      .eq("owner_id", input.ownerId)
+      .eq("artist_id", input.artistId)
+      .eq("media_asset_id", input.assetId)
+      .or(`release_id.eq.${input.releaseId},track_id.eq.${input.trackId}`)
+      .limit(1).maybeSingle(),
+    input.db.from("music_video_generations").select("result_asset_id")
+      .eq("owner_id", input.ownerId)
+      .eq("project_id", input.projectId)
+      .eq("result_asset_id", input.assetId)
+      .limit(1).maybeSingle(),
+  ]);
+  if (linked.error) throw new Error(linked.error.message);
+  if (generated.error) throw new Error(generated.error.message);
+  return Boolean(linked.data || generated.data);
 }
 
 const timingInput = z.object({
@@ -244,24 +275,206 @@ const sourceInput = z.object({
   projectId: z.uuid(),
   shotId: z.uuid(),
   assetId: z.uuid(),
+  sourceOffsetMs: z.number().int().min(0).default(0),
 });
 
 export async function assignVideoSourceAsset(input: z.infer<typeof sourceInput>) {
   const parsed = sourceInput.parse(input);
-  const { user, db } = await session(parsed.projectId);
-  const { data: asset, error: assetError } = await db.from("media_assets").select("id")
+  const { user, artist, db, music, context } = await session(parsed.projectId);
+  const { data: asset, error: assetError } = await db.from("media_assets").select("id,duration_ms")
     .eq("id", parsed.assetId).eq("owner_id", user.id).single();
   if (assetError || !asset) throw new Error(assetError?.message || "Source asset not found.");
+  const allowed = await allowedProjectSourceAsset({
+    projectId: parsed.projectId,
+    assetId: parsed.assetId,
+    ownerId: user.id,
+    artistId: artist.artistId,
+    releaseId: context.project.release_id,
+    trackId: context.project.track_id,
+    db,
+    music,
+  });
+  if (!allowed) throw new Error("Source asset is not linked to this artist, release, track or video project.");
+  const { data: shot, error: shotLookupError } = await db.from("music_video_shots").select("editor_config")
+    .eq("id", parsed.shotId).eq("project_id", parsed.projectId).eq("owner_id", user.id).single();
+  if (shotLookupError || !shot) throw new Error(shotLookupError?.message || "Video shot not found.");
+  const sourceOffsetMs = asset.duration_ms
+    ? Math.min(parsed.sourceOffsetMs, Math.max(0, asset.duration_ms - 250))
+    : parsed.sourceOffsetMs;
+  const editorConfig = record(shot.editor_config);
   const { error } = await db.from("music_video_shots").update({
     shot_type: "source_media",
     selected_asset_id: parsed.assetId,
     selected_provider: null,
     selected_model: null,
+    editor_config: json({
+      ...editorConfig,
+      source_offset_ms: sourceOffsetMs,
+      source_selection: { source: "manual", asset_id: parsed.assetId, selected_at: new Date().toISOString() },
+      source_suggestion: null,
+    }),
     status: "locked",
     locked_at: new Date().toISOString(),
   }).eq("id", parsed.shotId).eq("project_id", parsed.projectId).eq("owner_id", user.id);
   if (error) throw new Error(error.message);
   refresh(parsed.projectId);
+}
+
+const sourceAssemblyInput = z.object({ projectId: z.uuid() });
+
+async function sourceAssemblyContext(projectId: string) {
+  const state = await session(projectId);
+  const { user, artist, db, music, context } = state;
+  const [shotsResult, linksResult] = await Promise.all([
+    db.from("music_video_shots").select("*").eq("owner_id", user.id).eq("project_id", projectId).order("display_order"),
+    music.from("media_links").select("media_asset_id,role,release_id,track_id,artist_id")
+      .eq("owner_id", user.id)
+      .eq("artist_id", artist.artistId)
+      .or(`release_id.eq.${context.project.release_id},track_id.eq.${context.project.track_id}`),
+  ]);
+  if (shotsResult.error) throw new Error(shotsResult.error.message);
+  if (linksResult.error) throw new Error(linksResult.error.message);
+  const roles = new Map<string, string[]>();
+  for (const link of linksResult.data ?? []) {
+    roles.set(link.media_asset_id, [...new Set([...(roles.get(link.media_asset_id) ?? []), link.role])]);
+  }
+  const ids = [...roles.keys()];
+  const assetsResult = ids.length
+    ? await db.from("media_assets").select("*").eq("owner_id", user.id).in("id", ids)
+    : { data: [], error: null };
+  if (assetsResult.error) throw new Error(assetsResult.error.message);
+  return {
+    ...state,
+    shots: shotsResult.data ?? [],
+    assetContexts: (assetsResult.data ?? []).map((asset) => ({ asset, roles: roles.get(asset.id) ?? [] })),
+  };
+}
+
+export async function planVideoSourceAssembly(input: z.infer<typeof sourceAssemblyInput>) {
+  const parsed = sourceAssemblyInput.parse(input);
+  const { user, db, context, shots, assetContexts } = await sourceAssemblyContext(parsed.projectId);
+  const plan = buildSourceAssemblyPlan({
+    shots,
+    assets: assetContexts,
+    targetAspectRatio: context.project.primary_aspect_ratio,
+  });
+  const suggestionByShot = new Map(plan.suggestions.map((suggestion) => [suggestion.shotId, suggestion]));
+  for (const shot of shots.filter((item) => !item.selected_asset_id)) {
+    const editorConfig = record(shot.editor_config);
+    const suggestion = suggestionByShot.get(shot.id) ?? null;
+    const { error } = await db.from("music_video_shots").update({
+      editor_config: json({
+        ...editorConfig,
+        source_plan_version: plan.version,
+        source_suggestion: suggestion,
+      }),
+    }).eq("id", shot.id).eq("project_id", parsed.projectId).eq("owner_id", user.id);
+    if (error) throw new Error(error.message);
+  }
+  const projectState = record(context.project.editor_state);
+  const { error: projectError } = await db.from("music_video_projects").update({
+    editor_state: json({
+      ...projectState,
+      source_assembly: {
+        version: plan.version,
+        suggested: plan.suggestions.length,
+        unresolved: plan.unresolvedShotIds.length,
+        generated_shots_avoided: plan.generatedShotsAvoided,
+        planned_at: new Date().toISOString(),
+      },
+    }),
+  }).eq("id", parsed.projectId).eq("owner_id", user.id);
+  if (projectError) throw new Error(projectError.message);
+  refresh(parsed.projectId);
+  return plan;
+}
+
+const sourceSuggestionInput = z.object({ projectId: z.uuid(), shotId: z.uuid() });
+
+export async function applyVideoSourceSuggestion(input: z.infer<typeof sourceSuggestionInput>) {
+  const parsed = sourceSuggestionInput.parse(input);
+  const { user, artist, db, music, context } = await session(parsed.projectId);
+  const { data: shot, error } = await db.from("music_video_shots").select("*")
+    .eq("id", parsed.shotId).eq("project_id", parsed.projectId).eq("owner_id", user.id).single();
+  if (error || !shot) throw new Error(error?.message || "Video shot not found.");
+  const editorConfig = record(shot.editor_config);
+  const suggestion = record(editorConfig.source_suggestion);
+  const assetId = typeof suggestion.assetId === "string" ? suggestion.assetId : "";
+  const sourceOffsetMs = typeof suggestion.sourceOffsetMs === "number" ? Math.max(0, Math.round(suggestion.sourceOffsetMs)) : 0;
+  if (!assetId) throw new Error("This shot has no current source suggestion.");
+  const allowed = await allowedProjectSourceAsset({
+    projectId: parsed.projectId,
+    assetId,
+    ownerId: user.id,
+    artistId: artist.artistId,
+    releaseId: context.project.release_id,
+    trackId: context.project.track_id,
+    db,
+    music,
+  });
+  if (!allowed) throw new Error("Suggested source is no longer available to this artist project.");
+  const { error: updateError } = await db.from("music_video_shots").update({
+    shot_type: "source_media",
+    selected_asset_id: assetId,
+    selected_provider: null,
+    selected_model: null,
+    editor_config: json({
+      ...editorConfig,
+      source_offset_ms: sourceOffsetMs,
+      source_selection: { source: "auto_edit", ...suggestion, selected_at: new Date().toISOString() },
+      source_suggestion: null,
+    }),
+    status: "locked",
+    locked_at: new Date().toISOString(),
+  }).eq("id", shot.id).eq("project_id", parsed.projectId).eq("owner_id", user.id);
+  if (updateError) throw new Error(updateError.message);
+  refresh(parsed.projectId);
+}
+
+export async function applyAllVideoSourceSuggestions(input: z.infer<typeof sourceAssemblyInput>) {
+  const parsed = sourceAssemblyInput.parse(input);
+  const { user, artist, db, music, context } = await session(parsed.projectId);
+  const { data: shots, error } = await db.from("music_video_shots").select("*")
+    .eq("owner_id", user.id).eq("project_id", parsed.projectId).order("display_order");
+  if (error) throw new Error(error.message);
+  let applied = 0;
+  for (const shot of shots ?? []) {
+    if (shot.selected_asset_id) continue;
+    const editorConfig = record(shot.editor_config);
+    const suggestion = record(editorConfig.source_suggestion);
+    const assetId = typeof suggestion.assetId === "string" ? suggestion.assetId : "";
+    if (!assetId) continue;
+    const allowed = await allowedProjectSourceAsset({
+      projectId: parsed.projectId,
+      assetId,
+      ownerId: user.id,
+      artistId: artist.artistId,
+      releaseId: context.project.release_id,
+      trackId: context.project.track_id,
+      db,
+      music,
+    });
+    if (!allowed) continue;
+    const sourceOffsetMs = typeof suggestion.sourceOffsetMs === "number" ? Math.max(0, Math.round(suggestion.sourceOffsetMs)) : 0;
+    const { error: updateError } = await db.from("music_video_shots").update({
+      shot_type: "source_media",
+      selected_asset_id: assetId,
+      selected_provider: null,
+      selected_model: null,
+      editor_config: json({
+        ...editorConfig,
+        source_offset_ms: sourceOffsetMs,
+        source_selection: { source: "auto_edit", ...suggestion, selected_at: new Date().toISOString() },
+        source_suggestion: null,
+      }),
+      status: "locked",
+      locked_at: new Date().toISOString(),
+    }).eq("id", shot.id).eq("project_id", parsed.projectId).eq("owner_id", user.id);
+    if (updateError) throw new Error(updateError.message);
+    applied += 1;
+  }
+  refresh(parsed.projectId);
+  return { applied };
 }
 
 const shotVariantInput = z.object({ projectId: z.uuid(), shotId: z.uuid() });
