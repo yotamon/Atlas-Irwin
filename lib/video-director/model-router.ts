@@ -1,5 +1,9 @@
 import type { ExtendedMusicVideoShot } from "@/types/video-database";
-import { VIDEO_MODEL_OFFERS, type VideoModelOffer } from "@/lib/video-providers/catalog";
+import {
+  VIDEO_MODEL_OFFERS,
+  type VideoModelOffer,
+  type VideoProviderId,
+} from "@/lib/video-providers/catalog";
 import type { VideoResolution } from "./domain";
 import {
   productionProfileDefinition,
@@ -9,14 +13,14 @@ import {
 export type ShotRoutingAlternative = {
   model: string;
   modelLabel: string;
-  provider: string;
+  provider: VideoProviderId;
   providerLabel: string;
   score: number;
 };
 
 export type ShotRoutingDecision = {
   model: string;
-  provider: string;
+  provider: VideoProviderId;
   modelLabel: string;
   providerLabel: string;
   reason: string;
