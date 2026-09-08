@@ -82,8 +82,6 @@ export async function updateVideoProductionProfile(form: FormData) {
       if (committedCredits > 0) {
         throw new Error("A USD max spend cannot be changed after spend exists until HIGGSFIELD_USD_PER_CREDIT is configured, because Ensemblis cannot guarantee the ceiling without a trusted conversion rate.");
       }
-      // Fail closed: with a user-requested USD ceiling and no trusted conversion rate,
-      // no provider credits can be approved until pricing is configured.
       effectiveProviderCap = 0;
     } else {
       const committedUsd = committedCredits * usdPerCredit;
@@ -165,15 +163,15 @@ export async function updateVideoProductionProfile(form: FormData) {
     total_reserve_credits: Number((videoReserve + lookReserve).toFixed(2)),
   };
 
-  const update: Record<string, unknown> = {
+  const projectUpdate = {
     creative_brief: json(creativeBrief),
     hard_budget_credits: Number(effectiveProviderCap.toFixed(2)),
     estimated_credits: nextCost.total_credits,
+    ...(Object.keys(plan).length ? { production_plan: json({ ...plan, cost_estimate: nextCost }) } : {}),
   };
-  if (Object.keys(plan).length) update.production_plan = json({ ...plan, cost_estimate: nextCost });
 
   const { error: projectError } = await db.from("music_video_projects")
-    .update(update)
+    .update(projectUpdate)
     .eq("id", projectId)
     .eq("owner_id", user.id);
   if (projectError) throw new Error(projectError.message);
