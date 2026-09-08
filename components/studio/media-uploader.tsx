@@ -14,6 +14,7 @@ import {
   attachReleaseMasterFromMedia,
   createVaultTrackFromMedia,
 } from "@/app/studio/growth-media-actions-safe";
+import { reportMediaUploadTransportFailure } from "@/app/studio/media-upload-diagnostics";
 import { createClient } from "@/lib/supabase/client";
 import { ResumableUploadAuthorizationError, uploadResumableMedia } from "@/lib/supabase/resumable-upload";
 import {
@@ -67,6 +68,32 @@ function cleanAudioTitle(name: string) {
   return name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
+async function reportTransportFailure({
+  transport,
+  stage,
+  error,
+  file,
+  progress,
+}: {
+  transport: string;
+  stage: string;
+  error: unknown;
+  file: File;
+  progress: number;
+}) {
+  const form = new FormData();
+  form.set("transport", transport);
+  form.set("stage", stage);
+  form.set("error_name", error instanceof Error ? error.name : typeof error);
+  form.set("error_message", error instanceof Error ? error.message : String(error));
+  form.set("mime_type", file.type || "application/octet-stream");
+  form.set("file_size", String(file.size));
+  form.set("progress", String(progress));
+  form.set("online", navigator.onLine ? "true" : "false");
+  form.set("user_agent", navigator.userAgent);
+  await reportMediaUploadTransportFailure(form).catch(() => undefined);
+}
+
 function uploadFailure(error: unknown, resumable: boolean) {
   if (error instanceof ResumableUploadAuthorizationError) {
     return {
@@ -85,7 +112,7 @@ function uploadFailure(error: unknown, resumable: boolean) {
   return {
     state: "error" as const,
     recovery: "restart" as const,
-    message: "Upload failed. Check your connection and try again.",
+    message: "Upload failed after secure upload recovery. Check your connection and try again.",
   };
 }
 
@@ -234,50 +261,97 @@ export function MediaUploader({
       } : entry));
       let uploadTarget: UploadTarget | null = item.target ?? null;
       let registered = false;
+      let transportCompleted = false;
+      let fallbackAttempted = false;
+      let latestProgress = item.progress ?? 0;
       let releaseMasterResult: { analysisReused?: boolean; analysisQueued?: boolean } | null = null;
+
+      async function prepareTarget() {
+        const targetForm = new FormData();
+        targetForm.set("asset_type", item.role);
+        targetForm.set("mime_type", item.file.type);
+        targetForm.set("file_size", String(item.file.size));
+        targetForm.set("original_name", item.file.name);
+        const preparedTarget = await createMediaUploadTarget(targetForm);
+        setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, target: preparedTarget } : entry));
+        return preparedTarget;
+      }
+
+      async function uploadSignedStandard(target: UploadTarget) {
+        const { error } = await supabase.storage.from(target.bucketName).uploadToSignedUrl(target.storagePath, target.token, item.file, {
+          cacheControl: "31536000",
+          contentType: item.file.type,
+        });
+        if (error) throw error;
+      }
 
       try {
         const [contentHash, dimensions] = await Promise.all([
           sha256(item.file),
           mediaDimensions(item.file).catch(() => ({ width: "", height: "", duration_ms: "" })),
         ]);
-        if (!uploadTarget) {
-          const targetForm = new FormData();
-          targetForm.set("asset_type", item.role);
-          targetForm.set("mime_type", item.file.type);
-          targetForm.set("file_size", String(item.file.size));
-          targetForm.set("original_name", item.file.name);
-          uploadTarget = await createMediaUploadTarget(targetForm);
-          const preparedTarget = uploadTarget;
-          setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, target: preparedTarget } : entry));
-        }
+        if (!uploadTarget) uploadTarget = await prepareTarget();
 
         if (resumable) {
-          await uploadResumableMedia({
-            file: item.file,
-            target: uploadTarget,
-            onProgress(progress) {
-              const percent = Math.round(progress * 100);
-              setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? {
-                ...entry,
-                progress,
-                message: `Uploading · ${percent}%`,
-              } : entry));
-            },
-            onRetry() {
-              setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? {
-                ...entry,
-                message: "Connection interrupted. Retrying…",
-              } : entry));
-            },
-          });
+          try {
+            await uploadResumableMedia({
+              file: item.file,
+              target: uploadTarget,
+              onProgress(progress) {
+                latestProgress = progress;
+                const percent = Math.round(progress * 100);
+                setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? {
+                  ...entry,
+                  progress,
+                  message: `Uploading · ${percent}%`,
+                } : entry));
+              },
+              onRetry() {
+                setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? {
+                  ...entry,
+                  message: "Connection interrupted. Retrying…",
+                } : entry));
+              },
+            });
+          } catch (resumableError) {
+            await reportTransportFailure({
+              transport: "tus",
+              stage: "resumable-exhausted",
+              error: resumableError,
+              file: item.file,
+              progress: latestProgress,
+            });
+            fallbackAttempted = true;
+            const failedResumableTarget = uploadTarget;
+            const discardForm = new FormData();
+            discardForm.set("bucket_name", failedResumableTarget.bucketName);
+            discardForm.set("storage_path", failedResumableTarget.storagePath);
+            await discardMediaUpload(discardForm).catch(() => undefined);
+
+            setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? {
+              ...entry,
+              progress: undefined,
+              message: "Resumable route interrupted. Finishing with secure direct upload…",
+            } : entry));
+
+            uploadTarget = await prepareTarget();
+            try {
+              await uploadSignedStandard(uploadTarget);
+            } catch (fallbackError) {
+              await reportTransportFailure({
+                transport: "signed-standard",
+                stage: "fallback",
+                error: fallbackError,
+                file: item.file,
+                progress: latestProgress,
+              });
+              throw fallbackError;
+            }
+          }
         } else {
-          const { error } = await supabase.storage.from(uploadTarget.bucketName).uploadToSignedUrl(uploadTarget.storagePath, uploadTarget.token, item.file, {
-            cacheControl: "31536000",
-            contentType: item.file.type,
-          });
-          if (error) throw error;
+          await uploadSignedStandard(uploadTarget);
         }
+        transportCompleted = true;
 
         const form = new FormData();
         const scopedTags = [tags, artistId ? `artist:${artistId}` : ""].filter(Boolean).join(",");
@@ -358,19 +432,20 @@ export function MediaUploader({
         } : entry));
       } catch (error) {
         const authorizationExpired = error instanceof ResumableUploadAuthorizationError;
-        if (uploadTarget && !registered && (!resumable || authorizationExpired)) {
+        const canResume = resumable && !transportCompleted && !fallbackAttempted && !authorizationExpired;
+        if (uploadTarget && !registered && !canResume) {
           const discardForm = new FormData();
           discardForm.set("bucket_name", uploadTarget.bucketName);
           discardForm.set("storage_path", uploadTarget.storagePath);
           await discardMediaUpload(discardForm).catch(() => undefined);
         }
-        const failure = uploadFailure(error, resumable);
+        const failure = uploadFailure(error, canResume);
         setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? {
           ...entry,
           state: failure.state,
           recovery: failure.recovery,
-          progress: authorizationExpired ? undefined : entry.progress,
-          target: resumable && !authorizationExpired ? uploadTarget ?? entry.target : undefined,
+          progress: canResume ? entry.progress : undefined,
+          target: canResume ? uploadTarget ?? entry.target : undefined,
           message: failure.message,
         } : entry));
       }
@@ -445,7 +520,7 @@ export function MediaUploader({
         <FiUploadCloud aria-hidden />
         <strong>{releaseMasterMode ? trackScopedMaster ? "Drop this track's master here" : "Drop the release master here" : musicIntakeMode ? "Drop mastered tracks here" : vaultMode ? "Drop unreleased masters here" : "Drop media here"}</strong>
         <span>{releaseMasterMode ? trackScopedMaster ? "WAV, MP3 or another audio master. It stays attached to this exact song and receives its own Music Intelligence." : "WAV, MP3 or another audio master. Ensemblis will attach it to this release and analyze its structure and strongest hooks." : musicIntakeMode ? "Audio only. Title is optional; Ensemblis starts understanding structure and strongest moments automatically." : vaultMode ? "Audio masters only. Each file becomes an independent Vault track." : "Images, video, audio, masters, stems, or ZIP files"}</span>
-        <small>Maximum {humanSize(PUBLIC_LIMIT)} per file. Files over 6 MB resume safely and retry automatically if the network drops.</small>
+        <small>Maximum {humanSize(PUBLIC_LIMIT)} per file. Large files resume safely and automatically switch to a secure direct upload if the resumable route cannot complete.</small>
         <span className="button media-dropzone-cta" aria-hidden="true">{pickerLabel}</span>
       </label>
       <input
