@@ -1,0 +1,72 @@
+/* Durable form, upload and provider feedback patterns. */
+
+.studio-root .media-dropzone > small {
+  max-width: 34rem;
+  color: var(--en-subtle);
+  font-size: var(--en-text-2xs);
+  line-height: var(--en-leading-body);
+}
+
+.studio-root .upload-item-copy {
+  display: grid;
+  min-width: 0;
+  gap: var(--en-space-1);
+}
+
+.studio-root .upload-item.uploading .upload-file-icon { color: var(--en-accent); }
+
+.studio-root .v2-provider-lock {
+  display: grid;
+  gap: var(--en-space-2);
+  margin-bottom: var(--en-space-4);
+  padding: var(--en-space-4);
+  border: 1px solid color-mix(in srgb, var(--en-warning) 28%, var(--en-line));
+  border-radius: var(--en-radius);
+  background: var(--en-warning-soft);
+}
+
+.studio-root .v2-provider-lock strong { color: var(--en-ink); }
+
+.studio-root .v2-provider-lock span {
+  color: var(--en-muted);
+  font-size: var(--en-text-xs);
+  line-height: var(--en-leading-body);
+}
+
+.studio-root .v2-provider-lock a {
+  width: fit-content;
+  color: color-mix(in srgb, var(--en-warning) 72%, var(--en-ink));
+  font-size: var(--en-text-xs);
+  font-weight: var(--en-weight-semibold);
+}
+
+.studio-root .v2-production-fieldset {
+  display: grid;
+  gap: var(--en-space-4);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.studio-root .v2-production-fieldset:disabled { opacity: 0.48; }
+
+.studio-root .field-error {
+  color: var(--en-danger);
+  font-size: var(--en-text-xs);
+  line-height: var(--en-leading-body);
+}
+
+.studio-root .field[data-invalid="true"] :where(input, select, textarea) {
+  border-color: color-mix(in srgb, var(--en-danger) 74%, var(--en-line));
+  box-shadow: 0 0 0 3px var(--en-danger-soft);
+}
+
+.studio-root .field[data-invalid="true"] :where(input, select, textarea):focus {
+  border-color: var(--en-danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--en-danger) 16%, transparent);
+}
+
+@media (max-width: 680px) {
+  .studio-root .upload-progress { width: 100%; }
+}
