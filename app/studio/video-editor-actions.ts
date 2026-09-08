@@ -6,7 +6,14 @@ import { requireStudioAdmin } from "@/lib/auth/studio";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { createServiceClient } from "@/lib/supabase/service";
 import { loadVideoProjectContext, resolveProjectAudioUrl } from "@/lib/video-director/context";
+import {
+  createApprovalEnvelope,
+  prepareShotGenerationRecords,
+  refreshGeneration,
+  submitApprovalEnvelope,
+} from "@/lib/video-director/generation";
 import { routeVideoShot } from "@/lib/video-director/model-router";
+import { recordDirectorPreference } from "@/lib/video-director/preferences";
 import type { Json } from "@/types/database";
 import type { VideoDatabase, VideoShotType } from "@/types/video-database";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -163,7 +170,13 @@ export async function updateVideoShotEditor(input: z.infer<typeof shotEditorInpu
   const baseReferences = strings(shot.reference_asset_ids).filter((id) => !allCharacterRefs.has(id));
   const referenceAssetIds = [...new Set([...baseReferences, ...characterRefs])].slice(0, 12);
 
+  const existingPerformance = record(shot.performance_config);
   const existingProfile = record(shot.capability_profile);
+  const generationIntentChanged =
+    parsed.shotType !== shot.shot_type
+    || parsed.prompt !== shot.prompt
+    || parsed.characterId !== shot.character_id
+    || parsed.lipSync !== (existingPerformance.lip_sync === true);
   const capabilityProfile = {
     ...existingProfile,
     performance_shot: parsed.shotType === "performance",
@@ -218,9 +231,10 @@ export async function updateVideoShotEditor(input: z.infer<typeof shotEditorInpu
     lyrics_config: json({ enabled: parsed.captionEnabled, text: parsed.captionText, style: parsed.captionStyle }),
     music_reactivity: json(parsed.reactivity),
     editor_config: json({ ...record(shot.editor_config), camera_intent: parsed.cameraIntent }),
-    prompt_version: shot.prompt_version + 1,
-    status: shot.status === "locked" ? "ready_for_generation" : shot.status,
-    locked_at: shot.status === "locked" ? null : shot.locked_at,
+    prompt_version: generationIntentChanged ? shot.prompt_version + 1 : shot.prompt_version,
+    selected_asset_id: generationIntentChanged ? null : shot.selected_asset_id,
+    status: generationIntentChanged && shot.status === "locked" ? "ready_for_generation" : shot.status,
+    locked_at: generationIntentChanged ? null : shot.locked_at,
   }).eq("id", parsed.shotId).eq("project_id", parsed.projectId).eq("owner_id", user.id);
   if (error) throw new Error(error.message);
   refresh(parsed.projectId);
@@ -247,5 +261,111 @@ export async function assignVideoSourceAsset(input: z.infer<typeof sourceInput>)
     locked_at: new Date().toISOString(),
   }).eq("id", parsed.shotId).eq("project_id", parsed.projectId).eq("owner_id", user.id);
   if (error) throw new Error(error.message);
+  refresh(parsed.projectId);
+}
+
+const shotVariantInput = z.object({ projectId: z.uuid(), shotId: z.uuid() });
+
+export async function prepareVideoShotVariant(input: z.infer<typeof shotVariantInput>) {
+  const parsed = shotVariantInput.parse(input);
+  const { user, db, context } = await session(parsed.projectId);
+  const { data: shot, error } = await db.from("music_video_shots").select("*")
+    .eq("id", parsed.shotId).eq("project_id", parsed.projectId).eq("owner_id", user.id).single();
+  if (error || !shot) throw new Error(error?.message || "Shot not found.");
+  if (!["generated", "performance"].includes(shot.shot_type)) throw new Error("Only generated or performance shots can create AI variants.");
+  if (!shot.prompt || !shot.selected_model) throw new Error("Save a generation-ready prompt before creating a variant.");
+
+  const nextVersion = shot.prompt_version + 1;
+  const { error: updateError } = await db.from("music_video_shots").update({ prompt_version: nextVersion })
+    .eq("id", shot.id).eq("owner_id", user.id);
+  if (updateError) throw new Error(updateError.message);
+  await prepareShotGenerationRecords({ db, ownerId: user.id, project: context.project });
+  const { data: generation, error: generationError } = await db.from("music_video_generations").select("*")
+    .eq("owner_id", user.id).eq("project_id", parsed.projectId).eq("shot_id", parsed.shotId)
+    .eq("prompt_version", nextVersion).eq("status", "planned").order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (generationError || !generation) throw new Error(generationError?.message || "Could not prepare the new shot variant.");
+  refresh(parsed.projectId);
+  return { id: generation.id, estimatedCredits: Number(generation.estimated_credits), model: generation.model };
+}
+
+const generationVariantInput = z.object({ projectId: z.uuid(), generationId: z.uuid() });
+
+export async function approveAndGenerateVideoVariant(input: z.infer<typeof generationVariantInput>) {
+  const parsed = generationVariantInput.parse(input);
+  const { user, db, context } = await session(parsed.projectId);
+  const { data: generation, error } = await db.from("music_video_generations").select("*")
+    .eq("id", parsed.generationId).eq("project_id", parsed.projectId).eq("owner_id", user.id).single();
+  if (error || !generation) throw new Error(error?.message || "Variant generation not found.");
+  if (generation.status !== "planned" || generation.approval_id) throw new Error("This variant is no longer waiting for approval.");
+  const approval = await createApprovalEnvelope({
+    db,
+    ownerId: user.id,
+    project: context.project,
+    generationIds: [generation.id],
+    label: `Editor A/B variant · ${generation.model}`,
+  });
+  await submitApprovalEnvelope({ db, ownerId: user.id, approvalId: approval.id });
+  refresh(parsed.projectId);
+}
+
+export async function selectVideoShotVariant(input: z.infer<typeof generationVariantInput>) {
+  const parsed = generationVariantInput.parse(input);
+  const { user, db } = await session(parsed.projectId);
+  const { data: generation, error } = await db.from("music_video_generations").select("*")
+    .eq("id", parsed.generationId).eq("project_id", parsed.projectId).eq("owner_id", user.id).eq("status", "completed").single();
+  if (error || !generation || !generation.shot_id || !generation.result_asset_id) throw new Error(error?.message || "Completed variant not found.");
+  const { error: shotError } = await db.from("music_video_shots").update({
+    selected_asset_id: generation.result_asset_id,
+    status: "locked",
+    locked_at: new Date().toISOString(),
+    review_note: "Selected from Director Pro A/B variants",
+  }).eq("id", generation.shot_id).eq("project_id", parsed.projectId).eq("owner_id", user.id);
+  if (shotError) throw new Error(shotError.message);
+  await recordDirectorPreference({
+    db,
+    ownerId: user.id,
+    signal: "Selected A/B shot variant",
+    positive: true,
+    projectId: parsed.projectId,
+    shotId: generation.shot_id,
+    generationId: generation.id,
+    note: `Selected ${generation.model} variant from Director Pro.`,
+  });
+  refresh(parsed.projectId);
+}
+
+export async function rejectVideoShotVariant(input: z.infer<typeof generationVariantInput>) {
+  const parsed = generationVariantInput.parse(input);
+  const { user, db } = await session(parsed.projectId);
+  const { data: generation, error } = await db.from("music_video_generations").select("*")
+    .eq("id", parsed.generationId).eq("project_id", parsed.projectId).eq("owner_id", user.id).eq("status", "completed").single();
+  if (error || !generation || !generation.shot_id) throw new Error(error?.message || "Completed variant not found.");
+  const { error: updateError } = await db.from("music_video_generations").update({
+    provider_metadata: json({ ...record(generation.provider_metadata), review: "rejected", review_note: "Rejected from Director Pro A/B variants" }),
+  }).eq("id", generation.id).eq("owner_id", user.id);
+  if (updateError) throw new Error(updateError.message);
+  await recordDirectorPreference({
+    db,
+    ownerId: user.id,
+    signal: "Rejected A/B shot variant",
+    positive: false,
+    projectId: parsed.projectId,
+    shotId: generation.shot_id,
+    generationId: generation.id,
+    note: `Rejected ${generation.model} variant from Director Pro.`,
+  });
+  refresh(parsed.projectId);
+}
+
+export async function refreshVideoShotVariants(input: z.infer<typeof shotVariantInput>) {
+  const parsed = shotVariantInput.parse(input);
+  const { user, db } = await session(parsed.projectId);
+  const { data: generations, error } = await db.from("music_video_generations").select("*")
+    .eq("owner_id", user.id).eq("project_id", parsed.projectId).eq("shot_id", parsed.shotId)
+    .in("status", ["submitted", "queued", "in_progress"]).not("provider_request_id", "is", null).order("created_at").limit(8);
+  if (error) throw new Error(error.message);
+  for (const generation of generations ?? []) {
+    try { await refreshGeneration({ db, generation }); } catch { /* preserve remaining refreshes and provider ambiguity */ }
+  }
   refresh(parsed.projectId);
 }
