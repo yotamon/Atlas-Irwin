@@ -25,6 +25,12 @@ function value(form: FormData, key: string) {
   return String(form.get(key) ?? "").trim();
 }
 
+function record(input: unknown): Record<string, unknown> {
+  return input && typeof input === "object" && !Array.isArray(input)
+    ? input as Record<string, unknown>
+    : {};
+}
+
 const projectKindSchema = z.enum(VIDEO_PROJECT_KINDS);
 const aspectRatioSchema = z.enum(VIDEO_ASPECT_RATIOS);
 const resolutionSchema = z.enum(VIDEO_RESOLUTIONS);
@@ -233,29 +239,39 @@ export async function updateMusicVideoProjectBrief(form: FormData) {
   });
   const { supabase, project } = await requireProjectForActiveArtist(id);
   if (project.status === "archived") throw new Error("Archived video projects cannot be edited.");
-  if (project.spent_credits > 0 && parsed.hard_budget_credits !== project.hard_budget_credits) {
+
+  const currentBrief = record(project.creative_brief);
+  const storedBaseCap = typeof currentBrief.provider_credit_safety_cap === "number"
+    ? currentBrief.provider_credit_safety_cap
+    : Number(project.hard_budget_credits);
+  if (project.spent_credits > 0 && Math.abs(parsed.hard_budget_credits - storedBaseCap) > 0.0001) {
     throw new Error("The provider credit safety cap cannot be changed after credits have been spent.");
   }
-  if (parsed.hard_budget_credits < project.spent_credits + project.reserved_credits) {
+  if (parsed.hard_budget_credits < Number(project.spent_credits) + Number(project.reserved_credits)) {
     throw new Error("The provider credit safety cap cannot be lower than spent and reserved credits.");
   }
+  const maxBudgetUsd = typeof currentBrief.max_budget_usd === "number" && currentBrief.max_budget_usd > 0
+    ? currentBrief.max_budget_usd
+    : null;
+  const effectiveCap = effectiveProviderCap(parsed.hard_budget_credits, maxBudgetUsd);
+  if (effectiveCap + 0.0001 < Number(project.spent_credits) + Number(project.reserved_credits)) {
+    throw new Error("The current USD ceiling would put the effective provider cap below spend already committed. Raise the USD maximum before changing this brief.");
+  }
 
-  const currentBrief = project.creative_brief && typeof project.creative_brief === "object" && !Array.isArray(project.creative_brief)
-    ? project.creative_brief
-    : {};
   const creative_brief = {
     ...currentBrief,
     note: parsed.creative_note,
     story_mode: parsed.story_mode,
     people_mode: parsed.people_mode,
     target: project.project_kind,
+    provider_credit_safety_cap: parsed.hard_budget_credits,
   };
   const { error } = await supabase.from("music_video_projects")
     .update({
       title: parsed.title,
       primary_aspect_ratio: parsed.primary_aspect_ratio,
       target_resolution: parsed.target_resolution,
-      hard_budget_credits: parsed.hard_budget_credits,
+      hard_budget_credits: Number(effectiveCap.toFixed(2)),
       creative_brief,
     })
     .eq("id", id)
