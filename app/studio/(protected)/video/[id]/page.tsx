@@ -149,7 +149,8 @@ export default async function VideoProjectPage({
   const characters = charactersResult.data ?? [];
   const generations = generationsResult.data ?? [];
   const renders = rendersResult.data ?? [];
-  const linkedAssetIds = (mediaLinksResult.data ?? []).map((link) => link.media_asset_id);
+  const mediaLinks = mediaLinksResult.data ?? [];
+  const linkedAssetIds = mediaLinks.map((link) => link.media_asset_id);
   const characterAssetIds = characters.flatMap((character) => [
     ...strings(character.reference_asset_ids),
     ...strings(character.approved_asset_ids),
@@ -173,9 +174,11 @@ export default async function VideoProjectPage({
   if (assetsError) throw new Error(assetsError.message);
   const assets = uniqueAssets([...(referencedAssets ?? []), ...(thumbnailAssetsResult.data ?? [])]);
 
-  const roles = new Set((mediaLinksResult.data ?? []).map((link) => link.role));
-  const hasAudio = Boolean(track.audio_url) || roles.has("master_audio") || roles.has("audio_preview");
-  const hasArtwork = Boolean(release.artwork_url) || roles.has("cover") || roles.has("alternate_artwork");
+  const projectRoles = new Set(mediaLinks
+    .filter((link) => link.track_id === project.track_id || (link.track_id === null && link.release_id === project.release_id))
+    .map((link) => link.role));
+  const hasAudio = Boolean(track.audio_url) || projectRoles.has("master_audio") || projectRoles.has("audio_preview");
+  const hasArtwork = Boolean(release.artwork_url) || projectRoles.has("cover") || projectRoles.has("alternate_artwork");
   const audioUrl = hasAudio ? await resolveProjectAudioUrl(db, project, user.id, artist.artistId) : null;
 
   return (
