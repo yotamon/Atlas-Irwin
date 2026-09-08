@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type SyntheticEvent } from "react";
 
 export type PlaybackLoopRange = { startMs: number; endMs: number } | null;
 
@@ -64,7 +64,7 @@ export function useVideoEditorPlayback(input: {
       onPlay: () => setIsPlaying(true),
       onPause: () => setIsPlaying(false),
       onEnded: () => setIsPlaying(false),
-      onSeeked: (event: React.SyntheticEvent<HTMLAudioElement>) => setPlayheadMs(event.currentTarget.currentTime * 1000),
+      onSeeked: (event: SyntheticEvent<HTMLAudioElement>) => setPlayheadMs(event.currentTarget.currentTime * 1000),
     },
   };
 }
