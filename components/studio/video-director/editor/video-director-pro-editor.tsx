@@ -28,6 +28,8 @@ import {
 import type { MediaAsset } from "@/types/database";
 import type { ExtendedMusicVideoShot } from "@/types/video-database";
 import type { VideoWorkspaceData } from "../workspace-types";
+import { ShotVariantLab } from "./shot-variant-lab";
+import { StemActivityLane } from "./stem-activity-lane";
 
 type PaletteTab = "story" | "media" | "cast" | "lyrics" | "music";
 type SnapMode = "off" | "beats" | "smart";
@@ -237,7 +239,7 @@ function Palette({
           ))}
         </div>
       </> : null}
-      <p className="video-editor-panel-hint">Per-stem visual response is edited on the selected shot under Sync.</p>
+      <p className="video-editor-panel-hint">Per-stem visual response is edited on the selected shot under Sync. Timeline lanes below use measured 500 ms Stem Intelligence activity rather than decorative waveforms.</p>
     </div>
   );
 }
@@ -298,7 +300,6 @@ function ShotInspector({ data, shot }: { data: VideoWorkspaceData; shot: Extende
 
   const shotId = shot.id;
   const readiness = shotReadiness(shot, data.characters, data.contextSignals.hasAudio);
-  const variants = data.generations.filter((generation) => generation.shot_id === shotId);
   const timedLyrics = data.lyricCues.filter((cue) => cue.endMs > shot.start_ms && cue.startMs < shot.end_ms);
 
   function save() {
@@ -364,11 +365,12 @@ function ShotInspector({ data, shot }: { data: VideoWorkspaceData; shot: Extende
       </div>
 
       <div className="video-editor-inspector-section video-editor-generation-summary">
-        <div className="video-editor-subheading">Generation</div>
-        <dl><div><dt>Model</dt><dd>{shot.selected_model ?? "Auto"}</dd></div><div><dt>Variants</dt><dd>{variants.length}</dd></div><div><dt>Priority</dt><dd>{shotType === "performance" ? "Consistency" : shot.generation_priority}</dd></div></dl>
+        <div className="video-editor-subheading">Generation routing</div>
+        <dl><div><dt>Model</dt><dd>{shot.selected_model ?? "Auto"}</dd></div><div><dt>Priority</dt><dd>{shotType === "performance" ? "Consistency" : shot.generation_priority}</dd></div><div><dt>Prompt version</dt><dd>v{shot.prompt_version}</dd></div></dl>
         {readiness.issues.length ? <ul>{readiness.issues.map((issue) => <li key={issue}>{issue}</li>)}</ul> : <p className="video-editor-ready-note">Shot is production-ready.</p>}
       </div>
 
+      <ShotVariantLab data={data} shot={shot} />
       <button className="button primary video-editor-save" type="button" onClick={save} disabled={pending || !description.trim()}>{pending ? "Saving..." : saved ? "Saved" : "Save shot"}</button>
     </aside>
   );
@@ -542,7 +544,7 @@ export function VideoDirectorProEditor({ data }: { data: VideoWorkspaceData }) {
             <div className="video-editor-ruler">{Array.from({ length: Math.max(2, Math.ceil(musicMap.durationMs / 10000) + 1) }, (_, index) => index * 10000).filter((ms) => ms <= musicMap.durationMs).map((ms) => <span key={ms} style={{ left: `${(ms / musicMap.durationMs) * 100}%` }}>{formatEditorTime(ms).slice(0, 5)}</span>)}</div>
             <div className="video-editor-structure-lane">{musicMap.sections.map((section) => <div key={section.id} style={{ left: `${(section.startMs / musicMap.durationMs) * 100}%`, width: `${((section.endMs - section.startMs) / musicMap.durationMs) * 100}%` }}><span>{section.label}</span></div>)}</div>
             <div className="video-editor-lyrics-lane">{data.lyricCues.map((cue) => <div key={cue.id} title={cue.text} style={{ left: `${(cue.startMs / musicMap.durationMs) * 100}%`, width: `${Math.max(0.25, ((cue.endMs - cue.startMs) / musicMap.durationMs) * 100)}%` }} />)}</div>
-            {data.stems.slice(0, 4).map((stem) => <div className="video-editor-stem-lane" key={stem.id}>{Array.from({ length: 28 }, (_, index) => <i key={index} style={{ height: `${16 + (((index * 17 + stem.category.length * 11) % 64))}%` }} />)}</div>)}
+            {data.stems.slice(0, 4).map((stem) => <StemActivityLane key={stem.id} analysis={stem.analysis} durationMs={musicMap.durationMs} />)}
             <div className="video-editor-video-lane">
               {data.shots.map((shot) => {
                 const timing = timingFor(shot);
