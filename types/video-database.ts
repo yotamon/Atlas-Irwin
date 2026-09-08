@@ -25,7 +25,7 @@ export type MusicVideoCharacter = {
   id: string;
   owner_id: string;
   artist_id: string;
-  project_id: string;
+  project_id: string | null;
   name: string;
   role: VideoCharacterRole;
   identity_prompt: string;
