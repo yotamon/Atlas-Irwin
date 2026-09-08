@@ -83,6 +83,54 @@ export type VideoProductionPreferences = {
   maxBudgetUsd: number | null;
 };
 
+export type VideoProfileModelMixItem = {
+  model: string;
+  modelLabel: string;
+  provider: string;
+  providerLabel: string;
+  shotCount: number;
+  generationSeconds: number;
+  share: number;
+  expectedCredits: number;
+  reserveCredits: number;
+  expectedUsd: number | null;
+  reserveUsd: number | null;
+};
+
+export type VideoProfileShotPreview = {
+  shotId: string;
+  displayOrder: number;
+  model: string;
+  modelLabel: string;
+  provider: string;
+  providerLabel: string;
+  reason: string;
+  generationSeconds: number;
+  expectedCredits: number;
+  reserveCredits: number;
+  expectedUsd: number | null;
+  reserveUsd: number | null;
+  alternatives: Array<{
+    model: string;
+    modelLabel: string;
+    provider: string;
+    providerLabel: string;
+  }>;
+};
+
+export type VideoProductionProfilePreview = {
+  profile: VideoProductionProfile;
+  label: string;
+  description: string;
+  pricingAvailable: boolean;
+  expectedCredits: number;
+  reserveCredits: number;
+  expectedUsd: number | null;
+  reserveUsd: number | null;
+  modelMix: VideoProfileModelMixItem[];
+  shots: VideoProfileShotPreview[];
+};
+
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
