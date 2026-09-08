@@ -1,9 +1,8 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Json, MediaAsset } from "@/types/database";
-import type { MusicVideoRender } from "@/types/database";
-import type { MusicVideoWorkerJob, VideoDatabase } from "@/types/video-database";
+import type { Json, MediaAsset, MusicVideoRender } from "@/types/database";
+import type { VideoDatabase } from "@/types/video-database";
 import { reviewVideoDirectorRender, type VideoDirectorQualityReview } from "./quality";
 
 function record(value: unknown): Record<string, unknown> {
@@ -34,7 +33,7 @@ export type RenderQualityOutcome = {
 
 export async function reconcileVideoRenderQuality(input: {
   db: SupabaseClient<VideoDatabase>;
-  job: MusicVideoWorkerJob;
+  job: { id: string; owner_id: string; project_id: string };
   render: MusicVideoRender;
   asset: MediaAsset;
   result: Record<string, unknown>;
