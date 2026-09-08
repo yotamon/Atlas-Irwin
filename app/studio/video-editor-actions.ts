@@ -36,6 +36,10 @@ function refresh(projectId: string) {
   revalidatePath(`/studio/video/${projectId}`);
 }
 
+function sourceBackedShotType(current: VideoShotType): VideoShotType {
+  return current === "generated" ? "source_media" : current;
+}
+
 async function session(projectId: string) {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveActiveArtistContext(supabase, user);
@@ -78,6 +82,31 @@ async function allowedProjectSourceAsset(input: {
   if (linked.error) throw new Error(linked.error.message);
   if (generated.error) throw new Error(generated.error.message);
   return Boolean(linked.data || generated.data);
+}
+
+async function assertArtistReferenceAssets(input: {
+  assetIds: string[];
+  projectId: string;
+  ownerId: string;
+  artistId: string;
+  releaseId: string;
+  trackId: string;
+  db: SupabaseClient<VideoDatabase>;
+  music: ReturnType<typeof asArtistScopedMusicClient>;
+}) {
+  for (const assetId of input.assetIds) {
+    const allowed = await allowedProjectSourceAsset({
+      projectId: input.projectId,
+      assetId,
+      ownerId: input.ownerId,
+      artistId: input.artistId,
+      releaseId: input.releaseId,
+      trackId: input.trackId,
+      db: input.db,
+      music: input.music,
+    });
+    if (!allowed) throw new Error("Character references must belong to the active artist, release, track or video project.");
+  }
 }
 
 const timingInput = z.object({
@@ -125,12 +154,17 @@ const characterInput = z.object({
 
 export async function createVideoCharacter(input: z.infer<typeof characterInput>) {
   const parsed = characterInput.parse(input);
-  const { user, artist, db } = await session(parsed.projectId);
-  if (parsed.referenceAssetIds.length) {
-    const { data, error } = await db.from("media_assets").select("id").eq("owner_id", user.id).in("id", parsed.referenceAssetIds);
-    if (error) throw new Error(error.message);
-    if ((data ?? []).length !== parsed.referenceAssetIds.length) throw new Error("One or more character references are unavailable.");
-  }
+  const { user, artist, db, music, context } = await session(parsed.projectId);
+  await assertArtistReferenceAssets({
+    assetIds: parsed.referenceAssetIds,
+    projectId: parsed.projectId,
+    ownerId: user.id,
+    artistId: artist.artistId,
+    releaseId: context.project.release_id,
+    trackId: context.project.track_id,
+    db,
+    music,
+  });
   const { error } = await db.from("music_video_characters").insert({
     owner_id: user.id,
     artist_id: artist.artistId,
@@ -155,7 +189,17 @@ const updateCharacterInput = characterInput.extend({
 
 export async function updateVideoCharacter(input: z.infer<typeof updateCharacterInput>) {
   const parsed = updateCharacterInput.parse(input);
-  const { user, artist, db } = await session(parsed.projectId);
+  const { user, artist, db, music, context } = await session(parsed.projectId);
+  await assertArtistReferenceAssets({
+    assetIds: parsed.referenceAssetIds,
+    projectId: parsed.projectId,
+    ownerId: user.id,
+    artistId: artist.artistId,
+    releaseId: context.project.release_id,
+    trackId: context.project.track_id,
+    db,
+    music,
+  });
   const { error } = await db.from("music_video_characters").update({
     name: parsed.name,
     role: parsed.role,
@@ -295,7 +339,7 @@ export async function assignVideoSourceAsset(input: z.infer<typeof sourceInput>)
     music,
   });
   if (!allowed) throw new Error("Source asset is not linked to this artist, release, track or video project.");
-  const { data: shot, error: shotLookupError } = await db.from("music_video_shots").select("editor_config")
+  const { data: shot, error: shotLookupError } = await db.from("music_video_shots").select("editor_config,shot_type")
     .eq("id", parsed.shotId).eq("project_id", parsed.projectId).eq("owner_id", user.id).single();
   if (shotLookupError || !shot) throw new Error(shotLookupError?.message || "Video shot not found.");
   const sourceOffsetMs = asset.duration_ms
@@ -303,7 +347,7 @@ export async function assignVideoSourceAsset(input: z.infer<typeof sourceInput>)
     : parsed.sourceOffsetMs;
   const editorConfig = record(shot.editor_config);
   const { error } = await db.from("music_video_shots").update({
-    shot_type: "source_media",
+    shot_type: sourceBackedShotType(shot.shot_type),
     selected_asset_id: parsed.assetId,
     selected_provider: null,
     selected_model: null,
@@ -414,7 +458,7 @@ export async function applyVideoSourceSuggestion(input: z.infer<typeof sourceSug
   });
   if (!allowed) throw new Error("Suggested source is no longer available to this artist project.");
   const { error: updateError } = await db.from("music_video_shots").update({
-    shot_type: "source_media",
+    shot_type: sourceBackedShotType(shot.shot_type),
     selected_asset_id: assetId,
     selected_provider: null,
     selected_model: null,
@@ -457,7 +501,7 @@ export async function applyAllVideoSourceSuggestions(input: z.infer<typeof sourc
     if (!allowed) continue;
     const sourceOffsetMs = typeof suggestion.sourceOffsetMs === "number" ? Math.max(0, Math.round(suggestion.sourceOffsetMs)) : 0;
     const { error: updateError } = await db.from("music_video_shots").update({
-      shot_type: "source_media",
+      shot_type: sourceBackedShotType(shot.shot_type),
       selected_asset_id: assetId,
       selected_provider: null,
       selected_model: null,
