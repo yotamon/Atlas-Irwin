@@ -10,14 +10,22 @@ test("legacy polish is migration input while the Design System is the only runti
   const layout = await source("app/studio/layout.tsx");
   const index = await source("app/studio/design-system/index.css");
   const compiler = await source("scripts/build-studio-css.mjs");
-  const polishFiles = ["ux-polish.css", "music-polish.css", "release-polish.css", "create-polish.css", "growth-polish.css", "audience-polish.css", "library-polish.css", "inbox-polish.css", "shared-interactions.css", "loading-polish.css", "object-workspace-polish.css", "production-polish.css", "responsive-polish.css"];
+  const polishFiles = ["ux-polish.css", "music-polish.css", "release-polish.css", "create-polish.css", "growth-polish.css", "audience-polish.css", "library-polish.css", "inbox-polish.css", "object-workspace-polish.css", "production-polish.css", "responsive-polish.css"];
+  const retiredFiles = ["shared-interactions.css", "loading-polish.css", "ux-consolidation.css", "studio-v2-safety.css", "ensemblis-root-isolation.css", "ensemblis-states.css"];
   assert.ok(layout.includes('import "./design-system/index.css"'));
   assert.ok(index.includes('layer(ensemblis-compat)'));
   assert.ok(index.includes('layer(ensemblis-workflows)'));
+  assert.ok(index.includes('"./feedback.css"'));
+  assert.ok(index.includes('"./overlays.css"'));
+  assert.ok(index.includes('"./loading.css"'));
   for (const file of polishFiles) {
     assert.equal(layout.includes(`import "./${file}"`), false, `${file} must not load directly at runtime`);
     assert.ok(compiler.includes(`app/studio/${file}`), `${file} must remain a declared migration input until its layout rules are retired`);
     await access(new URL(`../app/studio/${file}`, import.meta.url));
+  }
+  for (const file of retiredFiles) {
+    assert.equal(compiler.includes(`app/studio/${file}`), false, `${file} must not return to the compatibility compiler after migration`);
+    await assert.rejects(access(new URL(`../app/studio/${file}`, import.meta.url)), undefined, `${file} should be physically retired after its active rules migrate`);
   }
 });
 
@@ -26,14 +34,18 @@ test("global command search is keyboard accessible, artist aware and object awar
   const context = await source("components/studio/context-bar.tsx");
   const search = await source("app/api/studio/search/route.ts");
   for (const snippet of [
+    'Dialog as BaseDialog',
+    "<BaseDialog.Root",
+    "<BaseDialog.Portal>",
+    "<BaseDialog.Popup",
+    "initialFocus={inputRef}",
+    "finalFocus={triggerRef}",
     "event.metaKey || event.ctrlKey",
     'event.key.toLowerCase() === "k"',
     'event.key === "ArrowDown"',
     'event.key === "ArrowUp"',
     'event.key === "Home"',
     'event.key === "End"',
-    'role="dialog"',
-    'aria-modal="true"',
     'aria-controls="ensemblis-command-results"',
     "searchingObjects",
     "AbortController",
@@ -42,6 +54,8 @@ test("global command search is keyboard accessible, artist aware and object awar
     "Generate music",
     "Artist results",
   ]) assert.ok(palette.includes(snippet), `command palette is missing ${snippet}`);
+  assert.equal(palette.includes('role="dialog"'), false, "Dialog semantics must come from Base UI rather than hand-authored modal behavior");
+  assert.equal(palette.includes('aria-modal="true"'), false, "aria-modal ownership must stay with Base UI");
   assert.ok(context.includes("<CommandPalette artistId={artistId}"));
   assert.ok(search.includes("resolveArtistContext"));
   assert.ok(search.includes('.eq("artist_id", artist.artistId)'));
@@ -67,10 +81,12 @@ test("compact Studio navigation keeps accessible names and coarse-pointer target
 
 test("protected Studio routes have product-specific transition feedback", async () => {
   const loading = await source("app/studio/(protected)/loading.tsx");
-  const css = await source("app/studio/loading-polish.css");
+  const css = await source("app/studio/design-system/loading.css");
+  const index = await source("app/studio/design-system/index.css");
   assert.ok(loading.includes('aria-label="Loading workspace"'));
   assert.ok(loading.includes('aria-live="polite"'));
   assert.ok(css.includes("prefers-reduced-motion"));
+  assert.ok(index.includes('"./loading.css" layer(ensemblis-motion)'));
 });
 
 test("Music defaults to source material and makes Add music primary", async () => {
@@ -126,7 +142,8 @@ test("Media Library uses signed resumable TUS above 6 MB without expanding stora
   const uploader = await source("components/studio/media-uploader.tsx");
   const resumable = await source("lib/supabase/resumable-upload.ts");
   const catalog = await source("app/studio/catalog-actions-internal.ts");
-  const interactions = await source("app/studio/shared-interactions.css");
+  const feedback = await source("app/studio/design-system/feedback.css");
+  const patterns = await source("app/studio/design-system/patterns.css");
   const packageJson = JSON.parse(await source("package.json"));
 
   assert.ok(uploader.includes("RESUMABLE_THRESHOLD = 6 * 1024 * 1024"));
@@ -160,7 +177,8 @@ test("Media Library uses signed resumable TUS above 6 MB without expanding stora
 
   assert.ok(catalog.includes("createSignedUploadUrl(storagePath)"));
   assert.ok(catalog.includes("max(104857600)"));
-  assert.ok(interactions.includes(".upload-progress"));
+  assert.ok(patterns.includes(".upload-progress") || feedback.includes(".upload-progress"));
+  assert.ok(feedback.includes(".upload-item-copy"), "active upload feedback must live in the canonical design system");
   assert.equal(Boolean(packageJson.dependencies?.["tus-js-client"]), false);
   assert.equal(Boolean(packageJson.dependencies?.["wavesurfer.js"]), false);
 });
