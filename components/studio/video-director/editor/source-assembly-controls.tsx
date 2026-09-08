@@ -66,7 +66,9 @@ export function SourceAssemblyControls({
           type="button"
           className="button"
           disabled={pending}
-          onClick={() => startTransition(() => planVideoSourceAssembly({ projectId: data.project.id }))}
+          onClick={() => startTransition(async () => {
+            await planVideoSourceAssembly({ projectId: data.project.id });
+          })}
         >{pending ? "Planning..." : suggestions.length ? "Refresh plan" : "Plan rough cut"}</button>
       </div>
       <p>Ensemblis ranks existing artist media from provenance, role, timing, aspect and editorial metadata. It does not pretend to understand footage it has not visually analyzed, and it never replaces a locked source automatically.</p>
@@ -107,7 +109,9 @@ export function SourceAssemblyControls({
         type="button"
         className="text-button video-editor-auto-edit-apply-all"
         disabled={pending}
-        onClick={() => startTransition(() => applyAllVideoSourceSuggestions({ projectId: data.project.id }))}
+        onClick={() => startTransition(async () => {
+          await applyAllVideoSourceSuggestions({ projectId: data.project.id });
+        })}
       >Apply all suggestions to unresolved shots</button> : null}
     </section>
   );
