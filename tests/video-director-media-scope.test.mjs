@@ -21,4 +21,8 @@ test("Video Director source scope admits track, release-only, or artist-global m
   assert.match(actions, /projectMediaLinkScopeFilter\(context\.project\.release_id, context\.project\.track_id\)/);
   assert.match(page, /\.eq\("owner_id", user\.id\)\.eq\("artist_id", artist\.artistId\)/);
   assert.match(page, /projectMediaLinkScopeFilter\(project\.release_id, project\.track_id\)/);
+  assert.match(page, /link\.track_id === project\.track_id/);
+  assert.match(page, /link\.track_id === null && link\.release_id === project\.release_id/);
+  assert.match(page, /projectRoles\.has\("master_audio"\)/);
+  assert.match(page, /projectRoles\.has\("cover"\)/);
 });
