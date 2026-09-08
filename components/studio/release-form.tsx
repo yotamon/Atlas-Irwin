@@ -1,11 +1,18 @@
 "use client";
 
 import { useActionState } from "react";
-import { Field, Notice, Submit } from "./ui";
+import { SelectField } from "./form-controls";
+import { Field, FormActions, Notice, Submit } from "./ui";
 import { RELEASE_STATUSES, RELEASE_TYPES } from "@/lib/studio/constants";
 import { saveReleaseV2WithState } from "@/app/studio/release-form-actions";
 import { EMPTY_ACTION_FORM_STATE, firstActionFieldError } from "@/lib/studio/form-state";
 import type { Release } from "@/types/database";
+
+const RELEASE_TYPE_OPTIONS = RELEASE_TYPES.map((value) => ({ value, label: value }));
+const RELEASE_STATUS_OPTIONS = [
+  { value: "", label: "Let Ensemblis manage" },
+  ...RELEASE_STATUSES.map((value) => ({ value, label: value })),
+];
 
 export function ReleaseForm({
   release,
@@ -37,11 +44,14 @@ export function ReleaseForm({
         <Field label="Title" wide required error={error("title")}>
           <input name="title" required autoFocus={!release} aria-invalid={Boolean(error("title")) || undefined} defaultValue={release?.title} />
         </Field>
-        <Field label="Release type" required error={error("release_type")}>
-          <select name="release_type" aria-invalid={Boolean(error("release_type")) || undefined} defaultValue={release?.release_type || "Single"}>
-            {RELEASE_TYPES.map((type) => <option key={type}>{type}</option>)}
-          </select>
-        </Field>
+        <SelectField
+          label="Release type"
+          name="release_type"
+          options={RELEASE_TYPE_OPTIONS}
+          required
+          error={error("release_type")}
+          defaultValue={release?.release_type || "Single"}
+        />
         <Field label={releaseDateLocked ? "Release date (locked)" : "Release date"}>
           <input type="date" name={releaseDateLocked ? undefined : "release_date"} disabled={releaseDateLocked} defaultValue={release?.release_date ?? ""} />
         </Field>
@@ -62,7 +72,7 @@ export function ReleaseForm({
       <details className="studio-advanced-details">
         <summary><span>Advanced details</span><small>Only change these when Ensemblis should not decide for you.</small></summary>
         <div className="form-grid studio-advanced-grid">
-          <Field label="Workflow status"><select name="status" defaultValue={release?.status ?? ""}><option value="">Let Ensemblis manage</option>{RELEASE_STATUSES.map((status) => <option key={status}>{status}</option>)}</select></Field>
+          <SelectField label="Workflow status" name="status" options={RELEASE_STATUS_OPTIONS} defaultValue={release?.status ?? ""} />
           <Field label="Slug override" error={error("slug")}><input name="slug" pattern="[a-z0-9-]+" placeholder="Generated from title" aria-invalid={Boolean(error("slug")) || undefined} defaultValue={release?.slug ?? ""} /></Field>
           <Field label="Core emotion"><input name="core_emotion" defaultValue={release?.core_emotion ?? ""} /></Field>
           <Field label="Audience"><input name="audience" defaultValue={release?.audience ?? ""} /></Field>
@@ -81,7 +91,7 @@ export function ReleaseForm({
           <Field label="Private notes" wide><textarea name="notes" rows={4} defaultValue={release?.notes ?? ""} /></Field>
         </div>
       </details>
-      <div className="form-actions release-form-actions"><Submit>{release ? "Save changes" : "Create workspace"}</Submit></div>
+      <FormActions className="release-form-actions"><Submit>{release ? "Save changes" : "Create workspace"}</Submit></FormActions>
     </form>
   );
 }
