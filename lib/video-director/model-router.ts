@@ -1,12 +1,28 @@
 import type { ExtendedMusicVideoShot } from "@/types/video-database";
-import { HIGGSFIELD_MODELS, type HiggsfieldModelCapability } from "@/lib/video-providers/higgsfield/catalog";
+import { VIDEO_MODEL_OFFERS, type VideoModelOffer } from "@/lib/video-providers/catalog";
 import type { VideoResolution } from "./domain";
+import {
+  productionProfileDefinition,
+  type VideoProductionProfile,
+} from "./production-profile";
+
+export type ShotRoutingAlternative = {
+  model: string;
+  modelLabel: string;
+  provider: string;
+  providerLabel: string;
+  score: number;
+};
 
 export type ShotRoutingDecision = {
-  model: HiggsfieldModelCapability["id"];
+  model: string;
+  provider: string;
+  modelLabel: string;
+  providerLabel: string;
   reason: string;
   score: number;
   params: Record<string, unknown>;
+  alternatives: ShotRoutingAlternative[];
 };
 
 type RouterInput = Pick<ExtendedMusicVideoShot,
@@ -14,6 +30,7 @@ type RouterInput = Pick<ExtendedMusicVideoShot,
 > & {
   targetResolution: VideoResolution;
   isTest?: boolean;
+  productionProfile?: VideoProductionProfile;
 };
 
 function record(value: unknown): Record<string, unknown> {
@@ -30,7 +47,7 @@ function hasReferences(input: RouterInput) {
   return Boolean(input.start_asset_id || input.end_asset_id || genericReferenceCount(input));
 }
 
-function scoreModel(model: HiggsfieldModelCapability, input: RouterInput) {
+function scoreModel(model: VideoModelOffer, input: RouterInput) {
   if (model.output !== "video") return -Infinity;
   if (!model.supportedResolutions.includes(input.targetResolution)) return -Infinity;
   if (input.end_asset_id && !model.supportsEndImage) return -Infinity;
@@ -42,15 +59,26 @@ function scoreModel(model: HiggsfieldModelCapability, input: RouterInput) {
   if (profile.requires_audio_reference === true && !model.supportsAudioReferences) return -Infinity;
   if (profile.requires_video_reference === true && !model.supportsVideoReferences) return -Infinity;
 
-  let score = model.quality * 1.8 + model.costEfficiency + model.consistency * 1.2;
+  const production = productionProfileDefinition(input.productionProfile ?? "balanced");
+  let score = (
+    model.quality * production.qualityWeight
+    + model.costEfficiency * production.costWeight
+    + model.consistency * production.consistencyWeight
+  );
 
-  if (input.isTest) score += model.costEfficiency * 2.6;
+  // Higher production profiles progressively reward premium-capability models without
+  // overriding hard capability constraints or shot-specific requirements.
+  score += Math.max(0, model.quality - 8) * production.premiumBoost;
+
+  if (input.isTest) score += model.costEfficiency * production.testCostBias;
   if (hasReferences(input)) score += model.consistency * 1.8;
   if (profile.requires_audio_reference === true) score += 8;
   if (profile.requires_video_reference === true) score += 8;
-  if (profile.hero === true || music.energy === "peak") score += model.quality * 1.8;
+  if (profile.hero === true || music.energy === "peak") {
+    score += model.quality * (1.4 + production.premiumBoost * 0.35);
+  }
   if (profile.complex_motion === true && model.id === "kling3_0") score += 8;
-  if (profile.continuity_critical === true) score += model.consistency * 2.2;
+  if (profile.continuity_critical === true) score += model.consistency * 2.4;
 
   switch (input.generation_priority) {
     case "cost":
@@ -72,8 +100,36 @@ function scoreModel(model: HiggsfieldModelCapability, input: RouterInput) {
   return score;
 }
 
+function generationParams(model: VideoModelOffer, input: RouterInput) {
+  const params: Record<string, unknown> = { generate_audio: false };
+  if (model.id === "seedance_2_0") {
+    params.mode = input.targetResolution === "4k" || input.targetResolution === "1080p"
+      ? "std"
+      : (input.isTest ? "fast" : "std");
+    params.bitrate_mode = input.isTest ? "standard" : "high";
+  }
+  if (model.id === "seedance_2_0_mini") {
+    params.bitrate_mode = input.isTest ? "standard" : "high";
+  }
+  if (model.id === "seedance_2_5") {
+    params.mode = hasReferences(input) ? "omni_reference" : "t2v";
+    params.bitrate_mode = input.isTest ? "standard" : "high";
+  }
+  if (model.id === "kling3_0") {
+    params.mode = input.targetResolution === "4k"
+      ? "4k"
+      : input.generation_priority === "quality" || input.productionProfile === "maximum"
+        ? "pro"
+        : "std";
+    params.sound = "off";
+    delete params.generate_audio;
+  }
+  return params;
+}
+
 export function routeVideoShot(input: RouterInput): ShotRoutingDecision {
-  const ranked = HIGGSFIELD_MODELS
+  const production = productionProfileDefinition(input.productionProfile ?? "balanced");
+  const ranked = VIDEO_MODEL_OFFERS
     .filter((model) => model.output === "video")
     .map((model) => ({ model, score: scoreModel(model, input) }))
     .filter((entry) => Number.isFinite(entry.score))
@@ -81,34 +137,29 @@ export function routeVideoShot(input: RouterInput): ShotRoutingDecision {
   const winner = ranked[0];
   if (!winner) throw new Error("No video model satisfies the shot requirements, references, and requested resolution.");
 
-  const params: Record<string, unknown> = { generate_audio: false };
-  if (winner.model.id === "seedance_2_0") {
-    params.mode = input.targetResolution === "4k" || input.targetResolution === "1080p" ? "std" : (input.isTest ? "fast" : "std");
-    params.bitrate_mode = input.isTest ? "standard" : "high";
-  }
-  if (winner.model.id === "seedance_2_0_mini") {
-    params.bitrate_mode = input.isTest ? "standard" : "high";
-  }
-  if (winner.model.id === "seedance_2_5") {
-    params.mode = hasReferences(input) ? "omni_reference" : "t2v";
-    params.bitrate_mode = input.isTest ? "standard" : "high";
-  }
-  if (winner.model.id === "kling3_0") {
-    params.mode = input.targetResolution === "4k" ? "4k" : input.generation_priority === "quality" ? "pro" : "std";
-    params.sound = "off";
-    delete params.generate_audio;
-  }
+  const alternatives = ranked.slice(1, 4).map(({ model, score }) => ({
+    model: model.id,
+    modelLabel: model.label,
+    provider: model.provider,
+    providerLabel: model.providerLabel,
+    score: Number(score.toFixed(2)),
+  }));
 
+  const requirement = input.isTest
+    ? "representative test"
+    : `${input.generation_priority} shot`;
   return {
     model: winner.model.id,
-    score: winner.score,
-    params,
-    reason: input.isTest
-      ? `${winner.model.label} balances test cost with the required shot capabilities at ${input.targetResolution}.`
-      : `${winner.model.label} best matches the shot's ${input.generation_priority} priority, references, and ${input.targetResolution} target.`,
+    provider: winner.model.provider,
+    modelLabel: winner.model.label,
+    providerLabel: winner.model.providerLabel,
+    score: Number(winner.score.toFixed(2)),
+    params: generationParams(winner.model, input),
+    alternatives,
+    reason: `${winner.model.label} via ${winner.model.providerLabel} is the strongest fit for this ${requirement} under the ${production.label} production profile at ${input.targetResolution}.`,
   };
 }
 
 export function routeLookDevelopmentModel() {
-  return HIGGSFIELD_MODELS.find((model) => model.id === "nano_banana_2")!;
+  return VIDEO_MODEL_OFFERS.find((model) => model.id === "nano_banana_2")!;
 }
