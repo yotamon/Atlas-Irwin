@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SelectField, SwitchField } from "@/components/studio/form-controls";
 import { PageHeader, Status } from "@/components/studio/ui";
 import { saveAutonomyContract } from "@/app/studio/autonomy-contract-actions";
 import { requireStudioAdmin } from "@/lib/auth/studio";
@@ -24,6 +25,12 @@ const GROUPS: Array<{ label: string; domains: AutonomyDomain[] }> = [
     label: "External actions",
     domains: ["social_scheduling", "social_publishing", "audience_replies", "outreach", "sites", "distribution"],
   },
+];
+
+const MODE_OPTIONS = [
+  { value: "assist", label: "Assist · recommend, ask before acting" },
+  { value: "prepare", label: "Prepare · finish safe internal work, ask before external effects" },
+  { value: "run", label: "Run · execute explicitly allowed work inside these rules" },
 ];
 
 function modeLabel(mode: string) {
@@ -64,26 +71,25 @@ function ContractCard({
         </div>
 
         <div className="v2-settings-grid">
-          <label>
-            <div><strong>How independently should Ensemblis work?</strong></div>
-            <select name="mode" defaultValue={selectedMode}>
-              <option value="assist">Assist · recommend, ask before acting</option>
-              <option value="prepare">Prepare · finish safe internal work, ask before external effects</option>
-              <option value="run">Run · execute explicitly allowed work inside these rules</option>
-            </select>
-          </label>
-          <label>
-            <div><strong>Contract active</strong></div>
-            <span className="v2-muted-copy">Disable this override to fall back to Ensemblis&apos;s conservative domain default.</span>
-            <input type="checkbox" name="enabled" defaultChecked={contract ? contract.enabled : true} />
-          </label>
+          <SelectField
+            label="How independently should Ensemblis work?"
+            name="mode"
+            options={MODE_OPTIONS}
+            defaultValue={selectedMode}
+          />
+          <SwitchField
+            label="Contract active"
+            description="Disable this override to fall back to Ensemblis's conservative domain default."
+            name="enabled"
+            defaultChecked={contract ? contract.enabled : true}
+          />
         </div>
 
         {(domain === "creative_generation" || domain === "paid_growth") ? (
           <div className="v2-settings-grid">
-            <label>
-              <div><strong>Per-action spend ceiling</strong></div>
-              <span className="v2-muted-copy">Required before a paid action can ever resolve to Run.</span>
+            <label className="field">
+              <span>Per-action spend ceiling</span>
+              <small className="field-hint">Required before a paid action can ever resolve to Run.</small>
               <input
                 type="number"
                 name="max_single_spend_usd"
@@ -94,9 +100,9 @@ function ContractCard({
                 defaultValue={contract?.maxSingleSpendUsd ?? ""}
               />
             </label>
-            <label>
-              <div><strong>Total contract ceiling</strong></div>
-              <span className="v2-muted-copy">An additional ceiling. Existing campaign hard limits still apply.</span>
+            <label className="field">
+              <span>Total contract ceiling</span>
+              <small className="field-hint">An additional ceiling. Existing campaign hard limits still apply.</small>
               <input
                 type="number"
                 name="max_total_spend_usd"
@@ -111,9 +117,9 @@ function ContractCard({
         ) : null}
 
         <div className="v2-settings-grid">
-          <label>
-            <div><strong>Expires</strong></div>
-            <span className="v2-muted-copy">Optional. Expired contracts immediately fall back to the safe default.</span>
+          <label className="field">
+            <span>Expires</span>
+            <small className="field-hint">Optional. Expired contracts immediately fall back to the safe default.</small>
             <input type="date" name="expires_at" defaultValue={dateInput(contract?.expiresAt)} />
           </label>
         </div>
@@ -121,9 +127,9 @@ function ContractCard({
         <details className="studio-advanced-details">
           <summary>Advanced restrictions</summary>
           <div className="v2-settings-grid">
-            <label>
-              <div><strong>Allowed platforms</strong></div>
-              <span className="v2-muted-copy">Optional comma-separated allow-list. Empty means no extra platform restriction.</span>
+            <label className="field">
+              <span>Allowed platforms</span>
+              <small className="field-hint">Optional comma-separated allow-list. Empty means no extra platform restriction.</small>
               <input
                 type="text"
                 name="allowed_platforms"
@@ -131,9 +137,9 @@ function ContractCard({
                 defaultValue={contract?.allowedPlatforms.join(", ") ?? ""}
               />
             </label>
-            <label>
-              <div><strong>Allowed providers</strong></div>
-              <span className="v2-muted-copy">Optional technical restriction for execution routing.</span>
+            <label className="field">
+              <span>Allowed providers</span>
+              <small className="field-hint">Optional technical restriction for execution routing.</small>
               <input
                 type="text"
                 name="allowed_providers"
