@@ -77,6 +77,58 @@ test("a temporary HEAD failure preserves the resumable session instead of silent
   assert.deepEqual(calls.map((call) => call.method), ["HEAD"]);
 });
 
+test("a HEAD response without Upload-Offset is never misread as byte zero", async (t) => {
+  const storage = browserFixture(t);
+  const file = new File([new Uint8Array(32)], "master.wav", { type: "audio/wav", lastModified: 321 });
+  const uploadUrl = "https://demo.storage.supabase.co/storage/v1/upload/resumable/session-missing-offset";
+  storage.set(resumeKey(file), uploadUrl);
+  const methods = [];
+
+  globalThis.fetch = async (_url, init = {}) => {
+    methods.push(init.method);
+    if (init.method === "HEAD") return new Response(null, { status: 200 });
+    throw new Error(`Unexpected request method ${init.method}`);
+  };
+
+  await assert.rejects(
+    uploadResumableMedia({ file, target }),
+    /did not return Upload-Offset while checking resumable upload progress/,
+  );
+  assert.deepEqual(methods, ["HEAD"]);
+  assert.equal(storage.get(resumeKey(file)), uploadUrl);
+});
+
+test("a successful PATCH advances by the known chunk size when Upload-Offset is not readable", async (t) => {
+  const storage = browserFixture(t);
+  const file = new File([new Uint8Array(32)], "master.wav", { type: "audio/wav", lastModified: 654 });
+  const uploadUrl = "https://demo.storage.supabase.co/storage/v1/upload/resumable/session-no-exposed-offset";
+  let patchAttempts = 0;
+  const progress = [];
+
+  globalThis.fetch = async (_url, init = {}) => {
+    if (init.method === "POST") {
+      return new Response(null, { status: 201, headers: { Location: uploadUrl } });
+    }
+    if (init.method === "PATCH") {
+      patchAttempts += 1;
+      return new Response(null, { status: 204 });
+    }
+    throw new Error(`Unexpected request method ${init.method}`);
+  };
+
+  await uploadResumableMedia({
+    file,
+    target,
+    onProgress(value) {
+      progress.push(value);
+    },
+  });
+
+  assert.equal(patchAttempts, 1);
+  assert.equal(progress.at(-1), 1);
+  assert.equal(storage.has(resumeKey(file)), false);
+});
+
 test("automatic chunk retry is surfaced and continues from the server-confirmed offset", async (t) => {
   const storage = browserFixture(t);
   const file = new File([new Uint8Array(32)], "master.wav", { type: "audio/wav", lastModified: 456 });

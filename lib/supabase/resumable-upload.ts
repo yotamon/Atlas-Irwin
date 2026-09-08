@@ -86,6 +86,16 @@ function signedHeaders(target: ResumableUploadTarget) {
   };
 }
 
+function responseUploadOffset(response: Response) {
+  const raw = response.headers.get("Upload-Offset");
+  if (raw === null || raw.trim() === "") return null;
+  const offset = Number(raw);
+  if (!Number.isFinite(offset) || offset < 0) {
+    throw new Error(`Supabase returned an invalid Upload-Offset header: ${raw}.`);
+  }
+  return offset;
+}
+
 async function responseError(response: Response, fallback: string) {
   if (response.status === 401 || response.status === 403) {
     throw new ResumableUploadAuthorizationError();
@@ -118,8 +128,11 @@ async function currentOffset(uploadUrl: string, target: ResumableUploadTarget) {
   });
   if (response.status === 404 || response.status === 410) return null;
   if (!response.ok) await responseError(response, "Could not resume upload");
-  const offset = Number(response.headers.get("Upload-Offset"));
-  return Number.isFinite(offset) && offset >= 0 ? offset : 0;
+  const offset = responseUploadOffset(response);
+  if (offset === null) {
+    throw new Error("Supabase did not return Upload-Offset while checking resumable upload progress.");
+  }
+  return offset;
 }
 
 async function patchChunk(
@@ -138,8 +151,8 @@ async function patchChunk(
     body: chunk,
   });
   if (!response.ok) await responseError(response, "Resumable upload chunk failed");
-  const nextOffset = Number(response.headers.get("Upload-Offset"));
-  return Number.isFinite(nextOffset) && nextOffset >= 0 ? nextOffset : offset + chunk.size;
+  const nextOffset = responseUploadOffset(response);
+  return nextOffset ?? offset + chunk.size;
 }
 
 export async function uploadResumableMedia({
