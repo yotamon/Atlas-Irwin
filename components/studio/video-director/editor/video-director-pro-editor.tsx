@@ -296,15 +296,16 @@ function ShotInspector({ data, shot }: { data: VideoWorkspaceData; shot: Extende
 
   if (!shot) return <aside className="video-editor-inspector"><div className="video-editor-inspector-empty"><strong>No shot selected</strong><p>Select a clip in the timeline to edit its creative, cast, sync and generation settings.</p></div></aside>;
 
+  const shotId = shot.id;
   const readiness = shotReadiness(shot, data.characters, data.contextSignals.hasAudio);
-  const variants = data.generations.filter((generation) => generation.shot_id === shot.id);
+  const variants = data.generations.filter((generation) => generation.shot_id === shotId);
   const timedLyrics = data.lyricCues.filter((cue) => cue.endMs > shot.start_ms && cue.startMs < shot.end_ms);
 
   function save() {
     startTransition(async () => {
       await updateVideoShotEditor({
         projectId: data.project.id,
-        shotId: shot.id,
+        shotId,
         description,
         prompt: prompt || null,
         shotType,
