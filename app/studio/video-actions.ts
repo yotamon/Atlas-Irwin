@@ -18,6 +18,7 @@ import {
   VIDEO_STORY_MODES,
   type VideoProjectStatus,
 } from "@/lib/video-director/domain";
+import { VIDEO_PRODUCTION_PROFILES } from "@/lib/video-director/production-profile";
 import { assertProjectTransition } from "@/lib/video-director/state";
 
 function value(form: FormData, key: string) {
@@ -29,11 +30,16 @@ const aspectRatioSchema = z.enum(VIDEO_ASPECT_RATIOS);
 const resolutionSchema = z.enum(VIDEO_RESOLUTIONS);
 const storyModeSchema = z.enum(VIDEO_STORY_MODES);
 const peopleModeSchema = z.enum(VIDEO_PEOPLE_MODES);
+const productionProfileSchema = z.enum(VIDEO_PRODUCTION_PROFILES);
 const quickVideoConceptSchema = z.enum(QUICK_VIDEO_CONCEPT_IDS);
 const projectStatusSchema = z.enum(VIDEO_PROJECT_STATUSES);
 const titleSchema = z.string().trim().min(1).max(160);
 const noteSchema = z.string().trim().max(4000);
 const budgetSchema = z.coerce.number().finite().min(0).max(100000);
+const maxBudgetUsdSchema = z.preprocess(
+  (raw) => typeof raw === "string" && raw.trim() === "" ? null : raw,
+  z.coerce.number().finite().min(1).max(100000).nullable(),
+);
 
 function projectPath(projectId: string) {
   return `/studio/video/${projectId}`;
@@ -73,6 +79,8 @@ export async function createMusicVideoProject(form: FormData) {
     primary_aspect_ratio: aspectRatioSchema,
     target_resolution: resolutionSchema,
     hard_budget_credits: budgetSchema,
+    max_budget_usd: maxBudgetUsdSchema,
+    production_profile: productionProfileSchema,
     creative_note: noteSchema,
     story_mode: storyModeSchema,
     people_mode: peopleModeSchema,
@@ -85,6 +93,8 @@ export async function createMusicVideoProject(form: FormData) {
     primary_aspect_ratio: value(form, "primary_aspect_ratio"),
     target_resolution: value(form, "target_resolution"),
     hard_budget_credits: value(form, "hard_budget_credits"),
+    max_budget_usd: value(form, "max_budget_usd"),
+    production_profile: value(form, "production_profile") || "balanced",
     creative_note: value(form, "creative_note"),
     story_mode: value(form, "story_mode"),
     people_mode: value(form, "people_mode"),
@@ -143,6 +153,8 @@ export async function createMusicVideoProject(form: FormData) {
     story_mode: parsed.story_mode,
     people_mode: parsed.people_mode,
     target: parsed.project_kind,
+    production_profile: parsed.production_profile,
+    max_budget_usd: parsed.max_budget_usd,
   };
 
   const { data, error } = await supabase
@@ -182,6 +194,8 @@ export async function createMusicVideoProject(form: FormData) {
       title: selectedDirection.title,
       rationale: selectedDirection.rationale,
       anchor_moment_label: selectedDirection.anchorMomentLabel,
+      production_profile: parsed.production_profile,
+      max_budget_usd: parsed.max_budget_usd,
     },
   });
 
@@ -211,10 +225,10 @@ export async function updateMusicVideoProjectBrief(form: FormData) {
   const { supabase, project } = await requireProjectForActiveArtist(id);
   if (project.status === "archived") throw new Error("Archived video projects cannot be edited.");
   if (project.spent_credits > 0 && parsed.hard_budget_credits !== project.hard_budget_credits) {
-    throw new Error("The hard budget cannot be changed after credits have been spent.");
+    throw new Error("The provider credit safety cap cannot be changed after credits have been spent.");
   }
   if (parsed.hard_budget_credits < project.spent_credits + project.reserved_credits) {
-    throw new Error("The hard budget cannot be lower than spent and reserved credits.");
+    throw new Error("The provider credit safety cap cannot be lower than spent and reserved credits.");
   }
 
   const currentBrief = project.creative_brief && typeof project.creative_brief === "object" && !Array.isArray(project.creative_brief)
