@@ -117,7 +117,7 @@ const updateCharacterInput = characterInput.extend({
 
 export async function updateVideoCharacter(input: z.infer<typeof updateCharacterInput>) {
   const parsed = updateCharacterInput.parse(input);
-  const { user, db } = await session(parsed.projectId);
+  const { user, artist, db } = await session(parsed.projectId);
   const { error } = await db.from("music_video_characters").update({
     name: parsed.name,
     role: parsed.role,
@@ -126,7 +126,7 @@ export async function updateVideoCharacter(input: z.infer<typeof updateCharacter
     approved_asset_ids: json(parsed.referenceAssetIds),
     style_lock_strength: parsed.lockStrength,
     continuity_notes: parsed.continuityNotes,
-  }).eq("id", parsed.characterId).eq("project_id", parsed.projectId).eq("owner_id", user.id);
+  }).eq("id", parsed.characterId).eq("artist_id", artist.artistId).eq("owner_id", user.id);
   if (error) throw new Error(error.message);
   refresh(parsed.projectId);
 }
@@ -148,17 +148,17 @@ const shotEditorInput = z.object({
 
 export async function updateVideoShotEditor(input: z.infer<typeof shotEditorInput>) {
   const parsed = shotEditorInput.parse(input);
-  const { user, db, baseDb, context } = await session(parsed.projectId);
+  const { user, artist, db, baseDb, context } = await session(parsed.projectId);
   const { data: shot, error: shotError } = await db.from("music_video_shots").select("*")
     .eq("id", parsed.shotId).eq("project_id", parsed.projectId).eq("owner_id", user.id).single();
   if (shotError || !shot) throw new Error(shotError?.message || "Video shot not found.");
 
-  const { data: projectCharacters, error: charactersError } = await db.from("music_video_characters")
-    .select("id,reference_asset_ids").eq("project_id", parsed.projectId).eq("owner_id", user.id);
+  const { data: artistCharacters, error: charactersError } = await db.from("music_video_characters")
+    .select("id,reference_asset_ids").eq("artist_id", artist.artistId).eq("owner_id", user.id);
   if (charactersError) throw new Error(charactersError.message);
-  const allCharacterRefs = new Set((projectCharacters ?? []).flatMap((character) => strings(character.reference_asset_ids)));
-  const chosenCharacter = parsed.characterId ? (projectCharacters ?? []).find((character) => character.id === parsed.characterId) : null;
-  if (parsed.characterId && !chosenCharacter) throw new Error("Video character not found.");
+  const allCharacterRefs = new Set((artistCharacters ?? []).flatMap((character) => strings(character.reference_asset_ids)));
+  const chosenCharacter = parsed.characterId ? (artistCharacters ?? []).find((character) => character.id === parsed.characterId) : null;
+  if (parsed.characterId && !chosenCharacter) throw new Error("Video character is unavailable for this artist.");
   const characterRefs = chosenCharacter ? strings(chosenCharacter.reference_asset_ids) : [];
   const baseReferences = strings(shot.reference_asset_ids).filter((id) => !allCharacterRefs.has(id));
   const referenceAssetIds = [...new Set([...baseReferences, ...characterRefs])].slice(0, 12);
@@ -176,11 +176,9 @@ export async function updateVideoShotEditor(input: z.infer<typeof shotEditorInpu
     const audioUrl = await resolveProjectAudioUrl(baseDb, context.project, user.id, context.release.artist_id);
     if (!audioUrl) throw new Error("Lip-sync performance needs accessible track audio.");
     generationParams.audio_references = [{ type: "audio_url", audio_url: audioUrl }];
-    generationParams.performance_mode = "lip_sync";
     generationParams.generate_audio = false;
   } else {
     delete generationParams.audio_references;
-    delete generationParams.performance_mode;
   }
 
   let selectedModel = shot.selected_model;
@@ -198,6 +196,9 @@ export async function updateVideoShotEditor(input: z.infer<typeof shotEditorInpu
     selectedModel = route.model;
     selectedProvider = "higgsfield";
     Object.assign(generationParams, route.params);
+  } else {
+    selectedModel = null;
+    selectedProvider = null;
   }
 
   const { error } = await db.from("music_video_shots").update({
