@@ -11,6 +11,7 @@ from .audio_intelligence_providers import (
     run_clap_audio_semantics,
 )
 from .mastering_inspector import enrich_music_map_with_mastering
+from .moment_rhythm import beat_sync_strongest_moments
 from .music_intelligence_v4 import analyze_music as analyze_music_v4_core
 from .strongest_moments import attach_strongest_moments
 
@@ -151,6 +152,7 @@ def analyze_music(path: Path, source_audio: dict[str, Any] | None = None) -> dic
     result = analyze_music_v4_core(path, source_audio)
     _compatibility_enrich(result)
     attach_strongest_moments(result)
+    beat_sync_strongest_moments(result)
     capabilities = provider_capabilities()
     result["provider_capabilities"] = capabilities
     analysis = result.setdefault("analysis", {})

@@ -1,13 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { analysisConfidenceLabel, hookRecommendationLabel } from "@/lib/studio/evidence-labels";
 import {
-  selectStrongestMoments,
+  momentAuditionGain,
+  momentFadeDurations,
+  momentRhythmSyncLabel,
+  selectAuditionMoments,
+} from "@/lib/music-intelligence/moment-audition";
+import {
   strongestMomentDurationLabel,
   strongestMomentIntentLabel,
   strongestMomentTitle,
 } from "@/lib/music-intelligence/strongest-moments";
+import { analysisConfidenceLabel, hookRecommendationLabel } from "@/lib/studio/evidence-labels";
 import { parseMusicMap } from "@/lib/video-director/creative-director";
 import type { Json } from "@/types/database";
 import styles from "./music-intelligence-preview.module.css";
@@ -55,6 +60,13 @@ type WaveformState = {
   error: boolean;
 };
 
+type AuditionEnvelope = {
+  startMs: number;
+  endMs: number;
+  fadeInMs: number;
+  fadeOutMs: number;
+};
+
 export function MusicIntelligencePreview({
   audioUrl,
   musicMap,
@@ -64,6 +76,8 @@ export function MusicIntelligencePreview({
 }) {
   const map = parseMusicMap(musicMap);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const auditionEnvelopeRef = useRef<AuditionEnvelope | null>(null);
+  const auditionFrameRef = useRef<number | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [endMs, setEndMs] = useState<number | null>(null);
   const [currentMs, setCurrentMs] = useState(0);
@@ -71,7 +85,7 @@ export function MusicIntelligencePreview({
   const [waveformState, setWaveformState] = useState<WaveformState>({ audioUrl: "", peaks: null, error: false });
   const waveformPeaks = waveformState.audioUrl === audioUrl ? waveformState.peaks : null;
   const waveformError = waveformState.audioUrl === audioUrl && waveformState.error;
-  const strongestMoments = useMemo(() => selectStrongestMoments(map), [map]);
+  const strongestMoments = useMemo(() => selectAuditionMoments(map), [map]);
 
   useEffect(() => {
     if (!audioUrl) return;
@@ -106,6 +120,12 @@ export function MusicIntelligencePreview({
     };
   }, [audioUrl]);
 
+  useEffect(() => () => {
+    if (auditionFrameRef.current !== null) cancelAnimationFrame(auditionFrameRef.current);
+    const audio = audioRef.current;
+    if (audio) audio.volume = 1;
+  }, []);
+
   if (!map || !Object.keys(map).length) return null;
 
   const durationMs = Math.max(
@@ -123,9 +143,52 @@ export function MusicIntelligencePreview({
     .slice(0, 24);
   const waveformProgress = clamp(currentMs / durationMs);
 
+  function resetAuditionEnvelope() {
+    if (auditionFrameRef.current !== null) {
+      cancelAnimationFrame(auditionFrameRef.current);
+      auditionFrameRef.current = null;
+    }
+    auditionEnvelopeRef.current = null;
+    const audio = audioRef.current;
+    if (audio) audio.volume = 1;
+  }
+
+  function tickAuditionEnvelope() {
+    const audio = audioRef.current;
+    const envelope = auditionEnvelopeRef.current;
+    if (!audio || !envelope || audio.paused) {
+      auditionFrameRef.current = null;
+      return;
+    }
+
+    const nextMs = audio.currentTime * 1000;
+    const duration = Math.max(1, envelope.endMs - envelope.startMs);
+    setCurrentMs(nextMs);
+    audio.volume = momentAuditionGain(
+      nextMs - envelope.startMs,
+      duration,
+      envelope.fadeInMs,
+      envelope.fadeOutMs,
+    );
+
+    if (nextMs >= envelope.endMs - 8) {
+      audio.volume = 0;
+      audio.pause();
+      setCurrentMs(envelope.endMs);
+      setPlaying(false);
+      auditionEnvelopeRef.current = null;
+      auditionFrameRef.current = null;
+      audio.volume = 1;
+      return;
+    }
+
+    auditionFrameRef.current = requestAnimationFrame(tickAuditionEnvelope);
+  }
+
   function seekToRatio(ratio: number) {
     const audio = audioRef.current;
     if (!audio || !audioUrl) return;
+    resetAuditionEnvelope();
     const seconds = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : durationMs / 1000;
     const nextSeconds = clamp(ratio) * seconds;
     audio.currentTime = nextSeconds;
@@ -140,19 +203,47 @@ export function MusicIntelligencePreview({
     seekToRatio((event.clientX - bounds.left) / bounds.width);
   }
 
-  function toggle(id: string, startMs: number, stopMs: number) {
+  function toggle(
+    id: string,
+    startMs: number,
+    stopMs: number,
+    options: { smoothMoment?: boolean } = {},
+  ) {
     const audio = audioRef.current;
     if (!audio || !audioUrl) return;
     if (activeId === id && playing) {
       audio.pause();
+      resetAuditionEnvelope();
       setPlaying(false);
       return;
     }
+
+    resetAuditionEnvelope();
+    if (!audio.paused) audio.pause();
     setActiveId(id);
     setEndMs(stopMs);
     setCurrentMs(startMs);
     audio.currentTime = startMs / 1000;
-    void audio.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+
+    if (options.smoothMoment) {
+      const { fadeInMs, fadeOutMs } = momentFadeDurations(map?.bpm, stopMs - startMs);
+      auditionEnvelopeRef.current = { startMs, endMs: stopMs, fadeInMs, fadeOutMs };
+      audio.volume = 0;
+    } else {
+      audio.volume = 1;
+    }
+
+    void audio.play()
+      .then(() => {
+        setPlaying(true);
+        if (options.smoothMoment) {
+          auditionFrameRef.current = requestAnimationFrame(tickAuditionEnvelope);
+        }
+      })
+      .catch(() => {
+        resetAuditionEnvelope();
+        setPlaying(false);
+      });
   }
 
   const confidence = map.analysis?.confidence?.overall;
@@ -172,6 +263,7 @@ export function MusicIntelligencePreview({
           if (!audio) return;
           const nextMs = audio.currentTime * 1000;
           setCurrentMs(nextMs);
+          if (auditionEnvelopeRef.current) return;
           if (endMs === null || nextMs < endMs - 30) return;
           audio.pause();
           setPlaying(false);
@@ -280,7 +372,7 @@ export function MusicIntelligencePreview({
                 <span
                   key={moment.id}
                   style={{ left: `${left}%`, width: `${width}%` }}
-                  title={`Moment ${index + 1}: ${strongestMomentTitle(moment)} · scoring peak ${time(moment.peak_window.start_ms)}–${time(moment.peak_window.end_ms)}`}
+                  title={`Moment ${index + 1}: ${strongestMomentTitle(moment)} · ${momentRhythmSyncLabel(moment)} · scoring peak ${time(moment.peak_window.start_ms)}–${time(moment.peak_window.end_ms)}`}
                 >
                   <i style={{ left: `${peakLeft}%`, width: `${peakWidth}%` }} />
                 </span>
@@ -309,20 +401,20 @@ export function MusicIntelligencePreview({
 
       {strongestMoments.length ? (
         <div className={styles.hooks}>
-          <div className={styles.hookHeading}><span>Strongest moments</span><small>play musical context</small></div>
+          <div className={styles.hookHeading}><span>Strongest moments</span><small>beat-synced · soft fades</small></div>
           {strongestMoments.map((moment, index) => (
             <button
               type="button"
               key={moment.id}
               className={activeId === moment.id ? styles.activeHook : ""}
-              onClick={() => toggle(moment.id, moment.start_ms, moment.end_ms)}
+              onClick={() => toggle(moment.id, moment.start_ms, moment.end_ms, { smoothMoment: true })}
               disabled={!audioUrl}
-              aria-label={`Play ${strongestMomentTitle(moment)}, ${time(moment.start_ms)} to ${time(moment.end_ms)}`}
+              aria-label={`Play ${strongestMomentTitle(moment)}, ${time(moment.start_ms)} to ${time(moment.end_ms)}, ${momentRhythmSyncLabel(moment)}`}
             >
               <span>{activeId === moment.id && playing ? "❚❚" : "▶"}</span>
               <div>
                 <strong>#{index + 1} {strongestMomentTitle(moment)}</strong>
-                <small>{time(moment.start_ms)}–{time(moment.end_ms)} · {strongestMomentDurationLabel(moment)} · {strongestMomentIntentLabel(moment)}</small>
+                <small>{time(moment.start_ms)}–{time(moment.end_ms)} · {strongestMomentDurationLabel(moment)} · {strongestMomentIntentLabel(moment)} · {momentRhythmSyncLabel(moment)}</small>
               </div>
               <b>{hookRecommendationLabel(moment.score, index)}</b>
             </button>
