@@ -12,6 +12,7 @@
 @import "./patterns.css" layer(ensemblis-patterns);
 @import "./feedback.css" layer(ensemblis-patterns);
 @import "./overlays.css" layer(ensemblis-patterns);
+@import "./controls.css" layer(ensemblis-patterns);
 @import "./shell.css" layer(ensemblis-shell);
 @import "./compositions.css" layer(ensemblis-compositions);
 @import "./video-editor.css" layer(ensemblis-compositions);
