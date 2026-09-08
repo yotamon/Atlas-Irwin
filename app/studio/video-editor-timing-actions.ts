@@ -67,5 +67,4 @@ export async function trimVideoShotStart(input: z.infer<typeof inputSchema>) {
   }).eq("id", parsed.shotId).eq("project_id", parsed.projectId).eq("owner_id", user.id);
   if (updateError) throw new Error(updateError.message);
   revalidatePath(`/studio/video/${parsed.projectId}`);
-  return { sourceOffsetMs };
 }
