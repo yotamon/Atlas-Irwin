@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from .music_intelligence import analyze_music
 from .stem_intelligence import analyze_stem
+from .video_director_finishing import build_video_director_filter, extract_review_frames
 
 FFMPEG_BINARY = imageio_ffmpeg.get_ffmpeg_exe()
 AUDIO_SCENE_SR = 44100
@@ -228,6 +229,7 @@ async def render_job(payload: dict[str, Any], workdir: Path) -> dict[str, Any]:
         raise ValueError("Invalid render dimensions or frame rate")
 
     segment_paths: list[Path] = []
+    finishing_summaries: list[dict[str, Any]] = []
     for index, clip in enumerate(clips):
         if not isinstance(clip, dict):
             raise ValueError("Invalid clip manifest")
@@ -243,11 +245,17 @@ async def render_job(payload: dict[str, Any], workdir: Path) -> dict[str, Any]:
         args: list[str] = ["-stream_loop", "-1", "-i", str(source)]
         if source_offset_ms:
             args = ["-ss", f"{source_offset_ms / 1000:.3f}", *args]
+        video_filter, finishing_summary = build_video_director_filter(width, height, fps, focus_x, clip)
+        finishing_summaries.append({
+            "shot_id": clip.get("shot_id"),
+            "shot_type": clip.get("shot_type"),
+            **finishing_summary,
+        })
         args += [
             "-t",
             f"{duration_ms / 1000:.3f}",
             "-vf",
-            crop_filter(width, height, fps, focus_x),
+            video_filter,
             "-an",
             "-c:v",
             "libx264",
@@ -297,14 +305,32 @@ async def render_job(payload: dict[str, Any], workdir: Path) -> dict[str, Any]:
         str(output),
     )
 
+    if not output.exists() or output.stat().st_size <= 0:
+        raise RuntimeError("Video Director render produced no output")
     await upload_file(upload_url, output, "video/mp4")
+    raw_review_frames = payload.get("review_frames")
+    requested_review_frames = [item for item in raw_review_frames if isinstance(item, dict)] if isinstance(raw_review_frames, list) else []
+    review_frames = await extract_review_frames(output, requested_review_frames, workdir, ffmpeg, upload_file) if requested_review_frames else []
+    qc_policies = [item.get("qc_policy") for item in finishing_summaries if isinstance(item.get("qc_policy"), dict)]
     return {
         "uploaded": True,
         "file_size": output.stat().st_size,
+        "sha256": await asyncio.to_thread(sha256_file, output),
         "mime_type": "video/mp4",
         "duration_ms": target_duration_ms,
         "width": width,
         "height": height,
+        "deterministic_finishing": True,
+        "clip_finishing": finishing_summaries,
+        "review_frames": review_frames,
+        "qc_summary": {
+            "review_frame_count": len(review_frames),
+            "continuity_review_required": any(bool(policy.get("continuity_review_required")) for policy in qc_policies),
+            "temporal_artifact_review_required": any(bool(policy.get("temporal_artifact_review_required")) for policy in qc_policies),
+            "lip_sync_review_required": any(bool(policy.get("lip_sync_review_required")) for policy in qc_policies),
+            "lip_sync_auto_pass_allowed": False,
+            "human_visual_review_required": any(bool(policy.get("human_visual_review_required")) for policy in qc_policies),
+        },
     }
 
 

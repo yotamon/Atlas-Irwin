@@ -177,6 +177,16 @@ export function createWorkerRenderUploadTarget(
   return createWorkerUploadTarget(db, ownerId, projectId, `${renderId}.mp4`);
 }
 
+export function createWorkerReviewFrameUploadTarget(
+  db: SupabaseClient<VideoDatabase>,
+  ownerId: string,
+  projectId: string,
+  renderId: string,
+  index: number,
+) {
+  return createWorkerUploadTarget(db, ownerId, projectId, `qc/${renderId}/frame-${String(index + 1).padStart(2, "0")}.jpg`);
+}
+
 export function createWorkerThumbnailUploadTarget(
   db: SupabaseClient<VideoDatabase>,
   ownerId: string,

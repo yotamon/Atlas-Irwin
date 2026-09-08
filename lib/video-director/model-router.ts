@@ -78,6 +78,12 @@ function scoreModel(model: VideoModelOffer, input: RouterInput) {
   if (hasReferences(input)) score += model.consistency * 1.8;
   if (profile.requires_audio_reference === true) score += 8;
   if (profile.requires_video_reference === true) score += 8;
+  if (profile.performance_shot === true) {
+    score += model.supportsAudioReferences ? 7 : 0;
+    score += model.consistency * 2.4;
+    if (model.id === "seedance_2_5") score += 6;
+    if (model.id === "seedance_2_0") score += 3;
+  }
   if (profile.hero === true || music.energy === "peak") {
     score += model.quality * (1.4 + production.premiumBoost * 0.35);
   }

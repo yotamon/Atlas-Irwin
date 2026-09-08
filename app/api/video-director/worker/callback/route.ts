@@ -11,13 +11,14 @@ import {
   registerWorkerRenderAsset,
   registerWorkerThumbnailAsset,
 } from "@/lib/video-director/assets";
+import { reconcileVideoRenderQuality } from "@/lib/video-director/render-quality-reconciliation";
 import { queueQuickVideoSocialPack } from "@/lib/video-director/social-delivery";
 import type { Json } from "@/types/database";
 import type { VideoDatabase } from "@/types/video-database";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 180;
 
 function safeEqual(actual: string, expected: string) {
   const actualBuffer = Buffer.from(actual);
@@ -273,33 +274,31 @@ export async function POST(request: Request) {
       renderType: render.render_type,
       result,
     });
-    const { error: renderUpdateError } = await db.from("music_video_renders").update({
-      status: "completed",
-      media_asset_id: asset.id,
-      error: null,
-    }).eq("id", render.id);
-    if (renderUpdateError) throw new Error(renderUpdateError.message);
+    const videoDb = db as unknown as SupabaseClient<VideoDatabase>;
+    const quality = await reconcileVideoRenderQuality({
+      db: videoDb,
+      job: { id: job.id, owner_id: job.owner_id, project_id: job.project_id },
+      render,
+      asset,
+      result,
+    });
 
-    if (render.render_type === "master_16_9") {
-      const { error: projectError } = await db.from("music_video_projects").update({
-        status: "complete",
-        previous_status: null,
-        last_error: null,
-      }).eq("id", job.project_id);
-      if (projectError) throw new Error(projectError.message);
-    } else {
-      const { error: projectError } = await db.from("music_video_projects")
-        .update({ last_error: null })
-        .eq("id", job.project_id);
-      if (projectError) throw new Error(projectError.message);
-    }
-
-    await markWorkerTerminal(db, job.id, "completed", result, null);
-    if (render.render_type === "master_16_9") {
+    await markWorkerTerminal(db, job.id, "completed", {
+      ...result,
+      automated_qc: quality.review,
+      quality_passed: quality.passed,
+      publish_ready: quality.publishReady,
+    }, null);
+    if (render.render_type === "master_16_9" && quality.publishReady) {
       scheduleQuickVideoSocialDelivery(db, job.owner_id, job.project_id);
     }
     scheduleCleanup();
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({
+      ok: true,
+      qualityPassed: quality.passed,
+      publishReady: quality.publishReady,
+      qcUnavailable: quality.unavailable,
+    });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Render reconciliation failed" }, { status: 500 });
   }
