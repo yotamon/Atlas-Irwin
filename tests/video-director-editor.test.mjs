@@ -157,6 +157,23 @@ test("Source Auto-Edit is explainable, real-first, artist-scoped and non-destruc
   assert.doesNotMatch(controls, /Math\.round\(.*confidence.*100/);
 });
 
+test("Video Director admits reusable artist media without treating sibling releases as global", async () => {
+  const scope = await source("lib/video-director/media-scope.ts");
+  const actions = await source("app/studio/video-editor-actions.ts");
+  const page = await source("app/studio/(protected)/video/[id]/page.tsx");
+
+  assert.match(scope, /release_id\.eq\.\$\{releaseId\}/);
+  assert.match(scope, /track_id\.eq\.\$\{trackId\}/);
+  assert.match(scope, /and\(release_id\.is\.null,track_id\.is\.null\)/);
+  assert.doesNotMatch(scope, /release_id\.is\.null(?!,track_id\.is\.null)/);
+  assert.match(actions, /projectMediaLinkScopeFilter\(input\.releaseId, input\.trackId\)/);
+  assert.match(actions, /projectMediaLinkScopeFilter\(context\.project\.release_id, context\.project\.track_id\)/);
+  assert.match(actions, /\.eq\("artist_id", input\.artistId\)/);
+  assert.match(actions, /\.eq\("artist_id", artist\.artistId\)/);
+  assert.match(page, /projectMediaLinkScopeFilter\(project\.release_id, project\.track_id\)/);
+  assert.match(page, /\.eq\("owner_id", user\.id\)\.eq\("artist_id", artist\.artistId\)/);
+});
+
 test("Program Monitor and final render share one master clock and source-in semantics", async () => {
   const editor = await source("components/studio/video-director/editor/video-director-pro-editor.tsx");
   const monitor = await source("components/studio/video-director/editor/program-monitor.tsx");
