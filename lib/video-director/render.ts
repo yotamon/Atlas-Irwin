@@ -66,6 +66,11 @@ function isVerticalSafe(shot: ExtendedMusicVideoShot) {
   return record(shot.generation_params).vertical_safe === true;
 }
 
+function editorSourceOffsetMs(shot: ExtendedMusicVideoShot) {
+  const value = record(shot.editor_config).source_offset_ms;
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;
+}
+
 function reviewFrameTimestamps(durationMs: number) {
   if (durationMs <= 0) return [];
   return Array.from(new Set([0.04, 0.22, 0.5, 0.76, 0.96].map((ratio) =>
@@ -298,7 +303,7 @@ export async function buildRenderManifest(input: {
       asset_id: assetId,
       url,
       duration_ms: overlapEnd - overlapStart,
-      source_offset_ms: Math.max(0, overlapStart - shot.start_ms),
+      source_offset_ms: editorSourceOffsetMs(shot) + Math.max(0, overlapStart - shot.start_ms),
       focus_x: focusX(shot),
       vertical_safe: sourceIsAlreadyVertical || isVerticalSafe(shot),
       captions,
