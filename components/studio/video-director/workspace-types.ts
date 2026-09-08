@@ -5,6 +5,7 @@ import type {
   ExtendedMusicVideoGeneration,
   ExtendedMusicVideoProject,
   ExtendedMusicVideoShot,
+  MusicVideoCharacter,
   MusicVideoWorkerJob,
 } from "@/types/video-database";
 
@@ -19,6 +20,34 @@ export type VideoServiceReadiness = {
   worker: { configured: boolean; url: string | null };
 };
 
+export type VideoLyricCue = {
+  id: string;
+  text: string;
+  startMs: number;
+  endMs: number;
+  sectionId: string;
+  allowMedia: boolean;
+};
+
+export type VideoStemLane = {
+  id: string;
+  category: string;
+  label: string;
+  status: string;
+  durationMs: number | null;
+  analysis: unknown;
+};
+
+export type VideoAudioScene = {
+  id: string;
+  name: string;
+  sceneType: string;
+  description: string | null;
+  startMs: number | null;
+  endMs: number | null;
+  score: number | null;
+};
+
 export type VideoWorkspaceData = {
   project: ExtendedMusicVideoProject;
   release: Release;
@@ -27,6 +56,10 @@ export type VideoWorkspaceData = {
   concepts: MusicVideoConcept[];
   scenes: MusicVideoScene[];
   shots: ExtendedMusicVideoShot[];
+  characters: MusicVideoCharacter[];
+  lyricCues: VideoLyricCue[];
+  stems: VideoStemLane[];
+  audioScenes: VideoAudioScene[];
   generations: ExtendedMusicVideoGeneration[];
   approvals: ExtendedMusicVideoApproval[];
   renders: MusicVideoRender[];

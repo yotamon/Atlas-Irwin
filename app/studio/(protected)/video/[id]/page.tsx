@@ -10,6 +10,8 @@ import { resolveProjectAudioUrl } from "@/lib/video-director/context";
 import { higgsfieldReadiness } from "@/lib/video-providers/higgsfield/client";
 import { VideoProjectWorkspace } from "@/components/studio/video-director/project-workspace";
 import type { Json, MediaAsset } from "@/types/database";
+import type { VideoDatabase } from "@/types/video-database";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 function hasStructuredValue(value: unknown) {
   if (!value) return false;
@@ -38,9 +40,10 @@ export default async function VideoProjectPage({
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveActiveArtistContext(supabase, user);
   const db = createServiceClient();
+  const videoDb = db as unknown as SupabaseClient<VideoDatabase>;
   const music = asArtistScopedMusicClient(db);
 
-  const { data: project, error: projectError } = await db.from("music_video_projects")
+  const { data: project, error: projectError } = await videoDb.from("music_video_projects")
     .select("*").eq("id", id).eq("owner_id", user.id).maybeSingle();
   if (projectError) throw new Error(projectError.message);
   if (!project) notFound();
@@ -51,25 +54,30 @@ export default async function VideoProjectPage({
     conceptsResult,
     scenesResult,
     shotsResult,
+    charactersResult,
     generationsResult,
     approvalsResult,
     rendersResult,
     workerJobsResult,
     mediaLinksResult,
     thumbnailAssetsResult,
+    lyricsResult,
+    stemsResult,
+    audioScenesResult,
   ] = await Promise.all([
     music.from("releases").select("*")
       .eq("id", project.release_id).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
     music.from("tracks").select("*")
       .eq("id", project.track_id).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
-    db.from("music_video_concepts").select("*").eq("project_id", project.id).eq("owner_id", user.id)
+    videoDb.from("music_video_concepts").select("*").eq("project_id", project.id).eq("owner_id", user.id)
       .order("round_number", { ascending: false }).order("display_order"),
-    db.from("music_video_scenes").select("*").eq("project_id", project.id).eq("owner_id", user.id).order("display_order"),
-    db.from("music_video_shots").select("*").eq("project_id", project.id).eq("owner_id", user.id).order("display_order"),
-    db.from("music_video_generations").select("*").eq("project_id", project.id).eq("owner_id", user.id).order("created_at"),
-    db.from("music_video_approvals").select("*").eq("project_id", project.id).eq("owner_id", user.id).order("created_at", { ascending: false }),
-    db.from("music_video_renders").select("*").eq("project_id", project.id).eq("owner_id", user.id).order("created_at", { ascending: false }),
-    db.from("music_video_worker_jobs").select("*").eq("project_id", project.id).eq("owner_id", user.id).order("created_at", { ascending: false }).limit(50),
+    videoDb.from("music_video_scenes").select("*").eq("project_id", project.id).eq("owner_id", user.id).order("display_order"),
+    videoDb.from("music_video_shots").select("*").eq("project_id", project.id).eq("owner_id", user.id).order("display_order"),
+    videoDb.from("music_video_characters").select("*").eq("project_id", project.id).eq("owner_id", user.id).order("created_at"),
+    videoDb.from("music_video_generations").select("*").eq("project_id", project.id).eq("owner_id", user.id).order("created_at"),
+    videoDb.from("music_video_approvals").select("*").eq("project_id", project.id).eq("owner_id", user.id).order("created_at", { ascending: false }),
+    videoDb.from("music_video_renders").select("*").eq("project_id", project.id).eq("owner_id", user.id).order("created_at", { ascending: false }),
+    videoDb.from("music_video_worker_jobs").select("*").eq("project_id", project.id).eq("owner_id", user.id).order("created_at", { ascending: false }).limit(50),
     music.from("media_links").select("id,media_asset_id,role,release_id,track_id,artist_id")
       .eq("owner_id", user.id).eq("artist_id", artist.artistId)
       .or(`release_id.eq.${project.release_id},track_id.eq.${project.track_id}`),
@@ -78,6 +86,12 @@ export default async function VideoProjectPage({
       .eq("asset_type", "thumbnail")
       .contains("metadata", { project_id: project.id })
       .order("created_at"),
+    db.from("track_lyrics").select("id,version,status")
+      .eq("owner_id", user.id).eq("track_id", project.track_id).maybeSingle(),
+    db.from("track_stems").select("id,category,label,status,duration_ms,analysis")
+      .eq("owner_id", user.id).eq("track_id", project.track_id).order("display_order"),
+    db.from("audio_scenes").select("id,name,scene_type,description,recommended_start_ms,recommended_end_ms,score")
+      .eq("owner_id", user.id).eq("track_id", project.track_id).eq("status", "ready").order("score", { ascending: false }),
   ]);
 
   const firstError = [
@@ -86,17 +100,35 @@ export default async function VideoProjectPage({
     conceptsResult.error,
     scenesResult.error,
     shotsResult.error,
+    charactersResult.error,
     generationsResult.error,
     approvalsResult.error,
     rendersResult.error,
     workerJobsResult.error,
     mediaLinksResult.error,
     thumbnailAssetsResult.error,
+    lyricsResult.error,
+    stemsResult.error,
+    audioScenesResult.error,
   ].find(Boolean);
   if (firstError) throw new Error(firstError.message);
   const release = releaseResult.data;
   const track = trackResult.data;
   if (!release || !track || track.release_id !== release.id) notFound();
+
+  const lyricLinesResult = lyricsResult.data && lyricsResult.data.status !== "instrumental"
+    ? await db.from("track_lyric_lines").select("id,section_id,text,allow_media,start_ms,end_ms")
+      .eq("owner_id", user.id)
+      .eq("lyrics_id", lyricsResult.data.id)
+      .eq("lyrics_version", lyricsResult.data.version)
+      .order("display_order")
+    : { data: [], error: null };
+  if (lyricLinesResult.error) throw new Error(lyricLinesResult.error.message);
+  const lyricCues = (lyricLinesResult.data ?? []).flatMap((line) =>
+    line.start_ms !== null && line.end_ms !== null && line.end_ms > line.start_ms
+      ? [{ id: line.id, text: line.text, startMs: line.start_ms, endMs: line.end_ms, sectionId: line.section_id, allowMedia: line.allow_media }]
+      : [],
+  );
 
   const creativeMemory = await loadArtistCreativeMemory({
     db,
@@ -108,11 +140,17 @@ export default async function VideoProjectPage({
   });
 
   const shots = shotsResult.data ?? [];
+  const characters = charactersResult.data ?? [];
   const generations = generationsResult.data ?? [];
   const renders = rendersResult.data ?? [];
   const linkedAssetIds = (mediaLinksResult.data ?? []).map((link) => link.media_asset_id);
+  const characterAssetIds = characters.flatMap((character) => [
+    ...strings(character.reference_asset_ids),
+    ...strings(character.approved_asset_ids),
+  ]);
   const assetIds = [...new Set([
     ...linkedAssetIds,
+    ...characterAssetIds,
     ...creativeMemory.recommendations.map((recommendation) => recommendation.assetId),
     ...generations.flatMap((generation) => generation.result_asset_id ? [generation.result_asset_id] : []),
     ...renders.flatMap((render) => render.media_asset_id ? [render.media_asset_id] : []),
@@ -145,6 +183,25 @@ export default async function VideoProjectPage({
         concepts: conceptsResult.data ?? [],
         scenes: scenesResult.data ?? [],
         shots,
+        characters,
+        lyricCues,
+        stems: (stemsResult.data ?? []).map((stem) => ({
+          id: stem.id,
+          category: stem.category,
+          label: stem.label,
+          status: stem.status,
+          durationMs: stem.duration_ms,
+          analysis: stem.analysis,
+        })),
+        audioScenes: (audioScenesResult.data ?? []).map((scene) => ({
+          id: scene.id,
+          name: scene.name,
+          sceneType: scene.scene_type,
+          description: scene.description,
+          startMs: scene.recommended_start_ms,
+          endMs: scene.recommended_end_ms,
+          score: scene.score === null ? null : Number(scene.score),
+        })),
         generations,
         approvals: approvalsResult.data ?? [],
         renders,

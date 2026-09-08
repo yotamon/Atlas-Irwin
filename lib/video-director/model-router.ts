@@ -48,6 +48,12 @@ function scoreModel(model: HiggsfieldModelCapability, input: RouterInput) {
   if (hasReferences(input)) score += model.consistency * 1.8;
   if (profile.requires_audio_reference === true) score += 8;
   if (profile.requires_video_reference === true) score += 8;
+  if (profile.performance_shot === true) {
+    score += model.supportsAudioReferences ? 7 : 0;
+    score += model.consistency * 2.4;
+    if (model.id === "seedance_2_5") score += 6;
+    if (model.id === "seedance_2_0") score += 3;
+  }
   if (profile.hero === true || music.energy === "peak") score += model.quality * 1.8;
   if (profile.complex_motion === true && model.id === "kling3_0") score += 8;
   if (profile.continuity_critical === true) score += model.consistency * 2.2;
@@ -81,6 +87,7 @@ export function routeVideoShot(input: RouterInput): ShotRoutingDecision {
   const winner = ranked[0];
   if (!winner) throw new Error("No video model satisfies the shot requirements, references, and requested resolution.");
 
+  const profile = record(input.capability_profile);
   const params: Record<string, unknown> = { generate_audio: false };
   if (winner.model.id === "seedance_2_0") {
     params.mode = input.targetResolution === "4k" || input.targetResolution === "1080p" ? "std" : (input.isTest ? "fast" : "std");
@@ -99,13 +106,16 @@ export function routeVideoShot(input: RouterInput): ShotRoutingDecision {
     delete params.generate_audio;
   }
 
+  const requirement = profile.performance_shot === true
+    ? "performance continuity and audio-reference capability"
+    : `${input.generation_priority} priority, references`;
   return {
     model: winner.model.id,
     score: winner.score,
     params,
     reason: input.isTest
       ? `${winner.model.label} balances test cost with the required shot capabilities at ${input.targetResolution}.`
-      : `${winner.model.label} best matches the shot's ${input.generation_priority} priority, references, and ${input.targetResolution} target.`,
+      : `${winner.model.label} best matches the shot's ${requirement}, and ${input.targetResolution} target.`,
   };
 }
 
