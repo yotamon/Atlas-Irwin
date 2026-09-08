@@ -21,6 +21,12 @@ function contextState(available: boolean, label: string) {
   );
 }
 
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
 const PROFILE_LOCKED_STATUSES = new Set([
   "test_generation",
   "test_review",
@@ -53,6 +59,10 @@ export function BriefPanel({
 }) {
   const brief = parseVideoCreativeBrief(project.creative_brief);
   const production = parseVideoProductionPreferences(project.creative_brief);
+  const rawBrief = record(project.creative_brief);
+  const providerSafetyCap = typeof rawBrief.provider_credit_safety_cap === "number"
+    ? rawBrief.provider_credit_safety_cap
+    : project.hard_budget_credits;
   const archived = project.status === "archived";
 
   return (
@@ -122,7 +132,7 @@ export function BriefPanel({
               min="0"
               max="100000"
               step="0.01"
-              defaultValue={project.hard_budget_credits}
+              defaultValue={providerSafetyCap}
               disabled={archived}
               readOnly={project.spent_credits > 0}
             />
