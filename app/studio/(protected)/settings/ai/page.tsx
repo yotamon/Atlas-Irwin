@@ -1,10 +1,23 @@
 import Link from "next/link";
 import { applyZeroCostPreset, saveAiControlSettings } from "@/app/studio/ai-control-actions";
+import { SelectField, SwitchField } from "@/components/studio/form-controls";
 import { Field, PageHeader, Panel, Status, Submit } from "@/components/studio/ui";
 import { isZeroCostPolicy } from "@/lib/ai/control-plane";
 import { getAiControlSummary } from "@/lib/ai/analytics";
 import { ensemblisAiGatewayConfigured } from "@/lib/ai/gateway";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+
+const ROUTING_OPTIONS = [
+  { value: "auto", label: "Auto by task" },
+  { value: "economy", label: "Force economy" },
+  { value: "balanced", label: "Force balanced" },
+  { value: "premium", label: "Force premium" },
+];
+const PROVIDER_SORT_OPTIONS = [
+  { value: "cost", label: "Lowest cost" },
+  { value: "ttft", label: "Fastest first token" },
+  { value: "tps", label: "Highest throughput" },
+];
 
 function money(value: number) {
   if (value > 0 && value < 0.01) return `$${value.toFixed(4)}`;
@@ -160,31 +173,14 @@ export default async function AiControlCenterPage() {
         <div className="panel-head"><div><span className="section-label">Controls</span><h2>Routing and budget policy</h2></div></div>
         <form action={saveAiControlSettings} className="studio-form">
           <div className="form-grid">
-            <Field label="Routing mode">
-              <select name="routing_mode" defaultValue={settings.routing_mode}>
-                <option value="auto">Auto by task</option>
-                <option value="economy">Force economy</option>
-                <option value="balanced">Force balanced</option>
-                <option value="premium">Force premium</option>
-              </select>
-            </Field>
-            <Field label="Provider priority">
-              <select name="provider_sort" defaultValue={settings.provider_sort}>
-                <option value="cost">Lowest cost</option>
-                <option value="ttft">Fastest first token</option>
-                <option value="tps">Highest throughput</option>
-              </select>
-            </Field>
+            <SelectField label="Routing mode" name="routing_mode" options={ROUTING_OPTIONS} defaultValue={settings.routing_mode} />
+            <SelectField label="Provider priority" name="provider_sort" options={PROVIDER_SORT_OPTIONS} defaultValue={settings.provider_sort} />
             <Field label="Monthly AI budget ($)"><input type="number" min="0" step="0.01" name="monthly_budget_usd" defaultValue={Number(settings.monthly_budget_usd)} required /></Field>
             <Field label="Text / reasoning ($)"><input type="number" min="0" step="0.01" name="text_budget_usd" defaultValue={Number(settings.text_budget_usd)} required /></Field>
             <Field label="Image hard cap ($)"><input type="number" min="0" step="0.01" name="image_budget_usd" defaultValue={Number(settings.image_budget_usd)} required /></Field>
             <Field label="Video hard cap ($)"><input type="number" min="0" step="0.01" name="video_budget_usd" defaultValue={Number(settings.video_budget_usd)} required /></Field>
-            <Field label="Budget enforcement" wide>
-              <label className="studio-checkbox"><input type="checkbox" name="hard_stop" defaultChecked={settings.hard_stop} /> Block new text and paid media submissions when their configured budgets would be exceeded</label>
-            </Field>
-            <Field label="Quality escalation" wide>
-              <label className="studio-checkbox"><input type="checkbox" name="quality_escalation" defaultChecked={settings.quality_escalation} /> Escalate GLM → Luna → Sol only after deterministic quality gates require it</label>
-            </Field>
+            <SwitchField label="Budget enforcement" description="Block new text and paid media submissions when their configured budgets would be exceeded." name="hard_stop" defaultChecked={settings.hard_stop} />
+            <SwitchField label="Quality escalation" description="Escalate GLM → Luna → Sol only after deterministic quality gates require it." name="quality_escalation" defaultChecked={settings.quality_escalation} />
           </div>
           <Submit>Save AI policy</Submit>
         </form>
