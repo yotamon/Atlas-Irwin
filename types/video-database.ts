@@ -18,10 +18,31 @@ type Table<Row> = {
   Relationships: [];
 };
 
+export type VideoShotType = "generated" | "performance" | "source_media" | "graphic" | "hold";
+export type VideoCharacterRole = "artist" | "featured" | "character";
+
+export type MusicVideoCharacter = {
+  id: string;
+  owner_id: string;
+  artist_id: string;
+  project_id: string | null;
+  name: string;
+  role: VideoCharacterRole;
+  identity_prompt: string;
+  identity_profile: Json;
+  reference_asset_ids: Json;
+  approved_asset_ids: Json;
+  continuity_notes: string | null;
+  style_lock_strength: number;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ExtendedMusicVideoProject = MusicVideoProject & {
   production_plan: Json;
   director_notes: Json;
   render_manifest: Json;
+  editor_state: Json;
   quality_profile: "economy" | "balanced" | "premium";
   previous_status: VideoProjectStatus | null;
   last_error: string | null;
@@ -37,6 +58,13 @@ export type ExtendedMusicVideoShot = MusicVideoShot & {
   review_note: string | null;
   music_context: Json;
   prompt_version: number;
+  shot_type: VideoShotType;
+  character_id: string | null;
+  performance_config: Json;
+  editor_config: Json;
+  lyrics_config: Json;
+  music_reactivity: Json;
+  quality_checks: Json;
 };
 
 export type ExtendedMusicVideoApproval = MusicVideoApproval & {
@@ -93,7 +121,8 @@ type VideoTableNames =
   | "music_video_shots"
   | "music_video_approvals"
   | "music_video_generations"
-  | "music_video_renders";
+  | "music_video_renders"
+  | "music_video_characters";
 
 export type VideoDatabase = Omit<Database, "public"> & {
   public: Omit<Database["public"], "Tables" | "Functions"> & {
@@ -105,6 +134,7 @@ export type VideoDatabase = Omit<Database, "public"> & {
       music_video_approvals: Table<ExtendedMusicVideoApproval>;
       music_video_generations: Table<ExtendedMusicVideoGeneration>;
       music_video_renders: Table<MusicVideoRender>;
+      music_video_characters: Table<MusicVideoCharacter>;
       music_video_worker_jobs: Table<MusicVideoWorkerJob>;
       music_video_director_preferences: Table<MusicVideoDirectorPreferences>;
     };
