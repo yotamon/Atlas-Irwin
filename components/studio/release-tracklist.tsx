@@ -9,14 +9,19 @@ function trackLabel(track: Track) {
   return track.track_number ?? track.display_order + 1;
 }
 
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
 function analysisState(vault: VaultTrack | null) {
   if (!vault) return "Not analyzed";
-  const analysis = vault.analysis && typeof vault.analysis === "object" && !Array.isArray(vault.analysis)
-    ? vault.analysis as Record<string, unknown>
-    : {};
+  const analysis = record(vault.analysis);
+  const profile = record(vault.audio_profile);
   const status = typeof analysis.status === "string" ? analysis.status : "";
   if (["queued", "dispatched", "running", "pending"].includes(status)) return "Analyzing";
-  if (vault.analysis_confidence > 0 || Object.keys(vault.audio_profile as object).length) return "Understood";
+  if (Number(vault.analysis_confidence) > 0 || Object.keys(profile).length > 0) return "Understood";
   return "Ready to analyze";
 }
 

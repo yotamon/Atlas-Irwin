@@ -19,10 +19,6 @@ import { ReleaseWorkspaceV2 } from "@/components/studio/release-workspace-v2";
 import type { MusicVideoProject } from "@/types/database";
 import type { LyricsDatabase } from "@/types/lyrics-database";
 
-function missingCalibrationTable(error: { code?: string } | null) {
-  return error?.code === "42P01" || error?.code === "PGRST205";
-}
-
 function artistFacingReleaseStage(stage: string) {
   if (stage === "music") return "overview";
   if (stage === "plan") return "promotion";
@@ -55,7 +51,7 @@ export default async function ReleaseDetail({
   const growth = asGrowthClient(supabase);
 
   const [
-    { data: release },
+    releaseResult,
     { data: tracks },
     { data: placement },
     { data: mediaLinks },
@@ -70,7 +66,7 @@ export default async function ReleaseDetail({
     campaignResult,
     vaultsResult,
   ] = await Promise.all([
-    music.from("releases").select("*").eq("id", id).eq("artist_id", artist.artistId).single(),
+    music.from("releases").select("*").eq("id", id).eq("artist_id", artist.artistId).maybeSingle(),
     music.from("tracks").select("*").eq("release_id", id).eq("artist_id", artist.artistId).order("display_order").order("is_primary", { ascending: false }),
     music.from("homepage_placements").select("*").eq("release_id", id).eq("artist_id", artist.artistId).maybeSingle(),
     music.from("media_links").select("*").eq("release_id", id).eq("artist_id", artist.artistId),
@@ -85,9 +81,14 @@ export default async function ReleaseDetail({
     marketing.from("campaigns").select("id,name,status,mode,objective,primary_kpi").eq("owner_id", user.id).eq("artist_id", artist.artistId).eq("release_id", id).not("status", "in", '("archived")').order("updated_at", { ascending: false }).limit(1).maybeSingle(),
     growth.from("track_vault").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId).eq("linked_release_id", id).order("updated_at", { ascending: false }),
   ]);
+  if (releaseResult.error) throw new Error(releaseResult.error.message);
+  const release = releaseResult.data;
   if (!release) notFound();
-  if (campaignResult.error) throw new Error(campaignResult.error.message);
-  if (vaultsResult.error) throw new Error(vaultsResult.error.message);
+
+  // Campaigns and Music Intelligence enrich a release, but neither owns the canonical
+  // release record. A temporary failure in either service must not make the song vanish.
+  const campaign = campaignResult.error ? null : campaignResult.data;
+  const vaultTracks = vaultsResult.error ? [] : vaultsResult.data ?? [];
 
   const trackIds = (tracks ?? []).map((track) => track.id);
   const { data: externalTrackIds } = trackIds.length
@@ -99,6 +100,8 @@ export default async function ReleaseDetail({
   const { count: providerScheduledCount, error: providerScheduleError } = contentIds.length
     ? await marketing.from("publication_jobs").select("id", { count: "exact", head: true }).eq("owner_id", user.id).eq("artist_id", artist.artistId).eq("status", "provider_scheduled" as never).in("content_item_id", contentIds)
     : { count: 0, error: null };
+  // Keep this fail-closed: unknown provider scheduling state could otherwise unlock a
+  // release date that is already committed downstream.
   if (providerScheduleError) throw new Error(providerScheduleError.message);
 
   const [
@@ -110,16 +113,15 @@ export default async function ReleaseDetail({
     momentsDb.from("moment_performance_rollups").select("*").eq("release_id", id).eq("artist_id", artist.artistId),
     momentsDb.from("moment_calibration_events").select("*").eq("release_id", id).eq("artist_id", artist.artistId).order("created_at", { ascending: false }).limit(250),
   ]);
-  if (momentsError) throw new Error(momentsError.message);
-  if (performanceError) throw new Error(performanceError.message);
-  if (calibrationError && !missingCalibrationTable(calibrationError)) throw new Error(calibrationError.message);
+  const safeMoments = momentsError ? [] : moments ?? [];
+  const safeMomentPerformance = performanceError ? [] : momentPerformance ?? [];
   const calibrationEvents = calibrationError ? [] : calibrationRows ?? [];
 
   const { data: trackLyrics, error: trackLyricsError } = trackIds.length
     ? await lyricsDb.from("track_lyrics").select("id,track_id").eq("artist_id", artist.artistId).in("track_id", trackIds)
     : { data: [], error: null };
-  if (trackLyricsError) throw new Error(trackLyricsError.message);
-  const lyricsIds = (trackLyrics ?? []).map((lyrics) => lyrics.id);
+  const safeTrackLyrics = trackLyricsError ? [] : trackLyrics ?? [];
+  const lyricsIds = safeTrackLyrics.map((lyrics) => lyrics.id);
   const [{ data: lyricSections, error: lyricSectionsError }, { data: lyricSources, error: lyricSourcesError }] = await Promise.all([
     lyricsIds.length
       ? lyricsDb.from("track_lyric_sections").select("id,lyrics_id,section_key,section_type,label,start_ms,end_ms,confidence,is_primary_hook").eq("artist_id", artist.artistId).in("lyrics_id", lyricsIds)
@@ -128,14 +130,14 @@ export default async function ReleaseDetail({
       ? lyricsDb.from("track_lyric_moments").select("id,track_id,section_key,excerpt,start_ms,end_ms,score").eq("artist_id", artist.artistId).in("track_id", trackIds)
       : Promise.resolve({ data: [], error: null }),
   ]);
-  if (lyricSectionsError) throw new Error(lyricSectionsError.message);
-  if (lyricSourcesError) throw new Error(lyricSourcesError.message);
+  const safeLyricSections = lyricSectionsError ? [] : lyricSections ?? [];
+  const safeLyricSources = lyricSourcesError ? [] : lyricSources ?? [];
 
-  const trackByLyricsId = new Map((trackLyrics ?? []).map((lyrics) => [lyrics.id, lyrics.track_id]));
+  const trackByLyricsId = new Map(safeTrackLyrics.map((lyrics) => [lyrics.id, lyrics.track_id]));
   const momentCuration = curateCalibratedReleaseMoments({
-    moments: moments ?? [],
+    moments: safeMoments,
     calibrationEvents,
-    sections: (lyricSections ?? []).map((section) => ({
+    sections: safeLyricSections.map((section) => ({
       id: section.id,
       track_id: trackByLyricsId.get(section.lyrics_id) ?? "",
       section_key: section.section_key,
@@ -146,13 +148,13 @@ export default async function ReleaseDetail({
       confidence: section.confidence,
       is_primary_hook: section.is_primary_hook,
     })).filter((section) => Boolean(section.track_id)),
-    lyricMoments: lyricSources ?? [],
+    lyricMoments: safeLyricSources,
   });
 
   if (!advanced) {
     return <>
-      <ReleaseWorkspaceV2 artistId={artist.artistId} release={release} tracks={tracks ?? []} contentItems={contentItems ?? []} metrics={metrics ?? []} campaign={campaignResult.data} stage={simpleStage} renderedAt={renderedAt} playbookTasks={playbookTasks ?? []} providerScheduledCount={providerScheduledCount ?? 0} vaultTracks={vaultsResult.data ?? []} />
-      {stage === "create" ? <MomentReviewPanel releaseId={release.id} moments={momentCuration.curated} historicalMoments={momentCuration.historical} rawCandidateCount={momentCuration.raw_active_count} suppressedCount={momentCuration.suppressed_count} tracks={(tracks ?? []).map((track) => ({ id: track.id, title: track.title, audio_url: track.audio_url }))} performance={momentPerformance ?? []} lyricSources={lyricSources ?? []} calibrationEvents={calibrationEvents} /> : null}
+      <ReleaseWorkspaceV2 artistId={artist.artistId} release={release} tracks={tracks ?? []} contentItems={contentItems ?? []} metrics={metrics ?? []} campaign={campaign} stage={simpleStage} renderedAt={renderedAt} playbookTasks={playbookTasks ?? []} providerScheduledCount={providerScheduledCount ?? 0} vaultTracks={vaultTracks} />
+      {stage === "create" ? <MomentReviewPanel releaseId={release.id} moments={momentCuration.curated} historicalMoments={momentCuration.historical} rawCandidateCount={momentCuration.raw_active_count} suppressedCount={momentCuration.suppressed_count} tracks={(tracks ?? []).map((track) => ({ id: track.id, title: track.title, audio_url: track.audio_url }))} performance={safeMomentPerformance} lyricSources={safeLyricSources} calibrationEvents={calibrationEvents} /> : null}
     </>;
   }
 
@@ -171,7 +173,7 @@ export default async function ReleaseDetail({
 
   return <>
     <div className="v2-advanced-banner"><div><strong>Specialist workspace</strong><span>Legacy controls for exceptional cases, migrations and debugging.</span></div><Link className="button" href={scopedHref(`/studio/releases/${release.id}`)}>Back to release</Link></div>
-    {tab === "campaign" ? <ReleaseCampaignBridge campaign={campaignResult.data} /> : null}
+    {tab === "campaign" ? <ReleaseCampaignBridge campaign={campaign} /> : null}
     <ReleaseCockpit release={release} tracks={tracks ?? []} placement={placement} mediaLinks={mediaLinks ?? []} mediaAssets={mediaAssets ?? []} mediaPreviewUrls={mediaPreviewUrls} externalLinks={externalLinks ?? []} externalTrackIds={externalTrackIds ?? []} contentCount={contentCount ?? 0} contactCount={contactCount ?? 0} contentItems={contentItems ?? []} metrics={metrics ?? []} unmatchedSoundCloud={relevantSoundCloud} unmatchedSpotify={relevantSpotify} publicReleases={publicReleases} videoProjects={videoProjects} moments={momentCuration.curated} tab={tab} />
   </>;
 }
