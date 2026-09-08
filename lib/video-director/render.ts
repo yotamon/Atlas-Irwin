@@ -12,7 +12,11 @@ import {
   buildShotReactiveEvents,
   loadVideoRenderFinishingContext,
 } from "./render-finishing";
-import { createWorkerRenderUploadTarget, queueMediaWorkerJob } from "./worker";
+import {
+  createWorkerRenderUploadTarget,
+  createWorkerReviewFrameUploadTarget,
+  queueMediaWorkerJob,
+} from "./worker";
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -60,6 +64,13 @@ function focusX(shot: ExtendedMusicVideoShot) {
 
 function isVerticalSafe(shot: ExtendedMusicVideoShot) {
   return record(shot.generation_params).vertical_safe === true;
+}
+
+function reviewFrameTimestamps(durationMs: number) {
+  if (durationMs <= 0) return [];
+  return Array.from(new Set([0.04, 0.22, 0.5, 0.76, 0.96].map((ratio) =>
+    Math.max(0, Math.min(durationMs - 80, Math.round(durationMs * ratio))),
+  )));
 }
 
 function momentScore(moment: Moment) {
@@ -340,6 +351,10 @@ export async function queueVideoRender(input: {
   }).select("*").single();
   if (renderError || !render) throw new Error(renderError?.message || "Could not create render job.");
   const upload = await createWorkerRenderUploadTarget(input.db, input.ownerId, input.project.id, render.id);
+  const frameUploads = await Promise.all(reviewFrameTimestamps(manifest.duration_ms).map(async (timestampMs, index) => {
+    const target = await createWorkerReviewFrameUploadTarget(input.db, input.ownerId, input.project.id, render.id, index);
+    return { timestamp_ms: timestampMs, upload_url: target.signedUrl, public_url: target.publicUrl };
+  }));
   const spec = outputSpec(input.type, input.project);
   const workerPayload = {
     render_id: render.id,
@@ -351,6 +366,7 @@ export async function queueVideoRender(input: {
     height: manifest.height,
     fps: manifest.fps,
     deterministic_finishing: manifest.deterministic_finishing,
+    review_frames: frameUploads,
     upload_url: upload.signedUrl,
     upload_bucket: upload.bucket,
     upload_path: upload.path,
