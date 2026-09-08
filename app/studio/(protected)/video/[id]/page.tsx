@@ -73,7 +73,7 @@ export default async function VideoProjectPage({
       .order("round_number", { ascending: false }).order("display_order"),
     videoDb.from("music_video_scenes").select("*").eq("project_id", project.id).eq("owner_id", user.id).order("display_order"),
     videoDb.from("music_video_shots").select("*").eq("project_id", project.id).eq("owner_id", user.id).order("display_order"),
-    videoDb.from("music_video_characters").select("*").eq("project_id", project.id).eq("owner_id", user.id).order("created_at"),
+    videoDb.from("music_video_characters").select("*").eq("artist_id", artist.artistId).eq("owner_id", user.id).order("created_at"),
     videoDb.from("music_video_generations").select("*").eq("project_id", project.id).eq("owner_id", user.id).order("created_at"),
     videoDb.from("music_video_approvals").select("*").eq("project_id", project.id).eq("owner_id", user.id).order("created_at", { ascending: false }),
     videoDb.from("music_video_renders").select("*").eq("project_id", project.id).eq("owner_id", user.id).order("created_at", { ascending: false }),
