@@ -51,9 +51,10 @@ test("social delivery is retry-safe and never starts new paid AI generations", a
 });
 
 test("Quick Video delivery hides worker plumbing and explains zero-generation-spend derivatives", async () => {
-  const workspace = await read("components/studio/video-director/quick-video-workspace.tsx");
+  const deliveryPanel = await read("components/studio/video-director/quick-video-delivery-panel.tsx");
 
-  assert.ok(workspace.includes("No additional AI generation spend"));
-  assert.ok(!workspace.includes("MEDIA_WORKER"));
-  assert.ok(!workspace.includes("worker job"));
+  assert.ok(deliveryPanel.includes("They do not submit new paid AI generations"));
+  assert.ok(deliveryPanel.includes("zero-generation-spend delivery orchestrator"));
+  assert.ok(!deliveryPanel.includes("MEDIA_WORKER"));
+  assert.ok(!deliveryPanel.includes("worker job"));
 });
