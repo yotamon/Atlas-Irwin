@@ -6,6 +6,12 @@ import type { Moment, MomentsDatabase } from "@/types/moments-database";
 import type { ExtendedMusicVideoProject, ExtendedMusicVideoShot, VideoDatabase } from "@/types/video-database";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { parseMusicMap } from "./creative-director";
+import {
+  buildShotCaptionCues,
+  buildShotQcPolicy,
+  buildShotReactiveEvents,
+  loadVideoRenderFinishingContext,
+} from "./render-finishing";
 import { createWorkerRenderUploadTarget, queueMediaWorkerJob } from "./worker";
 
 function record(value: unknown): Record<string, unknown> {
@@ -75,24 +81,32 @@ function overlapRatio(a: Moment, b: Moment) {
   return overlap / Math.max(1, Math.min(a.end_ms - a.start_ms, b.end_ms - b.start_ms));
 }
 
-async function approvedMoments(
+async function projectArtistId(
   db: SupabaseClient<VideoDatabase>,
   ownerId: string,
   project: ExtendedMusicVideoProject,
 ) {
   const musicDb = db as unknown as SupabaseClient<ArtistScopedMusicDatabase>;
-  const { data: release } = await musicDb.from("releases")
+  const { data: release, error } = await musicDb.from("releases")
     .select("artist_id")
     .eq("id", project.release_id)
     .eq("owner_id", ownerId)
     .maybeSingle();
-  if (!release?.artist_id) return [];
+  if (error || !release?.artist_id) throw new Error(error?.message || "Video render cannot resolve its artist lineage.");
+  return release.artist_id;
+}
 
+async function approvedMoments(
+  db: SupabaseClient<VideoDatabase>,
+  ownerId: string,
+  project: ExtendedMusicVideoProject,
+) {
+  const artistId = await projectArtistId(db, ownerId, project);
   const momentsDb = db as unknown as SupabaseClient<MomentsDatabase>;
   const { data, error } = await momentsDb.from("moments")
     .select("*")
     .eq("owner_id", ownerId)
-    .eq("artist_id", release.artist_id)
+    .eq("artist_id", artistId)
     .eq("release_id", project.release_id)
     .eq("track_id", project.track_id)
     .eq("state", "approved")
@@ -247,23 +261,44 @@ export async function buildRenderManifest(input: {
     : { start: fullStart, end: fullEnd };
   if (window.end <= window.start) throw new Error("Selected music-intelligence window does not overlap the locked storyboard timeline.");
 
+  const artistId = await projectArtistId(input.db, input.ownerId, input.project);
+  const finishing = await loadVideoRenderFinishingContext({
+    db: input.db,
+    ownerId: input.ownerId,
+    artistId,
+    project: input.project,
+  });
+  const musicMap = parseMusicMap(input.project.music_map);
   const clips = sources.flatMap(({ shot, url, assetId }) => {
     const overlapStart = Math.max(window.start, shot.start_ms);
     const overlapEnd = Math.min(window.end, shot.end_ms);
     if (overlapEnd <= overlapStart) return [];
+    const captions = buildShotCaptionCues({ shot, overlapStartMs: overlapStart, overlapEndMs: overlapEnd, finishing });
+    const reactiveEvents = buildShotReactiveEvents({
+      shot,
+      overlapStartMs: overlapStart,
+      overlapEndMs: overlapEnd,
+      finishing,
+      energyCurve: musicMap?.energy_curve ?? [],
+    });
     return [{
       shot_id: shot.id,
+      shot_type: shot.shot_type,
       asset_id: assetId,
       url,
       duration_ms: overlapEnd - overlapStart,
       source_offset_ms: Math.max(0, overlapStart - shot.start_ms),
       focus_x: focusX(shot),
       vertical_safe: sourceIsAlreadyVertical || isVerticalSafe(shot),
+      captions,
+      reactive_events: reactiveEvents,
+      qc_policy: buildShotQcPolicy({ shot, captions, reactiveEvents }),
     }];
   });
   return {
-    version: 3,
+    version: 4,
     type: input.type,
+    artist_id: artistId,
     primary_aspect_ratio: input.project.primary_aspect_ratio,
     width: spec.width,
     height: spec.height,
@@ -275,6 +310,9 @@ export async function buildRenderManifest(input: {
     music_moment_id: highlighted?.momentId ?? null,
     music_moment_label: highlighted?.momentLabel ?? null,
     music_hook_candidate_id: highlighted?.candidateId ?? null,
+    deterministic_finishing: true,
+    stem_intelligence_used: finishing.stems.length > 0,
+    timed_lyrics_used: finishing.lyricCues.length > 0,
     clips,
     unsafe_vertical_shot_ids: unsafeShotIds,
     generated_at: new Date().toISOString(),
@@ -312,6 +350,7 @@ export async function queueVideoRender(input: {
     width: manifest.width,
     height: manifest.height,
     fps: manifest.fps,
+    deterministic_finishing: manifest.deterministic_finishing,
     upload_url: upload.signedUrl,
     upload_bucket: upload.bucket,
     upload_path: upload.path,
