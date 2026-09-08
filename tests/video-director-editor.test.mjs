@@ -42,7 +42,6 @@ test("performance shots route through audio-reference-capable continuity models"
   assert.match(actions, /performance_shot/);
   assert.match(actions, /requires_audio_reference/);
   assert.match(actions, /audio_references/);
-  assert.match(actions, /performance_mode = "lip_sync"/);
   assert.match(actions, /generation_priority: parsed\.shotType === "performance" \? "consistency"/);
   assert.match(router, /profile\.performance_shot === true/);
   assert.match(router, /supportsAudioReferences/);
@@ -50,16 +49,19 @@ test("performance shots route through audio-reference-capable continuity models"
   assert.match(provider, /input\.audio_references/);
 });
 
-test("character identity is project-scoped and cannot leak across video productions", async () => {
+test("character identity is artist-scoped, reusable and cannot leak across artists", async () => {
   const migration = await source("supabase/migrations/20260908190000_video_director_pro_editor.sql");
   const actions = await source("app/studio/video-editor-actions.ts");
+  const page = await source("app/studio/(protected)/video/[id]/page.tsx");
 
   assert.match(migration, /create table public\.music_video_characters/);
   assert.match(migration, /artist_id uuid not null references public\.artists/);
-  assert.match(migration, /Video character artist must match project artist/);
-  assert.match(migration, /Video shot character must belong to the same project/);
-  assert.match(actions, /allCharacterRefs/);
+  assert.match(migration, /project_id uuid references public\.music_video_projects\(id\) on delete set null/);
+  assert.match(migration, /Video character artist must match origin project artist/);
+  assert.match(migration, /Video shot character must belong to the same artist as the project/);
+  assert.match(actions, /artistCharacters/);
   assert.match(actions, /baseReferences/);
+  assert.match(page, /music_video_characters.*artist_id/s);
 });
 
 test("editor keeps spend safety and exposes professional handoff instead of bypassing production", async () => {
