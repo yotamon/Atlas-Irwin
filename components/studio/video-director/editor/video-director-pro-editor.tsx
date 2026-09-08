@@ -2,7 +2,6 @@
 
 /* eslint-disable @next/next/no-img-element */
 import {
-  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -224,32 +223,6 @@ function ShotInspector({ data, shot }: { data: VideoWorkspaceData; shot: Extende
     energy: numberValue(reactivity.energy, 0.6),
   });
 
-  useEffect(() => {
-    if (!shot) return;
-    const nextPerformance = record(shot.performance_config);
-    const nextLyrics = record(shot.lyrics_config);
-    const nextReactivity = record(shot.music_reactivity);
-    const nextEditor = record(shot.editor_config);
-    setDescription(shot.description);
-    setPrompt(shot.prompt ?? "");
-    setShotType(shot.shot_type);
-    setCharacterId(shot.character_id ?? "");
-    setLipSync(nextPerformance.lip_sync === true);
-    setCaptionEnabled(nextLyrics.enabled === true);
-    setCaptionText(typeof nextLyrics.text === "string" ? nextLyrics.text : "");
-    setCaptionStyle(["clean", "editorial", "karaoke", "poster"].includes(String(nextLyrics.style)) ? String(nextLyrics.style) as typeof captionStyle : "clean");
-    setCameraIntent(typeof nextEditor.camera_intent === "string" ? nextEditor.camera_intent : "");
-    setReact({
-      vocals: numberValue(nextReactivity.vocals, 0.5),
-      drums: numberValue(nextReactivity.drums, 0.5),
-      bass: numberValue(nextReactivity.bass, 0.35),
-      percussion: numberValue(nextReactivity.percussion, 0.25),
-      energy: numberValue(nextReactivity.energy, 0.6),
-    });
-    setSaved(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shot?.id]);
-
   if (!shot) return <aside className="video-editor-inspector"><div className="video-editor-inspector-empty"><strong>No shot selected</strong><p>Select a timeline clip to edit it. The Program Monitor can continue following playback independently.</p></div></aside>;
 
   const shotId = shot.id;
@@ -339,13 +312,13 @@ export function VideoDirectorProEditor({ data }: { data: VideoWorkspaceData }) {
   const committed = Number(data.project.spent_credits || 0) + Number(data.project.reserved_credits || 0);
   const budgetPercent = hardBudget > 0 ? Math.min(100, (committed / hardBudget) * 100) : 0;
 
-  const selectShot = useCallback((id: string, cue = true) => {
+  function selectShot(id: string, cue = true) {
     setSelectedShotId(id);
     if (cue) {
       const shot = data.shots.find((item) => item.id === id);
       if (shot) seek(shot.start_ms);
     }
-  }, [data.shots, seek]);
+  }
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
