@@ -27,6 +27,19 @@
 .video-editor-variant-error { color: var(--en-danger); font-size: var(--en-text-2xs); }
 @keyframes video-editor-spin { to { transform: rotate(360deg); } }
 
+.video-editor-human-qc { display: grid; gap: .62rem; padding: .75rem; border: 1px solid var(--en-warning); border-radius: var(--en-radius); background: var(--en-warning-soft); }
+.video-editor-human-qc.is-approved { border-color: color-mix(in srgb, var(--en-accent) 54%, var(--en-line)); background: var(--en-accent-soft); }
+.video-editor-human-qc > div { display: grid; gap: .12rem; }
+.video-editor-human-qc > div span { color: var(--en-subtle); font-size: var(--en-text-2xs); text-transform: uppercase; letter-spacing: .07em; }
+.video-editor-human-qc > div strong { font-size: var(--en-text-xs); }
+.video-editor-human-qc ul { display: grid; gap: .3rem; margin: 0; padding: 0; list-style: none; }
+.video-editor-human-qc li { display: flex; gap: .4rem; align-items: center; color: var(--en-muted); font-size: var(--en-text-2xs); }
+.video-editor-human-qc li::before { content: "○"; color: var(--en-warning); }
+.video-editor-human-qc li.pass::before { content: "✓"; color: var(--en-accent); }
+.video-editor-human-qc p { margin: 0; color: var(--en-subtle); font-size: var(--en-text-2xs); line-height: 1.5; }
+.video-editor-human-qc small { color: var(--en-accent); font-size: var(--en-text-2xs); }
+.video-editor-human-qc .button { width: 100%; font-size: var(--en-text-2xs); }
+
 /* Stem Intelligence supplies real 500 ms activity windows. The lane is spatially accurate to the master clock. */
 .video-editor-stem-lane { display: block; position: relative; opacity: .82; }
 .video-editor-stem-lane > i { position: absolute; bottom: 4%; min-width: 1px; max-height: 92%; background: color-mix(in srgb, var(--en-muted) 30%, transparent); border-radius: 1px 1px 0 0; }
