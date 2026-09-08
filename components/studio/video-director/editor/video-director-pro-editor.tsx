@@ -311,6 +311,9 @@ export function VideoDirectorProEditor({ data }: { data: VideoWorkspaceData }) {
   const hardBudget = Number(data.project.hard_budget_credits || 0);
   const committed = Number(data.project.spent_credits || 0) + Number(data.project.reserved_credits || 0);
   const budgetPercent = hardBudget > 0 ? Math.min(100, (committed / hardBudget) * 100) : 0;
+  const inspectorKey = selectedShot
+    ? [selectedShot.id, selectedShot.prompt_version, selectedShot.shot_type, selectedShot.selected_asset_id ?? "", selectedShot.character_id ?? ""].join(":")
+    : "none";
 
   function selectShot(id: string, cue = true) {
     setSelectedShotId(id);
@@ -431,7 +434,7 @@ export function VideoDirectorProEditor({ data }: { data: VideoWorkspaceData }) {
           <ProgramMonitor data={data} shot={activeShot} playheadMs={playheadMs} isPlaying={isPlaying} />
           <div className="video-editor-canvas-note"><span>Space</span> play/pause <span>← →</span> seek <span>Shift + ← →</span> 5 sec <span>L</span> loop selected <span>⌘ +/-</span> zoom</div>
         </main>
-        <ShotInspector key={selectedShot?.id ?? "none"} data={data} shot={selectedShot} />
+        <ShotInspector key={inspectorKey} data={data} shot={selectedShot} />
       </div>
 
       <div className="video-editor-timeline-shell">
