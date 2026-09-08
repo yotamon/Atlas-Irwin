@@ -68,7 +68,7 @@ export function ProductionProfileControl({
           <h3 id="production-quality-title">Choose how Ensemblis spends quality</h3>
           <p>The setting changes the exact model routing. Nothing is hidden: provider, model and expected spend stay visible before generation.</p>
         </div>
-        <div className="video-production-estimate" data-over-cap={overCap || undefined}>
+        <div className="video-production-estimate" data-over-cap={overCap || undefined} aria-live="polite">
           <small>Estimated production</small>
           <strong>{estimateLabel}</strong>
           <span>{preview?.pricingAvailable ? "USD estimate from configured provider pricing" : "USD conversion unavailable · provider credits shown"}</span>
@@ -80,14 +80,15 @@ export function ProductionProfileControl({
         <input type="hidden" name="production_profile" value={profile} />
 
         <div className="video-quality-slider">
-          <div className="video-quality-slider__labels" aria-hidden="true">
+          <div className="video-quality-slider__labels" role="group" aria-label="Production quality presets">
             {VIDEO_PRODUCTION_PROFILE_DEFINITIONS.map((item, itemIndex) => (
               <button
                 type="button"
                 key={item.id}
                 className={itemIndex === index ? "active" : ""}
-                onClick={() => !profileLocked && setIndex(itemIndex)}
-                tabIndex={-1}
+                aria-pressed={itemIndex === index}
+                disabled={profileLocked}
+                onClick={() => setIndex(itemIndex)}
               >
                 <span>{item.eyebrow}</span>
                 <strong>{item.label}</strong>
@@ -96,6 +97,7 @@ export function ProductionProfileControl({
           </div>
           <input
             aria-label="Production quality"
+            aria-valuetext={definition.label}
             type="range"
             min={0}
             max={VIDEO_PRODUCTION_PROFILES.length - 1}
@@ -104,7 +106,7 @@ export function ProductionProfileControl({
             disabled={profileLocked}
             onChange={(event) => setIndex(Number(event.target.value))}
           />
-          <div className="video-quality-slider__selection">
+          <div className="video-quality-slider__selection" aria-live="polite">
             <div><span>{definition.eyebrow}</span><strong>{definition.label}</strong></div>
             <p>{definition.description}</p>
             {profileLocked ? <small>Global routing is locked because motion generation has started. Existing spend stays auditable; future shots can still be handled individually.</small> : null}
@@ -207,7 +209,7 @@ export function ProductionProfileControl({
               onChange={(event) => setMaxBudget(event.target.value)}
             />
           </div>
-          <div className="video-budget-cap__state" data-over-cap={overCap || undefined}>
+          <div className="video-budget-cap__state" data-over-cap={overCap || undefined} aria-live="polite">
             {overCap ? (
               <><strong>Current profile is about {money(capDifference)} over this cap.</strong><span>Move the quality control left or raise the ceiling before approving generation.</span></>
             ) : parsedMax !== null && Number.isFinite(parsedMax) ? (
