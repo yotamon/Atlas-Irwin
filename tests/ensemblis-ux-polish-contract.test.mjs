@@ -133,7 +133,11 @@ test("Media Library uses signed resumable TUS above 6 MB without expanding stora
   assert.ok(uploader.includes("PUBLIC_LIMIT = 100 * 1024 * 1024"));
   assert.ok(uploader.includes("uploadResumableMedia"));
   assert.ok(uploader.includes("upload-progress"));
-  assert.ok(uploader.includes("Retry to resume from the last confirmed chunk"));
+  assert.ok(uploader.includes('state: "ready" | "uploading" | "paused" | "done" | "error"'));
+  assert.ok(uploader.includes("Upload paused. Resume to continue from where it stopped."));
+  assert.ok(uploader.includes("Connection interrupted. Retrying…"));
+  assert.ok(uploader.includes('"Resume upload"'));
+  assert.equal(uploader.includes("last confirmed chunk"), false, "artist-facing recovery copy must not expose TUS implementation details");
   assert.ok(uploader.includes("ResumableUploadAuthorizationError"));
   assert.equal(uploader.includes("auth.getSession"), false, "signed resumable upload must not depend on browser session retrieval");
 
@@ -151,6 +155,7 @@ test("Media Library uses signed resumable TUS above 6 MB without expanding stora
     "const chunkOffset: number = offset",
     "patchChunk(uploadUrl, target, chunk, chunkOffset)",
     "serverOffset !== chunkOffset",
+    "onRetry",
   ]) assert.ok(resumable.includes(snippet), `resumable transport is missing ${snippet}`);
 
   assert.ok(catalog.includes("createSignedUploadUrl(storagePath)"));
