@@ -1,6 +1,6 @@
 -- Video Director human quality gate.
 -- Vision models may flag continuity/artifact risk, but lip-sync is never auto-approved from sparse frames.
--- A locked performance/identity shot must carry explicit human attestation before the project can render.
+-- A locked performance/identity shot must carry explicit human attestation for that exact selected asset.
 
 create or replace function private.validate_music_video_human_quality_gate()
 returns trigger
@@ -20,7 +20,13 @@ begin
   where s.project_id = new.id
     and s.owner_id = new.owner_id
     and (
-      (
+      s.character_id is not null
+      or coalesce((s.performance_config->>'lip_sync')::boolean, false) = true
+    )
+    and (
+      s.selected_asset_id is null
+      or coalesce(s.quality_checks->>'review_asset_id', '') <> s.selected_asset_id::text
+      or (
         s.character_id is not null
         and coalesce((s.quality_checks->>'continuity_approved')::boolean, false) = false
       )
@@ -31,7 +37,7 @@ begin
     );
 
   if missing_count > 0 then
-    raise exception '% shot(s) still require explicit human identity/lip-sync quality approval before rendering', missing_count;
+    raise exception '% shot(s) still require explicit human identity/lip-sync quality approval for their current locked variant before rendering', missing_count;
   end if;
   return new;
 end;
