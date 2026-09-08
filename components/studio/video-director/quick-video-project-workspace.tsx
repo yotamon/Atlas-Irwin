@@ -4,6 +4,10 @@ import { approveVideoProductionPlan } from "@/app/studio/video-pipeline-actions"
 import { SubmitButton } from "@/components/studio/submit-button";
 import { Status } from "@/components/studio/ui";
 import { availableBudget, parseVideoCreativeBrief, type VideoProjectStatus } from "@/lib/video-director/domain";
+import {
+  parseVideoProductionPreferences,
+  productionProfileDefinition,
+} from "@/lib/video-director/production-profile";
 import { ProjectHeader } from "./project-header";
 import { RecoveryPanel } from "./recovery-panel";
 import { TrackIntelligenceInspector } from "./track-intelligence-inspector";
@@ -12,6 +16,7 @@ import {
   ShotReviewPanel,
 } from "./production-panels";
 import { LookDevelopmentPanel } from "./look-development-panel";
+import { ProductionProfileControl } from "./production-profile-control";
 import { QuickVideoDeliveryPanel } from "./quick-video-delivery-panel";
 import type { VideoWorkspaceData } from "./workspace-types";
 
@@ -23,6 +28,19 @@ const QUICK_PHASES: Array<{ id: Exclude<QuickPhase, "attention">; label: string;
   { id: "production", label: "Production", detail: "Bounded generation" },
   { id: "delivery", label: "Master + socials", detail: "Review and export" },
 ];
+
+const PROFILE_LOCKED_STATUSES = new Set([
+  "test_generation",
+  "test_review",
+  "production",
+  "shot_review",
+  "ready_to_render",
+  "rendering",
+  "complete",
+  "blocked",
+  "failed",
+  "archived",
+]);
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -52,8 +70,20 @@ function credits(value: number) {
   return `${Number(value || 0).toFixed(1)} cr`;
 }
 
+function moneyFromCredits(data: VideoWorkspaceData, value: number) {
+  const rate = data.services.higgsfield.usdPerCredit;
+  if (rate === null) return null;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  }).format(Number(value || 0) * rate);
+}
+
 function DirectionDevelopment({ data }: { data: VideoWorkspaceData }) {
   const brief = parseVideoCreativeBrief(data.project.creative_brief);
+  const production = parseVideoProductionPreferences(data.project.creative_brief);
+  const definition = productionProfileDefinition(production.profile);
   const selected = data.concepts.find((concept) => concept.id === data.project.selected_concept_id) ?? data.concepts.find((concept) => concept.status === "selected");
   const snapshot = brief.concept_snapshot;
   const developing = data.project.status === "treatment_review";
@@ -69,7 +99,8 @@ function DirectionDevelopment({ data }: { data: VideoWorkspaceData }) {
         <span>{data.track.title}</span>
         <span>{data.project.primary_aspect_ratio}</span>
         <span>{data.project.target_resolution}</span>
-        <span>{credits(data.project.hard_budget_credits)} hard cap</span>
+        <span>{definition.label}</span>
+        {production.maxBudgetUsd !== null ? <span>${production.maxBudgetUsd.toFixed(0)} max spend</span> : null}
       </div>
       <form action={developQuickVideoDirection} className="video-section-action">
         <input type="hidden" name="project_id" value={data.project.id} />
@@ -79,7 +110,7 @@ function DirectionDevelopment({ data }: { data: VideoWorkspaceData }) {
         >
           {developing ? "Finish production plan" : "Develop this direction"}
         </SubmitButton>
-        <small>This step creates the treatment, visual system, storyboard and cost plan. It spends 0 generation credits.</small>
+        <small>This step creates the treatment, visual system, storyboard and exact model/cost plan. It spends 0 generation credits.</small>
       </form>
     </section>
   );
@@ -94,26 +125,38 @@ function PreviewPlan({ data }: { data: VideoWorkspaceData }) {
   const uniqueSources = typeof cost.unique_source_sequences === "number" ? cost.unique_source_sequences : data.shots.length;
   const editorialReuse = typeof cost.editorial_reuse_shots === "number" ? cost.editorial_reuse_shots : 0;
   const verticalSafe = data.shots.filter((shot) => record(shot.generation_params).vertical_safe === true).length;
+  const production = parseVideoProductionPreferences(data.project.creative_brief);
+  const preview = data.productionProfilePreviews.find((item) => item.profile === production.profile);
   return (
     <section className="workspace-section" id="quick-preview-plan">
       <div className="section-head">
         <div><span className="section-label">Representative preview</span><h2>The film is planned. Validate the world before motion scales.</h2></div>
-        <Status>{withinBudget ? "Within hard cap" : "Budget needs attention"}</Status>
+        <Status>{withinBudget ? "Within safety cap" : "Budget needs attention"}</Status>
       </div>
       <p className="section-copy">Ensemblis has already built the detailed storyboard and provider routing underneath. Your next meaningful decision is whether the visual world deserves production.</p>
       <div className="video-cost-plan">
-        <div><small>Estimated production</small><strong>{credits(Number(cost.total_credits ?? data.project.estimated_credits))}</strong></div>
-        <div><small>Conservative reserve</small><strong>{credits(reserve)}</strong></div>
+        <div><small>Estimated production</small><strong>{preview?.expectedUsd !== null && preview?.expectedUsd !== undefined ? `$${preview.expectedUsd.toFixed(2)}` : credits(Number(cost.total_credits ?? data.project.estimated_credits))}</strong></div>
+        <div><small>Conservative reserve</small><strong>{preview?.reserveUsd !== null && preview?.reserveUsd !== undefined ? `$${preview.reserveUsd.toFixed(2)}` : credits(reserve)}</strong></div>
         <div><small>Unique source sequences</small><strong>{uniqueSources}</strong></div>
         <div><small>Editorial reuse</small><strong>{editorialReuse}</strong></div>
-        <div className="total"><small>Social-safe compositions</small><strong>{verticalSafe}/{data.shots.length}</strong><span>Hard cap: {credits(data.project.hard_budget_credits)}</span></div>
+        <div className="total"><small>Social-safe compositions</small><strong>{verticalSafe}/{data.shots.length}</strong><span>Provider safety cap: {credits(data.project.hard_budget_credits)}</span></div>
       </div>
+      {preview?.modelMix.length ? (
+        <div className="video-quick-routing-summary">
+          {preview.modelMix.map((item) => (
+            <span key={`${item.provider}:${item.model}`}>
+              <strong>{item.modelLabel}</strong>
+              <small>{item.providerLabel} · {item.share}% · {item.expectedUsd !== null ? `$${item.expectedUsd.toFixed(2)}` : credits(item.expectedCredits)}</small>
+            </span>
+          ))}
+        </div>
+      ) : null}
       <form action={approveVideoProductionPlan} className="video-section-action">
         <input type="hidden" name="project_id" value={data.project.id} />
         <SubmitButton pendingLabel="Preparing representative preview..." disabled={!withinBudget}>Prepare representative visual preview</SubmitButton>
         {withinBudget
           ? <small>This approval spends 0 credits. The next screen shows the exact preview-generation spend before anything is submitted.</small>
-          : <small>The conservative reserve is above the remaining hard cap. Open Director Pro to reduce scope or change the budget.</small>}
+          : <small>The conservative reserve is above the remaining safety cap. Reduce scope, quality or change the ceiling before proceeding.</small>}
       </form>
     </section>
   );
@@ -154,6 +197,7 @@ function CurrentQuickStage({ data }: { data: VideoWorkspaceData }) {
 export function QuickVideoProjectWorkspace({ data }: { data: VideoWorkspaceData }) {
   const phase = phaseForStatus(data.project.status);
   const brief = parseVideoCreativeBrief(data.project.creative_brief);
+  const production = parseVideoProductionPreferences(data.project.creative_brief);
   return (
     <div className="video-project-workspace">
       <ProjectHeader project={data.project} release={data.release} track={data.track} />
@@ -174,6 +218,16 @@ export function QuickVideoProjectWorkspace({ data }: { data: VideoWorkspaceData 
         </div>
       </section>
 
+      {data.project.status !== "archived" ? (
+        <ProductionProfileControl
+          projectId={data.project.id}
+          initialProfile={production.profile}
+          initialMaxBudgetUsd={production.maxBudgetUsd}
+          previews={data.productionProfilePreviews}
+          profileLocked={PROFILE_LOCKED_STATUSES.has(data.project.status)}
+        />
+      ) : null}
+
       {phase === "attention" ? null : <RecoveryPanel data={data} />}
 
       <div className="video-production-layout">
@@ -187,9 +241,9 @@ export function QuickVideoProjectWorkspace({ data }: { data: VideoWorkspaceData 
             {brief.note ? <p><strong>Protect:</strong> {brief.note}</p> : null}
             <dl>
               <div><dt>Track</dt><dd>{data.track.title}</dd></div>
-              <div><dt>Spent</dt><dd>{credits(data.project.spent_credits)}</dd></div>
-              <div><dt>Reserved</dt><dd>{credits(data.project.reserved_credits)}</dd></div>
-              <div><dt>Available</dt><dd>{credits(availableBudget(data.project))}</dd></div>
+              <div><dt>Spent</dt><dd>{moneyFromCredits(data, data.project.spent_credits) ?? credits(data.project.spent_credits)}</dd></div>
+              <div><dt>Reserved</dt><dd>{moneyFromCredits(data, data.project.reserved_credits) ?? credits(data.project.reserved_credits)}</dd></div>
+              <div><dt>Available</dt><dd>{moneyFromCredits(data, availableBudget(data.project)) ?? credits(availableBudget(data.project))}</dd></div>
             </dl>
           </section>
         </aside>
