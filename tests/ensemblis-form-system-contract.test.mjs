@@ -40,6 +40,8 @@ test("behavior-heavy form controls use Base UI without replacing native text inp
   const controls = await source("components/studio/form-controls.tsx");
   const tooltip = await source("components/studio/tooltip.tsx");
   const ui = await source("components/studio/ui.tsx");
+  const onboardingForms = await source("components/studio/onboarding-forms.tsx");
+  const onboardingPage = await source("app/studio/onboarding/page.tsx");
   const css = await source("app/studio/design-system/controls.css");
   const index = await source("app/studio/design-system/index.css");
   const release = await source("components/studio/release-form.tsx");
@@ -78,6 +80,12 @@ test("behavior-heavy form controls use Base UI without replacing native text inp
   assert.ok(artistSettings.includes("<SwitchField"));
   assert.ok(autonomySettings.includes("<SwitchField"));
   assert.ok(aiSettings.includes("<SwitchField"));
+  assert.ok(onboardingForms.includes("<SelectField"));
+  assert.ok(onboardingForms.includes("<SwitchField"));
+  assert.ok(onboardingForms.includes("<Field"), "onboarding keeps native text/number inputs inside the canonical field shell");
+  assert.ok(onboardingPage.includes("<OnboardingIdentityForm"));
+  assert.ok(onboardingPage.includes("<OnboardingOperatingForm"));
+  assert.equal(onboardingPage.includes("<select name=\"project_type\""), false, "first-run onboarding must not regress to bespoke selects");
   assert.ok(release.includes("<input"), "native text/date inputs remain the low-JS default");
 });
 
