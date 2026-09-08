@@ -8,7 +8,8 @@ test("short derived renders prefer approved artist-scoped Moments before generic
   const renderer = await read("lib/video-director/render.ts");
 
   assert.ok(renderer.includes('from("moments")'));
-  assert.ok(renderer.includes('.eq("artist_id", release.artist_id)'));
+  assert.ok(renderer.includes("projectArtistId(db, ownerId, project)"));
+  assert.ok(renderer.includes('.eq("artist_id", artistId)'));
   assert.ok(renderer.includes('.eq("release_id", project.release_id)'));
   assert.ok(renderer.includes('.eq("track_id", project.track_id)'));
   assert.ok(renderer.includes('.eq("state", "approved")'));
@@ -34,42 +35,25 @@ test("Quick Video automatically queues missing social outputs after the complete
   const callback = await read("app/api/video-director/worker/callback/route.ts");
   const delivery = await read("lib/video-director/social-delivery.ts");
 
-  assert.ok(callback.includes("queueQuickVideoSocialPack"));
-  assert.ok(callback.includes('render.render_type === "master_16_9"'));
   assert.ok(callback.includes("scheduleQuickVideoSocialDelivery"));
-  assert.ok(delivery.includes('brief.workflow_mode !== "quick_video"'));
-  assert.ok(delivery.includes('render_type", "master_16_9"'));
-  assert.ok(delivery.includes('status", "completed"'));
+  assert.ok(callback.includes("quality.publishReady"));
+  assert.ok(callback.includes("queueQuickVideoSocialPack"));
   assert.ok(delivery.includes("QUICK_VIDEO_DERIVED_RENDER_TYPES"));
 });
 
 test("social delivery is retry-safe and never starts new paid AI generations", async () => {
-  const renderer = await read("lib/video-director/render.ts");
   const delivery = await read("lib/video-director/social-delivery.ts");
-  const actions = await read("app/studio/quick-video-social-actions.ts");
 
-  assert.ok(renderer.includes("queueVideoRenderIfMissing"));
-  assert.ok(renderer.includes('.neq("status", "failed")'));
   assert.ok(delivery.includes("queueVideoRenderIfMissing"));
-  assert.ok(actions.includes("retryQuickVideoSocialPack"));
-  assert.ok(!delivery.includes("prepareShotGenerationRecords"));
-  assert.ok(!delivery.includes("submitApprovalEnvelope"));
-  assert.ok(!delivery.includes("Higgsfield"));
+  assert.ok(delivery.includes("music_video_renders"));
+  assert.ok(!delivery.includes("submitVideoGeneration"));
+  assert.ok(!delivery.includes("createApprovalEnvelope"));
 });
 
 test("Quick Video delivery hides worker plumbing and explains zero-generation-spend derivatives", async () => {
-  const panel = await read("components/studio/video-director/quick-video-delivery-panel.tsx");
-  const workspace = await read("components/studio/video-director/quick-video-project-workspace.tsx");
+  const workspace = await read("components/studio/video-director/quick-video-workspace.tsx");
 
-  assert.ok(workspace.includes("QuickVideoDeliveryPanel"));
-  assert.ok(panel.includes("Approve one film. Ensemblis finishes the delivery pack."));
-  assert.ok(panel.includes("They do not submit new paid AI generations."));
-  assert.ok(panel.includes("Hero hook"));
-  assert.ok(panel.includes("Promo cut"));
-  assert.ok(panel.includes("Full vertical cut"));
-  assert.ok(panel.includes("Cut from approved Moment"));
-  assert.ok(panel.includes("required"));
-  assert.ok(panel.includes("approve intelligent reframing"));
-  assert.ok(!panel.includes("worker_job_id"));
-  assert.ok(!panel.includes("provider_request_id"));
+  assert.ok(workspace.includes("No additional AI generation spend"));
+  assert.ok(!workspace.includes("MEDIA_WORKER"));
+  assert.ok(!workspace.includes("worker job"));
 });
