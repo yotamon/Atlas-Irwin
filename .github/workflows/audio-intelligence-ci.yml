@@ -6,6 +6,7 @@ on:
     paths:
       - "services/media-worker/app/music_intelligence*.py"
       - "services/media-worker/app/strongest_moments.py"
+      - "services/media-worker/app/moment_rhythm.py"
       - "services/media-worker/app/mastering_inspector.py"
       - "services/media-worker/app/mastering_processor.py"
       - "services/media-worker/app/stem_intelligence*.py"
@@ -24,6 +25,7 @@ on:
       - "supabase/migrations/*audio*intelligence*.sql"
       - "supabase/migrations/*automix*.sql"
       - "tests/music-intelligence.test.mjs"
+      - "tests/strongest-moments-context.test.mjs"
       - ".github/workflows/audio-intelligence-ci.yml"
   workflow_dispatch:
 
@@ -70,6 +72,7 @@ jobs:
           services/media-worker/app/music_intelligence_v4.py
           services/media-worker/app/music_intelligence_v4_runtime.py
           services/media-worker/app/strongest_moments.py
+          services/media-worker/app/moment_rhythm.py
           services/media-worker/app/mastering_inspector.py
           services/media-worker/app/mastering_processor.py
           services/media-worker/app/audio_intelligence_providers.py
