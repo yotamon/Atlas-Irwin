@@ -10,6 +10,8 @@ import { resolveProjectAudioUrl } from "@/lib/video-director/context";
 import { higgsfieldReadiness } from "@/lib/video-providers/higgsfield/client";
 import { VideoProjectWorkspace } from "@/components/studio/video-director/project-workspace";
 import type { Json, MediaAsset } from "@/types/database";
+import type { LyricsDatabase } from "@/types/lyrics-database";
+import type { StemDatabase } from "@/types/stem-database";
 import type { VideoDatabase } from "@/types/video-database";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -41,6 +43,8 @@ export default async function VideoProjectPage({
   const artist = await resolveActiveArtistContext(supabase, user);
   const db = createServiceClient();
   const videoDb = db as unknown as SupabaseClient<VideoDatabase>;
+  const lyricsDb = db as unknown as SupabaseClient<LyricsDatabase>;
+  const stemDb = db as unknown as SupabaseClient<StemDatabase>;
   const music = asArtistScopedMusicClient(db);
 
   const { data: project, error: projectError } = await videoDb.from("music_video_projects")
@@ -86,12 +90,12 @@ export default async function VideoProjectPage({
       .eq("asset_type", "thumbnail")
       .contains("metadata", { project_id: project.id })
       .order("created_at"),
-    db.from("track_lyrics").select("id,version,status")
-      .eq("owner_id", user.id).eq("track_id", project.track_id).maybeSingle(),
-    db.from("track_stems").select("id,category,label,status,duration_ms,analysis")
-      .eq("owner_id", user.id).eq("track_id", project.track_id).order("display_order"),
-    db.from("audio_scenes").select("id,name,scene_type,description,recommended_start_ms,recommended_end_ms,score")
-      .eq("owner_id", user.id).eq("track_id", project.track_id).eq("status", "ready").order("score", { ascending: false }),
+    lyricsDb.from("track_lyrics").select("id,version,status")
+      .eq("owner_id", user.id).eq("artist_id", artist.artistId).eq("track_id", project.track_id).maybeSingle(),
+    stemDb.from("track_stems").select("id,category,label,status,duration_ms,analysis")
+      .eq("owner_id", user.id).eq("artist_id", artist.artistId).eq("track_id", project.track_id).order("display_order"),
+    stemDb.from("audio_scenes").select("id,name,scene_type,description,recommended_start_ms,recommended_end_ms,score")
+      .eq("owner_id", user.id).eq("artist_id", artist.artistId).eq("track_id", project.track_id).eq("status", "ready").order("score", { ascending: false }),
   ]);
 
   const firstError = [
@@ -117,8 +121,9 @@ export default async function VideoProjectPage({
   if (!release || !track || track.release_id !== release.id) notFound();
 
   const lyricLinesResult = lyricsResult.data && lyricsResult.data.status !== "instrumental"
-    ? await db.from("track_lyric_lines").select("id,section_id,text,allow_media,start_ms,end_ms")
+    ? await lyricsDb.from("track_lyric_lines").select("id,section_id,text,allow_media,start_ms,end_ms")
       .eq("owner_id", user.id)
+      .eq("artist_id", artist.artistId)
       .eq("lyrics_id", lyricsResult.data.id)
       .eq("lyrics_version", lyricsResult.data.version)
       .order("display_order")
