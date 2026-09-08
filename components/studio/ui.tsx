@@ -1,6 +1,7 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactElement, ReactNode } from "react";
 import Link from "next/link";
 import { SubmitButton } from "./submit-button";
+import { EnsemblisTooltip } from "./tooltip";
 
 type ButtonVariant = "default" | "primary" | "danger";
 export type StatusTone = "neutral" | "accent" | "success" | "attention" | "danger";
@@ -35,20 +36,21 @@ export function IconButton({
   ...props
 }: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "aria-label" | "title"> & { label: string; children: ReactNode }) {
   return (
-    <Button
-      {...props}
-      aria-label={label}
-      data-icon-button
-      data-tooltip={label}
-      className={className}
-    >
-      {children}
-    </Button>
+    <EnsemblisTooltip label={label}>
+      <Button
+        {...props}
+        aria-label={label}
+        data-icon-button
+        className={className}
+      >
+        {children}
+      </Button>
+    </EnsemblisTooltip>
   );
 }
 
-export function Tooltip({ label, children }: { label: string; children: ReactNode }) {
-  return <span className="ensemblis-tooltip-anchor" data-tooltip={label}>{children}</span>;
+export function Tooltip({ label, children }: { label: string; children: ReactElement }) {
+  return <EnsemblisTooltip label={label}>{children}</EnsemblisTooltip>;
 }
 
 export function PageHeader({
@@ -159,6 +161,20 @@ export function Field({
       {error ? <small className="field-error" role="alert">{error}</small> : null}
     </label>
   );
+}
+
+export function FormSection({
+  children,
+  className = "",
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return <section className={`ensemblis-form-section${className ? ` ${className}` : ""}`}>{children}</section>;
+}
+
+export function FormActions({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <div className={`form-actions${className ? ` ${className}` : ""}`}>{children}</div>;
 }
 
 export function Progress({ value, label }: { value: number; label: string }) {
