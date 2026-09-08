@@ -1,5 +1,6 @@
 "use client";
 
+import { Dialog as BaseDialog } from "@base-ui/react/dialog";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
@@ -28,7 +29,6 @@ export function CommandPalette({ artistId }: { artistId: string }) {
   const [retryKey, setRetryKey] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const dialogRef = useRef<HTMLElement | null>(null);
   const resultsRef = useRef<HTMLDivElement | null>(null);
   const commands = useMemo<Command[]>(() => [
     { label: "Today", group: "Go to", keywords: "home next action needs you working", href: ensemblisArtistHref("/studio", artistId) },
@@ -58,7 +58,6 @@ export function CommandPalette({ artistId }: { artistId: string }) {
     setObjectResults([]);
     setSearchingObjects(false);
     setSearchError("");
-    requestAnimationFrame(() => triggerRef.current?.focus());
   }, []);
 
   const openPalette = useCallback(() => {
@@ -109,43 +108,17 @@ export function CommandPalette({ artistId }: { artistId: string }) {
     }
   }, [focusResult, resultLinks]);
 
-  const onDialogKeyDown = useCallback((event: ReactKeyboardEvent<HTMLElement>) => {
-    if (event.key !== "Tab") return;
-    const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
-      'input:not([disabled]), button:not([disabled]), a[href]:not([aria-disabled="true"])',
-    ) ?? []).filter((element) => element.tabIndex !== -1);
-    if (!focusable.length) return;
-    const first = focusable[0];
-    const last = focusable.at(-1);
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last?.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first?.focus();
-    }
-  }, []);
-
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         if (open) close();
         else openPalette();
-      } else if (event.key === "Escape" && open) {
-        event.preventDefault();
-        close();
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [close, open, openPalette]);
-
-  useEffect(() => {
-    if (!open) return;
-    const frame = requestAnimationFrame(() => inputRef.current?.focus());
-    return () => cancelAnimationFrame(frame);
-  }, [open]);
 
   useEffect(() => {
     if (!open || normalized.length < 2) return;
@@ -178,11 +151,11 @@ export function CommandPalette({ artistId }: { artistId: string }) {
     };
   }, [artistId, normalized, open, query, retryKey]);
 
-  function changeQuery(value: string) {
-    setQuery(value);
+  function changeQuery(nextQuery: string) {
+    setQuery(nextQuery);
     setObjectResults([]);
     setSearchError("");
-    setSearchingObjects(value.trim().length >= 2);
+    setSearchingObjects(nextQuery.trim().length >= 2);
   }
 
   return (
@@ -199,82 +172,87 @@ export function CommandPalette({ artistId }: { artistId: string }) {
         <span>Search</span>
         <kbd>⌘/Ctrl K</kbd>
       </button>
-      {open ? (
-        <div className="ensemblis-command-backdrop" onMouseDown={(event) => {
-          if (event.target === event.currentTarget) close();
-        }}>
-          <section
-            ref={dialogRef}
-            className="ensemblis-command-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Search Ensemblis"
-            onKeyDown={onDialogKeyDown}
-          >
-            <div className="ensemblis-command-search">
-              <input
-                ref={inputRef}
-                value={query}
-                onChange={(event) => changeQuery(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "ArrowDown") {
-                    event.preventDefault();
-                    focusResult("first");
-                  } else if (event.key === "End" && (event.metaKey || event.ctrlKey)) {
-                    event.preventDefault();
-                    focusResult("last");
-                  }
-                }}
-                placeholder="Search tracks, releases, campaigns, content or actions…"
-                aria-label="Search commands and artist objects"
-                aria-controls="ensemblis-command-results"
-              />
-              <button type="button" onClick={close} aria-label="Close search">Esc</button>
-            </div>
-            <div className="ensemblis-command-results" id="ensemblis-command-results" ref={resultsRef}>
-              {searchingObjects ? <div className="ensemblis-command-searching" role="status">Searching…</div> : null}
-              {searchError ? (
-                <div className="ensemblis-command-error" role="alert">
-                  <span>{searchError}</span>
-                  <button type="button" className="text-button" onClick={() => {
-                    setSearchingObjects(true);
-                    setRetryKey((value) => value + 1);
-                  }}>Retry</button>
-                </div>
-              ) : null}
-              {objectResults.length ? (
-                <div className="ensemblis-command-group ensemblis-command-object-results">
-                  <span>Artist results</span>
-                  {objectResults.map((result) => (
-                    <Link data-command-result href={result.href} key={result.id} onClick={close} onKeyDown={onResultKeyDown}>
-                      <strong>{result.label}</strong>
-                      <small>{result.type} · {result.detail}</small>
-                      <b aria-hidden>↵</b>
-                    </Link>
-                  ))}
-                </div>
-              ) : null}
-              {(["Go to", "Create", "Tools"] as const).map((group) => {
-                const groupCommands = filtered.filter((command) => command.group === group);
-                if (!groupCommands.length) return null;
-                return (
-                  <div className="ensemblis-command-group" key={group}>
-                    <span>{group}</span>
-                    {groupCommands.map((command) => (
-                      <Link data-command-result href={command.href} key={`${group}-${command.label}`} onClick={close} onKeyDown={onResultKeyDown}>
-                        <strong>{command.label}</strong>
-                        <small>{command.keywords.split(" ").slice(0, 3).join(" · ")}</small>
+
+      <BaseDialog.Root
+        open={open}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) close();
+        }}
+      >
+        <BaseDialog.Portal>
+          <BaseDialog.Backdrop className="ensemblis-command-backdrop" />
+          <BaseDialog.Viewport className="ensemblis-command-viewport">
+            <BaseDialog.Popup
+              className="ensemblis-command-dialog"
+              initialFocus={inputRef}
+              finalFocus={triggerRef}
+            >
+              <BaseDialog.Title className="sr-only">Search Ensemblis</BaseDialog.Title>
+              <div className="ensemblis-command-search">
+                <input
+                  ref={inputRef}
+                  value={query}
+                  onChange={(event) => changeQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "ArrowDown") {
+                      event.preventDefault();
+                      focusResult("first");
+                    } else if (event.key === "End" && (event.metaKey || event.ctrlKey)) {
+                      event.preventDefault();
+                      focusResult("last");
+                    }
+                  }}
+                  placeholder="Search tracks, releases, campaigns, content or actions…"
+                  aria-label="Search commands and artist objects"
+                  aria-controls="ensemblis-command-results"
+                />
+                <BaseDialog.Close type="button" aria-label="Close search">Esc</BaseDialog.Close>
+              </div>
+              <div className="ensemblis-command-results" id="ensemblis-command-results" ref={resultsRef}>
+                {searchingObjects ? <div className="ensemblis-command-searching" role="status">Searching…</div> : null}
+                {searchError ? (
+                  <div className="ensemblis-command-error" role="alert">
+                    <span>{searchError}</span>
+                    <button type="button" className="text-button" onClick={() => {
+                      setSearchingObjects(true);
+                      setRetryKey((value) => value + 1);
+                    }}>Retry</button>
+                  </div>
+                ) : null}
+                {objectResults.length ? (
+                  <div className="ensemblis-command-group ensemblis-command-object-results">
+                    <span>Artist results</span>
+                    {objectResults.map((result) => (
+                      <Link data-command-result href={result.href} key={result.id} onClick={close} onKeyDown={onResultKeyDown}>
+                        <strong>{result.label}</strong>
+                        <small>{result.type} · {result.detail}</small>
                         <b aria-hidden>↵</b>
                       </Link>
                     ))}
                   </div>
-                );
-              })}
-              {!searchingObjects && !searchError && !objectResults.length && !filtered.length ? <div className="ensemblis-command-empty">No matching workspace, action or artist object.</div> : null}
-            </div>
-          </section>
-        </div>
-      ) : null}
+                ) : null}
+                {(["Go to", "Create", "Tools"] as const).map((group) => {
+                  const groupCommands = filtered.filter((command) => command.group === group);
+                  if (!groupCommands.length) return null;
+                  return (
+                    <div className="ensemblis-command-group" key={group}>
+                      <span>{group}</span>
+                      {groupCommands.map((command) => (
+                        <Link data-command-result href={command.href} key={`${group}-${command.label}`} onClick={close} onKeyDown={onResultKeyDown}>
+                          <strong>{command.label}</strong>
+                          <small>{command.keywords.split(" ").slice(0, 3).join(" · ")}</small>
+                          <b aria-hidden>↵</b>
+                        </Link>
+                      ))}
+                    </div>
+                  );
+                })}
+                {!searchingObjects && !searchError && !objectResults.length && !filtered.length ? <div className="ensemblis-command-empty">No matching workspace, action or artist object.</div> : null}
+              </div>
+            </BaseDialog.Popup>
+          </BaseDialog.Viewport>
+        </BaseDialog.Portal>
+      </BaseDialog.Root>
     </>
   );
 }
