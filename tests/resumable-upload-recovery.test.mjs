@@ -10,6 +10,7 @@ const compiled = ts.transpileModule(resumableSource, {
 }).outputText;
 const { uploadResumableMedia } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`);
 const uploaderSource = await readFile("components/studio/media-uploader.tsx", "utf8");
+const diagnosticsSource = await readFile("app/studio/media-upload-diagnostics.ts", "utf8");
 
 const target = {
   bucketName: "media",
@@ -169,7 +170,19 @@ test("automatic chunk retry is surfaced and continues from the server-confirmed 
   assert.equal(storage.has(resumeKey(file)), false);
 });
 
-test("upload UI treats recoverable interruptions as paused, not failed", () => {
+test("large uploads automatically switch to a fresh signed standard upload after TUS exhausts retries", () => {
+  assert.match(uploaderSource, /fallbackAttempted = true/);
+  assert.match(uploaderSource, /Resumable route interrupted\. Finishing with secure direct upload…/);
+  assert.match(uploaderSource, /uploadTarget = await prepareTarget\(\)/);
+  assert.match(uploaderSource, /await uploadSignedStandard\(uploadTarget\)/);
+  assert.match(uploaderSource, /transport: "tus"/);
+  assert.match(uploaderSource, /transport: "signed-standard"/);
+  assert.match(uploaderSource, /const canResume = resumable && !transportCompleted && !fallbackAttempted && !authorizationExpired/);
+  assert.match(diagnosticsSource, /\[media-upload-transport\]/);
+  assert.match(diagnosticsSource, /requireStudioAdmin\(\)/);
+});
+
+test("upload UI keeps recovery states human-readable", () => {
   assert.match(uploaderSource, /state: "ready" \| "uploading" \| "paused" \| "done" \| "error"/);
   assert.match(uploaderSource, /Upload paused\. Resume to continue from where it stopped\./);
   assert.match(uploaderSource, /Connection interrupted\. Retrying…/);
