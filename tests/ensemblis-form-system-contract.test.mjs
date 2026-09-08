@@ -36,6 +36,51 @@ test("Base UI owns modal focus, dismissal and accessibility behavior", async () 
   assert.equal(overlays.includes(".studio-root .ensemblis-dialog-backdrop"), false, "portal chrome must not depend on being rendered inside .studio-root");
 });
 
+test("behavior-heavy form controls use Base UI without replacing native text inputs", async () => {
+  const controls = await source("components/studio/form-controls.tsx");
+  const tooltip = await source("components/studio/tooltip.tsx");
+  const ui = await source("components/studio/ui.tsx");
+  const css = await source("app/studio/design-system/controls.css");
+  const index = await source("app/studio/design-system/index.css");
+  const release = await source("components/studio/release-form.tsx");
+  const video = await source("components/studio/video-director/create-project-form.tsx");
+  const artistSettings = await source("app/studio/(protected)/settings/artist/page.tsx");
+  const autonomySettings = await source("app/studio/(protected)/settings/autonomy/page.tsx");
+  const aiSettings = await source("app/studio/(protected)/settings/ai/page.tsx");
+
+  assert.ok(controls.includes('from "@base-ui/react/select"'));
+  assert.ok(controls.includes('from "@base-ui/react/switch"'));
+  assert.ok(controls.includes("<BaseSelect.Root"));
+  assert.ok(controls.includes("<BaseSelect.Label"));
+  assert.ok(controls.includes("<BaseSelect.Portal>"));
+  assert.ok(controls.includes("<BaseSwitch.Root"));
+  assert.ok(controls.includes("name={name}"), "Base UI controls must participate in native form submission");
+
+  assert.ok(tooltip.includes('from "@base-ui/react/tooltip"'));
+  assert.ok(tooltip.includes("<BaseTooltip.Trigger"));
+  assert.ok(tooltip.includes("<BaseTooltip.Portal>"));
+  assert.ok(ui.includes("<EnsemblisTooltip label={label}>"));
+  assert.equal(ui.includes("data-tooltip={label}"), false, "shared tooltips must not regress to CSS-only hover hints");
+
+  assert.ok(index.includes('"./controls.css" layer(ensemblis-patterns)'));
+  for (const selector of [
+    ".ensemblis-select-trigger",
+    ".ensemblis-select-popup",
+    ".ensemblis-switch-field",
+    ".ensemblis-switch-thumb",
+    ".ensemblis-tooltip-popup",
+  ]) assert.ok(css.includes(selector), `${selector} must have canonical Ensemblis chrome`);
+  assert.ok(css.includes("prefers-reduced-motion: reduce"));
+
+  assert.ok(release.includes("<SelectField"));
+  assert.ok(video.includes("<SelectField"));
+  assert.ok(artistSettings.includes("<SelectField"));
+  assert.ok(artistSettings.includes("<SwitchField"));
+  assert.ok(autonomySettings.includes("<SwitchField"));
+  assert.ok(aiSettings.includes("<SwitchField"));
+  assert.ok(release.includes("<input"), "native text/date inputs remain the low-JS default");
+});
+
 test("release forms return structured validation instead of throwing known field errors", async () => {
   const form = await source("components/studio/release-form.tsx");
   const adapter = await source("app/studio/release-form-actions.ts");
