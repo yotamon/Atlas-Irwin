@@ -8,7 +8,6 @@ const legacySources = [
   "app/studio/studio.css",
   "app/studio/studio-v2.css",
   "app/studio/studio-v2-workflows.css",
-  "app/studio/studio-v2-safety.css",
   "app/studio/release-workspace-v2.css",
   "app/studio/release-growth.css",
   "app/studio/growth-os.css",
@@ -22,8 +21,6 @@ const legacySources = [
   "app/studio/sites-domains.css",
   "app/studio/ensemblis-shell.css",
   "app/studio/ensemblis-screens.css",
-  "app/studio/ensemblis-root-isolation.css",
-  "app/studio/ensemblis-states.css",
   "app/studio/ux-polish.css",
   "app/studio/music-polish.css",
   "app/studio/release-polish.css",
@@ -33,13 +30,10 @@ const legacySources = [
   "app/studio/audience-polish.css",
   "app/studio/library-polish.css",
   "app/studio/inbox-polish.css",
-  "app/studio/shared-interactions.css",
-  "app/studio/loading-polish.css",
   "app/studio/object-workspace-polish.css",
   "app/studio/production-polish.css",
   "app/studio/responsive-polish.css",
   "app/studio/onboarding.css",
-  "app/studio/ux-consolidation.css",
 ];
 
 const palette = [
