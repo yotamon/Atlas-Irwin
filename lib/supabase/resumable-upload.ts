@@ -9,6 +9,11 @@ export type ResumableUploadTarget = {
   token: string;
 };
 
+export type ResumableUploadRetry = {
+  attempt: number;
+  delayMs: number;
+};
+
 export class ResumableUploadAuthorizationError extends Error {
   constructor(message = "The resumable upload authorization expired.") {
     super(message);
@@ -141,19 +146,16 @@ export async function uploadResumableMedia({
   file,
   target,
   onProgress,
+  onRetry,
 }: {
   file: File;
   target: ResumableUploadTarget;
   onProgress?: (progress: number) => void;
+  onRetry?: (retry: ResumableUploadRetry) => void;
 }) {
   const key = resumeKey(file, target);
   const resumedUrl = readResumeUrl(key);
-  const resumedOffset: number | null = resumedUrl
-    ? await currentOffset(resumedUrl, target).catch((error) => {
-        if (error instanceof ResumableUploadAuthorizationError) throw error;
-        return null;
-      })
-    : null;
+  const resumedOffset = resumedUrl ? await currentOffset(resumedUrl, target) : null;
 
   let uploadUrl: string;
   let offset: number;
@@ -176,7 +178,10 @@ export async function uploadResumableMedia({
     let chunkHandled = false;
     let lastError: unknown = null;
 
-    for (const delay of RETRY_DELAYS) {
+    for (const [attemptIndex, delay] of RETRY_DELAYS.entries()) {
+      if (attemptIndex > 0) {
+        onRetry?.({ attempt: attemptIndex, delayMs: delay });
+      }
       if (delay) await sleep(delay);
       try {
         offset = await patchChunk(uploadUrl, target, chunk, chunkOffset);
@@ -186,7 +191,17 @@ export async function uploadResumableMedia({
       } catch (error) {
         if (error instanceof ResumableUploadAuthorizationError) throw error;
         lastError = error;
-        const serverOffset = await currentOffset(uploadUrl, target).catch(() => null);
+
+        let serverOffset: number | null;
+        try {
+          serverOffset = await currentOffset(uploadUrl, target);
+        } catch (resumeError) {
+          if (resumeError instanceof ResumableUploadAuthorizationError) throw resumeError;
+          lastError = resumeError;
+          offset = chunkOffset;
+          continue;
+        }
+
         if (serverOffset === null) {
           forgetResumeUrl(key);
           uploadUrl = await createUpload(file, target);
