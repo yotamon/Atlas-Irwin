@@ -2,6 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { analysisConfidenceLabel, hookRecommendationLabel } from "@/lib/studio/evidence-labels";
+import {
+  selectStrongestMoments,
+  strongestMomentDurationLabel,
+  strongestMomentIntentLabel,
+  strongestMomentTitle,
+} from "@/lib/music-intelligence/strongest-moments";
 import { parseMusicMap } from "@/lib/video-director/creative-director";
 import type { Json } from "@/types/database";
 import styles from "./music-intelligence-preview.module.css";
@@ -65,10 +71,7 @@ export function MusicIntelligencePreview({
   const [waveformState, setWaveformState] = useState<WaveformState>({ audioUrl: "", peaks: null, error: false });
   const waveformPeaks = waveformState.audioUrl === audioUrl ? waveformState.peaks : null;
   const waveformError = waveformState.audioUrl === audioUrl && waveformState.error;
-  const hooks = useMemo(
-    () => [...(map?.hook_candidates ?? [])].sort((a, b) => b.score - a.score).slice(0, 5),
-    [map],
-  );
+  const strongestMoments = useMemo(() => selectStrongestMoments(map), [map]);
 
   useEffect(() => {
     if (!audioUrl) return;
@@ -250,7 +253,7 @@ export function MusicIntelligencePreview({
           <span>Musical timeline</span>
           <small>{time(durationMs)}</small>
         </div>
-        <div className={styles.timeline} aria-label="Track energy, structure and ranked hook windows">
+        <div className={styles.timeline} aria-label="Track energy, structure and strongest musical moments">
           <svg viewBox="0 0 1000 112" preserveAspectRatio="none" aria-hidden="true">
             <line className={styles.timelineBaseline} x1="0" y1="104" x2="1000" y2="104" />
             {energyPoints ? <polyline className={styles.energyLine} points={energyPoints} fill="none" vectorEffect="non-scaling-stroke" /> : null}
@@ -267,10 +270,21 @@ export function MusicIntelligencePreview({
             })}
           </div>
           <div className={styles.hookOverlay} aria-hidden="true">
-            {hooks.slice(0, 3).map((hook, index) => {
-              const left = clamp(hook.start_ms / durationMs) * 100;
-              const width = Math.max(0.7, clamp((hook.end_ms - hook.start_ms) / durationMs) * 100);
-              return <span key={hook.id} style={{ left: `${left}%`, width: `${width}%` }} title={`Hook ${index + 1}: ${hook.label}`} />;
+            {strongestMoments.slice(0, 3).map((moment, index) => {
+              const left = clamp(moment.start_ms / durationMs) * 100;
+              const width = Math.max(0.7, clamp((moment.end_ms - moment.start_ms) / durationMs) * 100);
+              const momentDuration = Math.max(1, moment.end_ms - moment.start_ms);
+              const peakLeft = clamp((moment.peak_window.start_ms - moment.start_ms) / momentDuration) * 100;
+              const peakWidth = Math.max(3, clamp((moment.peak_window.end_ms - moment.peak_window.start_ms) / momentDuration) * 100);
+              return (
+                <span
+                  key={moment.id}
+                  style={{ left: `${left}%`, width: `${width}%` }}
+                  title={`Moment ${index + 1}: ${strongestMomentTitle(moment)} · scoring peak ${time(moment.peak_window.start_ms)}–${time(moment.peak_window.end_ms)}`}
+                >
+                  <i style={{ left: `${peakLeft}%`, width: `${peakWidth}%` }} />
+                </span>
+              );
             })}
           </div>
           {audioUrl ? <span className={styles.playhead} aria-hidden="true" style={{ left: `${clamp(currentMs / durationMs) * 100}%` }} /> : null}
@@ -293,32 +307,31 @@ export function MusicIntelligencePreview({
         ))}
       </div>
 
-      {hooks.length ? (
+      {strongestMoments.length ? (
         <div className={styles.hooks}>
-          <div className={styles.hookHeading}><span>Strongest moments</span><small>play ranked windows</small></div>
-          {hooks.map((hook, index) => {
-            const topIntent = Object.entries(hook.intent_scores ?? {})
-              .filter((entry): entry is [string, number] => typeof entry[1] === "number")
-              .sort((a, b) => b[1] - a[1])[0];
-            return (
-              <button
-                type="button"
-                key={hook.id}
-                className={activeId === hook.id ? styles.activeHook : ""}
-                onClick={() => toggle(hook.id, hook.start_ms, hook.end_ms)}
-                disabled={!audioUrl}
-              >
-                <span>{activeId === hook.id && playing ? "❚❚" : "▶"}</span>
-                <div><strong>#{index + 1} {hook.label}</strong><small>{time(hook.start_ms)}–{time(hook.end_ms)} · {topIntent ? topIntent[0].replaceAll("_", " ") : hook.kind.replaceAll("_", " ")}</small></div>
-                <b>{hookRecommendationLabel(hook.score, index)}</b>
-              </button>
-            );
-          })}
+          <div className={styles.hookHeading}><span>Strongest moments</span><small>play musical context</small></div>
+          {strongestMoments.map((moment, index) => (
+            <button
+              type="button"
+              key={moment.id}
+              className={activeId === moment.id ? styles.activeHook : ""}
+              onClick={() => toggle(moment.id, moment.start_ms, moment.end_ms)}
+              disabled={!audioUrl}
+              aria-label={`Play ${strongestMomentTitle(moment)}, ${time(moment.start_ms)} to ${time(moment.end_ms)}`}
+            >
+              <span>{activeId === moment.id && playing ? "❚❚" : "▶"}</span>
+              <div>
+                <strong>#{index + 1} {strongestMomentTitle(moment)}</strong>
+                <small>{time(moment.start_ms)}–{time(moment.end_ms)} · {strongestMomentDurationLabel(moment)} · {strongestMomentIntentLabel(moment)}</small>
+              </div>
+              <b>{hookRecommendationLabel(moment.score, index)}</b>
+            </button>
+          ))}
         </div>
       ) : (
         <p className={styles.note}>{map.source === "worker" && map.version < 3 ? "Legacy analysis. Re-analyze this track to get v3 production moments and ranked alternatives." : "No strong moment candidates are available for this map."}</p>
       )}
-      {!audioUrl ? <p className={styles.note}>Attach an audio master to enable section and hook playback.</p> : null}
+      {!audioUrl ? <p className={styles.note}>Attach an audio master to enable section and moment playback.</p> : null}
     </div>
   );
 }

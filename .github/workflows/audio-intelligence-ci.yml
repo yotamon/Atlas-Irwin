@@ -5,6 +5,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - "services/media-worker/app/music_intelligence*.py"
+      - "services/media-worker/app/strongest_moments.py"
       - "services/media-worker/app/mastering_inspector.py"
       - "services/media-worker/app/mastering_processor.py"
       - "services/media-worker/app/stem_intelligence*.py"
@@ -68,6 +69,7 @@ jobs:
           services/media-worker/app/music_intelligence.py
           services/media-worker/app/music_intelligence_v4.py
           services/media-worker/app/music_intelligence_v4_runtime.py
+          services/media-worker/app/strongest_moments.py
           services/media-worker/app/mastering_inspector.py
           services/media-worker/app/mastering_processor.py
           services/media-worker/app/audio_intelligence_providers.py

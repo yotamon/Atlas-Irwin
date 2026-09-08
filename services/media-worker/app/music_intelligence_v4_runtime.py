@@ -12,6 +12,7 @@ from .audio_intelligence_providers import (
 )
 from .mastering_inspector import enrich_music_map_with_mastering
 from .music_intelligence_v4 import analyze_music as analyze_music_v4_core
+from .strongest_moments import attach_strongest_moments
 
 
 def _nearest_median_ms(reference: list[int], candidate: list[int]) -> float | None:
@@ -149,6 +150,7 @@ def _attach_cross_modal_semantics(result: dict[str, Any], path: Path) -> None:
 def analyze_music(path: Path, source_audio: dict[str, Any] | None = None) -> dict[str, Any]:
     result = analyze_music_v4_core(path, source_audio)
     _compatibility_enrich(result)
+    attach_strongest_moments(result)
     capabilities = provider_capabilities()
     result["provider_capabilities"] = capabilities
     analysis = result.setdefault("analysis", {})
