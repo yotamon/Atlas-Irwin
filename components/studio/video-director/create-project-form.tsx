@@ -9,6 +9,11 @@ import {
   buildQuickVideoConcepts,
   type QuickVideoConceptId,
 } from "@/lib/video-director/quick-video";
+import {
+  VIDEO_PRODUCTION_PROFILE_DEFINITIONS,
+  VIDEO_PRODUCTION_PROFILES,
+  type VideoProductionProfile,
+} from "@/lib/video-director/production-profile";
 import type {
   VideoAspectRatio,
   VideoPeopleMode,
@@ -18,6 +23,10 @@ import type {
 } from "@/lib/video-director/domain";
 import type { Release, Track } from "@/types/database";
 import type { Moment } from "@/types/moments-database";
+
+function profileForIndex(index: number): VideoProductionProfile {
+  return VIDEO_PRODUCTION_PROFILES[index] ?? "balanced";
+}
 
 export function CreateProjectForm({
   release,
@@ -38,6 +47,8 @@ export function CreateProjectForm({
   const [resolution, setResolution] = useState<VideoResolution>("1080p");
   const [storyMode, setStoryMode] = useState<VideoStoryMode>("hybrid");
   const [peopleMode, setPeopleMode] = useState<VideoPeopleMode>("director_choice");
+  const [productionProfile, setProductionProfile] = useState<VideoProductionProfile>("balanced");
+  const [maxBudgetUsd, setMaxBudgetUsd] = useState("");
 
   const selectedTrack = useMemo(
     () => tracks.find((track) => track.id === trackId) ?? initialTrack,
@@ -48,6 +59,8 @@ export function CreateProjectForm({
     [moments, release, selectedTrack],
   );
   const selectedConcept = concepts.find((concept) => concept.id === conceptId) ?? concepts[0] ?? null;
+  const productionIndex = Math.max(0, VIDEO_PRODUCTION_PROFILES.indexOf(productionProfile));
+  const productionDefinition = VIDEO_PRODUCTION_PROFILE_DEFINITIONS[productionIndex] ?? VIDEO_PRODUCTION_PROFILE_DEFINITIONS[2];
 
   function chooseConcept(nextId: QuickVideoConceptId) {
     const next = concepts.find((concept) => concept.id === nextId);
@@ -63,6 +76,7 @@ export function CreateProjectForm({
   return (
     <form action={createMusicVideoProject} className="studio-form video-create-form">
       <input type="hidden" name="release_id" value={release.id} />
+      <input type="hidden" name="production_profile" value={productionProfile} />
 
       <div className="form-grid">
         <Field label="Track">
@@ -81,17 +95,6 @@ export function CreateProjectForm({
               <option value={track.id} key={track.id}>{track.title}</option>
             ))}
           </select>
-        </Field>
-        <Field label="Total generation budget">
-          <input
-            name="hard_budget_credits"
-            type="number"
-            min="0"
-            max="100000"
-            step="0.01"
-            defaultValue={QUICK_VIDEO_DEFAULT_BUDGET_CREDITS}
-            required
-          />
         </Field>
       </div>
 
@@ -125,6 +128,72 @@ export function CreateProjectForm({
         </div>
       </div>
 
+      <section className="video-create-quality" aria-labelledby="create-video-quality-title">
+        <div className="section-head">
+          <div>
+            <span className="section-label">Quick Video · 2 of 3</span>
+            <h3 id="create-video-quality-title">Set production quality</h3>
+          </div>
+          <span>{productionDefinition.label}</span>
+        </div>
+        <p className="section-copy">This controls how aggressively Ensemblis chooses premium models. The exact provider, model and price for every shot appear as soon as the storyboard exists, before any paid generation.</p>
+        <div className="video-quality-slider video-quality-slider--create">
+          <div className="video-quality-slider__labels" role="group" aria-label="Production quality presets">
+            {VIDEO_PRODUCTION_PROFILE_DEFINITIONS.map((item, index) => (
+              <button
+                type="button"
+                key={item.id}
+                className={index === productionIndex ? "active" : ""}
+                aria-pressed={index === productionIndex}
+                onClick={() => setProductionProfile(profileForIndex(index))}
+              >
+                <span>{item.eyebrow}</span>
+                <strong>{item.label}</strong>
+              </button>
+            ))}
+          </div>
+          <input
+            type="range"
+            aria-label="Production quality"
+            aria-valuetext={productionDefinition.label}
+            min={0}
+            max={VIDEO_PRODUCTION_PROFILES.length - 1}
+            step={1}
+            value={productionIndex}
+            onChange={(event) => setProductionProfile(profileForIndex(Number(event.target.value)))}
+          />
+          <div className="video-quality-slider__selection" aria-live="polite">
+            <div><span>{productionDefinition.eyebrow}</span><strong>{productionDefinition.label}</strong></div>
+            <p>{productionDefinition.description}</p>
+          </div>
+        </div>
+        <div className="video-budget-cap video-budget-cap--create">
+          <div>
+            <label htmlFor="create-video-max-budget">Maximum spend <span>optional</span></label>
+            <p>A safety ceiling in USD. It does not choose the creative quality for you.</p>
+          </div>
+          <div className="video-budget-cap__input">
+            <span>$</span>
+            <input
+              id="create-video-max-budget"
+              name="max_budget_usd"
+              type="number"
+              min="1"
+              max="100000"
+              step="1"
+              inputMode="decimal"
+              placeholder="No USD cap"
+              value={maxBudgetUsd}
+              onChange={(event) => setMaxBudgetUsd(event.target.value)}
+            />
+          </div>
+          <div className="video-budget-cap__state" aria-live="polite">
+            <strong>{maxBudgetUsd ? `Never exceed $${Number(maxBudgetUsd || 0).toLocaleString("en-US")}` : "No USD ceiling"}</strong>
+            <span>Every paid batch still requires explicit approval.</span>
+          </div>
+        </div>
+      </section>
+
       <Field label="Anything Ensemblis should protect or avoid?" wide>
         <textarea
           name="creative_note"
@@ -137,7 +206,7 @@ export function CreateProjectForm({
       </Field>
 
       <details className="workspace-section">
-        <summary><strong>Director Pro settings</strong> · format, story mode and technical target</summary>
+        <summary><strong>Director Pro settings</strong> · format, story mode and technical safety</summary>
         <div className="form-grid">
           <Field label="Project title">
             <input
@@ -172,7 +241,7 @@ export function CreateProjectForm({
               <option value="1:1">1:1 square</option>
             </select>
           </Field>
-          <Field label="Target quality">
+          <Field label="Target resolution">
             <select
               name="target_resolution"
               value={resolution}
@@ -205,11 +274,23 @@ export function CreateProjectForm({
               <option value="no_people">No people</option>
             </select>
           </Field>
+          <Field label="Provider credit safety cap">
+            <input
+              name="hard_budget_credits"
+              type="number"
+              min="0"
+              max="100000"
+              step="0.01"
+              defaultValue={QUICK_VIDEO_DEFAULT_BUDGET_CREDITS}
+              required
+            />
+          </Field>
         </div>
+        <p className="video-credit-cap-note">This provider-level cap is a secondary technical guardrail. The optional USD ceiling above is the clear user-facing spend limit.</p>
       </details>
 
       <div className="video-create-actions">
-        <small>Creating the plan is free. Generation still requires explicit budget approval before credits are spent.</small>
+        <small>Planning is free. Ensemblis will show the exact model routing and estimated cost before any generation approval.</small>
         <SubmitButton>Plan Quick Video</SubmitButton>
       </div>
     </form>

@@ -5,6 +5,7 @@ import type { ExtendedMusicVideoProject, ExtendedMusicVideoShot, VideoDatabase }
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { HiggsfieldProvider } from "@/lib/video-providers/higgsfield/client";
 import { routeLookDevelopmentModel, routeVideoShot } from "./model-router";
+import { parseVideoProductionPreferences } from "./production-profile";
 import type { ProductionPlan, VideoConcept, VideoProjectContext } from "./creative-director";
 
 function json(value: unknown): Json { return value as Json; }
@@ -152,6 +153,7 @@ export function alignProductionPlanToMusicMap(
 
 export async function persistProductionPlan(input: { db: SupabaseClient<VideoDatabase>; ownerId: string; context: VideoProjectContext & { project: ExtendedMusicVideoProject }; plan: ProductionPlan }) {
   const provider = new HiggsfieldProvider();
+  const productionPreferences = parseVideoProductionPreferences(input.context.project.creative_brief);
   const alignedPlan = alignProductionPlanToMusicMap(input.plan, input.context);
   const flattened = alignedPlan.scenes.flatMap((scene, sceneIndex) => scene.shots.map((shot, shotIndex) => ({ scene, sceneIndex, shot, shotIndex })));
   const shotRows: Array<{ sceneIndex: number; data: Omit<Partial<ExtendedMusicVideoShot>, "scene_id"> & { display_order: number; start_ms: number; end_ms: number; description: string }; quoteCredits: number; reserveCredits: number }> = [];
@@ -161,12 +163,14 @@ export async function persistProductionPlan(input: { db: SupabaseClient<VideoDat
   for (let index = 0; index < flattened.length; index += 1) {
     const entry = flattened[index];
     const musicContext = shotMusicContext(input.context, entry.shot.start_ms, entry.shot.end_ms);
-    // Every paid source shot receives at least one approved look-development frame before
-    // generation. Route with that future requirement now so planning can never choose a
-    // model that will later reject the canonical image references.
     const provisional = { generation_priority: entry.shot.generation_priority, capability_profile: json(entry.shot.capability_profile), start_asset_id: null, end_asset_id: null, reference_asset_ids: json(["planned-look-reference"]), music_context: json(musicContext) };
     const testIndexes = new Set(alignedPlan.test_shot_indexes);
-    const routing = routeVideoShot({ ...provisional, targetResolution: input.context.project.target_resolution, isTest: testIndexes.has(index) });
+    const routing = routeVideoShot({
+      ...provisional,
+      targetResolution: input.context.project.target_resolution,
+      isTest: testIndexes.has(index),
+      productionProfile: productionPreferences.profile,
+    });
     const seconds = Math.max(0.1, (entry.shot.end_ms - entry.shot.start_ms) / 1000);
     const generationSeconds = durationForGeneration(seconds, routing.model);
     const quote = requiresPaidSource(entry.shot.reuse_strategy) ? await provider.quote({ operation: testIndexes.has(index) ? "test_video" : "shot_video", model: routing.model, prompt: entry.shot.prompt, negativePrompt: entry.shot.negative_prompt, durationSeconds: generationSeconds, aspectRatio: input.context.project.primary_aspect_ratio, resolution: input.context.project.target_resolution, params: routing.params }) : { credits: 0, reserveCredits: 0 };
@@ -174,8 +178,21 @@ export async function persistProductionPlan(input: { db: SupabaseClient<VideoDat
     sourceReserveCredits += quote.reserveCredits;
     shotRows.push({ sceneIndex: entry.sceneIndex, quoteCredits: quote.credits, reserveCredits: quote.reserveCredits, data: {
       owner_id: input.ownerId, project_id: input.context.project.id, display_order: index, start_ms: entry.shot.start_ms, end_ms: entry.shot.end_ms, description: entry.shot.description, prompt: entry.shot.prompt, negative_prompt: entry.shot.negative_prompt,
-      capability_profile: json(entry.shot.capability_profile), selected_provider: "higgsfield", selected_model: routing.model,
-      generation_params: json({ ...routing.params, duration: generationSeconds, routing_reason: routing.reason, camera: entry.shot.camera, transition_in: entry.shot.transition_in, transition_out: entry.shot.transition_out, vertical_safe: entry.shot.vertical_safe, vertical_focus: entry.shot.vertical_focus }),
+      capability_profile: json(entry.shot.capability_profile), selected_provider: routing.provider, selected_model: routing.model,
+      generation_params: json({
+        ...routing.params,
+        duration: generationSeconds,
+        routing_reason: routing.reason,
+        routing_profile: productionPreferences.profile,
+        routing_model_label: routing.modelLabel,
+        routing_provider_label: routing.providerLabel,
+        routing_alternatives: routing.alternatives,
+        camera: entry.shot.camera,
+        transition_in: entry.shot.transition_in,
+        transition_out: entry.shot.transition_out,
+        vertical_safe: entry.shot.vertical_safe,
+        vertical_focus: entry.shot.vertical_focus,
+      }),
       reference_asset_ids: [], reuse_strategy: entry.shot.reuse_strategy, generation_priority: entry.shot.generation_priority, review_note: null, music_context: json(musicContext), prompt_version: 1, status: "ready_for_reference",
     } });
   }
@@ -188,7 +205,19 @@ export async function persistProductionPlan(input: { db: SupabaseClient<VideoDat
     lookCredits += quote.credits;
     lookReserveCredits += quote.reserveCredits;
   }
-  const costEstimate = { source_generation_credits: Number(sourceGenerationCredits.toFixed(2)), source_reserve_credits: Number(sourceReserveCredits.toFixed(2)), look_dev_credits: Number(lookCredits.toFixed(2)), look_dev_reserve_credits: Number(lookReserveCredits.toFixed(2)), total_credits: Number((sourceGenerationCredits + lookCredits).toFixed(2)), total_reserve_credits: Number((sourceReserveCredits + lookReserveCredits).toFixed(2)), unique_source_sequences: shotRows.filter((row) => requiresPaidSource(row.data.reuse_strategy ?? "unique")).length, editorial_reuse_shots: shotRows.filter((row) => !requiresPaidSource(row.data.reuse_strategy ?? "unique")).length, look_dev_frames: alignedPlan.look_dev_prompts.length, quote_note: "Planning estimate. Every paid batch is rechecked against an approval envelope and the project hard cap before submission." };
+  const costEstimate = {
+    production_profile: productionPreferences.profile,
+    source_generation_credits: Number(sourceGenerationCredits.toFixed(2)),
+    source_reserve_credits: Number(sourceReserveCredits.toFixed(2)),
+    look_dev_credits: Number(lookCredits.toFixed(2)),
+    look_dev_reserve_credits: Number(lookReserveCredits.toFixed(2)),
+    total_credits: Number((sourceGenerationCredits + lookCredits).toFixed(2)),
+    total_reserve_credits: Number((sourceReserveCredits + lookReserveCredits).toFixed(2)),
+    unique_source_sequences: shotRows.filter((row) => requiresPaidSource(row.data.reuse_strategy ?? "unique")).length,
+    editorial_reuse_shots: shotRows.filter((row) => !requiresPaidSource(row.data.reuse_strategy ?? "unique")).length,
+    look_dev_frames: alignedPlan.look_dev_prompts.length,
+    quote_note: "Planning estimate. Every paid batch is rechecked against an approval envelope and both safety caps before submission.",
+  };
   const storedPlan = { ...alignedPlan, cost_estimate: costEstimate };
 
   const { error: clearShotsError } = await input.db.from("music_video_shots").delete().eq("project_id", input.context.project.id).eq("owner_id", input.ownerId);

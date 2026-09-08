@@ -7,6 +7,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { resolveProjectAudioUrl } from "@/lib/video-director/context";
 import { projectMediaLinkScopeFilter } from "@/lib/video-director/media-scope";
 import { openAIDirectorReadiness } from "@/lib/video-director/openai-director";
+import { buildProductionProfilePreviews } from "@/lib/video-director/profile-preview";
 import { mediaWorkerReadiness } from "@/lib/video-director/worker";
 import { higgsfieldReadiness } from "@/lib/video-providers/higgsfield/client";
 import { VideoProjectWorkspace } from "@/components/studio/video-director/project-workspace";
@@ -29,6 +30,11 @@ function strings(value: Json) {
 
 function uniqueAssets(assets: MediaAsset[]) {
   return [...new Map(assets.map((asset) => [asset.id, asset])).values()];
+}
+
+function higgsfieldUsdPerCredit() {
+  const value = Number(process.env.HIGGSFIELD_USD_PER_CREDIT);
+  return Number.isFinite(value) && value > 0 ? value : null;
 }
 
 export default async function VideoProjectPage({
@@ -146,6 +152,7 @@ export default async function VideoProjectPage({
   });
 
   const shots = shotsResult.data ?? [];
+  const productionProfilePreviews = await buildProductionProfilePreviews({ project, shots });
   const characters = charactersResult.data ?? [];
   const generations = generationsResult.data ?? [];
   const renders = rendersResult.data ?? [];
@@ -180,6 +187,7 @@ export default async function VideoProjectPage({
   const hasAudio = Boolean(track.audio_url) || projectRoles.has("master_audio") || projectRoles.has("audio_preview");
   const hasArtwork = Boolean(release.artwork_url) || projectRoles.has("cover") || projectRoles.has("alternate_artwork");
   const audioUrl = hasAudio ? await resolveProjectAudioUrl(db, project, user.id, artist.artistId) : null;
+  const higgsfield = higgsfieldReadiness();
 
   return (
     <VideoProjectWorkspace
@@ -216,6 +224,7 @@ export default async function VideoProjectPage({
         renders,
         workerJobs: workerJobsResult.data ?? [],
         assets,
+        productionProfilePreviews,
         creativeMemory: {
           summary: creativeMemory.preferences.summary,
           evidenceCount: creativeMemory.eventCount,
@@ -223,7 +232,7 @@ export default async function VideoProjectPage({
         },
         services: {
           director: openAIDirectorReadiness(),
-          higgsfield: higgsfieldReadiness(),
+          higgsfield: { ...higgsfield, usdPerCredit: higgsfieldUsdPerCredit() },
           worker: mediaWorkerReadiness(),
         },
         contextSignals: {

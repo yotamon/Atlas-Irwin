@@ -18,12 +18,14 @@ test("Quick Video offers exactly three music-aware default directions", async ()
   assert.ok(form.includes("Quick Video · 1 of 3"));
   assert.ok(form.includes('role="radiogroup"'));
   assert.ok(form.includes('name="quick_video_concept"'));
+  assert.ok(form.includes("Set production quality"));
+  assert.ok(form.includes("Maximum spend"));
+  assert.ok(form.includes("Provider credit safety cap"));
   assert.ok(form.includes("Director Pro settings"));
-  assert.ok(form.includes("Total generation budget"));
-  assert.ok(form.includes("Creating the plan is free"));
+  assert.ok(form.includes("Planning is free"));
 });
 
-test("Quick Video keeps concept lineage and the existing hard budget gate", async () => {
+test("Quick Video keeps concept lineage and hard spend ceilings", async () => {
   const actions = await read("app/studio/video-actions.ts");
   const domain = await read("lib/video-director/domain.ts");
 
@@ -32,8 +34,11 @@ test("Quick Video keeps concept lineage and the existing hard budget gate", asyn
   assert.ok(actions.includes("concept_id: parsed.quick_video_concept"));
   assert.ok(actions.includes("concept_snapshot"));
   assert.ok(actions.includes("buildQuickVideoConcepts"));
-  assert.ok(actions.includes("hard_budget_credits: parsed.hard_budget_credits"));
-  assert.ok(actions.includes("The hard budget cannot be lower than spent and reserved credits."));
+  assert.ok(actions.includes("effectiveProviderCap(parsed.hard_budget_credits, parsed.max_budget_usd)"));
+  assert.ok(actions.includes("provider_credit_safety_cap: parsed.hard_budget_credits"));
+  assert.ok(actions.includes("hard_budget_credits: Number(effectiveCap.toFixed(2))"));
+  assert.ok(actions.includes("The provider credit safety cap cannot be lower than spent and reserved credits."));
+  assert.ok(actions.includes("The current USD ceiling would put the effective provider cap below spend already committed."));
 
   assert.ok(domain.includes('workflow_mode: "quick_video" | "director_pro"'));
   assert.ok(domain.includes("concept_snapshot"));
@@ -83,6 +88,6 @@ test("Quick Video project mode is outcome-first while Director Pro remains avail
   assert.ok(quickWorkspace.includes("Representative preview"));
   assert.ok(quickWorkspace.includes("Master + socials"));
   assert.ok(quickWorkspace.includes("Open Director Pro"));
-  assert.ok(quickWorkspace.includes("This step creates the treatment, visual system, storyboard and cost plan. It spends 0 generation credits."));
+  assert.ok(quickWorkspace.includes("This step creates the treatment, visual system, storyboard and exact model/cost plan. It spends 0 generation credits."));
   assert.ok(quickWorkspace.includes("The next screen shows the exact preview-generation spend before anything is submitted."));
 });

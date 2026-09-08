@@ -63,6 +63,7 @@ export function VideoProjectWorkspace({
               hasAudio={contextSignals.hasAudio}
               hasArtwork={contextSignals.hasArtwork}
               hasReleaseIdentity={contextSignals.hasReleaseIdentity}
+              productionProfilePreviews={data.productionProfilePreviews}
             />
             <TrackIntelligenceInspector data={data} />
             <ConceptsPanel data={data} />

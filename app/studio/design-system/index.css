@@ -16,6 +16,8 @@
 @import "./video-editor-variants.css" layer(ensemblis-compositions);
 @import "./video-editor-source.css" layer(ensemblis-compositions);
 @import "./workflows.css" layer(ensemblis-workflows);
+@import "./video-production-controls.css" layer(ensemblis-workflows);
+@import "./video-production-transparency.css" layer(ensemblis-workflows);
 @import "./motion.css" layer(ensemblis-motion);
 @import "./choreography.css" layer(ensemblis-motion);
 @import "./interaction-states.css" layer(ensemblis-motion);

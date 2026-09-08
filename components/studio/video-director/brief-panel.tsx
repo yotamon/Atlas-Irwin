@@ -5,7 +5,12 @@ import {
   VIDEO_PEOPLE_MODE_LABELS,
   VIDEO_STORY_MODE_LABELS,
 } from "@/lib/video-director/domain";
+import {
+  parseVideoProductionPreferences,
+  type VideoProductionProfilePreview,
+} from "@/lib/video-director/production-profile";
 import type { MusicVideoProject, Release, Track } from "@/types/database";
+import { ProductionProfileControl } from "./production-profile-control";
 
 function contextState(available: boolean, label: string) {
   return (
@@ -16,6 +21,25 @@ function contextState(available: boolean, label: string) {
   );
 }
 
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+const PROFILE_LOCKED_STATUSES = new Set([
+  "test_generation",
+  "test_review",
+  "production",
+  "shot_review",
+  "ready_to_render",
+  "rendering",
+  "complete",
+  "blocked",
+  "failed",
+  "archived",
+]);
+
 export function BriefPanel({
   project,
   release,
@@ -23,6 +47,7 @@ export function BriefPanel({
   hasAudio,
   hasArtwork,
   hasReleaseIdentity,
+  productionProfilePreviews,
 }: {
   project: MusicVideoProject;
   release: Release;
@@ -30,8 +55,14 @@ export function BriefPanel({
   hasAudio: boolean;
   hasArtwork: boolean;
   hasReleaseIdentity: boolean;
+  productionProfilePreviews: VideoProductionProfilePreview[];
 }) {
   const brief = parseVideoCreativeBrief(project.creative_brief);
+  const production = parseVideoProductionPreferences(project.creative_brief);
+  const rawBrief = record(project.creative_brief);
+  const providerSafetyCap = typeof rawBrief.provider_credit_safety_cap === "number"
+    ? rawBrief.provider_credit_safety_cap
+    : project.hard_budget_credits;
   const archived = project.status === "archived";
 
   return (
@@ -56,7 +87,7 @@ export function BriefPanel({
           <span>{release.release_type}</span>
         </article>
         <article className="video-context-signals">
-          <small>Atlas context</small>
+          <small>Ensemblis context</small>
           {contextState(hasReleaseIdentity, "Release identity")}
           {contextState(hasArtwork, "Artwork")}
           {contextState(Boolean(release.visual_direction), "Visual direction")}
@@ -64,7 +95,17 @@ export function BriefPanel({
         </article>
       </div>
 
-      <form action={updateMusicVideoProjectBrief} className="studio-form">
+      {!archived ? (
+        <ProductionProfileControl
+          projectId={project.id}
+          initialProfile={production.profile}
+          initialMaxBudgetUsd={production.maxBudgetUsd}
+          previews={productionProfilePreviews}
+          profileLocked={PROFILE_LOCKED_STATUSES.has(project.status)}
+        />
+      ) : null}
+
+      <form action={updateMusicVideoProjectBrief} className="studio-form video-brief-details-form">
         <input type="hidden" name="id" value={project.id} />
         <div className="form-grid">
           <Field label="Project title">
@@ -77,21 +118,21 @@ export function BriefPanel({
               <option value="1:1">1:1 square</option>
             </select>
           </Field>
-          <Field label="Target quality">
+          <Field label="Target resolution">
             <select name="target_resolution" defaultValue={project.target_resolution} disabled={archived}>
               <option value="720p">720p</option>
               <option value="1080p">1080p</option>
               <option value="4k">4K</option>
             </select>
           </Field>
-          <Field label="Hard generation budget">
+          <Field label="Provider credit safety cap">
             <input
               name="hard_budget_credits"
               type="number"
               min="0"
               max="100000"
               step="0.01"
-              defaultValue={project.hard_budget_credits}
+              defaultValue={providerSafetyCap}
               disabled={archived}
               readOnly={project.spent_credits > 0}
             />
@@ -121,6 +162,7 @@ export function BriefPanel({
             />
           </Field>
         </div>
+        <p className="video-credit-cap-note">The provider credit cap is a secondary technical guardrail. The quality control and optional USD ceiling above are the user-facing production controls.</p>
         {!archived ? <Submit>Save project brief</Submit> : null}
       </form>
     </section>
