@@ -368,7 +368,7 @@ const sourceAssemblyInput = z.object({ projectId: z.uuid() });
 
 async function sourceAssemblyContext(projectId: string) {
   const state = await session(projectId);
-  const { user, artist, db, music, context } = state;
+  const { user, artist, db, baseDb, music, context } = state;
   const [shotsResult, linksResult] = await Promise.all([
     db.from("music_video_shots").select("*").eq("owner_id", user.id).eq("project_id", projectId).order("display_order"),
     music.from("media_links").select("media_asset_id,role,release_id,track_id,artist_id")
@@ -384,7 +384,7 @@ async function sourceAssemblyContext(projectId: string) {
   }
   const ids = [...roles.keys()];
   const assetsResult = ids.length
-    ? await db.from("media_assets").select("*").eq("owner_id", user.id).in("id", ids)
+    ? await baseDb.from("media_assets").select("*").eq("owner_id", user.id).in("id", ids)
     : { data: [], error: null };
   if (assetsResult.error) throw new Error(assetsResult.error.message);
   return {
