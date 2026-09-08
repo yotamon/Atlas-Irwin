@@ -135,6 +135,47 @@ test("final delivery is fail-closed behind temporal QC and exact human lip-sync 
   assert.ok(deliveryIndex >= 0);
 });
 
+test("Source Auto-Edit is explainable, real-first, artist-scoped and non-destructive", async () => {
+  const planner = await source("lib/video-director/source-auto-edit.ts");
+  const actions = await source("app/studio/video-editor-actions.ts");
+  const controls = await source("components/studio/video-director/editor/source-assembly-controls.tsx");
+
+  assert.match(planner, /source-assembly-v1/);
+  assert.match(planner, /generated provenance penalized while source media exists/);
+  assert.match(planner, /metadata matches editorial intent/);
+  assert.match(planner, /duration covers the shot/);
+  assert.match(actions, /allowedProjectSourceAsset/);
+  assert.match(actions, /\.eq\("artist_id", input\.artistId\)/);
+  assert.match(actions, /planVideoSourceAssembly/);
+  assert.match(actions, /source_suggestion/);
+  const planning = actions.slice(actions.indexOf("export async function planVideoSourceAssembly"), actions.indexOf("export async function applyVideoSourceSuggestion"));
+  assert.doesNotMatch(planning, /selected_asset_id:/);
+  assert.match(controls, /It does not pretend to understand footage it has not visually analyzed/);
+  assert.match(controls, /Use this source/);
+  assert.match(controls, /Apply all suggestions to unresolved shots/);
+  assert.match(controls, /Strong match/);
+  assert.doesNotMatch(controls, /Math\.round\(.*confidence.*100/);
+});
+
+test("Program Monitor and final render share one master clock and source-in semantics", async () => {
+  const editor = await source("components/studio/video-director/editor/video-director-pro-editor.tsx");
+  const monitor = await source("components/studio/video-director/editor/program-monitor.tsx");
+  const playback = await source("components/studio/video-director/editor/use-video-editor-playback.ts");
+  const render = await source("lib/video-director/render.ts");
+
+  assert.match(editor, /activeShot/);
+  assert.match(editor, /ProgramMonitor/);
+  assert.match(editor, /loopSelected/);
+  assert.match(playback, /requestAnimationFrame/);
+  assert.match(playback, /audio\.currentTime \* 1000/);
+  assert.match(playback, /loop\.startMs/);
+  assert.match(monitor, /source_offset_ms/);
+  assert.match(monitor, /playheadMs - shot\.start_ms/);
+  assert.match(monitor, /video\.currentTime = targetMs \/ 1000/);
+  assert.match(render, /editorSourceOffsetMs/);
+  assert.match(render, /source_offset_ms: editorSourceOffsetMs\(shot\) \+ Math\.max/);
+});
+
 test("editor keeps spend safety and exposes professional handoff instead of bypassing production", async () => {
   const workspace = await source("components/studio/video-director/project-workspace.tsx");
   const editor = await source("components/studio/video-director/editor/video-director-pro-editor.tsx");
