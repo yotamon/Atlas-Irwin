@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { connectCatalogTrackToIntelligence } from "@/app/studio/catalog-track-actions";
 import { MediaUploader } from "@/components/studio/media-uploader";
 import { ObjectHeader } from "@/components/studio/object-header";
 import { Status } from "@/components/studio/ui";
@@ -37,20 +38,46 @@ export function CatalogTrackWorkspace({
         <div className="v2-section-heading">
           <div>
             <span className="section-label">Master audio</span>
-            <h2>{hasMaster ? "Connect this exact song to Music Intelligence" : "Add this song's master"}</h2>
+            <h2>{hasMaster ? "Use the master that is already attached" : "Add this song's master"}</h2>
             <p>{hasMaster
-              ? "This catalog row has audio, but it does not yet have a reliable per-track intelligence identity. Upload the canonical master here to bind analysis to this exact song."
+              ? "This exact song already has its canonical master. Ensemblis can connect that source to Music Intelligence without uploading the audio again."
               : "The master you add here belongs only to this song. Other tracks in the release keep their own audio and analysis."}</p>
           </div>
         </div>
-        {hasMaster ? <audio className="catalog-track-audio" controls preload="metadata" src={track.audio_url ?? undefined} /> : null}
-        <MediaUploader
-          releaseId={track.release_id}
-          trackId={track.id}
-          artistId={artistId}
-          defaultRole="master_audio"
-          releaseMasterMode
-        />
+
+        {hasMaster ? (
+          <>
+            <audio className="catalog-track-audio" controls preload="metadata" src={track.audio_url ?? undefined} />
+            <div className="v2-calm-state compact">
+              <strong>No re-upload needed.</strong>
+              <p>Connect the existing master and Ensemblis will create the per-track intelligence identity, then queue structure, Moments and mastering analysis from this same source.</p>
+              <form action={connectCatalogTrackToIntelligence}>
+                <input type="hidden" name="track_id" value={track.id} />
+                <input type="hidden" name="artist_id" value={artistId} />
+                <button className="button primary" type="submit">Connect & analyze</button>
+              </form>
+            </div>
+            <details className="v2-advanced-disclosure">
+              <summary>Replace this master instead</summary>
+              <p className="v2-muted-copy">Only upload a new file when the attached master is actually the wrong version or needs to be replaced.</p>
+              <MediaUploader
+                releaseId={track.release_id}
+                trackId={track.id}
+                artistId={artistId}
+                defaultRole="master_audio"
+                releaseMasterMode
+              />
+            </details>
+          </>
+        ) : (
+          <MediaUploader
+            releaseId={track.release_id}
+            trackId={track.id}
+            artistId={artistId}
+            defaultRole="master_audio"
+            releaseMasterMode
+          />
+        )}
       </section>
     </div>
   );
