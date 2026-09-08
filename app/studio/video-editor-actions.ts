@@ -13,6 +13,7 @@ import {
   refreshGeneration,
   submitApprovalEnvelope,
 } from "@/lib/video-director/generation";
+import { projectMediaLinkScopeFilter } from "@/lib/video-director/media-scope";
 import { routeVideoShot } from "@/lib/video-director/model-router";
 import { recordDirectorPreference } from "@/lib/video-director/preferences";
 import { buildSourceAssemblyPlan } from "@/lib/video-director/source-auto-edit";
@@ -71,7 +72,7 @@ async function allowedProjectSourceAsset(input: {
       .eq("owner_id", input.ownerId)
       .eq("artist_id", input.artistId)
       .eq("media_asset_id", input.assetId)
-      .or(`release_id.eq.${input.releaseId},track_id.eq.${input.trackId}`)
+      .or(projectMediaLinkScopeFilter(input.releaseId, input.trackId))
       .limit(1).maybeSingle(),
     input.db.from("music_video_generations").select("result_asset_id")
       .eq("owner_id", input.ownerId)
@@ -374,7 +375,7 @@ async function sourceAssemblyContext(projectId: string) {
     music.from("media_links").select("media_asset_id,role,release_id,track_id,artist_id")
       .eq("owner_id", user.id)
       .eq("artist_id", artist.artistId)
-      .or(`release_id.eq.${context.project.release_id},track_id.eq.${context.project.track_id}`),
+      .or(projectMediaLinkScopeFilter(context.project.release_id, context.project.track_id)),
   ]);
   if (shotsResult.error) throw new Error(shotsResult.error.message);
   if (linksResult.error) throw new Error(linksResult.error.message);
