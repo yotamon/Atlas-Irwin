@@ -45,6 +45,13 @@ function projectPath(projectId: string) {
   return `/studio/video/${projectId}`;
 }
 
+function effectiveProviderCap(baseCredits: number, maxBudgetUsd: number | null) {
+  if (maxBudgetUsd === null) return baseCredits;
+  const rate = Number(process.env.HIGGSFIELD_USD_PER_CREDIT);
+  if (!Number.isFinite(rate) || rate <= 0) return 0;
+  return Math.min(baseCredits, maxBudgetUsd / rate);
+}
+
 async function requireProjectForActiveArtist(id: string) {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveActiveArtistContext(supabase, user);
@@ -140,6 +147,7 @@ export async function createMusicVideoProject(form: FormData) {
   }).find((concept) => concept.id === parsed.quick_video_concept);
   if (!selectedDirection) throw new Error("Quick Video direction could not be resolved.");
 
+  const effectiveCap = effectiveProviderCap(parsed.hard_budget_credits, parsed.max_budget_usd);
   const creative_brief = {
     workflow_mode: "quick_video",
     concept_id: parsed.quick_video_concept,
@@ -155,6 +163,7 @@ export async function createMusicVideoProject(form: FormData) {
     target: parsed.project_kind,
     production_profile: parsed.production_profile,
     max_budget_usd: parsed.max_budget_usd,
+    provider_credit_safety_cap: parsed.hard_budget_credits,
   };
 
   const { data, error } = await supabase
@@ -169,7 +178,7 @@ export async function createMusicVideoProject(form: FormData) {
       primary_aspect_ratio: parsed.primary_aspect_ratio,
       target_resolution: parsed.target_resolution,
       creative_brief,
-      hard_budget_credits: parsed.hard_budget_credits,
+      hard_budget_credits: Number(effectiveCap.toFixed(2)),
     })
     .select("id")
     .single();
