@@ -44,7 +44,9 @@ export function ShotVariantLab({ data, shot }: { data: VideoWorkspaceData; shot:
         <div><span>A/B variants</span><strong>{variants.length ? `${variants.length} takes` : "No takes yet"}</strong></div>
         <div>
           {processing ? <button type="button" className="text-button" disabled={pending} onClick={() => startTransition(() => refreshVideoShotVariants({ projectId: data.project.id, shotId: shot.id }))}>Refresh</button> : null}
-          <button type="button" className="button" disabled={!canVariant || pending} onClick={() => startTransition(() => prepareVideoShotVariant({ projectId: data.project.id, shotId: shot.id }))}>New variant</button>
+          <button type="button" className="button" disabled={!canVariant || pending} onClick={() => startTransition(async () => {
+            await prepareVideoShotVariant({ projectId: data.project.id, shotId: shot.id });
+          })}>New variant</button>
         </div>
       </div>
       <p>Preparing a take is free and gives you the exact reserved-credit quote. Spend happens only after you approve that specific take.</p>
