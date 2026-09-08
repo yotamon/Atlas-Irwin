@@ -19,7 +19,7 @@ test("Director Pro is a music-aware editor instead of a settings stack", async (
   assert.match(editor, /video-editor-timeline-content/);
   assert.match(editor, /smartSnapTime/);
   assert.match(editor, /updateVideoShotTiming/);
-  assert.match(editor, /prefers-reduced-motion/);
+  assert.match(css, /prefers-reduced-motion/);
   assert.match(css, /video-editor-workbench/);
   assert.match(css, /video-editor-playhead/);
   assert.match(css, /focus-visible/);
