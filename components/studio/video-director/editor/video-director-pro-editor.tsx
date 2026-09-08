@@ -17,6 +17,7 @@ import {
   updateVideoShotEditor,
   updateVideoShotTiming,
 } from "@/app/studio/video-editor-actions";
+import { trimVideoShotStart } from "@/app/studio/video-editor-timing-actions";
 import {
   buildCmx3600Edl,
   buildFcpxml,
@@ -404,9 +405,15 @@ export function VideoDirectorProEditor({ data }: { data: VideoWorkspaceData }) {
       startMs = Math.max(0, endMs - duration);
     }
     const shotId = drag.shotId;
+    const dragKind = drag.kind;
+    const previousStartMs = drag.startMs;
     setDraftTimings((current) => ({ ...current, [shotId]: { startMs, endMs } }));
     setDrag(null);
-    startTransition(() => updateVideoShotTiming({ projectId: data.project.id, shotId, startMs, endMs }));
+    if (dragKind === "start") {
+      startTransition(() => trimVideoShotStart({ projectId: data.project.id, shotId, previousStartMs, startMs, endMs }));
+    } else {
+      startTransition(() => updateVideoShotTiming({ projectId: data.project.id, shotId, startMs, endMs }));
+    }
   }
 
   function timelineSeek(event: ReactPointerEvent<HTMLDivElement>) {
