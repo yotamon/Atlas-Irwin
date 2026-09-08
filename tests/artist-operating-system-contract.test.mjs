@@ -26,14 +26,17 @@ test("artist operating profile keeps AI optional and human projects conservative
 });
 
 test("onboarding understands music before asking only irreducible working preferences and does not force every artist into a release", async () => {
-  const page = await read("app/studio/onboarding/page.tsx");
+  const [page, forms] = await Promise.all([
+    read("app/studio/onboarding/page.tsx"),
+    read("components/studio/onboarding-forms.tsx"),
+  ]);
   assert.match(page, /Only what the music cannot tell us/);
   assert.match(page, /The music is already understood\. These few preferences decide how much Ensemblis should handle/);
   assert.match(page, /else if \(analysisPending\) current = "analysis";\n  else if \(!operatingContext\.profileConfigured\) current = "operating";/);
   assert.match(page, /releaseFirst = operatingContext\.profileConfigured && operatingContext\.profile\.primaryGoal === "release_music"/);
   assert.match(page, /releaseFirst && !mission/);
   assert.match(page, /next useful Mission/);
-  assert.match(page, /get_gigs|GOAL_LABELS/);
+  assert.match(forms, /get_gigs|GOAL_LABELS/);
   assert.doesNotMatch(page, /Five decisions, after the music/);
 });
 

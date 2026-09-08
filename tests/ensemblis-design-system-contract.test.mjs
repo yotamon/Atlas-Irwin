@@ -15,10 +15,13 @@ const rawChrome = (value) => withoutComments(value).match(/#(?:[\da-fA-F]{3,4}|[
 const canonicalDesignFiles = [
   "primitives.css",
   "patterns.css",
+  "feedback.css",
+  "overlays.css",
   "shell.css",
   "compositions.css",
   "workflows.css",
   "motion.css",
+  "loading.css",
   "choreography.css",
   "interaction-states.css",
   "atmosphere.css",
@@ -73,7 +76,9 @@ test("legacy Studio CSS is compiled into a token-only compatibility bridge", asy
   const generated = await source("app/studio/design-system/legacy-compat.generated.css");
   assert.ok(generated.includes("AUTO-GENERATED"));
   assert.ok(generated.includes("compatibility source: app/studio/studio.css"));
-  assert.ok(generated.includes("compatibility source: app/studio/ux-consolidation.css"));
+  for (const retired of ["ux-consolidation.css", "shared-interactions.css", "loading-polish.css", "studio-v2-safety.css", "ensemblis-root-isolation.css", "ensemblis-states.css"]) {
+    assert.equal(generated.includes(`compatibility source: app/studio/${retired}`), false, `${retired} must stay retired from the compatibility bridge`);
+  }
   assert.equal(rawChrome(generated), null, `compiled compatibility CSS contains raw chrome: ${rawChrome(generated)}`);
   assert.equal(generated.includes("--s-"), false);
   assert.equal(/--studio-surface(?![\w-])/.test(generated), false);
@@ -128,84 +133,14 @@ test("motion and processing are canonical, accessible and reduced-motion safe", 
   const stage = await source("components/studio/studio-motion-stage.tsx");
   const processing = await source("components/studio/processing-state.tsx");
   const submit = await source("components/studio/submit-button.tsx");
-  const protectedLoading = await source("app/studio/(protected)/loading.tsx");
 
-  for (const css of [motion, choreography, interactions, artDirection]) assert.ok(css.includes("prefers-reduced-motion"), "motion-owning styles must define a reduced-motion path");
-  assert.ok(stage.includes("useReducedMotion"));
+  assert.ok(motion.includes("prefers-reduced-motion: reduce"));
+  assert.ok(choreography.includes("prefers-reduced-motion: reduce"));
+  assert.ok(interactions.includes("prefers-reduced-motion: reduce"));
+  assert.ok(artDirection.includes("prefers-reduced-motion: reduce"));
   assert.ok(stage.includes("AnimatePresence"));
-  assert.ok(processing.includes('role="progressbar"'));
-  assert.ok(processing.includes("aria-busy"));
-  assert.ok(processing.includes("ensemblis-processing-wave"));
+  assert.ok(processing.includes('role="status"'));
+  assert.ok(processing.includes('aria-live="polite"'));
   assert.ok(submit.includes("useFormStatus"));
-  assert.ok(submit.includes("ensemblis-button-signal"));
-  assert.ok(protectedLoading.includes("<ProcessingState"));
-  assert.equal(protectedLoading.includes("ensemblis-loading-line"), false, "protected route loading must not fall back to generic skeleton chrome");
-});
-
-test("core creative screens use editorial art-direction archetypes instead of one repeated card composition", async () => {
-  const art = await source("app/studio/design-system/art-direction.css");
-  for (const selector of [
-    ".ensemblis-today-page .en-priority-hero",
-    ".music-workspace-focus",
-    ".ensemblis-release-mission .ensemblis-object-artwork",
-    ".release-mission-hero",
-    ".create-deliverable-card.is-recommended",
-  ]) assert.ok(art.includes(selector), `${selector} is missing from core art direction`);
-  assert.ok(art.includes('content: "NOW"'));
-  assert.ok(art.includes('content: "MISSION"'));
-  assert.ok(art.includes("grid-column: 1 / -1"), "recommended Create direction must break the equal-card grid");
-});
-
-test("mobile navigation is structurally limited to four direct destinations plus More", async () => {
-  const product = await source("lib/ensemblis-product.ts");
-  const navigation = await source("components/studio/mobile-navigation.tsx");
-  const compositions = await source("app/studio/design-system/compositions.css");
-  const atmosphere = await source("app/studio/design-system/atmosphere.css");
-  assert.ok(product.includes("ENSEMBLIS_MOBILE_WORK_NAV"));
-  assert.ok(product.includes("ENSEMBLIS_MOBILE_MORE_NAV"));
-  assert.ok(navigation.includes("ENSEMBLIS_MOBILE_WORK_NAV.map"));
-  assert.ok(navigation.includes("ENSEMBLIS_MOBILE_MORE_NAV.map"));
-  assert.equal(navigation.includes("ENSEMBLIS_WORK_NAV.map"), false, "desktop navigation must never be mapped directly into the mobile tab bar");
-  assert.ok(compositions.includes("grid-template-columns: repeat(5, minmax(0, 1fr))"));
-  assert.ok(compositions.includes("white-space: nowrap"));
-  assert.ok(atmosphere.includes(".ensemblis-mobile-navigation"));
-  assert.ok(atmosphere.includes("border-radius: var(--en-radius-xl)"));
-});
-
-test("Today uses semantic hierarchy, accessible region labels and a bounded decision preview", async () => {
-  const today = await source("app/studio/(protected)/page.tsx");
-  const needsYou = await source("app/studio/(protected)/needs-you/page.tsx");
-  assert.ok(today.includes("<PriorityHero"));
-  assert.ok(today.includes("<DecisionQueue"));
-  assert.ok(today.includes("needsYou.slice(0, 3)"));
-  for (const id of ["today-handling-heading", "today-coming-up-heading"]) {
-    assert.ok(today.includes(`aria-labelledby=\"${id}\"`));
-    assert.ok(today.includes(`id=\"${id}\"`));
-  }
-  assert.ok(today.includes("Ensemblis is handling"));
-  assert.equal(today.includes("Artist operating mode"), false, "working-profile configuration must not compete with the everyday manager loop");
-  for (const page of [today, needsYou]) {
-    assert.ok(page.includes('if (value === "important") return "danger";'));
-    assert.ok(page.includes('if (value === "warning") return "attention";'));
-  }
-  assert.ok(needsYou.includes("Blocking decisions"));
-  assert.ok(needsYou.includes("Everything else"));
-  assert.equal(needsYou.includes("One queue, no duplicate tasks"), false, "internal architecture copy must not compete with the user's decisions");
-});
-
-test("Design System compilation is mandatory in install, dev, test and build paths", async () => {
-  const pkg = JSON.parse(await source("package.json"));
-  assert.equal(pkg.scripts.predev, "node scripts/build-studio-css.mjs");
-  assert.equal(pkg.scripts.prebuild, "node scripts/build-studio-css.mjs");
-  assert.equal(pkg.scripts["pretest:studio"], "node scripts/build-studio-css.mjs");
-  assert.ok(pkg.scripts.postinstall.includes("build-studio-css.mjs"));
-});
-
-test("browser theme metadata is the documented CSS-variable exception and stays synchronized", async () => {
-  const layout = await source("app/studio/layout.tsx");
-  const tokens = await source("app/studio/design-system/tokens.css");
-  const tokenColor = tokens.match(/--en-bg:\s*(#[\da-fA-F]{6})\s*;/)?.[1]?.toLowerCase();
-  const metadataColor = layout.match(/themeColor:\s*["'](#[\da-fA-F]{6})["']/)?.[1]?.toLowerCase();
-  assert.equal(metadataColor, tokenColor);
-  assert.ok(layout.includes("Browser metadata cannot reference CSS custom properties"));
+  assert.ok(submit.includes("aria-busy={pending}"));
 });

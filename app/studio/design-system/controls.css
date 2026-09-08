@@ -1,0 +1,264 @@
+/* Canonical behavior-heavy controls.
+   Native text/date/number controls stay in primitives.css; Base UI owns the
+   accessibility and interaction model for selects, switches and tooltips. */
+
+.studio-root .ensemblis-field-label {
+  color: var(--en-muted);
+  font-size: var(--en-text-xs);
+  font-weight: var(--en-weight-semibold);
+  letter-spacing: 0.05em;
+}
+
+.studio-root .ensemblis-field-label small {
+  color: var(--en-subtle);
+  font-size: inherit;
+  font-weight: var(--en-weight-medium);
+  letter-spacing: 0;
+}
+
+.studio-root .ensemblis-select-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--en-space-3);
+  width: 100%;
+  min-height: var(--en-control-md);
+  padding: 0.7rem 0.78rem;
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-sm);
+  background: var(--en-bg-elevated);
+  color: var(--en-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--en-duration-fast) var(--en-ease-standard),
+    box-shadow var(--en-duration-fast) var(--en-ease-standard),
+    background-color var(--en-duration-fast) var(--en-ease-standard);
+}
+
+.studio-root .ensemblis-select-trigger:hover { border-color: var(--en-line-strong); }
+
+.studio-root .ensemblis-select-trigger:focus-visible,
+.studio-root .ensemblis-select-trigger[data-popup-open] {
+  outline: none;
+  border-color: var(--en-accent);
+  background: color-mix(in srgb, var(--en-bg-elevated) 88%, var(--en-accent));
+  box-shadow: var(--en-focus-ring);
+}
+
+.studio-root .ensemblis-select-trigger[aria-invalid="true"] {
+  border-color: color-mix(in srgb, var(--en-danger) 72%, var(--en-line));
+}
+
+.studio-root .ensemblis-select-trigger[data-disabled] {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.studio-root .ensemblis-select-value[data-placeholder] { color: var(--en-subtle); }
+
+.studio-root .ensemblis-select-icon {
+  flex: 0 0 auto;
+  color: var(--en-subtle);
+  font-size: var(--en-text-md);
+  transform: translateY(-0.08rem);
+  transition: transform var(--en-duration-fast) var(--en-ease-standard);
+}
+
+.studio-root .ensemblis-select-trigger[data-popup-open] .ensemblis-select-icon {
+  transform: translateY(0.08rem) rotate(180deg);
+}
+
+.ensemblis-select-positioner,
+.ensemblis-tooltip-positioner {
+  z-index: 140;
+  outline: none;
+}
+
+.ensemblis-select-popup {
+  min-width: var(--anchor-width);
+  max-width: min(34rem, calc(100vw - 2rem));
+  max-height: min(22rem, var(--available-height));
+  overflow: hidden;
+  border: 1px solid var(--en-line-strong);
+  border-radius: var(--en-radius-sm);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--en-white) 2%, transparent), transparent 32%),
+    color-mix(in srgb, var(--en-surface-raised) 98%, var(--en-black));
+  box-shadow: var(--en-shadow-lg);
+  transform-origin: var(--transform-origin);
+  transition:
+    opacity var(--en-duration-fast) var(--en-ease-standard),
+    transform var(--en-duration-normal) var(--en-ease-emphasized);
+}
+
+.ensemblis-select-popup[data-starting-style],
+.ensemblis-select-popup[data-ending-style] {
+  opacity: 0;
+  transform: scale(0.985) translateY(-0.2rem);
+}
+
+.ensemblis-select-list {
+  max-height: inherit;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--en-space-1);
+  scroll-padding-block: var(--en-space-2);
+}
+
+.ensemblis-select-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--en-space-3);
+  align-items: center;
+  min-height: var(--en-control-sm);
+  padding: 0.55rem 0.65rem;
+  border-radius: var(--en-radius-xs);
+  color: var(--en-muted);
+  font-size: var(--en-text-sm);
+  cursor: default;
+  outline: none;
+}
+
+.ensemblis-select-item[data-highlighted] {
+  background: var(--en-surface-hover);
+  color: var(--en-ink);
+}
+
+.ensemblis-select-item[data-selected] {
+  color: var(--en-ink);
+  font-weight: var(--en-weight-semibold);
+}
+
+.ensemblis-select-item[data-disabled] { opacity: 0.42; }
+
+.ensemblis-select-indicator {
+  color: var(--en-accent);
+  font-size: var(--en-text-xs);
+}
+
+.studio-root .ensemblis-switch-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--en-space-4);
+  min-width: 0;
+  padding: var(--en-space-3);
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-sm);
+  background: color-mix(in srgb, var(--en-surface) 74%, transparent);
+  cursor: pointer;
+  transition:
+    border-color var(--en-duration-fast) var(--en-ease-standard),
+    background-color var(--en-duration-fast) var(--en-ease-standard);
+}
+
+.studio-root .ensemblis-switch-field:hover {
+  border-color: var(--en-line-strong);
+  background: var(--en-surface-hover);
+}
+
+.studio-root .ensemblis-switch-copy {
+  display: grid;
+  gap: var(--en-space-1);
+  min-width: 0;
+}
+
+.studio-root .ensemblis-switch-copy strong {
+  color: var(--en-ink);
+  font-size: var(--en-text-sm);
+  font-weight: var(--en-weight-semibold);
+}
+
+.studio-root .ensemblis-switch-copy small {
+  color: var(--en-muted);
+  font-size: var(--en-text-xs);
+  font-weight: var(--en-weight-regular);
+  line-height: var(--en-leading-body);
+}
+
+.studio-root .ensemblis-switch {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  width: 2.6rem;
+  height: 1.48rem;
+  padding: 0.16rem;
+  border: 1px solid var(--en-line-strong);
+  border-radius: var(--en-radius-pill);
+  background: var(--en-bg-elevated);
+  cursor: pointer;
+  transition:
+    border-color var(--en-duration-fast) var(--en-ease-standard),
+    background-color var(--en-duration-fast) var(--en-ease-standard),
+    box-shadow var(--en-duration-fast) var(--en-ease-standard);
+}
+
+.studio-root .ensemblis-switch[data-checked] {
+  border-color: color-mix(in srgb, var(--en-accent) 72%, var(--en-line));
+  background: color-mix(in srgb, var(--en-accent) 32%, var(--en-bg-elevated));
+}
+
+.studio-root .ensemblis-switch:focus-visible {
+  outline: none;
+  box-shadow: var(--en-focus-ring);
+}
+
+.studio-root .ensemblis-switch[data-disabled] {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.studio-root .ensemblis-switch-thumb {
+  display: block;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  background: var(--en-muted);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--en-black) 34%, transparent);
+  transform: translateX(0);
+  transition:
+    transform var(--en-duration-normal) var(--en-ease-emphasized),
+    background-color var(--en-duration-fast) var(--en-ease-standard);
+}
+
+.studio-root .ensemblis-switch[data-checked] .ensemblis-switch-thumb {
+  background: var(--en-accent);
+  transform: translateX(1.08rem);
+}
+
+.ensemblis-tooltip-popup {
+  max-width: min(18rem, calc(100vw - 2rem));
+  padding: 0.42rem 0.58rem;
+  border: 1px solid var(--en-line-strong);
+  border-radius: var(--en-radius-xs);
+  background: color-mix(in srgb, var(--en-surface-raised) 98%, var(--en-black));
+  color: var(--en-ink);
+  box-shadow: var(--en-shadow-md);
+  font: var(--en-weight-medium) var(--en-text-2xs) / 1.35 var(--font-body), sans-serif;
+  transform-origin: var(--transform-origin);
+  transition:
+    opacity var(--en-duration-fast) var(--en-ease-standard),
+    transform var(--en-duration-fast) var(--en-ease-emphasized);
+}
+
+.ensemblis-tooltip-popup[data-starting-style],
+.ensemblis-tooltip-popup[data-ending-style] {
+  opacity: 0;
+  transform: scale(0.97);
+}
+
+.ensemblis-tooltip-arrow {
+  width: 0.5rem;
+  height: 0.5rem;
+  fill: color-mix(in srgb, var(--en-surface-raised) 98%, var(--en-black));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ensemblis-select-popup,
+  .ensemblis-tooltip-popup,
+  .studio-root .ensemblis-switch-thumb,
+  .studio-root .ensemblis-select-icon { transition: none; }
+}

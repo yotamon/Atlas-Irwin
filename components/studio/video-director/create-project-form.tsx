@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { createMusicVideoProject } from "@/app/studio/video-actions";
+import { SelectField } from "@/components/studio/form-controls";
 import { SubmitButton } from "@/components/studio/submit-button";
 import { Field } from "@/components/studio/ui";
 import {
@@ -23,6 +24,31 @@ import type {
 } from "@/lib/video-director/domain";
 import type { Release, Track } from "@/types/database";
 import type { Moment } from "@/types/moments-database";
+
+const PROJECT_KIND_OPTIONS = [
+  { value: "full_music_video", label: "Full music video" },
+  { value: "teaser", label: "Teaser" },
+];
+const ASPECT_RATIO_OPTIONS = [
+  { value: "16:9", label: "16:9 landscape" },
+  { value: "9:16", label: "9:16 vertical" },
+  { value: "1:1", label: "1:1 square" },
+];
+const RESOLUTION_OPTIONS = [
+  { value: "720p", label: "720p" },
+  { value: "1080p", label: "1080p" },
+  { value: "4k", label: "4K" },
+];
+const STORY_MODE_OPTIONS = [
+  { value: "narrative", label: "Narrative" },
+  { value: "abstract", label: "Abstract" },
+  { value: "hybrid", label: "Hybrid" },
+];
+const PEOPLE_MODE_OPTIONS = [
+  { value: "director_choice", label: "Director choice" },
+  { value: "prefer_people", label: "Prefer people" },
+  { value: "no_people", label: "No people" },
+];
 
 function profileForIndex(index: number): VideoProductionProfile {
   return VIDEO_PRODUCTION_PROFILES[index] ?? "balanced";
@@ -61,6 +87,7 @@ export function CreateProjectForm({
   const selectedConcept = concepts.find((concept) => concept.id === conceptId) ?? concepts[0] ?? null;
   const productionIndex = Math.max(0, VIDEO_PRODUCTION_PROFILES.indexOf(productionProfile));
   const productionDefinition = VIDEO_PRODUCTION_PROFILE_DEFINITIONS[productionIndex] ?? VIDEO_PRODUCTION_PROFILE_DEFINITIONS[2];
+  const trackOptions = tracks.map((track) => ({ value: track.id, label: track.title }));
 
   function chooseConcept(nextId: QuickVideoConceptId) {
     const next = concepts.find((concept) => concept.id === nextId);
@@ -79,23 +106,18 @@ export function CreateProjectForm({
       <input type="hidden" name="production_profile" value={productionProfile} />
 
       <div className="form-grid">
-        <Field label="Track">
-          <select
-            name="track_id"
-            required
-            value={trackId}
-            onChange={(event) => {
-              const nextId = event.target.value;
-              const nextTrack = tracks.find((track) => track.id === nextId);
-              setTrackId(nextId);
-              if (!titleEdited && nextTrack) setTitle(`${nextTrack.title} Music Video`);
-            }}
-          >
-            {tracks.map((track) => (
-              <option value={track.id} key={track.id}>{track.title}</option>
-            ))}
-          </select>
-        </Field>
+        <SelectField
+          label="Track"
+          name="track_id"
+          required
+          options={trackOptions}
+          value={trackId}
+          onValueChange={(nextId) => {
+            const nextTrack = tracks.find((track) => track.id === nextId);
+            setTrackId(nextId);
+            if (!titleEdited && nextTrack) setTitle(`${nextTrack.title} Music Video`);
+          }}
+        />
       </div>
 
       <div className="workspace-stack">
@@ -220,60 +242,11 @@ export function CreateProjectForm({
               }}
             />
           </Field>
-          <Field label="Target">
-            <select
-              name="project_kind"
-              value={projectKind}
-              onChange={(event) => setProjectKind(event.target.value as VideoProjectKind)}
-            >
-              <option value="full_music_video">Full music video</option>
-              <option value="teaser">Teaser</option>
-            </select>
-          </Field>
-          <Field label="Primary format">
-            <select
-              name="primary_aspect_ratio"
-              value={aspectRatio}
-              onChange={(event) => setAspectRatio(event.target.value as VideoAspectRatio)}
-            >
-              <option value="16:9">16:9 landscape</option>
-              <option value="9:16">9:16 vertical</option>
-              <option value="1:1">1:1 square</option>
-            </select>
-          </Field>
-          <Field label="Target resolution">
-            <select
-              name="target_resolution"
-              value={resolution}
-              onChange={(event) => setResolution(event.target.value as VideoResolution)}
-            >
-              <option value="720p">720p</option>
-              <option value="1080p">1080p</option>
-              <option value="4k">4K</option>
-            </select>
-          </Field>
-          <Field label="Story mode">
-            <select
-              name="story_mode"
-              value={storyMode}
-              onChange={(event) => setStoryMode(event.target.value as VideoStoryMode)}
-            >
-              <option value="narrative">Narrative</option>
-              <option value="abstract">Abstract</option>
-              <option value="hybrid">Hybrid</option>
-            </select>
-          </Field>
-          <Field label="People">
-            <select
-              name="people_mode"
-              value={peopleMode}
-              onChange={(event) => setPeopleMode(event.target.value as VideoPeopleMode)}
-            >
-              <option value="director_choice">Director choice</option>
-              <option value="prefer_people">Prefer people</option>
-              <option value="no_people">No people</option>
-            </select>
-          </Field>
+          <SelectField label="Target" name="project_kind" options={PROJECT_KIND_OPTIONS} value={projectKind} onValueChange={(value) => setProjectKind(value as VideoProjectKind)} />
+          <SelectField label="Primary format" name="primary_aspect_ratio" options={ASPECT_RATIO_OPTIONS} value={aspectRatio} onValueChange={(value) => setAspectRatio(value as VideoAspectRatio)} />
+          <SelectField label="Target resolution" name="target_resolution" options={RESOLUTION_OPTIONS} value={resolution} onValueChange={(value) => setResolution(value as VideoResolution)} />
+          <SelectField label="Story mode" name="story_mode" options={STORY_MODE_OPTIONS} value={storyMode} onValueChange={(value) => setStoryMode(value as VideoStoryMode)} />
+          <SelectField label="People" name="people_mode" options={PEOPLE_MODE_OPTIONS} value={peopleMode} onValueChange={(value) => setPeopleMode(value as VideoPeopleMode)} />
           <Field label="Provider credit safety cap">
             <input
               name="hard_budget_credits"
