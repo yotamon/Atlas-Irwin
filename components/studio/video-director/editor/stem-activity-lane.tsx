@@ -1,5 +1,3 @@
-import type { Json } from "@/types/database";
-
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
@@ -17,7 +15,7 @@ function clamp(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
 }
 
-export function parseStemActivityCurve(analysis: Json, durationMs: number): ActivityPoint[] {
+export function parseStemActivityCurve(analysis: unknown, durationMs: number): ActivityPoint[] {
   const raw = record(analysis).activity_curve;
   if (!Array.isArray(raw)) return [];
   return raw.flatMap((item) => {
@@ -36,7 +34,7 @@ export function parseStemActivityCurve(analysis: Json, durationMs: number): Acti
   });
 }
 
-export function StemActivityLane({ analysis, durationMs }: { analysis: Json; durationMs: number }) {
+export function StemActivityLane({ analysis, durationMs }: { analysis: unknown; durationMs: number }) {
   const points = parseStemActivityCurve(analysis, durationMs);
   if (!points.length) return <div className="video-editor-stem-lane is-empty"><span>No activity analysis</span></div>;
   return (
