@@ -25,13 +25,19 @@ test("Director Pro is a music-aware editor instead of a settings stack", async (
   assert.match(css, /focus-visible/);
 });
 
-test("video editor consumes canonical lyrics and stem intelligence", async () => {
+test("video editor consumes canonical lyrics and measured stem intelligence", async () => {
   const page = await source("app/studio/(protected)/video/[id]/page.tsx");
+  const editor = await source("components/studio/video-director/editor/video-director-pro-editor.tsx");
+  const stemLane = await source("components/studio/video-director/editor/stem-activity-lane.tsx");
   assert.match(page, /track_lyric_lines/);
   assert.match(page, /track_stems/);
   assert.match(page, /audio_scenes/);
   assert.match(page, /lyricCues/);
   assert.match(page, /audioScenes/);
+  assert.match(editor, /StemActivityLane/);
+  assert.match(stemLane, /activity_curve/);
+  assert.match(stemLane, /rhythmic_activity/);
+  assert.doesNotMatch(editor, /Array\.from\(\{ length: 28 \}/);
 });
 
 test("performance shots route through audio-reference-capable continuity models", async () => {
@@ -42,6 +48,7 @@ test("performance shots route through audio-reference-capable continuity models"
   assert.match(actions, /performance_shot/);
   assert.match(actions, /requires_audio_reference/);
   assert.match(actions, /audio_references/);
+  assert.match(actions, /performance_mode = "lip_sync"/);
   assert.match(actions, /generation_priority: parsed\.shotType === "performance" \? "consistency"/);
   assert.match(router, /profile\.performance_shot === true/);
   assert.match(router, /supportsAudioReferences/);
@@ -62,6 +69,70 @@ test("character identity is artist-scoped, reusable and cannot leak across artis
   assert.match(actions, /artistCharacters/);
   assert.match(actions, /baseReferences/);
   assert.match(page, /music_video_characters.*artist_id/s);
+});
+
+test("A/B variants are quote-first, non-destructive and retain spend envelopes", async () => {
+  const actions = await source("app/studio/video-editor-actions.ts");
+  const lab = await source("components/studio/video-director/editor/shot-variant-lab.tsx");
+
+  assert.match(actions, /prepareVideoShotVariant/);
+  assert.match(actions, /approveAndGenerateVideoVariant/);
+  assert.match(actions, /createApprovalEnvelope/);
+  assert.match(actions, /submitApprovalEnvelope/);
+  assert.match(actions, /selectVideoShotVariant/);
+  assert.match(actions, /rejectVideoShotVariant/);
+  const prepare = actions.slice(actions.indexOf("export async function prepareVideoShotVariant"), actions.indexOf("export async function approveAndGenerateVideoVariant"));
+  assert.doesNotMatch(prepare, /selected_asset_id:\s*null/);
+  assert.match(lab, /Preparing a take is free/);
+  assert.match(lab, /Generate ·/);
+  assert.match(lab, /WINNER/);
+});
+
+test("deterministic finishing turns measured music and timed lyrics into final pixels", async () => {
+  const finishing = await source("lib/video-director/render-finishing.ts");
+  const render = await source("lib/video-director/render.ts");
+  const worker = await source("services/media-worker/app/video_director_finishing.py");
+  const main = await source("services/media-worker/app/main.py");
+
+  assert.match(finishing, /activity_curve/);
+  assert.match(finishing, /buildShotReactiveEvents/);
+  assert.match(finishing, /buildShotCaptionCues/);
+  assert.match(finishing, /lip_sync_auto_pass_allowed: false/);
+  assert.match(render, /reactive_events/);
+  assert.match(render, /captions/);
+  assert.match(render, /deterministic_finishing: true/);
+  assert.match(worker, /drawtext=/);
+  assert.match(worker, /eq=/);
+  assert.match(worker, /enable='between\(t,/);
+  assert.match(main, /build_video_director_filter/);
+  assert.match(main, /clip_finishing/);
+  assert.match(main, /review_frames/);
+});
+
+test("final delivery is fail-closed behind temporal QC and exact human lip-sync identity attestation", async () => {
+  const gate = await source("supabase/migrations/20260908203000_video_director_human_quality_gate.sql");
+  const humanAction = await source("app/studio/video-editor-quality-actions.ts");
+  const quality = await source("lib/video-director/quality.ts");
+  const reconciliation = await source("lib/video-director/render-quality-reconciliation.ts");
+  const callback = await source("app/api/video-director/worker/callback/route.ts");
+
+  assert.match(gate, /review_asset_id/);
+  assert.match(gate, /lip_sync_approved/);
+  assert.match(gate, /continuity_approved/);
+  assert.match(gate, /ready_to_render/);
+  assert.match(humanAction, /explicit_human_attestation/);
+  assert.match(humanAction, /review_asset_id: shot\.selected_asset_id/);
+  assert.match(quality, /Do NOT claim to verify phoneme-level lip-sync/);
+  assert.match(quality, /not_assessed_from_sparse_frames/);
+  assert.match(quality, /publishReady: passed && humanAttestationsValid/);
+  assert.match(reconciliation, /status: "blocked"/);
+  assert.match(callback, /reconcileVideoRenderQuality/);
+  assert.match(callback, /quality\.publishReady/);
+  const deliveryIndex = callback.indexOf("scheduleQuickVideoSocialDelivery");
+  const qualityIndex = callback.lastIndexOf("reconcileVideoRenderQuality");
+  const guardedDeliveryIndex = callback.lastIndexOf("scheduleQuickVideoSocialDelivery");
+  assert.ok(qualityIndex >= 0 && guardedDeliveryIndex > qualityIndex, "social delivery must be downstream of final QC");
+  assert.ok(deliveryIndex >= 0);
 });
 
 test("editor keeps spend safety and exposes professional handoff instead of bypassing production", async () => {
