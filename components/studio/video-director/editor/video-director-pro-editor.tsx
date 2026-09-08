@@ -54,6 +54,12 @@ function isVideoAsset(asset: MediaAsset | undefined) {
   return asset.mime_type?.startsWith("video/") === true || /\.(mp4|mov|webm|m4v)(\?|$)/.test(url) || /video|footage|clip/.test(asset.asset_type.toLowerCase());
 }
 
+function isVisualAsset(asset: MediaAsset) {
+  const mime = asset.mime_type?.toLowerCase() ?? "";
+  const type = asset.asset_type.toLowerCase();
+  return isVideoAsset(asset) || mime.startsWith("image/") || /image|photo|artwork|cover|visual|graphic/.test(type);
+}
+
 function downloadText(name: string, content: string, type: string) {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
@@ -89,6 +95,8 @@ function Palette({
   const [selectedMediaId, setSelectedMediaId] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [characterName, setCharacterName] = useState("");
+  const renderAssetIds = new Set(data.renders.flatMap((render) => render.media_asset_id ? [render.media_asset_id] : []));
+  const sourceAssets = data.assets.filter((asset) => isVisualAsset(asset) && asset.asset_type !== "thumbnail" && !renderAssetIds.has(asset.id));
 
   if (tab === "story") {
     return (
@@ -116,12 +124,12 @@ function Palette({
   if (tab === "media") {
     return (
       <div className="video-editor-palette-content">
-        <div className="video-editor-panel-heading"><span>Media library</span><strong>{data.assets.length} assets</strong></div>
+        <div className="video-editor-panel-heading"><span>Media library</span><strong>{sourceAssets.length} visual assets</strong></div>
         <SourceAssemblyControls data={data} selectedShot={selectedShot} />
         <div className="video-editor-subheading">Manual source</div>
         <p className="video-editor-panel-hint">Pick a specific real asset when you want to override the rough-cut suggestion. Manual assignment is always explicit.</p>
         <div className="video-editor-media-grid">
-          {data.assets.map((asset) => (
+          {sourceAssets.map((asset) => (
             <button key={asset.id} type="button" className={selectedMediaId === asset.id ? "is-selected" : ""} onClick={() => setSelectedMediaId(asset.id)}>
               {asset.public_url && !isVideoAsset(asset) ? <img src={asset.public_url} alt="" /> : <span>{String(asset.asset_type).replaceAll("_", " ")}</span>}
               <small>{String(asset.asset_type).replaceAll("_", " ")}</small>
