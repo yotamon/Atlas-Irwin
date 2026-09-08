@@ -11,6 +11,7 @@ import {
 } from "@/app/studio/video-editor-actions";
 import type { ExtendedMusicVideoGeneration, ExtendedMusicVideoShot } from "@/types/video-database";
 import type { VideoWorkspaceData } from "../workspace-types";
+import { ShotHumanQualityGate } from "./shot-human-qc";
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -73,6 +74,7 @@ export function ShotVariantLab({ data, shot }: { data: VideoWorkspaceData; shot:
           );
         })}
       </div> : <div className="video-editor-empty-note">Create two or three takes here, then choose the winner without disturbing the currently locked edit.</div>}
+      <ShotHumanQualityGate projectId={data.project.id} shot={shot} />
     </section>
   );
 }
