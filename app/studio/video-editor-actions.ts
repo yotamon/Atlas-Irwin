@@ -173,12 +173,14 @@ export async function updateVideoShotEditor(input: z.infer<typeof shotEditorInpu
   const existingParams = record(shot.generation_params);
   const generationParams: Record<string, unknown> = { ...existingParams };
   if (parsed.shotType === "performance" && parsed.lipSync) {
-    const audioUrl = await resolveProjectAudioUrl(baseDb, context.project, user.id, context.release.artist_id);
+    const audioUrl = await resolveProjectAudioUrl(baseDb, context.project, user.id, artist.artistId);
     if (!audioUrl) throw new Error("Lip-sync performance needs accessible track audio.");
     generationParams.audio_references = [{ type: "audio_url", audio_url: audioUrl }];
+    generationParams.performance_mode = "lip_sync";
     generationParams.generate_audio = false;
   } else {
     delete generationParams.audio_references;
+    delete generationParams.performance_mode;
   }
 
   let selectedModel = shot.selected_model;
