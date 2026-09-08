@@ -1,0 +1,344 @@
+/* Canonical overlays and command surfaces.
+   Behavior is provided by Base UI; this file owns Ensemblis visual language only. */
+
+.studio-root .ensemblis-dialog-backdrop,
+.studio-root .ensemblis-command-backdrop {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in srgb, var(--en-black) 72%, transparent);
+  backdrop-filter: blur(10px) saturate(112%);
+  transition: opacity var(--en-duration-normal) var(--en-ease-standard);
+}
+
+.studio-root .ensemblis-dialog-backdrop { z-index: 110; }
+.studio-root .ensemblis-command-backdrop { z-index: 120; }
+
+.studio-root .ensemblis-dialog-viewport,
+.studio-root .ensemblis-command-viewport {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  overflow-y: auto;
+  pointer-events: none;
+}
+
+.studio-root .ensemblis-dialog-viewport {
+  z-index: 111;
+  place-items: center;
+  padding: var(--en-space-4);
+}
+
+.studio-root .ensemblis-command-viewport {
+  z-index: 121;
+  place-items: start center;
+  padding: min(14vh, 8rem) var(--en-space-4) var(--en-space-4);
+}
+
+.studio-root .ensemblis-dialog,
+.studio-root .ensemblis-command-dialog {
+  pointer-events: auto;
+  border: 1px solid var(--en-line-strong);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--en-white) 2.2%, transparent), transparent 34%),
+    color-mix(in srgb, var(--en-surface) 97%, var(--en-black));
+  box-shadow: var(--en-shadow-lg);
+  transition:
+    opacity var(--en-duration-normal) var(--en-ease-standard),
+    transform var(--en-duration-slow) var(--en-ease-emphasized);
+}
+
+.studio-root .ensemblis-dialog[data-starting-style],
+.studio-root .ensemblis-dialog[data-ending-style],
+.studio-root .ensemblis-command-dialog[data-starting-style],
+.studio-root .ensemblis-command-dialog[data-ending-style] {
+  opacity: 0;
+  transform: translateY(0.45rem) scale(0.985);
+}
+
+.studio-root .ensemblis-dialog-backdrop[data-starting-style],
+.studio-root .ensemblis-dialog-backdrop[data-ending-style],
+.studio-root .ensemblis-command-backdrop[data-starting-style],
+.studio-root .ensemblis-command-backdrop[data-ending-style] {
+  opacity: 0;
+}
+
+.studio-root .ensemblis-dialog {
+  width: min(100%, 36rem);
+  max-height: min(86svh, 52rem);
+  overflow: hidden;
+  border-radius: var(--en-radius-lg);
+}
+
+.studio-root .ensemblis-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--en-space-4);
+  padding: var(--en-space-5) var(--en-space-5) var(--en-space-4);
+  border-bottom: 1px solid var(--en-line);
+}
+
+.studio-root .ensemblis-dialog-header > div {
+  display: grid;
+  gap: var(--en-space-2);
+  min-width: 0;
+}
+
+.studio-root .ensemblis-dialog-header h2 {
+  margin: 0;
+  color: var(--en-ink);
+  font-size: var(--en-text-xl);
+  font-weight: var(--en-weight-semibold);
+  letter-spacing: -0.03em;
+}
+
+.studio-root .ensemblis-dialog-header p {
+  margin: 0;
+  color: var(--en-muted);
+  font-size: var(--en-text-sm);
+  line-height: var(--en-leading-body);
+}
+
+.studio-root .ensemblis-dialog-close {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: var(--en-control-sm);
+  min-height: var(--en-control-sm);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--en-radius-sm);
+  background: transparent;
+  color: var(--en-muted);
+  cursor: pointer;
+}
+
+.studio-root .ensemblis-dialog-close:hover,
+.studio-root .ensemblis-dialog-close:focus-visible {
+  border-color: var(--en-line);
+  background: var(--en-surface-raised);
+  color: var(--en-ink);
+}
+
+.studio-root .ensemblis-dialog-close span {
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.studio-root .ensemblis-dialog-body {
+  max-height: calc(min(86svh, 52rem) - 5.5rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--en-space-5);
+}
+
+.studio-root .ensemblis-confirm-copy {
+  margin: 0;
+  color: var(--en-muted);
+  line-height: var(--en-leading-body);
+}
+
+.studio-root .ensemblis-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--en-space-2);
+  margin-top: var(--en-space-5);
+  flex-wrap: wrap;
+}
+
+.studio-root .ensemblis-command-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--en-space-2);
+  min-height: 2.15rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-sm);
+  background: color-mix(in srgb, var(--en-surface-raised) 72%, transparent);
+  color: var(--en-muted);
+  font: inherit;
+  font-size: var(--en-text-2xs);
+  font-weight: var(--en-weight-semibold);
+  cursor: pointer;
+}
+
+.studio-root .ensemblis-command-trigger:hover,
+.studio-root .ensemblis-command-trigger:focus-visible {
+  border-color: var(--en-line-strong);
+  color: var(--en-ink);
+}
+
+.studio-root .ensemblis-command-trigger kbd {
+  padding: 0.1rem 0.3rem;
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-xs);
+  background: var(--en-bg);
+  color: var(--en-subtle);
+  font: var(--en-weight-semibold) var(--en-text-2xs) var(--font-body);
+}
+
+.studio-root .ensemblis-command-dialog {
+  width: min(100%, 38rem);
+  max-height: min(68svh, 40rem);
+  overflow: hidden;
+  border-radius: var(--en-radius-lg);
+}
+
+.studio-root .ensemblis-command-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--en-space-2);
+  align-items: center;
+  padding: var(--en-space-3);
+  border-bottom: 1px solid var(--en-line);
+}
+
+.studio-root .ensemblis-command-search input {
+  width: 100%;
+  min-height: var(--en-control-sm);
+  padding: 0.5rem 0.65rem;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--en-ink);
+  font: inherit;
+  font-size: var(--en-text-md);
+}
+
+.studio-root .ensemblis-command-search input::placeholder { color: var(--en-subtle); }
+
+.studio-root .ensemblis-command-search button {
+  min-width: var(--en-control-sm);
+  min-height: var(--en-control-sm);
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-sm);
+  background: transparent;
+  color: var(--en-subtle);
+  font-size: var(--en-text-2xs);
+  cursor: pointer;
+}
+
+.studio-root .ensemblis-command-results {
+  max-height: calc(min(68svh, 40rem) - 4.3rem);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: var(--en-space-2);
+  scroll-padding-block: var(--en-space-3);
+}
+
+.studio-root .ensemblis-command-searching {
+  padding: 0.45rem 0.55rem 0.2rem;
+  color: var(--en-subtle);
+  font-size: var(--en-text-2xs);
+  font-weight: var(--en-weight-medium);
+}
+
+.studio-root .ensemblis-command-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--en-space-3);
+  margin: var(--en-space-1);
+  padding: var(--en-space-3);
+  border: 1px solid color-mix(in srgb, var(--en-danger) 38%, var(--en-line));
+  border-radius: var(--en-radius-sm);
+  background: var(--en-danger-soft);
+  color: color-mix(in srgb, var(--en-danger) 78%, var(--en-ink));
+  font-size: var(--en-text-xs);
+}
+
+.studio-root .ensemblis-command-group {
+  display: grid;
+  gap: 0.12rem;
+  padding: 0.35rem 0;
+}
+
+.studio-root .ensemblis-command-group > span {
+  padding: 0.35rem 0.55rem;
+  color: var(--en-subtle);
+  font-size: var(--en-text-2xs);
+  font-weight: var(--en-weight-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.studio-root .ensemblis-command-group > a {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(7rem, auto) auto;
+  gap: var(--en-space-3);
+  align-items: center;
+  padding: 0.65rem 0.7rem;
+  border-radius: var(--en-radius-sm);
+}
+
+.studio-root .ensemblis-command-group > a:hover,
+.studio-root .ensemblis-command-group > a:focus-visible {
+  background: var(--en-surface-hover);
+}
+
+.studio-root .ensemblis-command-group strong {
+  color: var(--en-ink);
+  font-size: var(--en-text-xs);
+  font-weight: var(--en-weight-semibold);
+}
+
+.studio-root .ensemblis-command-group small {
+  overflow: hidden;
+  color: var(--en-subtle);
+  font-size: var(--en-text-2xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-root .ensemblis-command-group b {
+  color: var(--en-subtle);
+  font-size: var(--en-text-2xs);
+  font-weight: var(--en-weight-medium);
+}
+
+.studio-root .ensemblis-command-empty {
+  padding: var(--en-space-8) var(--en-space-4);
+  color: var(--en-muted);
+  font-size: var(--en-text-xs);
+  text-align: center;
+}
+
+@media (max-width: 680px) {
+  .studio-root .ensemblis-command-trigger span,
+  .studio-root .ensemblis-command-trigger kbd { display: none; }
+
+  .studio-root .ensemblis-command-trigger {
+    width: var(--en-control-md);
+    min-width: var(--en-control-md);
+    padding: 0;
+  }
+
+  .studio-root .ensemblis-command-trigger::before {
+    content: "⌕";
+    margin: auto;
+    font-size: var(--en-text-lg);
+  }
+
+  .studio-root .ensemblis-command-viewport { padding-top: 4.6rem; }
+  .studio-root .ensemblis-command-group > a { grid-template-columns: minmax(0, 1fr) auto; }
+  .studio-root .ensemblis-command-group small { display: none; }
+
+  .studio-root .ensemblis-dialog-viewport {
+    place-items: end center;
+    padding: var(--en-space-2);
+  }
+
+  .studio-root .ensemblis-dialog {
+    width: 100%;
+    max-height: min(92svh, 52rem);
+    border-radius: var(--en-radius-lg) var(--en-radius-lg) var(--en-radius-sm) var(--en-radius-sm);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-root .ensemblis-dialog,
+  .studio-root .ensemblis-command-dialog,
+  .studio-root .ensemblis-dialog-backdrop,
+  .studio-root .ensemblis-command-backdrop { transition: none; }
+}
