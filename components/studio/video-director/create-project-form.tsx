@@ -24,6 +24,10 @@ import type {
 import type { Release, Track } from "@/types/database";
 import type { Moment } from "@/types/moments-database";
 
+function profileForIndex(index: number): VideoProductionProfile {
+  return VIDEO_PRODUCTION_PROFILES[index] ?? "balanced";
+}
+
 export function CreateProjectForm({
   release,
   tracks,
@@ -134,14 +138,14 @@ export function CreateProjectForm({
         </div>
         <p className="section-copy">This controls how aggressively Ensemblis chooses premium models. The exact provider, model and price for every shot appear as soon as the storyboard exists, before any paid generation.</p>
         <div className="video-quality-slider video-quality-slider--create">
-          <div className="video-quality-slider__labels" aria-hidden="true">
+          <div className="video-quality-slider__labels" role="group" aria-label="Production quality presets">
             {VIDEO_PRODUCTION_PROFILE_DEFINITIONS.map((item, index) => (
               <button
                 type="button"
                 key={item.id}
                 className={index === productionIndex ? "active" : ""}
-                onClick={() => setProductionProfile(VIDEO_PRODUCTION_PROFILES[index])}
-                tabIndex={-1}
+                aria-pressed={index === productionIndex}
+                onClick={() => setProductionProfile(profileForIndex(index))}
               >
                 <span>{item.eyebrow}</span>
                 <strong>{item.label}</strong>
@@ -151,13 +155,14 @@ export function CreateProjectForm({
           <input
             type="range"
             aria-label="Production quality"
+            aria-valuetext={productionDefinition.label}
             min={0}
             max={VIDEO_PRODUCTION_PROFILES.length - 1}
             step={1}
             value={productionIndex}
-            onChange={(event) => setProductionProfile(VIDEO_PRODUCTION_PROFILES[Number(event.target.value)])}
+            onChange={(event) => setProductionProfile(profileForIndex(Number(event.target.value)))}
           />
-          <div className="video-quality-slider__selection">
+          <div className="video-quality-slider__selection" aria-live="polite">
             <div><span>{productionDefinition.eyebrow}</span><strong>{productionDefinition.label}</strong></div>
             <p>{productionDefinition.description}</p>
           </div>
@@ -182,7 +187,7 @@ export function CreateProjectForm({
               onChange={(event) => setMaxBudgetUsd(event.target.value)}
             />
           </div>
-          <div className="video-budget-cap__state">
+          <div className="video-budget-cap__state" aria-live="polite">
             <strong>{maxBudgetUsd ? `Never exceed $${Number(maxBudgetUsd || 0).toLocaleString("en-US")}` : "No USD ceiling"}</strong>
             <span>Every paid batch still requires explicit approval.</span>
           </div>
