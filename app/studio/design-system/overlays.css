@@ -1,8 +1,10 @@
 /* Canonical overlays and command surfaces.
-   Behavior is provided by Base UI; this file owns Ensemblis visual language only. */
+   Base UI portals render under <body>, so portal classes intentionally are not
+   descendant-scoped to .studio-root. Studio tokens are available on :root while
+   a Studio route is mounted, and these class names are Ensemblis-specific. */
 
-.studio-root .ensemblis-dialog-backdrop,
-.studio-root .ensemblis-command-backdrop {
+.ensemblis-dialog-backdrop,
+.ensemblis-command-backdrop {
   position: fixed;
   inset: 0;
   background: color-mix(in srgb, var(--en-black) 72%, transparent);
@@ -10,11 +12,11 @@
   transition: opacity var(--en-duration-normal) var(--en-ease-standard);
 }
 
-.studio-root .ensemblis-dialog-backdrop { z-index: 110; }
-.studio-root .ensemblis-command-backdrop { z-index: 120; }
+.ensemblis-dialog-backdrop { z-index: 110; }
+.ensemblis-command-backdrop { z-index: 120; }
 
-.studio-root .ensemblis-dialog-viewport,
-.studio-root .ensemblis-command-viewport {
+.ensemblis-dialog-viewport,
+.ensemblis-command-viewport {
   position: fixed;
   inset: 0;
   display: grid;
@@ -22,20 +24,20 @@
   pointer-events: none;
 }
 
-.studio-root .ensemblis-dialog-viewport {
+.ensemblis-dialog-viewport {
   z-index: 111;
   place-items: center;
   padding: var(--en-space-4);
 }
 
-.studio-root .ensemblis-command-viewport {
+.ensemblis-command-viewport {
   z-index: 121;
   place-items: start center;
   padding: min(14vh, 8rem) var(--en-space-4) var(--en-space-4);
 }
 
-.studio-root .ensemblis-dialog,
-.studio-root .ensemblis-command-dialog {
+.ensemblis-dialog,
+.ensemblis-command-dialog {
   pointer-events: auto;
   border: 1px solid var(--en-line-strong);
   background:
@@ -47,29 +49,27 @@
     transform var(--en-duration-slow) var(--en-ease-emphasized);
 }
 
-.studio-root .ensemblis-dialog[data-starting-style],
-.studio-root .ensemblis-dialog[data-ending-style],
-.studio-root .ensemblis-command-dialog[data-starting-style],
-.studio-root .ensemblis-command-dialog[data-ending-style] {
+.ensemblis-dialog[data-starting-style],
+.ensemblis-dialog[data-ending-style],
+.ensemblis-command-dialog[data-starting-style],
+.ensemblis-command-dialog[data-ending-style] {
   opacity: 0;
   transform: translateY(0.45rem) scale(0.985);
 }
 
-.studio-root .ensemblis-dialog-backdrop[data-starting-style],
-.studio-root .ensemblis-dialog-backdrop[data-ending-style],
-.studio-root .ensemblis-command-backdrop[data-starting-style],
-.studio-root .ensemblis-command-backdrop[data-ending-style] {
-  opacity: 0;
-}
+.ensemblis-dialog-backdrop[data-starting-style],
+.ensemblis-dialog-backdrop[data-ending-style],
+.ensemblis-command-backdrop[data-starting-style],
+.ensemblis-command-backdrop[data-ending-style] { opacity: 0; }
 
-.studio-root .ensemblis-dialog {
+.ensemblis-dialog {
   width: min(100%, 36rem);
   max-height: min(86svh, 52rem);
   overflow: hidden;
   border-radius: var(--en-radius-lg);
 }
 
-.studio-root .ensemblis-dialog-header {
+.ensemblis-dialog-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -78,13 +78,13 @@
   border-bottom: 1px solid var(--en-line);
 }
 
-.studio-root .ensemblis-dialog-header > div {
+.ensemblis-dialog-header > div {
   display: grid;
   gap: var(--en-space-2);
   min-width: 0;
 }
 
-.studio-root .ensemblis-dialog-header h2 {
+.ensemblis-dialog-header h2 {
   margin: 0;
   color: var(--en-ink);
   font-size: var(--en-text-xl);
@@ -92,14 +92,14 @@
   letter-spacing: -0.03em;
 }
 
-.studio-root .ensemblis-dialog-header p {
+.ensemblis-dialog-header p {
   margin: 0;
   color: var(--en-muted);
   font-size: var(--en-text-sm);
   line-height: var(--en-leading-body);
 }
 
-.studio-root .ensemblis-dialog-close {
+.ensemblis-dialog-close {
   display: inline-grid;
   place-items: center;
   flex: 0 0 auto;
@@ -113,32 +113,29 @@
   cursor: pointer;
 }
 
-.studio-root .ensemblis-dialog-close:hover,
-.studio-root .ensemblis-dialog-close:focus-visible {
+.ensemblis-dialog-close:hover,
+.ensemblis-dialog-close:focus-visible {
   border-color: var(--en-line);
   background: var(--en-surface-raised);
   color: var(--en-ink);
 }
 
-.studio-root .ensemblis-dialog-close span {
-  font-size: 1.35rem;
-  line-height: 1;
-}
+.ensemblis-dialog-close span { font-size: 1.35rem; line-height: 1; }
 
-.studio-root .ensemblis-dialog-body {
+.ensemblis-dialog-body {
   max-height: calc(min(86svh, 52rem) - 5.5rem);
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: var(--en-space-5);
 }
 
-.studio-root .ensemblis-confirm-copy {
+.ensemblis-confirm-copy {
   margin: 0;
   color: var(--en-muted);
   line-height: var(--en-leading-body);
 }
 
-.studio-root .ensemblis-confirm-actions {
+.ensemblis-confirm-actions {
   display: flex;
   justify-content: flex-end;
   gap: var(--en-space-2);
@@ -177,14 +174,14 @@
   font: var(--en-weight-semibold) var(--en-text-2xs) var(--font-body);
 }
 
-.studio-root .ensemblis-command-dialog {
+.ensemblis-command-dialog {
   width: min(100%, 38rem);
   max-height: min(68svh, 40rem);
   overflow: hidden;
   border-radius: var(--en-radius-lg);
 }
 
-.studio-root .ensemblis-command-search {
+.ensemblis-command-search {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--en-space-2);
@@ -193,7 +190,7 @@
   border-bottom: 1px solid var(--en-line);
 }
 
-.studio-root .ensemblis-command-search input {
+.ensemblis-command-search input {
   width: 100%;
   min-height: var(--en-control-sm);
   padding: 0.5rem 0.65rem;
@@ -205,9 +202,9 @@
   font-size: var(--en-text-md);
 }
 
-.studio-root .ensemblis-command-search input::placeholder { color: var(--en-subtle); }
+.ensemblis-command-search input::placeholder { color: var(--en-subtle); }
 
-.studio-root .ensemblis-command-search button {
+.ensemblis-command-search button {
   min-width: var(--en-control-sm);
   min-height: var(--en-control-sm);
   padding: 0.4rem 0.5rem;
@@ -219,7 +216,7 @@
   cursor: pointer;
 }
 
-.studio-root .ensemblis-command-results {
+.ensemblis-command-results {
   max-height: calc(min(68svh, 40rem) - 4.3rem);
   overflow: auto;
   overscroll-behavior: contain;
@@ -227,14 +224,14 @@
   scroll-padding-block: var(--en-space-3);
 }
 
-.studio-root .ensemblis-command-searching {
+.ensemblis-command-searching {
   padding: 0.45rem 0.55rem 0.2rem;
   color: var(--en-subtle);
   font-size: var(--en-text-2xs);
   font-weight: var(--en-weight-medium);
 }
 
-.studio-root .ensemblis-command-error {
+.ensemblis-command-error {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -248,13 +245,13 @@
   font-size: var(--en-text-xs);
 }
 
-.studio-root .ensemblis-command-group {
+.ensemblis-command-group {
   display: grid;
   gap: 0.12rem;
   padding: 0.35rem 0;
 }
 
-.studio-root .ensemblis-command-group > span {
+.ensemblis-command-group > span {
   padding: 0.35rem 0.55rem;
   color: var(--en-subtle);
   font-size: var(--en-text-2xs);
@@ -263,27 +260,27 @@
   text-transform: uppercase;
 }
 
-.studio-root .ensemblis-command-group > a {
+.ensemblis-command-group > a {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(7rem, auto) auto;
   gap: var(--en-space-3);
   align-items: center;
   padding: 0.65rem 0.7rem;
   border-radius: var(--en-radius-sm);
+  color: inherit;
+  text-decoration: none;
 }
 
-.studio-root .ensemblis-command-group > a:hover,
-.studio-root .ensemblis-command-group > a:focus-visible {
-  background: var(--en-surface-hover);
-}
+.ensemblis-command-group > a:hover,
+.ensemblis-command-group > a:focus-visible { background: var(--en-surface-hover); }
 
-.studio-root .ensemblis-command-group strong {
+.ensemblis-command-group strong {
   color: var(--en-ink);
   font-size: var(--en-text-xs);
   font-weight: var(--en-weight-semibold);
 }
 
-.studio-root .ensemblis-command-group small {
+.ensemblis-command-group small {
   overflow: hidden;
   color: var(--en-subtle);
   font-size: var(--en-text-2xs);
@@ -291,13 +288,13 @@
   white-space: nowrap;
 }
 
-.studio-root .ensemblis-command-group b {
+.ensemblis-command-group b {
   color: var(--en-subtle);
   font-size: var(--en-text-2xs);
   font-weight: var(--en-weight-medium);
 }
 
-.studio-root .ensemblis-command-empty {
+.ensemblis-command-empty {
   padding: var(--en-space-8) var(--en-space-4);
   color: var(--en-muted);
   font-size: var(--en-text-xs);
@@ -320,16 +317,16 @@
     font-size: var(--en-text-lg);
   }
 
-  .studio-root .ensemblis-command-viewport { padding-top: 4.6rem; }
-  .studio-root .ensemblis-command-group > a { grid-template-columns: minmax(0, 1fr) auto; }
-  .studio-root .ensemblis-command-group small { display: none; }
+  .ensemblis-command-viewport { padding-top: 4.6rem; }
+  .ensemblis-command-group > a { grid-template-columns: minmax(0, 1fr) auto; }
+  .ensemblis-command-group small { display: none; }
 
-  .studio-root .ensemblis-dialog-viewport {
+  .ensemblis-dialog-viewport {
     place-items: end center;
     padding: var(--en-space-2);
   }
 
-  .studio-root .ensemblis-dialog {
+  .ensemblis-dialog {
     width: 100%;
     max-height: min(92svh, 52rem);
     border-radius: var(--en-radius-lg) var(--en-radius-lg) var(--en-radius-sm) var(--en-radius-sm);
@@ -337,8 +334,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .studio-root .ensemblis-dialog,
-  .studio-root .ensemblis-command-dialog,
-  .studio-root .ensemblis-dialog-backdrop,
-  .studio-root .ensemblis-command-backdrop { transition: none; }
+  .ensemblis-dialog,
+  .ensemblis-command-dialog,
+  .ensemblis-dialog-backdrop,
+  .ensemblis-command-backdrop { transition: none; }
 }
