@@ -1,4 +1,5 @@
 import type { CreativeMemoryRecommendation } from "@/lib/creative-memory/server";
+import type { VideoProductionProfilePreview } from "@/lib/video-director/production-profile";
 import type { MediaAsset, MusicVideoConcept, MusicVideoRender, MusicVideoScene, Release, Track } from "@/types/database";
 import type {
   ExtendedMusicVideoApproval,
@@ -15,6 +16,7 @@ export type VideoServiceReadiness = {
     configuredModels: string[];
     inferredEndpointsEnabled: boolean;
     hasConfiguredRates: boolean;
+    usdPerCredit: number | null;
   };
   worker: { configured: boolean; url: string | null };
 };
@@ -32,6 +34,7 @@ export type VideoWorkspaceData = {
   renders: MusicVideoRender[];
   workerJobs: MusicVideoWorkerJob[];
   assets: MediaAsset[];
+  productionProfilePreviews: VideoProductionProfilePreview[];
   creativeMemory: {
     summary: string;
     evidenceCount: number;
