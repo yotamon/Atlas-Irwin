@@ -1,11 +1,11 @@
 -- Ensemblis Video Director Pro Editor
--- First-class timeline editing, reusable cast identity, performance intent, captions and music-reactive direction.
+-- First-class timeline editing, reusable artist-scoped cast identity, performance intent, captions and music-reactive direction.
 
 create table public.music_video_characters (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references public.profiles(id) on delete cascade,
   artist_id uuid not null references public.artists(id) on delete restrict,
-  project_id uuid not null references public.music_video_projects(id) on delete cascade,
+  project_id uuid references public.music_video_projects(id) on delete set null,
   name text not null,
   role text not null default 'character' check (role in ('artist','featured','character')),
   identity_prompt text not null default '',
@@ -32,9 +32,9 @@ alter table public.music_video_shots
   add column if not exists quality_checks jsonb not null default '{}'::jsonb;
 
 create index music_video_characters_project_idx
-  on public.music_video_characters(project_id, created_at);
+  on public.music_video_characters(project_id, created_at) where project_id is not null;
 create index music_video_characters_artist_idx
-  on public.music_video_characters(artist_id, created_at);
+  on public.music_video_characters(owner_id, artist_id, created_at);
 create index music_video_shots_character_idx
   on public.music_video_shots(character_id) where character_id is not null;
 
@@ -48,22 +48,25 @@ declare
   v_owner uuid;
   v_artist uuid;
 begin
+  if jsonb_typeof(new.reference_asset_ids) <> 'array' or jsonb_typeof(new.approved_asset_ids) <> 'array' then
+    raise exception 'Video character reference collections must be arrays';
+  end if;
+
+  if new.project_id is null then return new; end if;
+
   select p.owner_id, r.artist_id into v_owner, v_artist
   from public.music_video_projects p
   join public.releases r on r.id = p.release_id
   where p.id = new.project_id;
 
   if v_owner is null or v_artist is null then
-    raise exception 'Video character project must resolve to an artist';
+    raise exception 'Video character origin project must resolve to an artist';
   end if;
   if new.owner_id <> v_owner then
-    raise exception 'Video character owner must match project owner';
+    raise exception 'Video character owner must match origin project owner';
   end if;
   if new.artist_id <> v_artist then
-    raise exception 'Video character artist must match project artist';
-  end if;
-  if jsonb_typeof(new.reference_asset_ids) <> 'array' or jsonb_typeof(new.approved_asset_ids) <> 'array' then
-    raise exception 'Video character reference collections must be arrays';
+    raise exception 'Video character artist must match origin project artist';
   end if;
   return new;
 end;
@@ -81,14 +84,22 @@ security invoker
 set search_path = ''
 as $$
 declare
-  v_project uuid;
+  v_character_artist uuid;
+  v_project_artist uuid;
 begin
   if new.character_id is null then return new; end if;
-  select c.project_id into v_project
+
+  select c.artist_id into v_character_artist
   from public.music_video_characters c
   where c.id = new.character_id and c.owner_id = new.owner_id;
-  if v_project is null or v_project <> new.project_id then
-    raise exception 'Video shot character must belong to the same project';
+
+  select r.artist_id into v_project_artist
+  from public.music_video_projects p
+  join public.releases r on r.id = p.release_id
+  where p.id = new.project_id and p.owner_id = new.owner_id;
+
+  if v_character_artist is null or v_project_artist is null or v_character_artist <> v_project_artist then
+    raise exception 'Video shot character must belong to the same artist as the project';
   end if;
   return new;
 end;
