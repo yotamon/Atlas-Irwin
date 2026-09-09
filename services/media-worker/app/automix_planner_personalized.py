@@ -176,6 +176,51 @@ def _set_intent_with_directive_locks(value: Any, directives: dict[str, Any]) -> 
     return raw
 
 
+def _honor_small_route_directives(
+    tracks: list[TrackDescriptor],
+    directives: dict[str, Any],
+    purpose: Purpose,
+) -> list[TrackDescriptor]:
+    """Honor hard locks for the tiny routes the canonical beam planner intentionally short-circuits.
+
+    Journey mode remains narrative-order preserving. For one or two ordinary tracks, directives
+    must still have the same semantics as a larger route: locks are exact and preferred order is
+    the deterministic tiebreaker for the remaining slot.
+    """
+    if len(tracks) <= 1 or purpose == "journey":
+        return tracks
+    if len(tracks) > 2:
+        return tracks
+
+    by_id = {track.id: track for track in tracks}
+    locks = {
+        track_id: position
+        for track_id, position in locked_position_map(directives).items()
+        if track_id in by_id
+    }
+    slots: list[TrackDescriptor | None] = [None] * len(tracks)
+    for track_id, position in locks.items():
+        if position >= len(slots):
+            raise ValueError("A locked set position is outside the final curated route")
+        if slots[position] is not None:
+            raise ValueError("Two tracks cannot occupy the same locked set position")
+        slots[position] = by_id[track_id]
+
+    preferred = [
+        track_id
+        for track_id in directives.get("preferred_order_track_ids") or []
+        if isinstance(track_id, str) and track_id in by_id
+    ]
+    preferred_rank = {track_id: index for index, track_id in enumerate(preferred)}
+    remaining = [track for track in tracks if track.id not in locks]
+    remaining.sort(key=lambda track: preferred_rank.get(track.id, len(preferred_rank)))
+    iterator = iter(remaining)
+    for index, track in enumerate(slots):
+        if track is None:
+            slots[index] = next(iterator)
+    return [track for track in slots if track is not None]
+
+
 def build_set_intelligent_plan(
     tracks: list[TrackDescriptor],
     purpose: Purpose,
@@ -215,6 +260,7 @@ def build_set_intelligent_plan(
     }
     if selected_locks and max(selected_locks.values()) >= len(selected_tracks):
         raise ValueError("A locked set position is outside the final curated route")
+    selected_tracks = _honor_small_route_directives(selected_tracks, directives, purpose)
 
     plan = build_canonical_plan(
         selected_tracks,
@@ -255,6 +301,7 @@ def build_set_intelligent_plan(
         "canonical_transition_safety_preserved": True,
         "plan_directives_are_durable": True,
         "locked_tracks_survive_curation": True,
+        "small_route_locks_are_hard": True,
         "set_intent_version": selection["set_intent"].get("version"),
         "dj_profile_version": normalized_profile.get("version"),
         "plan_directives_version": directives.get("version"),
