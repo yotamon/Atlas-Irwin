@@ -51,11 +51,14 @@ export function AutoMixRenderRecovery({ artistId }: { artistId: string }) {
     return () => { cancelled = true; };
   }, [artistId]);
 
-  const failedRender = useMemo(
-    () => jobs.find((job) => executionMode(job) === "approved_render" && job.status === "failed") ?? null,
+  const latestApprovedRender = useMemo(
+    () => jobs.find((job) => executionMode(job) === "approved_render") ?? null,
     [jobs],
   );
-  const hasActiveRender = jobs.some((job) => executionMode(job) === "approved_render" && ["planned", "queued", "running"].includes(job.status));
+  const failedRender = latestApprovedRender?.status === "failed" ? latestApprovedRender : null;
+  const hasActiveRender = latestApprovedRender
+    ? ["planned", "queued", "running"].includes(latestApprovedRender.status)
+    : false;
 
   if (!failedRender) return null;
 
@@ -98,7 +101,7 @@ export function AutoMixRenderRecovery({ artistId }: { artistId: string }) {
         {message ? <small role="status">{message}</small> : null}
       </div>
       <button className="button button-primary" type="button" disabled={retrying || hasActiveRender} onClick={() => void retry()}>
-        <FiRefreshCw aria-hidden /> {retrying ? "Retrying…" : hasActiveRender ? "Render already active" : "Retry exact render"}
+        <FiRefreshCw aria-hidden /> {retrying ? "Retrying…" : "Retry exact render"}
       </button>
     </section>
   );
