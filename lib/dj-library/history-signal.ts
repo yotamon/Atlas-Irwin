@@ -77,32 +77,46 @@ export function observeDjLibraryHistory(
     byId.set(track.sourceTrackId, track);
     byId.set(track.stableId, track);
   }
-  const ordered = [...history]
-    .sort((a, b) => (a.position ?? Number.MAX_SAFE_INTEGER) - (b.position ?? Number.MAX_SAFE_INTEGER))
-    .flatMap((entry) => {
-      const track = byId.get(entry.trackId);
-      return track ? [track] : [];
-    });
+
+  // History playlists represent separate DJ sessions. Positions restart inside each one, so never
+  // create a fake transition from the end of one history playlist to the beginning of another.
+  const sessions = new Map<string, Array<{ entry: DjLibraryPlayHistoryEntry; track: NormalizedDjLibraryTrack }>>();
+  for (const entry of history) {
+    const track = byId.get(entry.trackId);
+    if (!track) continue;
+    const sessionKey = entry.context?.trim() || "__default_history_session__";
+    const session = sessions.get(sessionKey) ?? [];
+    session.push({ entry, track });
+    sessions.set(sessionKey, session);
+  }
 
   const tempoMovements: number[] = [];
   const harmonicMovements: number[] = [];
-  for (let index = 0; index < ordered.length - 1; index += 1) {
-    const current = ordered[index];
-    const next = ordered[index + 1];
-    const currentBpm = current.metadata.bpm;
-    const nextBpm = next.metadata.bpm;
-    if (typeof currentBpm === "number" && currentBpm > 0 && typeof nextBpm === "number" && nextBpm > 0) {
-      tempoMovements.push(clamp01(Math.abs(nextBpm - currentBpm) / currentBpm / 0.12));
+  let sampleCount = 0;
+  let orderedPairCount = 0;
+
+  for (const session of sessions.values()) {
+    session.sort((a, b) => (a.entry.position ?? Number.MAX_SAFE_INTEGER) - (b.entry.position ?? Number.MAX_SAFE_INTEGER));
+    sampleCount += session.length;
+    orderedPairCount += Math.max(0, session.length - 1);
+    for (let index = 0; index < session.length - 1; index += 1) {
+      const current = session[index].track;
+      const next = session[index + 1].track;
+      const currentBpm = current.metadata.bpm;
+      const nextBpm = next.metadata.bpm;
+      if (typeof currentBpm === "number" && currentBpm > 0 && typeof nextBpm === "number" && nextBpm > 0) {
+        tempoMovements.push(clamp01(Math.abs(nextBpm - currentBpm) / currentBpm / 0.12));
+      }
+      const currentKey = parseWheelKey(current.metadata.musicalKey);
+      const nextKey = parseWheelKey(next.metadata.musicalKey);
+      if (currentKey && nextKey) harmonicMovements.push(harmonicMovement(currentKey, nextKey));
     }
-    const currentKey = parseWheelKey(current.metadata.musicalKey);
-    const nextKey = parseWheelKey(next.metadata.musicalKey);
-    if (currentKey && nextKey) harmonicMovements.push(harmonicMovement(currentKey, nextKey));
   }
 
   return {
     version: DJ_LIBRARY_HISTORY_OBSERVATION_VERSION,
-    sampleCount: ordered.length,
-    orderedPairCount: Math.max(0, ordered.length - 1),
+    sampleCount,
+    orderedPairCount,
     tempoMovement: mean(tempoMovements),
     harmonicAdventure: mean(harmonicMovements),
   };
