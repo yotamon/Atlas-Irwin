@@ -52,8 +52,6 @@ def normalize_dj_profile(value: Any) -> dict[str, Any]:
         "harmonic_adventure": _clip01(_number(raw.get("harmonic_adventure"), 0.50)),
         "transition_aggressiveness": _clip01(_number(raw.get("transition_aggressiveness"), 0.50)),
         "exploration": _clip01(_number(raw.get("exploration"), 0.45)),
-        "opening_energy": _clip01(_number(raw.get("opening_energy"), 0.42)),
-        "closing_energy": _clip01(_number(raw.get("closing_energy"), 0.58)),
         "learned_confidence": learned_confidence,
     }
 
