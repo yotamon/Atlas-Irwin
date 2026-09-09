@@ -70,6 +70,27 @@ function planLineage(value: Record<string, unknown>) {
   return record(value.plan_lineage);
 }
 
+function publicRenderLineage(result: Record<string, unknown>) {
+  const manifest = record(result.render_manifest);
+  const engine = record(result.engine);
+  const render = record(result.render);
+  const metrics = record(result.execution_metrics);
+  const qa = record(result.qa_diagnostics);
+  return {
+    version: "ensemblis.automix-public-lineage.v1",
+    plan_hash: typeof manifest.plan_hash === "string" ? manifest.plan_hash : null,
+    mixplan_version: typeof manifest.version === "string" ? manifest.version : null,
+    planner_version: typeof manifest.planner_version === "string" ? manifest.planner_version : null,
+    render_engine_contract_version: typeof manifest.render_engine_contract_version === "string"
+      ? manifest.render_engine_contract_version
+      : null,
+    renderer_version: typeof engine.renderer_version === "string" ? engine.renderer_version : null,
+    rendered_duration_ms: typeof render.duration_ms === "number" ? render.duration_ms : null,
+    source_track_count: typeof metrics.source_track_count === "number" ? metrics.source_track_count : null,
+    transition_count: typeof qa.transition_count === "number" ? qa.transition_count : null,
+  };
+}
+
 async function learnFromCompletedEdit(
   service: ReturnType<typeof createServiceClient>,
   job: AutoMixJob,
@@ -290,7 +311,7 @@ export async function POST(request: Request) {
       ? result.mime_type
       : job.output_format === "wav" ? "audio/wav" : "audio/mpeg";
     const render = record(result.render);
-    const renderManifest = record(result.render_manifest);
+    const publicLineage = publicRenderLineage(result);
 
     const latestBeforeCatalog = await db.from("automix_jobs")
       .select("status")
@@ -333,19 +354,8 @@ export async function POST(request: Request) {
           source_kind: "automix",
           automix_job_id: job.id,
           artist_id: job.artist_id,
-          track_ids: job.track_ids,
-          source_fingerprints: job.source_fingerprints,
-          engine: result.engine ?? null,
-          quality_contract: record(result.plan).quality_contract ?? null,
-          plan_lineage: record(record(result.plan).plan_lineage),
-          render_manifest: renderManifest,
-          evaluation: result.evaluation ?? null,
-          qa_diagnostics: result.qa_diagnostics ?? null,
-          execution_metrics: result.execution_metrics ?? null,
-          render_measurements: render,
-          approved_mixplan_hash: typeof renderManifest.plan_hash === "string"
-            ? renderManifest.plan_hash
-            : null,
+          public_render_lineage: publicLineage,
+          approved_mixplan_hash: publicLineage.plan_hash,
         }),
       }).select("*").single();
       if (created.error || !created.data) throw new Error(created.error?.message || "Could not register AutoMix output.");
