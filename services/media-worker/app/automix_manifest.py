@@ -7,6 +7,8 @@ from typing import Any
 
 MIXPLAN_VERSION = "ensemblis.mixplan.v2"
 AUTOMATION_VERSION = "ensemblis.transition-automation.v1"
+RENDER_ENGINE_CONTRACT_VERSION = "ensemblis.offline-audio-render.v1"
+SUPPORTED_RENDER_ENGINE_CONTRACT_VERSIONS = {RENDER_ENGINE_CONTRACT_VERSION}
 ALLOWED_TECHNIQUES = {
     "quick_mix", "bass_swap", "harmonic_blend", "breakdown_swap", "echo_out", "drop_cut",
 }
@@ -104,6 +106,7 @@ def build_mixplan(plan: dict[str, Any], *, source_fingerprints: list[dict[str, A
         "version": MIXPLAN_VERSION,
         "planner_version": str(plan.get("version") or "unknown"),
         "execution_contract": "offline_audio_render",
+        "render_engine_contract_version": RENDER_ENGINE_CONTRACT_VERSION,
         "purpose": plan.get("purpose"),
         "energy_profile": plan.get("energy_profile"),
         "transition_style": plan.get("transition_style"),
@@ -139,6 +142,12 @@ def _validate_envelope(name: str, value: Any) -> None:
 def validate_mixplan(manifest: dict[str, Any]) -> None:
     if str(manifest.get("version") or "") != MIXPLAN_VERSION:
         raise ValueError(f"Unsupported MixPlan version: {manifest.get('version')!r}")
+    renderer_contract = manifest.get("render_engine_contract_version")
+    # MixPlan v2 existed briefly before the renderer contract received its own version field.
+    # Missing is accepted as the original v1 contract for reproducibility; unknown explicit
+    # versions fail closed so a future renderer cannot accidentally execute incompatible DSP.
+    if renderer_contract is not None and str(renderer_contract) not in SUPPORTED_RENDER_ENGINE_CONTRACT_VERSIONS:
+        raise ValueError(f"Unsupported render engine contract: {renderer_contract!r}")
     tracks, transitions = _records(manifest.get("tracks")), _records(manifest.get("transitions"))
     if not tracks:
         raise ValueError("MixPlan contains no tracks")
