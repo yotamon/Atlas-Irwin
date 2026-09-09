@@ -44,6 +44,19 @@ test("AutoMix emits runtime cost proxies and mix-level QA diagnostics without ch
   assert.ok(worker.includes('"render_engine_contract_version": RENDER_ENGINE_CONTRACT_VERSION'));
 });
 
+test("completed mix assets persist the complete reproducibility and QA lineage", async () => {
+  const callback = await source("app/api/studio/automix/callback/route.ts");
+
+  assert.ok(callback.includes("const renderManifest = record(result.render_manifest)"));
+  assert.ok(callback.includes("render_manifest: renderManifest"));
+  assert.ok(callback.includes("evaluation: result.evaluation ?? null"));
+  assert.ok(callback.includes("qa_diagnostics: result.qa_diagnostics ?? null"));
+  assert.ok(callback.includes("execution_metrics: result.execution_metrics ?? null"));
+  assert.ok(callback.includes("render_measurements: render"));
+  assert.ok(callback.includes("source_fingerprints: job.source_fingerprints"));
+  assert.ok(callback.includes("approved_mixplan_hash:"));
+});
+
 test("render retries preserve history instead of mutating the failed attempt", async () => {
   const route = await source("app/api/studio/automix/plans/route.ts");
   const retryBlock = route.slice(
