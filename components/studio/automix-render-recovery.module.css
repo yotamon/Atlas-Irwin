@@ -5,8 +5,8 @@
   align-items: center;
   margin-top: var(--en-space-6);
   padding: var(--en-space-5);
-  border: 1px solid var(--en-warning-line, var(--en-line-strong));
-  background: color-mix(in srgb, var(--en-panel) 86%, var(--en-warning-soft, transparent));
+  border: 1px solid var(--en-line-strong);
+  background: color-mix(in srgb, var(--en-panel) 86%, transparent);
 }
 
 .icon {
@@ -15,7 +15,7 @@
   height: 2.5rem;
   place-items: center;
   border: 1px solid var(--en-line-strong);
-  color: var(--en-warning-text, var(--en-muted));
+  color: var(--en-muted);
 }
 
 .copy {
