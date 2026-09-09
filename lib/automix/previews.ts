@@ -22,6 +22,7 @@ import type { StemDatabase, TrackStem } from "@/types/stem-database";
 const PREVIEW_BUCKET = "automix-previews";
 const STALE_PREVIEW_MS = 20 * 60 * 1000;
 const PREVIEW_PURGE_BATCH = 50;
+const MAX_PREVIEW_PREPARATION_SKIPS = 8;
 
 function json(value: unknown): Json {
   return value as Json;
@@ -48,6 +49,10 @@ function timestamp(value: unknown) {
 function busyError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   return /already processing|worker is busy/i.test(message);
+}
+
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message.trim() ? error.message : fallback;
 }
 
 function withoutCredential(value: unknown) {
@@ -172,7 +177,6 @@ async function preparePreview(preview: AutoMixTransitionPreview) {
     throw new Error(upload.error?.message || "Could not create a private transition-preview upload credential.");
   }
   return {
-    db,
     outputPath,
     payload: {
       tracks,
@@ -239,69 +243,102 @@ async function recoverStalePreviews(db: SupabaseClient<AutoMixDatabase>) {
   return hasActive;
 }
 
+async function failPlannedPreviewPreparation(
+  db: SupabaseClient<AutoMixDatabase>,
+  preview: AutoMixTransitionPreview,
+  error: unknown,
+) {
+  const message = errorMessage(error, "Transition preview could not be prepared for rendering.");
+  const update = await db.from("automix_transition_previews").update({
+    status: "failed",
+    request_payload: json(withoutCredential(preview.request_payload)),
+    error: message,
+    completed_at: new Date().toISOString(),
+  }).eq("id", preview.id)
+    .eq("status", "planned")
+    .select("id")
+    .maybeSingle();
+  if (update.error) throw new Error(update.error.message);
+  return Boolean(update.data);
+}
+
 export async function kickAutoMixPreviewQueue() {
   const service = createServiceClient();
   const db = asAutoMixClient(service) as SupabaseClient<AutoMixDatabase>;
   await purgeExpiredAutoMixPreviews().catch(() => ({ inspected: 0, purged: 0 }));
   if (await recoverStalePreviews(db)) return { dispatched: false, busy: true };
 
-  const planned = await db.from("automix_transition_previews")
-    .select("*")
-    .eq("status", "planned")
-    .order("created_at")
-    .limit(1)
-    .maybeSingle();
-  if (planned.error) throw new Error(planned.error.message);
-  if (!planned.data) return { dispatched: false, busy: false };
-  const preview = planned.data as AutoMixTransitionPreview;
-  const prepared = await preparePreview(preview);
-  const credential = createMediaWorkerCallbackCredential();
-  const requestPayload = {
-    ...prepared.payload,
-    [MEDIA_WORKER_CALLBACK_HASH_KEY]: credential.hash,
-  };
-  const claimed = await db.from("automix_transition_previews").update({
-    status: "queued",
-    output_path: prepared.outputPath,
-    request_payload: json(requestPayload),
-    external_job_id: null,
-    error: null,
-    started_at: null,
-    completed_at: null,
-  }).eq("id", preview.id).eq("status", "planned").select("*").maybeSingle();
-  if (claimed.error) throw new Error(claimed.error.message);
-  if (!claimed.data) return { dispatched: false, busy: false };
+  // A changed master, missing lineage or unavailable storage must not leave the oldest preview
+  // permanently planned and block every later preview. Fail the poisoned row and keep walking.
+  for (let attempt = 0; attempt < MAX_PREVIEW_PREPARATION_SKIPS; attempt += 1) {
+    const planned = await db.from("automix_transition_previews")
+      .select("*")
+      .eq("status", "planned")
+      .order("created_at")
+      .limit(1)
+      .maybeSingle();
+    if (planned.error) throw new Error(planned.error.message);
+    if (!planned.data) return { dispatched: false, busy: false };
+    const preview = planned.data as AutoMixTransitionPreview;
 
-  try {
-    const dispatch = await dispatchMediaWorkerJob({
-      jobId: preview.id,
-      jobType: "render_automix_preview",
-      payload: requestPayload,
-      callbackUrl: `${getSiteUrl()}/api/studio/automix/previews/callback`,
-      callbackToken: credential.token,
-    });
-    const update = await db.from("automix_transition_previews")
-      .update({ external_job_id: dispatch.sandboxName })
-      .eq("id", preview.id);
-    if (update.error) throw new Error(update.error.message);
-    return { dispatched: true, busy: false };
-  } catch (error) {
-    if (busyError(error)) {
-      await db.from("automix_transition_previews").update({
-        status: "planned",
-        request_payload: json(withoutCredential(preview.request_payload)),
-        external_job_id: null,
-        error: null,
-      }).eq("id", preview.id);
-      return { dispatched: false, busy: true };
+    let prepared: Awaited<ReturnType<typeof preparePreview>>;
+    try {
+      prepared = await preparePreview(preview);
+    } catch (error) {
+      await failPlannedPreviewPreparation(db, preview, error);
+      continue;
     }
-    const message = error instanceof Error ? error.message : "Transition preview dispatch failed.";
-    await db.from("automix_transition_previews").update({
-      status: "failed",
-      request_payload: json(withoutCredential(requestPayload)),
-      error: message,
-      completed_at: new Date().toISOString(),
-    }).eq("id", preview.id);
-    throw new Error(message);
+
+    const credential = createMediaWorkerCallbackCredential();
+    const requestPayload = {
+      ...prepared.payload,
+      [MEDIA_WORKER_CALLBACK_HASH_KEY]: credential.hash,
+    };
+    const claimed = await db.from("automix_transition_previews").update({
+      status: "queued",
+      output_path: prepared.outputPath,
+      request_payload: json(requestPayload),
+      external_job_id: null,
+      error: null,
+      started_at: null,
+      completed_at: null,
+    }).eq("id", preview.id).eq("status", "planned").select("*").maybeSingle();
+    if (claimed.error) throw new Error(claimed.error.message);
+    if (!claimed.data) continue;
+
+    try {
+      const dispatch = await dispatchMediaWorkerJob({
+        jobId: preview.id,
+        jobType: "render_automix_preview",
+        payload: requestPayload,
+        callbackUrl: `${getSiteUrl()}/api/studio/automix/previews/callback`,
+        callbackToken: credential.token,
+      });
+      const update = await db.from("automix_transition_previews")
+        .update({ external_job_id: dispatch.sandboxName })
+        .eq("id", preview.id);
+      if (update.error) throw new Error(update.error.message);
+      return { dispatched: true, busy: false };
+    } catch (error) {
+      if (busyError(error)) {
+        await db.from("automix_transition_previews").update({
+          status: "planned",
+          request_payload: json(withoutCredential(preview.request_payload)),
+          external_job_id: null,
+          error: null,
+        }).eq("id", preview.id);
+        return { dispatched: false, busy: true };
+      }
+      const message = errorMessage(error, "Transition preview dispatch failed.");
+      await db.from("automix_transition_previews").update({
+        status: "failed",
+        request_payload: json(withoutCredential(requestPayload)),
+        error: message,
+        completed_at: new Date().toISOString(),
+      }).eq("id", preview.id);
+      throw new Error(message);
+    }
   }
+
+  return { dispatched: false, busy: false };
 }
