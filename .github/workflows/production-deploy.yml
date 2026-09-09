@@ -1,0 +1,47 @@
+name: Production Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Vercel production
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VERCEL_ORG_ID: team_mjlgX5h2BCdihts9bGlMESbu
+      VERCEL_PROJECT_ID: prj_v0lYExH2FSbdQVlzNRm6hr5yn2FP
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Verify Vercel credentials
+        shell: bash
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::VERCEL_TOKEN is not configured in GitHub Actions secrets."
+            exit 1
+          fi
+
+      - name: Pull production environment
+        run: npx --yes vercel@48.8.0 pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+      - name: Build production bundle
+        run: npx --yes vercel@48.8.0 build --prod --token="$VERCEL_TOKEN"
+
+      - name: Deploy production bundle
+        run: npx --yes vercel@48.8.0 deploy --prebuilt --prod --token="$VERCEL_TOKEN"
