@@ -21,7 +21,8 @@ fn supported_audio(path: &Path) -> bool {
 }
 
 fn modified_ms(modified: SystemTime) -> i64 {
-    modified.duration_since(UNIX_EPOCH)
+    modified
+        .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis().min(i64::MAX as u128) as i64)
         .unwrap_or(0)
 }
@@ -35,13 +36,22 @@ fn title_for(path: &Path) -> String {
         .to_string()
 }
 
-pub fn scan_source(db: &BridgeDb, source_id: &str, source_kind: &str, root: &Path) -> anyhow::Result<ScanSummary> {
+pub fn scan_source(
+    db: &BridgeDb,
+    source_id: &str,
+    source_kind: &str,
+    root: &Path,
+) -> anyhow::Result<ScanSummary> {
     if !root.is_dir() {
         anyhow::bail!("selected DJ library source is not a directory");
     }
 
     let mut tracks = Vec::<ScannedTrack>::new();
-    for entry in WalkDir::new(root).follow_links(false).into_iter().filter_map(Result::ok) {
+    for entry in WalkDir::new(root)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(Result::ok)
+    {
         let path = entry.path();
         if !entry.file_type().is_file() || !supported_audio(path) {
             continue;
@@ -49,10 +59,11 @@ pub fn scan_source(db: &BridgeDb, source_id: &str, source_kind: &str, root: &Pat
         let metadata = entry.metadata()?;
         let file_size = metadata.len();
         let modified_unix_ms = metadata.modified().map(modified_ms).unwrap_or(0);
-        let fingerprint = match db.cached_fingerprint(source_id, path, file_size, modified_unix_ms)? {
-            Some(value) => value,
-            None => fingerprint_file(path)?,
-        };
+        let fingerprint =
+            match db.cached_fingerprint(source_id, path, file_size, modified_unix_ms)? {
+                Some(value) => value,
+                None => fingerprint_file(path)?,
+            };
         // Local generic sources use content identity as source-track identity. Moving a file therefore
         // changes only the private binding, never the normalized track identity used by the planner.
         let source_track_id = fingerprint.clone();
@@ -95,7 +106,8 @@ pub fn scan_source(db: &BridgeDb, source_id: &str, source_kind: &str, root: &Pat
     }
 
     tracks.sort_by(|a, b| a.cloud.source_track_id.cmp(&b.cloud.source_track_id));
-    let revision_input = tracks.iter()
+    let revision_input = tracks
+        .iter()
         .map(|track| format!("{}:{}", track.cloud.source_track_id, track.payload_hash))
         .collect::<Vec<_>>()
         .join("\n");
@@ -104,8 +116,12 @@ pub fn scan_source(db: &BridgeDb, source_id: &str, source_kind: &str, root: &Pat
         .with_context(|| format!("could not persist scan for {source_id}"))
 }
 
-pub fn rescan_registered_source(db: &BridgeDb, source_id: &str) -> anyhow::Result<ScanSummary> {
-    let (kind, root) = db.source_root(source_id)?
+pub fn rescan_registered_source(
+    db: &BridgeDb,
+    source_id: &str,
+) -> anyhow::Result<ScanSummary> {
+    let (kind, root) = db
+        .source_root(source_id)?
         .context("DJ library source is not registered on this device")?;
     scan_source(db, source_id, &kind, &root)
 }
@@ -130,7 +146,9 @@ mod tests {
         let outbox = db.next_outbox().unwrap().unwrap();
         let serialized = serde_json::to_string(&outbox.envelope).unwrap();
         assert!(!serialized.contains(library.to_string_lossy().as_ref()));
-        let identity = outbox.envelope.delta.changed_tracks[0].source_track_id.clone();
+        let identity = outbox.envelope.delta.changed_tracks[0]
+            .source_track_id
+            .clone();
         db.acknowledge_outbox(outbox.id).unwrap();
 
         let moved = library.join("Moved.wav");
