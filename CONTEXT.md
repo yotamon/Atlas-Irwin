@@ -38,6 +38,14 @@ A route should mainly resolve request/auth context and render a prepared model. 
 
 Do not introduce repository interfaces, factories or service abstractions merely to hide Supabase when there is only one real implementation. Add an abstraction when it owns meaningful policy or crosses a real runtime/provider seam.
 
+## Repository/product topology
+
+Ensemblis currently lives inside the `yotamon/Atlas-Irwin` repository alongside the Atlas Irwin public artist website. This remains the canonical code/documentation location until an explicit future split is planned.
+
+The intended long-term direction is to separate the Atlas Irwin artist-site concern from Ensemblis itself. The future Ensemblis product is expected to have its own repository/deployment concern, a public `ensemblis.com` marketing site, and its own application domain/subdomain. Exact migration timing and routing are intentionally not locked yet.
+
+The marketing-site specification lives in `docs/marketing/` and is distinct from `docs/ensemblis-sites-roadmap.md`, which describes the Ensemblis Sites product for artists' owned-web surfaces.
+
 ## Canonical boundaries
 
 ### Artist context
@@ -134,3 +142,7 @@ See `docs/adr/README.md` for decisions that explain why the current boundaries e
 - Design system: `docs/ensemblis-design-system.md`
 - Audio intelligence: `docs/audio-intelligence-v4.md`
 - AI control plane: `docs/ai-control-plane.md`
+- Marketing website source of truth: `docs/marketing/README.md`
+- Marketing homepage wireframe: `docs/marketing/homepage-wireframe.md`
+- Marketing implementation blueprint: `docs/marketing/implementation-blueprint.md`
+- Marketing decision log: `docs/marketing/decision-log.md`
