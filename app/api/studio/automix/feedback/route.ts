@@ -64,6 +64,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Could not load the AutoMix session." }, { status: 500 });
   }
   if (!job.data) return NextResponse.json({ error: "AutoMix session not found." }, { status: 404 });
+  if (job.data.status !== "completed") {
+    return NextResponse.json({
+      error: "DJ-plan feedback is accepted only after the rendered session has completed and its source lineage is still valid.",
+    }, { status: 409 });
+  }
   const plan = record(record(job.data.result_payload).plan);
   if (!Object.keys(plan).length) {
     return NextResponse.json({ error: "This session does not have a verified DJ plan yet." }, { status: 409 });
