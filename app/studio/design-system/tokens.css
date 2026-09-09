@@ -71,6 +71,7 @@
   --en-text-2xl: 1.45rem;
   --en-text-3xl: clamp(1.8rem, 3vw, 2.45rem);
   --en-text-display: clamp(2.15rem, 4vw, 3.75rem);
+  --en-weight-regular: 450;
   --en-weight-medium: 620;
   --en-weight-semibold: 680;
   --en-weight-bold: 760;
