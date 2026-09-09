@@ -1,4 +1,5 @@
 import { routeVideoShot } from "@/lib/video-director/model-router";
+import type { VideoResolution } from "@/lib/video-director/domain";
 import type { Json } from "@/types/database";
 import type {
   ExtendedMusicVideoShot,
@@ -37,7 +38,7 @@ export function buildVideoShotEditorMutation(input: {
   shot: ExtendedMusicVideoShot;
   editor: VideoShotEditorInput;
   artistCharacters: Array<Pick<MusicVideoCharacter, "id" | "reference_asset_ids">>;
-  targetResolution: string;
+  targetResolution: VideoResolution;
   audioUrl: string | null;
 }) {
   const { shot, editor } = input;
