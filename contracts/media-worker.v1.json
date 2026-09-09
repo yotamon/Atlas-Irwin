@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ensemblis Media Worker Contract v1",
+  "version": 1,
+  "payloadVersionKey": "__ensemblis_media_worker_contract_version",
+  "jobTypes": [
+    "analyze_audio",
+    "analyze_stem",
+    "extract_frame",
+    "render_master",
+    "render_social",
+    "render_promo",
+    "render_hook",
+    "render_audio_scene",
+    "master_audio",
+    "finish_social_video",
+    "render_automix"
+  ],
+  "callbackStatuses": ["running", "completed", "failed"],
+  "invariants": [
+    "Every dispatched payload carries the contract version marker.",
+    "Unknown contract versions fail before job execution.",
+    "Job type names are stable discriminators across TypeScript and Python.",
+    "Terminal callbacks are idempotent and may be delivered more than once.",
+    "Payload/result objects remain job-specific and are validated at their owning domain boundary."
+  ]
+}
