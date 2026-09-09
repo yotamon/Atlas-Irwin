@@ -105,7 +105,7 @@ export function PageHeader({
   actions,
 }: {
   title: string;
-  description?: string;
+  description?: ReactNode;
   eyebrow?: ReactNode;
   action?: ReactNode;
   actions?: ReactNode;
@@ -129,7 +129,7 @@ export function SectionHeader({
   eyebrow,
   action,
 }: {
-  title: string;
+  title?: string;
   description?: ReactNode;
   eyebrow?: ReactNode;
   action?: ReactNode;
@@ -138,7 +138,7 @@ export function SectionHeader({
     <div className="studio-section-header">
       <div className="studio-section-header-copy">
         {eyebrow ? <span className="en-eyebrow">{eyebrow}</span> : null}
-        <h2>{title}</h2>
+        {title ? <h2>{title}</h2> : null}
         {description ? <p>{description}</p> : null}
       </div>
       {action ? <div className="studio-actions">{action}</div> : null}
@@ -159,7 +159,7 @@ export function Section({
   description?: ReactNode;
   eyebrow?: ReactNode;
   action?: ReactNode;
-  children: ReactNode;
+  children?: ReactNode;
   feature?: boolean;
   className?: string;
 }) {
@@ -170,13 +170,13 @@ export function Section({
     >
       {(title || description || eyebrow || action) ? (
         <SectionHeader
-          title={title ?? ""}
+          title={title}
           description={description}
           eyebrow={eyebrow}
           action={action}
         />
       ) : null}
-      {children}
+      {children ?? null}
     </section>
   );
 }
@@ -236,8 +236,8 @@ export function ActionBar({
 }) {
   return (
     <div className={classes("studio-action-bar", className)}>
-      {message ? <div className="studio-action-bar-copy">{message}</div> : <span />}
-      <Actions align="end">{children}</Actions>
+      {message ? <div className="studio-action-bar-copy">{message}</div> : null}
+      <Actions align="end" className="studio-action-bar-actions">{children}</Actions>
     </div>
   );
 }
@@ -378,7 +378,7 @@ export function FormSection({
 }) {
   return (
     <section className={classes("ensemblis-form-section", className)}>
-      {(title || description) ? <SectionHeader title={title ?? ""} description={description} /> : null}
+      {(title || description) ? <SectionHeader title={title} description={description} /> : null}
       {children}
     </section>
   );
