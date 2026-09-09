@@ -1,10 +1,40 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
-from .automix_model import EnergyProfile, Purpose, TrackDescriptor, TransitionStyle
+from .automix_model import (
+    MIN_TRACK_WINDOW_MS,
+    EnergyProfile,
+    Purpose,
+    TrackDescriptor,
+    TransitionStyle,
+    choose_showcase_window,
+)
 from .automix_planner import build_plan as build_canonical_plan
 from .automix_set_intelligence import preferred_transition_style, select_tracks_for_set
+
+
+def _rewindow_selected_tracks(
+    tracks: list[TrackDescriptor],
+    *,
+    purpose: Purpose,
+    target_duration_ms: int,
+) -> list[TrackDescriptor]:
+    """Re-size showcase windows after curation so target duration stays meaningful."""
+    if not tracks:
+        return []
+    desired_ms = max(MIN_TRACK_WINDOW_MS, int(target_duration_ms / len(tracks)) + 16_000)
+    result: list[TrackDescriptor] = []
+    for track in tracks:
+        start, end, window_score = choose_showcase_window(track.music_map, desired_ms, purpose)
+        result.append(replace(
+            track,
+            window_start_ms=start,
+            window_end_ms=end,
+            window_score=window_score,
+        ))
+    return result
 
 
 def build_set_intelligent_plan(
@@ -29,8 +59,13 @@ def build_set_intelligent_plan(
     )
     normalized_profile = selection["dj_profile"]
     effective_style = preferred_transition_style(style, normalized_profile)
-    plan = build_canonical_plan(
+    selected_tracks = _rewindow_selected_tracks(
         selection["tracks"],
+        purpose=purpose,
+        target_duration_ms=target_duration_ms,
+    )
+    plan = build_canonical_plan(
+        selected_tracks,
         purpose,
         profile,
         effective_style,
@@ -54,6 +89,7 @@ def build_set_intelligent_plan(
     plan["quality_contract"] = {
         **(plan.get("quality_contract") or {}),
         "duration_aware_candidate_curation": True,
+        "post_curation_window_resizing": True,
         "personalization_is_bounded": True,
         "canonical_transition_safety_preserved": True,
         "set_intent_version": selection["set_intent"].get("version"),
