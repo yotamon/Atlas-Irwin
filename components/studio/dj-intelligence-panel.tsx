@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { FiRefreshCw, FiSave, FiSliders, FiThumbsDown, FiThumbsUp } from "react-icons/fi";
+import { FiRefreshCw, FiSave, FiSliders, FiThumbsDown, FiThumbsUp, FiTrash2 } from "react-icons/fi";
 import styles from "./dj-intelligence-panel.module.css";
 
 type Preferences = {
@@ -102,6 +102,7 @@ export function DjIntelligencePanel({ artistId }: { artistId: string }) {
   const [loadedArtistId, setLoadedArtistId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [feedbackSaving, setFeedbackSaving] = useState(false);
   const [status, setStatus] = useState("");
   const currentArtistId = useRef(artistId);
@@ -179,6 +180,34 @@ export function DjIntelligencePanel({ artistId }: { artistId: string }) {
       setStatus(error instanceof Error ? error.message : "Could not save DJ preferences.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function resetIntelligence() {
+    if (resetting) return;
+    const approved = window.confirm(
+      "Reset Personal DJ Intelligence? This removes learned Set Builder decisions and imported DJ-library history for this artist. Your tracks, mixes and source libraries are not changed.",
+    );
+    if (!approved) return;
+    setResetting(true);
+    setStatus("");
+    try {
+      const response = await fetch("/api/studio/automix/preferences", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ artistId }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(String(record(body).error || "Could not reset Personal DJ Intelligence."));
+      setPreferences(asPreferences(record(body).preferences));
+      setLearnedPreferences(asPreferences(record(body).learnedPreferences));
+      setLearnedConfidence(0);
+      setEvidenceCount(0);
+      setStatus("Personal DJ Intelligence reset. Tracks, mixes and external DJ libraries were left untouched.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not reset Personal DJ Intelligence.");
+    } finally {
+      setResetting(false);
     }
   }
 
@@ -290,8 +319,9 @@ export function DjIntelligencePanel({ artistId }: { artistId: string }) {
             </small>
           </div>
           <div className={styles.actions}>
-            <button className="button" type="button" disabled={loading} onClick={() => void refresh()}><FiRefreshCw /> Refresh</button>
-            <button className="button primary" type="button" disabled={loading || saving} onClick={() => void save()}><FiSave /> {saving ? "Saving…" : "Save profile"}</button>
+            <button className="button" type="button" disabled={loading || resetting} onClick={() => void refresh()}><FiRefreshCw /> Refresh</button>
+            <button className="button" type="button" disabled={loading || resetting || evidenceCount === 0} onClick={() => void resetIntelligence()}><FiTrash2 /> {resetting ? "Resetting…" : "Reset learning"}</button>
+            <button className="button primary" type="button" disabled={loading || saving || resetting} onClick={() => void save()}><FiSave /> {saving ? "Saving…" : "Save profile"}</button>
           </div>
         </div>
 
@@ -305,8 +335,8 @@ export function DjIntelligencePanel({ artistId }: { artistId: string }) {
           </div>
           <p className={styles.note}>Whole-plan feedback is optional. Your concrete Set Builder edits and approved renders are already stronger evidence. A rejection is stored without guessing why.</p>
           <div className={styles.feedbackActions}>
-            <button className="button" type="button" disabled={!latestJob || feedbackSaving} onClick={() => void sendFeedback("accepted")}><FiThumbsUp /> This feels like me</button>
-            <button className="button" type="button" disabled={!latestJob || feedbackSaving} onClick={() => void sendFeedback("rejected")}><FiThumbsDown /> Not my direction</button>
+            <button className="button" type="button" disabled={!latestJob || feedbackSaving || resetting} onClick={() => void sendFeedback("accepted")}><FiThumbsUp /> This feels like me</button>
+            <button className="button" type="button" disabled={!latestJob || feedbackSaving || resetting} onClick={() => void sendFeedback("rejected")}><FiThumbsDown /> Not my direction</button>
           </div>
         </div>
 
