@@ -11,6 +11,7 @@ import numpy as np
 from pydantic import BaseModel, Field
 
 from . import main as worker_main
+from .automix_evaluation import evaluate_mixplan
 from .automix_manifest import MIXPLAN_VERSION, build_mixplan
 from .automix_mixplan_renderer import render_mixplan
 from .automix_model import (
@@ -167,8 +168,10 @@ async def automix_job(
     tracks = await prepare_tracks(raw_tracks, workdir, purpose, target_duration_ms)  # type: ignore[arg-type]
     plan = build_plan(tracks, purpose, profile, style, target_duration_ms)  # type: ignore[arg-type]
     mixplan = build_mixplan(plan, source_fingerprints=_source_fingerprints(raw_tracks))
+    evaluation = evaluate_mixplan(mixplan)
+    published_plan = {**plan, "render_manifest": mixplan, "evaluation": evaluation}
     if on_plan is not None:
-        await on_plan({**plan, "render_manifest": mixplan})
+        await on_plan(published_plan)
     wav_path, render_meta = await asyncio.to_thread(render_mixplan, tracks, mixplan, workdir)
 
     output_format = str(payload.get("output_format") or "mp3").lower()
@@ -201,8 +204,9 @@ async def automix_job(
         "sha256": sha256,
         "output": {"file_size": output_path.stat().st_size, "mime_type": mime_type, "sha256": sha256},
         "phase": "complete",
-        "plan": {**plan, "render_manifest": mixplan},
+        "plan": published_plan,
         "render_manifest": mixplan,
+        "evaluation": evaluation,
         "render": render_meta,
         "warnings": warnings,
         "engine": {
