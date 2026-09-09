@@ -2,6 +2,17 @@
    Framing is reserved for meaningful objects and feature moments. Structural
    sections use rhythm and rules instead of stacks of near-identical cards. */
 
+/* Page rhythm has one source. Legacy v2 pages already participate in the same
+   grid flow; reset compatibility margins before applying the canonical gap. */
+.studio-root .studio-page {
+  display: grid;
+  gap: var(--en-section-gap);
+}
+
+.studio-root :where(.studio-page, .studio-v2-page) > * + * {
+  margin-top: 0;
+}
+
 .studio-root :where(.v2-section) {
   display: grid;
   gap: var(--en-content-gap);
@@ -34,6 +45,20 @@
 .studio-root :where(.studio-panel.feature, .v2-section[data-surface="feature"]) :where(.v2-section, .studio-panel) {
   background: transparent;
   box-shadow: none;
+}
+
+/* Repeated binary settings are rows, not one card per toggle. */
+.studio-root .ensemblis-switch-field {
+  padding: var(--en-space-3) 0;
+  border: 0;
+  border-bottom: 1px solid var(--en-line);
+  border-radius: 0;
+  background: transparent;
+}
+
+.studio-root .ensemblis-switch-field:hover {
+  border-bottom-color: var(--en-line-strong);
+  background: transparent;
 }
 
 /* Data summaries read as an instrument panel, not a card collection. */
