@@ -26,6 +26,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "createUpdaterArtifacts": false
+    "createUpdaterArtifacts": false,
+    "icon": [
+      "../../../public/android-chrome-512x512.png"
+    ]
   }
 }
