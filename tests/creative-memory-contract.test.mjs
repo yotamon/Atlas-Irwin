@@ -145,7 +145,8 @@ test("Video project deep links and Quick Video orchestration cannot cross active
     "resolveProjectAudioUrl(videoDb, project, input.ownerId, input.artistId)",
   ]);
   await requireSnippets("lib/video-director/context.ts", [
-    "asArtistScopedMusicClient",
+    "ArtistScopedMusicDatabase",
+    'if (expectedArtistId) releaseQuery = releaseQuery.eq("artist_id", expectedArtistId)',
     '.eq("artist_id", artistId)',
     "expectedArtistId: artistId",
   ]);
