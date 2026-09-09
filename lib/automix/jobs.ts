@@ -1,6 +1,10 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  asDjIntelligenceClient,
+  plannerDjProfile,
+} from "@/lib/automix/personalization";
 import { dispatchMediaWorkerJob } from "@/lib/media-worker/dispatcher";
 import {
   createMediaWorkerCallbackCredential,
@@ -70,7 +74,8 @@ async function prepareCatalogPayload(job: AutoMixJob) {
   const db = asAutoMixClient(service);
   const musicDb = asArtistScopedMusicClient(service);
   const stemDb = asStemClient(service) as SupabaseClient<StemDatabase>;
-  const [trackResult, intelligenceResult, stemResult] = await Promise.all([
+  const djDb = asDjIntelligenceClient(service);
+  const [trackResult, intelligenceResult, stemResult, djProfileResult] = await Promise.all([
     musicDb.from("tracks")
       .select("id,title,audio_url,artist_id,owner_id")
       .eq("owner_id", job.owner_id)
@@ -85,8 +90,13 @@ async function prepareCatalogPayload(job: AutoMixJob) {
       .eq("owner_id", job.owner_id)
       .in("track_id", job.track_ids)
       .eq("status", "ready"),
+    djDb.from("dj_profiles")
+      .select("*")
+      .eq("owner_id", job.owner_id)
+      .eq("artist_id", job.artist_id)
+      .maybeSingle(),
   ]);
-  const firstError = trackResult.error || intelligenceResult.error || stemResult.error;
+  const firstError = trackResult.error || intelligenceResult.error || stemResult.error || djProfileResult.error;
   if (firstError) throw new Error(firstError.message);
 
   const trackById = new Map((trackResult.data ?? []).map((track) => [track.id, track]));
@@ -138,6 +148,7 @@ async function prepareCatalogPayload(job: AutoMixJob) {
   }
   const publicUrl = service.storage.from(job.output_bucket || AUTOMIX_BUCKET).getPublicUrl(outputPath).data.publicUrl;
   const base = withoutCredential(record(job.request_payload));
+  const baseIntent = record(base.set_intent);
   return {
     db,
     payload: {
@@ -148,6 +159,12 @@ async function prepareCatalogPayload(job: AutoMixJob) {
       transition_style: job.transition_style,
       duration_ms: job.target_duration_ms,
       output_format: job.output_format,
+      set_intent: {
+        version: "ensemblis.set-intent.v1",
+        allow_omissions: job.purpose !== "journey",
+        ...baseIntent,
+      },
+      dj_profile: plannerDjProfile(djProfileResult.data),
       upload_url: upload.data.signedUrl,
       upload_bucket: job.output_bucket || AUTOMIX_BUCKET,
       upload_path: outputPath,
