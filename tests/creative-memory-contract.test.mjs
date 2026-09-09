@@ -147,8 +147,8 @@ test("Video project deep links and Quick Video orchestration cannot cross active
   await requireSnippets("lib/video-director/context.ts", [
     "ArtistScopedMusicDatabase",
     'if (expectedArtistId) releaseQuery = releaseQuery.eq("artist_id", expectedArtistId)',
+    'if (expectedArtistId && artistId !== expectedArtistId) throw new Error("Video project does not belong to the active artist.")',
     '.eq("artist_id", artistId)',
-    "expectedArtistId: artistId",
   ]);
   await requireSnippets("app/studio/quick-video-actions.ts", [
     "resolveActiveArtistContext",
