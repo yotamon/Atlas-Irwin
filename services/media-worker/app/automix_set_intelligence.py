@@ -17,7 +17,7 @@ from .automix_model import (
 )
 
 SET_INTENT_VERSION = "ensemblis.set-intent.v1"
-DJ_PROFILE_VERSION = "ensemblis.dj-profile.v1"
+DJ_PROFILE_VERSION = "ensemblis.dj-profile.v2"
 
 
 def _record(value: Any) -> dict[str, Any]:
@@ -52,7 +52,10 @@ def normalize_dj_profile(value: Any) -> dict[str, Any]:
         "harmonic_adventure": _clip01(_number(raw.get("harmonic_adventure"), 0.50)),
         "transition_aggressiveness": _clip01(_number(raw.get("transition_aggressiveness"), 0.50)),
         "exploration": _clip01(_number(raw.get("exploration"), 0.45)),
+        "tempo_movement": _clip01(_number(raw.get("tempo_movement"), 0.42)),
+        "energy_dynamics": _clip01(_number(raw.get("energy_dynamics"), 0.52)),
         "learned_confidence": learned_confidence,
+        "evidence_count": max(0, int(round(_number(raw.get("evidence_count"), 0.0)))),
     }
 
 
@@ -153,18 +156,32 @@ def _base_candidate_score(track: TrackDescriptor, purpose: Purpose, profile: Ene
 def _pair_candidate_score(a: TrackDescriptor, b: TrackDescriptor, profile: dict[str, Any]) -> float:
     harmonic = harmonic_compatibility(a.key, b.key)
     tempo, delta = bpm_compatibility(a.dj_bpm, b.dj_bpm)
-    adventure = float(profile.get("harmonic_adventure", 0.5)) if profile.get("enabled", True) else 0.5
-    exploration = float(profile.get("exploration", 0.45)) if profile.get("enabled", True) else 0.45
+    enabled = bool(profile.get("enabled", True))
+    adventure = float(profile.get("harmonic_adventure", 0.5)) if enabled else 0.5
+    exploration = float(profile.get("exploration", 0.45)) if enabled else 0.45
+    tempo_movement = float(profile.get("tempo_movement", 0.42)) if enabled else 0.42
+    energy_dynamics = float(profile.get("energy_dynamics", 0.52)) if enabled else 0.52
 
     harmonic_contrast = _clip01(1.0 - abs(harmonic - 0.68) / 0.68)
     harmonic_preference = _clip01(harmonic * (1.0 - 0.34 * adventure) + harmonic_contrast * 0.34 * adventure)
     key_novelty = 1.0 if a.key.camelot != b.key.camelot else 0.0
     tempo_penalty = _clip01(1.0 - max(0.0, delta - 0.06) / 0.16)
+
+    # Personal movement preferences are deliberately low-weight tie breakers. They operate only
+    # inside candidate reranking; canonical transition planning still owns stretch limits, local
+    # tempo reliability, collision vetoes and fallback selection.
+    tempo_motion = _clip01(delta / 0.12)
+    tempo_character = _clip01(1.0 - abs(tempo_motion - tempo_movement))
+    energy_motion = _clip01(abs(a.energy - b.energy) / 0.45)
+    energy_character = _clip01(1.0 - abs(energy_motion - energy_dynamics))
+
     return _clip01(
-        0.52 * harmonic_preference
-        + 0.34 * tempo
-        + 0.10 * tempo_penalty
+        0.45 * harmonic_preference
+        + 0.30 * tempo
+        + 0.08 * tempo_penalty
         + 0.04 * exploration * key_novelty
+        + 0.07 * tempo_character
+        + 0.06 * energy_character
     )
 
 
