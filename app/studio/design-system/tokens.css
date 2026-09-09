@@ -31,6 +31,7 @@
   --en-danger-soft: color-mix(in srgb, var(--en-danger) 9%, transparent);
   --en-warning-soft: color-mix(in srgb, var(--en-warning) 10%, transparent);
   --en-overlay: color-mix(in srgb, var(--en-black) 72%, transparent);
+  --en-surface-glass: color-mix(in srgb, var(--en-bg-elevated) 88%, transparent);
 
   --en-radius-xs: 0.42rem;
   --en-radius-sm: 0.62rem;
@@ -49,6 +50,17 @@
   --en-space-10: 2.5rem;
   --en-space-12: 3rem;
 
+  /* Product layout contract. Individual routes choose width, never ad-hoc gutters. */
+  --en-page-narrow: 68rem;
+  --en-page-max: 90rem;
+  --en-page-wide: 104rem;
+  --en-page-gutter: clamp(1.25rem, 3vw, 3.25rem);
+  --en-page-gutter-mobile: clamp(1rem, 4.5vw, 1.35rem);
+  --en-page-block: clamp(1.5rem, 3vw, 2.6rem);
+  --en-page-block-mobile: 1.15rem;
+  --en-section-gap: clamp(1.5rem, 3vw, 2.5rem);
+  --en-content-gap: clamp(0.9rem, 1.8vw, 1.35rem);
+
   /* Minimum readable product typography. 2xs is reserved for tertiary metadata. */
   --en-text-2xs: 0.68rem;
   --en-text-xs: 0.75rem;
@@ -57,15 +69,22 @@
   --en-text-lg: 1.02rem;
   --en-text-xl: 1.16rem;
   --en-text-2xl: 1.45rem;
+  --en-text-3xl: clamp(1.8rem, 3vw, 2.45rem);
+  --en-text-display: clamp(2.15rem, 4vw, 3.75rem);
+  --en-weight-regular: 450;
   --en-weight-medium: 620;
   --en-weight-semibold: 680;
   --en-weight-bold: 760;
   --en-leading-tight: 1.2;
   --en-leading-body: 1.55;
 
+  --en-control-xs: 2.25rem;
   --en-control-sm: 2.5rem;
   --en-control-md: 2.75rem;
   --en-control-lg: 3rem;
+  --en-icon-sm: 1rem;
+  --en-icon-md: 1.125rem;
+  --en-icon-lg: 1.35rem;
 
   --en-duration-fast: 120ms;
   --en-duration-normal: 170ms;

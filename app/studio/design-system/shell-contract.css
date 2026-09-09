@@ -1,0 +1,62 @@
+/* Workspace shell contract. Route compositions own their internal rhythm; the
+   shell owns navigation, scroll geometry and the content canvas only. */
+
+.studio-root .ensemblis-workspace-shell {
+  min-width: 0;
+  width: 100%;
+  min-height: 100svh;
+  background: transparent;
+}
+
+.studio-root .studio-main {
+  min-width: 0;
+  width: 100%;
+  padding: 0;
+}
+
+.studio-root .ensemblis-motion-stage {
+  width: 100%;
+  min-width: 0;
+}
+
+.studio-root .ensemblis-context-bar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  min-width: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--en-line) 82%, transparent);
+  background: color-mix(in srgb, var(--en-bg) 90%, transparent);
+  backdrop-filter: blur(18px) saturate(118%);
+}
+
+.studio-root .ensemblis-first-use-nudge {
+  width: min(calc(100% - (var(--en-page-gutter) * 2)), var(--en-page-max));
+  margin: var(--en-space-4) auto 0;
+}
+
+.studio-root .studio-sidebar {
+  border-right-color: color-mix(in srgb, var(--en-line) 84%, transparent);
+  background: color-mix(in srgb, var(--en-bg) 92%, transparent);
+}
+
+.studio-root .studio-sidebar nav {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--en-line-strong) transparent;
+}
+
+@media (max-width: 900px) {
+  .studio-root .studio-main {
+    padding: 0;
+  }
+
+  .studio-root .ensemblis-first-use-nudge {
+    width: calc(100% - (var(--en-page-gutter-mobile) * 2));
+  }
+
+  .studio-root .ensemblis-context-bar {
+    padding-inline: max(var(--en-page-gutter-mobile), env(safe-area-inset-left));
+  }
+}
