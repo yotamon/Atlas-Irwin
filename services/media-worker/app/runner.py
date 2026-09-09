@@ -5,10 +5,10 @@ import json
 import shutil
 import sys
 from pathlib import Path
+from typing import Any
 
 from . import main as worker_main
 from .automix import AutomixWorkerRequest, execute_automix
-from .contract import validate_request_envelope
 from .mastering_processor import MasteringWorkerRequest, execute_mastering
 from .music_intelligence_v4_runtime import analyze_music as analyze_music_v4
 from .social_finishing import SocialWorkerRequest, execute_social
@@ -22,6 +22,35 @@ WorkerRequest = worker_main.WorkerRequest
 execute = worker_main.execute
 
 LOCK_PATH = Path("/tmp/atlas-media-worker.lock")
+CONTRACT_VERSION = 1
+CONTRACT_PAYLOAD_KEY = "__ensemblis_media_worker_contract_version"
+CONTRACT_JOB_TYPES = frozenset({
+    "analyze_audio",
+    "analyze_stem",
+    "extract_frame",
+    "render_master",
+    "render_social",
+    "render_promo",
+    "render_hook",
+    "render_audio_scene",
+    "master_audio",
+    "finish_social_video",
+    "render_automix",
+})
+
+
+def validate_request_envelope(value: dict[str, Any]) -> None:
+    job_type = value.get("job_type")
+    if job_type not in CONTRACT_JOB_TYPES:
+        raise ValueError(f"Unsupported Media Worker job type: {job_type!r}")
+    payload = value.get("payload")
+    if not isinstance(payload, dict):
+        raise ValueError("Media Worker payload must be an object")
+    version = payload.get(CONTRACT_PAYLOAD_KEY)
+    if version != CONTRACT_VERSION:
+        raise ValueError(
+            f"Unsupported Media Worker contract version: {version!r}; expected {CONTRACT_VERSION}"
+        )
 
 
 def main() -> None:
