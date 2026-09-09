@@ -347,8 +347,8 @@
   gap: var(--en-space-3);
   align-items: flex-start;
   padding: var(--en-space-4) var(--en-space-5);
-  border: 1px solid color-mix(in srgb, var(--en-danger, #c54b4b) 44%, var(--en-line));
-  background: color-mix(in srgb, var(--en-danger, #c54b4b) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--en-danger) 44%, var(--en-line));
+  background: color-mix(in srgb, var(--en-danger) 7%, transparent);
   color: var(--en-ink);
   line-height: 1.55;
 }
@@ -356,7 +356,7 @@
 .error svg {
   flex: 0 0 auto;
   margin-top: 0.18rem;
-  color: var(--en-danger, #c54b4b);
+  color: var(--en-danger);
 }
 
 .workspaceGrid {
@@ -677,7 +677,7 @@
 }
 
 .riskDot {
-  background: var(--en-warning, #c28b35);
+  background: var(--en-warning);
 }
 
 .handoffLead > div {
@@ -765,7 +765,7 @@
 }
 
 .risks {
-  color: var(--en-warning, #a56e20) !important;
+  color: var(--en-warning) !important;
 }
 
 .previewPlayer {
