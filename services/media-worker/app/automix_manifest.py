@@ -6,13 +6,9 @@ import math
 from typing import Any
 
 MIXPLAN_VERSION = "ensemblis.mixplan.v2"
+AUTOMATION_VERSION = "ensemblis.transition-automation.v1"
 ALLOWED_TECHNIQUES = {
-    "quick_mix",
-    "bass_swap",
-    "harmonic_blend",
-    "breakdown_swap",
-    "echo_out",
-    "drop_cut",
+    "quick_mix", "bass_swap", "harmonic_blend", "breakdown_swap", "echo_out", "drop_cut",
 }
 
 
@@ -28,32 +24,60 @@ def _finite(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(float(value))
 
 
+def _equal_power_curves() -> tuple[list[dict[str, float]], list[dict[str, float]]]:
+    return (
+        [{"at": 0.0, "value": 1.0}, {"at": 0.5, "value": 0.7071}, {"at": 1.0, "value": 0.0}],
+        [{"at": 0.0, "value": 0.0}, {"at": 0.5, "value": 0.7071}, {"at": 1.0, "value": 1.0}],
+    )
+
+
 def _automation_for_transition(transition: dict[str, Any]) -> dict[str, Any]:
     technique = str(transition.get("technique") or "drop_cut")
     overlap_ms = max(0, int(transition.get("overlap_ms") or 0))
-    duration = max(1, overlap_ms)
+    from_gain, to_gain = _equal_power_curves()
     if overlap_ms <= 0:
         return {
+            "version": AUTOMATION_VERSION,
             "duration_ms": 0,
-            "from_gain": [{"at": 0.0, "value": 1.0}, {"at": 1.0, "value": 0.0}],
-            "to_gain": [{"at": 0.0, "value": 0.0}, {"at": 1.0, "value": 1.0}],
+            "from_gain": from_gain,
+            "to_gain": to_gain,
             "low_end_handoff": None,
             "fx": None,
+            "stem_ducking": None,
         }
 
     low_end = None
     if technique in {"bass_swap", "harmonic_blend", "breakdown_swap", "quick_mix"}:
         if technique == "harmonic_blend":
-            low_end = {"from_zero_at": 0.68, "to_full_from": 0.32}
+            from_zero_at, to_full_from = 0.68, 0.32
+        elif technique == "quick_mix":
+            from_zero_at, to_full_from = 0.54, 0.46
         else:
-            low_end = {"from_zero_at": 0.58, "to_full_from": 0.42}
-    fx = {"kind": "echo_out", "tail_ms": duration} if technique == "echo_out" else None
+            from_zero_at, to_full_from = 0.58, 0.42
+        low_end = {
+            "cutoff_hz": 180.0,
+            "from_gain": [
+                {"at": 0.0, "value": 1.0},
+                {"at": from_zero_at, "value": 0.0},
+                {"at": 1.0, "value": 0.0},
+            ],
+            "to_gain": [
+                {"at": 0.0, "value": 0.0},
+                {"at": to_full_from, "value": 0.0},
+                {"at": 1.0, "value": 1.0},
+            ],
+        }
+    fx = None
+    if technique == "echo_out":
+        fx = {"kind": "echo_out", "tail_ms": overlap_ms, "feedback": 0.48}
     return {
+        "version": AUTOMATION_VERSION,
         "duration_ms": overlap_ms,
-        "from_gain": [{"at": 0.0, "value": 1.0}, {"at": 1.0, "value": 0.0}],
-        "to_gain": [{"at": 0.0, "value": 0.0}, {"at": 1.0, "value": 1.0}],
+        "from_gain": from_gain,
+        "to_gain": to_gain,
         "low_end_handoff": low_end,
         "fx": fx,
+        "stem_ducking": None,
     }
 
 
@@ -62,32 +86,20 @@ def build_mixplan(plan: dict[str, Any], *, source_fingerprints: list[dict[str, A
     for item in _records(plan.get("tracks")):
         tracks.append({
             **item,
-            "source": {
-                "start_ms": int(item.get("source_start_ms") or 0),
-                "end_ms": int(item.get("source_end_ms") or 0),
-            },
+            "source": {"start_ms": int(item.get("source_start_ms") or 0), "end_ms": int(item.get("source_end_ms") or 0)},
             "playback": {
                 "bpm": float(item.get("playback_bpm") or item.get("dj_bpm") or item.get("source_bpm") or 120.0),
                 "time_factor": float(item.get("time_factor") or 1.0),
                 "pitch_shift_semitones": 0.0,
             },
         })
-
     transitions = []
     for index, item in enumerate(_records(plan.get("transitions"))):
-        fallback = _record(item.get("fallback"))
-        if not fallback:
-            fallback = {
-                "technique": "quick_mix" if bool(item.get("beatmatch")) else "drop_cut",
-                "bars": 4 if bool(item.get("beatmatch")) else 0,
-            }
-        transitions.append({
-            **item,
-            "index": index,
-            "automation": _automation_for_transition(item),
-            "fallback": fallback,
-        })
-
+        fallback = _record(item.get("fallback")) or {
+            "technique": "quick_mix" if bool(item.get("beatmatch")) else "drop_cut",
+            "bars": 4 if bool(item.get("beatmatch")) else 0,
+        }
+        transitions.append({**item, "index": index, "automation": _automation_for_transition(item), "fallback": fallback})
     result = {
         "version": MIXPLAN_VERSION,
         "planner_version": str(plan.get("version") or "unknown"),
@@ -101,25 +113,20 @@ def build_mixplan(plan: dict[str, Any], *, source_fingerprints: list[dict[str, A
         "transitions": transitions,
         "quality_contract": _record(plan.get("quality_contract")),
         "quality_summary": _record(plan.get("quality_summary")),
-        "provenance": {
-            "source_fingerprints": source_fingerprints or [],
-        },
+        "provenance": {"source_fingerprints": source_fingerprints or []},
     }
     validate_mixplan(result)
     result["plan_hash"] = mixplan_hash(result)
     return result
 
 
-def _validate_envelope(name: str, value: Any, *, allow_none: bool = False) -> None:
-    if value is None and allow_none:
-        return
+def _validate_envelope(name: str, value: Any) -> None:
     points = _records(value)
     if len(points) < 2:
         raise ValueError(f"MixPlan {name} requires at least two automation points")
     previous = -1.0
     for point in points:
-        at = point.get("at")
-        amount = point.get("value")
+        at, amount = point.get("at"), point.get("value")
         if not _finite(at) or not 0.0 <= float(at) <= 1.0:
             raise ValueError(f"MixPlan {name} automation position must be within 0..1")
         if float(at) < previous:
@@ -132,22 +139,19 @@ def _validate_envelope(name: str, value: Any, *, allow_none: bool = False) -> No
 def validate_mixplan(manifest: dict[str, Any]) -> None:
     if str(manifest.get("version") or "") != MIXPLAN_VERSION:
         raise ValueError(f"Unsupported MixPlan version: {manifest.get('version')!r}")
-    tracks = _records(manifest.get("tracks"))
-    transitions = _records(manifest.get("transitions"))
+    tracks, transitions = _records(manifest.get("tracks")), _records(manifest.get("transitions"))
     if not tracks:
         raise ValueError("MixPlan contains no tracks")
     if len(transitions) != max(0, len(tracks) - 1):
         raise ValueError("MixPlan must contain exactly one transition between adjacent tracks")
-
     seen: set[str] = set()
-    for index, item in enumerate(tracks):
+    for item in tracks:
         track_id = str(item.get("track_id") or "")
         if not track_id or track_id in seen:
             raise ValueError("MixPlan track IDs must be non-empty and unique")
         seen.add(track_id)
         source = _record(item.get("source"))
-        start = source.get("start_ms")
-        end = source.get("end_ms")
+        start, end = source.get("start_ms"), source.get("end_ms")
         if not _finite(start) or not _finite(end) or int(start) < 0 or int(end) <= int(start):
             raise ValueError(f"MixPlan track {track_id} has an invalid source window")
         playback = _record(item.get("playback"))
@@ -160,12 +164,8 @@ def validate_mixplan(manifest: dict[str, Any]) -> None:
         bpm = playback.get("bpm")
         if not _finite(bpm) or float(bpm) <= 0:
             raise ValueError(f"MixPlan track {track_id} has invalid playback BPM")
-        if index and tracks[index - 1].get("track_id") == track_id:
-            raise ValueError("MixPlan cannot repeat the same adjacent track")
-
     for index, transition in enumerate(transitions):
-        left = str(tracks[index].get("track_id"))
-        right = str(tracks[index + 1].get("track_id"))
+        left, right = str(tracks[index].get("track_id")), str(tracks[index + 1].get("track_id"))
         if str(transition.get("from_track_id") or "") != left or str(transition.get("to_track_id") or "") != right:
             raise ValueError("MixPlan transition endpoints must match adjacent track order")
         technique = str(transition.get("technique") or "")
@@ -174,21 +174,39 @@ def validate_mixplan(manifest: dict[str, Any]) -> None:
         overlap = transition.get("overlap_ms", 0)
         if not _finite(overlap) or int(overlap) < 0:
             raise ValueError("MixPlan transition overlap must be non-negative")
-        left_window = int(_record(tracks[index].get("source"))["end_ms"]) - int(_record(tracks[index].get("source"))["start_ms"])
-        right_window = int(_record(tracks[index + 1].get("source"))["end_ms"]) - int(_record(tracks[index + 1].get("source"))["start_ms"])
+        left_source, right_source = _record(tracks[index].get("source")), _record(tracks[index + 1].get("source"))
+        left_window = int(left_source["end_ms"]) - int(left_source["start_ms"])
+        right_window = int(right_source["end_ms"]) - int(right_source["start_ms"])
         if int(overlap) > min(left_window, right_window) * 0.45 + 1:
             raise ValueError("MixPlan transition overlap exceeds the safe source-window budget")
         automation = _record(transition.get("automation"))
+        if str(automation.get("version") or "") != AUTOMATION_VERSION:
+            raise ValueError("MixPlan transition automation version is unsupported")
         if int(automation.get("duration_ms") or 0) != int(overlap):
             raise ValueError("MixPlan transition automation duration must equal overlap")
         _validate_envelope("from_gain", automation.get("from_gain"))
         _validate_envelope("to_gain", automation.get("to_gain"))
+        low_end = automation.get("low_end_handoff")
+        if low_end is not None:
+            low = _record(low_end)
+            cutoff = low.get("cutoff_hz")
+            if not _finite(cutoff) or not 60.0 <= float(cutoff) <= 420.0:
+                raise ValueError("MixPlan low-end handoff cutoff is outside the safe range")
+            _validate_envelope("low_end.from_gain", low.get("from_gain"))
+            _validate_envelope("low_end.to_gain", low.get("to_gain"))
+        fx = automation.get("fx")
+        if fx is not None:
+            fx_record = _record(fx)
+            if fx_record.get("kind") != "echo_out":
+                raise ValueError("MixPlan transition FX kind is unsupported")
+            feedback = fx_record.get("feedback")
+            if not _finite(feedback) or not 0.0 <= float(feedback) <= 0.72:
+                raise ValueError("MixPlan echo feedback is outside the safe range")
         confidence = transition.get("confidence", 0.5)
         if not _finite(confidence) or not 0.0 <= float(confidence) <= 1.0:
             raise ValueError("MixPlan transition confidence must be within 0..1")
         fallback = _record(transition.get("fallback"))
-        fallback_technique = str(fallback.get("technique") or "")
-        if fallback_technique not in ALLOWED_TECHNIQUES:
+        if str(fallback.get("technique") or "") not in ALLOWED_TECHNIQUES:
             raise ValueError("MixPlan fallback technique is invalid")
 
 
