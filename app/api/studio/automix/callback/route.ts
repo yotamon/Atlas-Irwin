@@ -2,6 +2,11 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { after, NextResponse } from "next/server";
 import { asAutoMixClient } from "@/lib/automix/jobs";
 import {
+  feedbackSignalFromEdit,
+  feedbackSignalFromPlan,
+  recordDjPreferenceEvidence,
+} from "@/lib/automix/personalization";
+import {
   MEDIA_WORKER_CALLBACK_HASH_KEY,
   scheduleMediaWorkerSandboxCleanup,
 } from "@/lib/media-worker/sandbox";
@@ -13,6 +18,14 @@ import type { Json } from "@/types/database";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+
+const LEARNABLE_EDIT_OPERATIONS = new Set([
+  "reorder_and_lock",
+  "replace_track",
+  "exclude_track",
+  "override_transition",
+  "reset_transition",
+]);
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -51,6 +64,59 @@ function terminalRequestPayload(value: Record<string, unknown>) {
 
 function scheduleCleanup() {
   after(scheduleMediaWorkerSandboxCleanup());
+}
+
+function planLineage(value: Record<string, unknown>) {
+  return record(value.plan_lineage);
+}
+
+async function learnFromCompletedEdit(
+  service: ReturnType<typeof createServiceClient>,
+  job: AutoMixJob,
+  requestPayload: Record<string, unknown>,
+  result: Record<string, unknown>,
+) {
+  const lineage = planLineage(requestPayload);
+  const operation = typeof lineage.operation === "string" ? lineage.operation : "";
+  if (!LEARNABLE_EDIT_OPERATIONS.has(operation)) return false;
+  const plan = record(result.plan);
+  if (!Object.keys(plan).length) return false;
+  const { signal, weight } = feedbackSignalFromEdit(operation, plan);
+  await recordDjPreferenceEvidence({
+    client: service,
+    ownerId: job.owner_id,
+    artistId: job.artist_id,
+    jobId: job.id,
+    evidenceType: "plan_edit",
+    evidenceKey: operation,
+    signal,
+    weight,
+  });
+  return true;
+}
+
+async function learnFromApprovedRender(
+  service: ReturnType<typeof createServiceClient>,
+  job: AutoMixJob,
+  requestPayload: Record<string, unknown>,
+  result: Record<string, unknown>,
+) {
+  if (requestPayload.execution_mode !== "approved_render") return false;
+  const lineage = planLineage(requestPayload);
+  if (lineage.operation !== "approve_render") return false;
+  const plan = record(result.plan);
+  if (!Object.keys(plan).length) return false;
+  await recordDjPreferenceEvidence({
+    client: service,
+    ownerId: job.owner_id,
+    artistId: job.artist_id,
+    jobId: job.id,
+    evidenceType: "plan_approval",
+    evidenceKey: "approved_mixplan",
+    signal: feedbackSignalFromPlan(plan),
+    weight: 1,
+  });
+  return true;
 }
 
 async function canonicalMastersStillMatch(job: AutoMixJob) {
@@ -172,8 +238,22 @@ export async function POST(request: Request) {
         .select("id")
         .maybeSingle();
       if (update.error) throw new Error(update.error.message);
-      if (update.data) scheduleCleanup();
-      return NextResponse.json({ ok: true, planned: Boolean(update.data), duplicate: !update.data });
+      let learningRecorded = false;
+      if (update.data) {
+        try {
+          learningRecorded = await learnFromCompletedEdit(service, job, requestPayload, result);
+        } catch {
+          // A valid plan must stay valid even if optional preference aggregation is temporarily unavailable.
+          learningRecorded = false;
+        }
+        scheduleCleanup();
+      }
+      return NextResponse.json({
+        ok: true,
+        planned: Boolean(update.data),
+        duplicate: !update.data,
+        learningRecorded,
+      });
     } catch (error) {
       return NextResponse.json({ error: error instanceof Error ? error.message : "AutoMix planning callback failed" }, { status: 500 });
     }
@@ -294,8 +374,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, duplicate: true, cancelled: latest.data?.status === "cancelled" });
     }
 
+    let learningRecorded = false;
+    try {
+      learningRecorded = await learnFromApprovedRender(service, job, requestPayload, result);
+    } catch {
+      // Rendering/catalog integrity is authoritative. Preference learning is deliberately non-blocking.
+      learningRecorded = false;
+    }
     scheduleCleanup();
-    return NextResponse.json({ ok: true, mediaAssetId: asset.id });
+    return NextResponse.json({ ok: true, mediaAssetId: asset.id, learningRecorded });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "AutoMix callback failed" }, { status: 500 });
   }
