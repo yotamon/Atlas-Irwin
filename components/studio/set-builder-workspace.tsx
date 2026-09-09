@@ -457,7 +457,7 @@ export function SetBuilderWorkspace({ artistId, artistName, tracks }: SetBuilder
     operation: string;
     order?: string[];
     locks?: Set<string>;
-    overrides?: Array<Record<string, unknown>>;
+    overrides?: ReturnType<typeof overridesFromPlan>;
     setIntent?: Record<string, unknown>;
     trackIds?: string[];
   }) {
