@@ -1,6 +1,6 @@
 begin;
 
-select plan(10);
+select plan(12);
 
 select has_table('public', 'dj_profiles', 'DJ profiles table exists');
 select has_table('public', 'dj_preference_evidence', 'DJ preference evidence table exists');
@@ -69,6 +69,63 @@ select throws_ok(
 );
 
 reset role;
+
+insert into public.releases (id, owner_id, title, slug)
+values ('46000000-0000-0000-0000-000000000001','16000000-0000-0000-0000-000000000001','DJ Evidence Release','dj-evidence-release');
+
+insert into public.tracks (id, release_id, owner_id, title, audio_url)
+values
+  ('56000000-0000-0000-0000-000000000001','46000000-0000-0000-0000-000000000001','16000000-0000-0000-0000-000000000001','Evidence One','https://example.com/evidence-one.wav'),
+  ('56000000-0000-0000-0000-000000000002','46000000-0000-0000-0000-000000000001','16000000-0000-0000-0000-000000000001','Evidence Two','https://example.com/evidence-two.wav');
+
+insert into public.automix_jobs (
+  id, owner_id, artist_id, track_ids, status, idempotency_key, output_path
+)
+values (
+  '66000000-0000-0000-0000-000000000001',
+  '16000000-0000-0000-0000-000000000001',
+  (select artist_id from public.tracks where id='56000000-0000-0000-0000-000000000001'),
+  array['56000000-0000-0000-0000-000000000001'::uuid,'56000000-0000-0000-0000-000000000002'::uuid],
+  'planned',
+  'dj-evidence-planned',
+  'automix/dj-evidence.mp3'
+);
+
+select throws_ok(
+  $$insert into public.dj_preference_evidence (
+      owner_id, artist_id, automix_job_id, verdict, signal
+    ) values (
+      '16000000-0000-0000-0000-000000000001',
+      (select artist_id from public.tracks where id='56000000-0000-0000-0000-000000000001'),
+      '66000000-0000-0000-0000-000000000001',
+      'accepted',
+      '{"harmonicAdventure":0.5}'::jsonb
+    )$$,
+  'P0001',
+  'DJ preference evidence requires a completed verified AutoMix job',
+  'unfinished AutoMix sessions cannot become learning evidence'
+);
+
+update public.automix_jobs
+set status='completed', completed_at=now()
+where id='66000000-0000-0000-0000-000000000001';
+
+insert into public.dj_preference_evidence (
+  owner_id, artist_id, automix_job_id, verdict, signal
+)
+values (
+  '16000000-0000-0000-0000-000000000001',
+  (select artist_id from public.tracks where id='56000000-0000-0000-0000-000000000001'),
+  '66000000-0000-0000-0000-000000000001',
+  'accepted',
+  '{"harmonicAdventure":0.5}'::jsonb
+);
+select is(
+  (select count(*)::integer from public.dj_preference_evidence where automix_job_id='66000000-0000-0000-0000-000000000001'),
+  1,
+  'completed verified AutoMix sessions may become inspectable learning evidence'
+);
+
 select set_config('request.jwt.claim.sub', '16000000-0000-0000-0000-000000000002', true);
 set local role authenticated;
 select is((select count(*)::integer from public.dj_profiles), 0, 'another account cannot read the first DJ profile');
