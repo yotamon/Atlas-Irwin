@@ -1,5 +1,6 @@
 import type {
   AutoMixSourceDescriptor,
+  DjLibraryAnalysisProvenance,
   DjLibraryBeatGrid,
   DjLibraryCuePoint,
   DjLibraryDetection,
@@ -369,7 +370,7 @@ export function parseRekordboxXml(context: RekordboxXmlContext): ParsedRekordbox
     const metadata = metadataFromTrack(raw);
     const cuePoints = cuePointsFromTrack(raw);
     const beatGrid = beatGridFromTrack(raw);
-    const provenance: NormalizedDjLibraryTrack["analysisProvenance"] = [
+    const provenance: DjLibraryAnalysisProvenance[] = [
       { field: "metadata", source: REKORDBOX_XML_ADAPTER_VERSION, confidence: 1, revision },
     ];
     if (metadata.bpm != null) provenance.push({ field: "bpm", source: REKORDBOX_XML_ADAPTER_VERSION, confidence: 0.95, revision });
