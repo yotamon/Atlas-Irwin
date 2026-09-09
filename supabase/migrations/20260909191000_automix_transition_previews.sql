@@ -55,10 +55,14 @@ declare
   parent_artist uuid;
   parent_status text;
   transition_count integer;
+  parent_plan_hash text;
 begin
-  select owner_id, artist_id, status,
-         greatest(0, cardinality(track_ids) - 1)
-    into parent_owner, parent_artist, parent_status, transition_count
+  select owner_id,
+         artist_id,
+         status,
+         coalesce(jsonb_array_length(result_payload->'render_manifest'->'transitions'), 0),
+         nullif(result_payload->'render_manifest'->>'plan_hash', '')
+    into parent_owner, parent_artist, parent_status, transition_count, parent_plan_hash
   from public.automix_jobs
   where id = new.automix_job_id;
 
@@ -71,8 +75,11 @@ begin
   if parent_status <> 'completed' then
     raise exception 'Transition previews require a completed verified AutoMix session';
   end if;
+  if parent_plan_hash is null then
+    raise exception 'Transition previews require a verified MixPlan hash';
+  end if;
   if new.transition_index >= transition_count then
-    raise exception 'Transition preview index is outside the parent set';
+    raise exception 'Transition preview index is outside the verified parent MixPlan';
   end if;
   if new.expires_at > now() + interval '25 hours' then
     raise exception 'Transition preview retention cannot exceed 25 hours';
