@@ -1,0 +1,201 @@
+/* Complete primitive contracts for controls, fields and page identity.
+   This file extends primitives.css without route-specific selectors. */
+
+.studio-root .button.secondary {
+  border-color: color-mix(in srgb, var(--en-accent) 30%, var(--en-line-strong));
+  background: var(--en-accent-soft);
+  color: var(--en-ink);
+}
+
+.studio-root .button.secondary:hover,
+.studio-root .button.secondary:focus-visible {
+  border-color: color-mix(in srgb, var(--en-accent) 58%, var(--en-line));
+  background: color-mix(in srgb, var(--en-accent) 15%, var(--en-surface-raised));
+}
+
+.studio-root .button.ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--en-muted);
+  box-shadow: none;
+}
+
+.studio-root .button.ghost:hover,
+.studio-root .button.ghost:focus-visible {
+  border-color: var(--en-line);
+  background: var(--en-surface-raised);
+  color: var(--en-ink);
+}
+
+.studio-root .button.danger,
+.studio-root .button.danger-text {
+  border-color: color-mix(in srgb, var(--en-danger) 32%, var(--en-line));
+  background: var(--en-danger-soft);
+  color: var(--en-danger);
+  box-shadow: none;
+}
+
+.studio-root .button.danger:hover,
+.studio-root .button.danger:focus-visible,
+.studio-root .button.danger-text:hover,
+.studio-root .button.danger-text:focus-visible {
+  border-color: color-mix(in srgb, var(--en-danger) 62%, var(--en-line));
+  background: color-mix(in srgb, var(--en-danger) 14%, var(--en-surface-raised));
+  color: color-mix(in srgb, var(--en-danger) 86%, var(--en-white));
+}
+
+.studio-root .button.button-sm {
+  min-height: var(--en-control-sm);
+  padding: 0.5rem var(--en-space-3);
+  font-size: var(--en-text-xs);
+}
+
+.studio-root .button.button-lg {
+  min-height: var(--en-control-lg);
+  padding-inline: var(--en-space-5);
+  font-size: var(--en-text-md);
+}
+
+.studio-root .button > svg,
+.studio-root .text-button > svg,
+.studio-root :where(.studio-tabs, .ensemblis-object-tabs) a > svg {
+  flex: 0 0 auto;
+  width: var(--en-icon-md);
+  height: var(--en-icon-md);
+  stroke-width: 1.8;
+}
+
+.studio-root [data-icon-button] {
+  width: var(--en-control-sm);
+  min-width: var(--en-control-sm);
+  min-height: var(--en-control-sm);
+  padding: 0;
+}
+
+.studio-root [data-icon-button] > svg {
+  width: var(--en-icon-md);
+  height: var(--en-icon-md);
+}
+
+.studio-root .studio-page-header {
+  align-items: flex-start;
+  margin-bottom: 0;
+  padding-bottom: var(--en-space-6);
+}
+
+.studio-root .studio-page-header-copy {
+  display: grid;
+  gap: var(--en-space-2);
+  min-width: 0;
+}
+
+.studio-root .studio-page-header h1 {
+  max-width: 18ch;
+  font-size: var(--en-text-display);
+  text-wrap: balance;
+}
+
+.studio-root .studio-page-header p {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.studio-root .studio-page-header .actions {
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
+.studio-root .field > span {
+  display: flex;
+  align-items: baseline;
+  gap: var(--en-space-1);
+  min-height: 1rem;
+  color: var(--en-muted);
+  font-size: var(--en-text-xs);
+  font-weight: var(--en-weight-semibold);
+  letter-spacing: 0.025em;
+}
+
+.studio-root .field > span small {
+  color: var(--en-subtle);
+  font-size: inherit;
+  font-weight: var(--en-weight-medium);
+  letter-spacing: 0;
+}
+
+.studio-root :where(.field input, .field select, .field textarea) {
+  min-width: 0;
+  outline: none;
+}
+
+.studio-root .field textarea {
+  min-height: 7.5rem;
+  line-height: var(--en-leading-body);
+}
+
+.studio-root .field select {
+  cursor: pointer;
+}
+
+.studio-root .field :where(input, select, textarea):disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+  background: color-mix(in srgb, var(--en-bg-elevated) 82%, var(--en-surface));
+}
+
+.studio-root .field[data-invalid="true"] :where(input, select, textarea):focus {
+  border-color: var(--en-danger);
+  box-shadow: 0 0 0 3px var(--en-danger-soft);
+}
+
+.studio-root :where(input[type="checkbox"], input[type="radio"]) {
+  accent-color: var(--en-accent);
+}
+
+.studio-root :where(button, a, input, select, textarea, summary):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--en-accent) 76%, var(--en-white));
+  outline-offset: 2px;
+}
+
+.studio-root :where(button, a, input, select, textarea, summary):focus:not(:focus-visible) {
+  outline: none;
+}
+
+.studio-root .empty-state {
+  border: 0;
+  border-top: 1px solid var(--en-line);
+  border-bottom: 1px solid var(--en-line);
+  border-radius: 0;
+  background: transparent;
+}
+
+.studio-root .empty-orbit {
+  box-shadow: inset 0 0 0 8px var(--en-bg-elevated);
+}
+
+@media (max-width: 720px) {
+  .studio-root .studio-page-header {
+    gap: var(--en-space-5);
+    padding-bottom: var(--en-space-5);
+  }
+
+  .studio-root .studio-page-header .actions,
+  .studio-root .studio-page-header .actions > * {
+    width: 100%;
+  }
+
+  .studio-root .studio-page-header .actions .button {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-root .button,
+  .studio-root .text-button {
+    transition-duration: 0ms;
+  }
+
+  .studio-root .button:active {
+    transform: none;
+  }
+}
