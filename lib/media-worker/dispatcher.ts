@@ -1,6 +1,7 @@
 import "server-only";
 
 import { dispatchMediaWorkerJob as dispatchVercelSandboxJob } from "@/lib/media-worker/sandbox";
+import { withMediaWorkerContractVersion } from "@/lib/media-worker/contract";
 import {
   childExecutionContext,
   EXECUTION_TRACE_QUERY,
@@ -57,10 +58,10 @@ export async function dispatchMediaWorkerJob(input: MediaWorkerDispatchInput) {
   const tracedInput: MediaWorkerDispatchInput = {
     ...input,
     callbackUrl: callbackUrlWithTrace(input.callbackUrl, context.traceId),
-    payload: {
+    payload: withMediaWorkerContractVersion({
       ...input.payload,
       [MEDIA_WORKER_TRACE_PAYLOAD_KEY]: context.traceId,
-    },
+    }),
   };
   return observeExecution("media_worker.dispatch", context, () => dispatcher.dispatch(tracedInput));
 }
