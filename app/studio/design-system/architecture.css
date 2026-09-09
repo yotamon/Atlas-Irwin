@@ -162,6 +162,10 @@
   line-height: 1.4;
 }
 
+.studio-root .studio-action-bar-actions {
+  margin-left: auto;
+}
+
 .studio-root .studio-form,
 .studio-root .ensemblis-form-section {
   display: grid;
@@ -317,6 +321,10 @@
     bottom: calc(5.25rem + env(safe-area-inset-bottom));
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .studio-root .studio-action-bar-actions {
+    margin-left: 0;
   }
 
   .studio-root .studio-action-bar :where(.studio-actions, .form-actions, .actions),
