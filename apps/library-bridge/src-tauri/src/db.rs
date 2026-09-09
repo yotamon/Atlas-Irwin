@@ -212,9 +212,8 @@ impl BridgeDb {
             let mut statement = transaction.prepare(
                 "select source_track_id,payload_hash from sync_state where source_id=?1",
             )?;
-            let rows = statement.query_map(params![source_id], |row| {
-                Ok((row.get(0)?, row.get(1)?))
-            })?;
+            let rows =
+                statement.query_map(params![source_id], |row| Ok((row.get(0)?, row.get(1)?)))?;
             for row in rows {
                 let (track_id, payload_hash): (String, String) = row?;
                 previous.insert(track_id, payload_hash);
@@ -232,9 +231,7 @@ impl BridgeDb {
             .collect();
         let changed_tracks: Vec<CloudTrackDelta> = tracks
             .iter()
-            .filter(|track| {
-                previous.get(&track.cloud.source_track_id) != Some(&track.payload_hash)
-            })
+            .filter(|track| previous.get(&track.cloud.source_track_id) != Some(&track.payload_hash))
             .map(|track| track.cloud.clone())
             .collect();
         let removed_source_track_ids: Vec<String> = previous
@@ -364,10 +361,7 @@ impl BridgeDb {
             .as_object()
             .cloned()
             .context("invalid local sync state")?;
-        transaction.execute(
-            "delete from sync_state where source_id=?1",
-            params![row.0],
-        )?;
+        transaction.execute("delete from sync_state where source_id=?1", params![row.0])?;
         for (track_id, hash) in state {
             let hash = hash.as_str().context("invalid local payload hash")?;
             transaction.execute(
