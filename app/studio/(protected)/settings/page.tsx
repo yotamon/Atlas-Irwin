@@ -46,9 +46,7 @@ export default async function SettingsPage() {
         title="Workspace health"
         description="Technical integrity belongs here. Campaigns, outreach, publishing and creative work stay inside Grow or Create instead of becoming a second navigation system in Settings."
         action={<Link className="button secondary" href={href("/studio/data-health")}>Data health</Link>}
-      >
-        <span />
-      </Section>
+      />
 
       <Section eyebrow="Account" title="Session">
         <form action={signOut}><button className="button ghost" type="submit">Sign out</button></form>
