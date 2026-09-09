@@ -5,7 +5,7 @@ import { Sandbox } from "@vercel/sandbox";
 
 export const MEDIA_WORKER_CALLBACK_HASH_KEY = "__atlas_callback_token_sha256";
 const MEDIA_WORKER_RUNTIME_VERSION = 12;
-const MEDIA_WORKER_BOOTSTRAP_VERSION = 10;
+const MEDIA_WORKER_BOOTSTRAP_VERSION = 9;
 const MEDIA_WORKER_PYTHON_VERSION = "3.13.14";
 const MEDIA_WORKER_SANDBOX_IMAGE = "vercel/sandbox/universal@sha256:0e3e3617e824397f170fc7c43ccaa565dd7ac36518e83ead3d41e077cd9f6ec7";
 const HOBBY_MAX_SANDBOX_MS = 45 * 60 * 1000;
@@ -211,6 +211,8 @@ files = {
     "app/music_intelligence.py": f"{base}/app/music_intelligence.py",
     "app/music_intelligence_v4.py": f"{base}/app/music_intelligence_v4.py",
     "app/music_intelligence_v4_runtime.py": f"{base}/app/music_intelligence_v4_runtime.py",
+    "app/moment_rhythm.py": f"{base}/app/moment_rhythm.py",
+    "app/strongest_moments.py": f"{base}/app/strongest_moments.py",
     "app/audio_intelligence_providers.py": f"{base}/app/audio_intelligence_providers.py",
     "app/mastering_inspector.py": f"{base}/app/mastering_inspector.py",
     "app/mastering_processor.py": f"{base}/app/mastering_processor.py",
