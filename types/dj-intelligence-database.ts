@@ -12,6 +12,8 @@ export type DjPreferenceValues = {
   harmonicAdventure: number;
   transitionAggressiveness: number;
   exploration: number;
+  tempoMovement: number;
+  energyDynamics: number;
 };
 
 export type DjProfileRow = {
@@ -27,14 +29,18 @@ export type DjProfileRow = {
   updated_at: string;
 };
 
+export type DjEvidenceType = "plan_feedback" | "plan_edit" | "plan_approval";
+
 export type DjPreferenceEvidenceRow = {
   id: string;
   owner_id: string;
   artist_id: string;
   automix_job_id: string;
-  evidence_type: "plan_feedback";
+  evidence_type: DjEvidenceType;
+  evidence_key: string;
   verdict: "accepted" | "rejected";
   signal: Json;
+  weight: number;
   created_at: string;
   updated_at: string;
 };

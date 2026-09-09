@@ -39,6 +39,7 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.json({
+    profileVersion: result.data?.profile_version ?? 2,
     preferences: normalizeDjPreferences(result.data?.explicit_preferences),
     learnedPreferences: normalizeDjPreferences(result.data?.learned_preferences),
     learnedConfidence: result.data?.learned_confidence ?? 0,
@@ -71,10 +72,10 @@ export async function PATCH(request: Request) {
     owner_id: user.id,
     artist_id: artist.artistId,
     explicit_preferences: json(preferences),
-    learned_preferences: existing.data?.learned_preferences ?? json({}),
+    learned_preferences: existing.data?.learned_preferences ?? json(normalizeDjPreferences({})),
     learned_confidence: existing.data?.learned_confidence ?? 0,
     evidence_count: existing.data?.evidence_count ?? 0,
-    profile_version: 1,
+    profile_version: 2,
   }, { onConflict: "owner_id,artist_id" }).select("*").single();
   if (saved.error) {
     return NextResponse.json({ error: "Could not save Personal DJ Intelligence." }, { status: 500 });
@@ -82,7 +83,11 @@ export async function PATCH(request: Request) {
 
   return NextResponse.json({
     saved: true,
+    profileVersion: saved.data.profile_version,
     preferences: normalizeDjPreferences(saved.data.explicit_preferences),
+    learnedPreferences: normalizeDjPreferences(saved.data.learned_preferences),
+    learnedConfidence: saved.data.learned_confidence,
+    evidenceCount: saved.data.evidence_count,
     plannerProfile: plannerDjProfile(saved.data),
   });
 }

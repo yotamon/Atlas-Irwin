@@ -35,11 +35,22 @@ test("durable DJ queues terminalize poisoned preparation instead of blocking lat
 test("Personal DJ learning and external source contracts remain bounded and versioned", async () => {
   const personalization = await source("lib/automix/personalization.ts");
   const feedback = await source("app/api/studio/automix/feedback/route.ts");
+  const callback = await source("app/api/studio/automix/callback/route.ts");
+  const worker = await source("services/media-worker/app/automix_set_intelligence.py");
   const sourceContract = await source("lib/automix/source-contract.ts");
 
   assert.ok(personalization.includes("0.16 * clamp01(confidence)"));
+  assert.ok(personalization.includes("Math.min(0.6"));
+  assert.ok(personalization.includes('version: "ensemblis.dj-profile.v2"'));
+  assert.ok(personalization.includes("tempoMovement"));
+  assert.ok(personalization.includes("energyDynamics"));
   assert.ok(feedback.includes('job.data.status !== "completed"'));
-  assert.ok(feedback.includes("Math.min(0.6"));
+  assert.ok(feedback.includes('evidenceType: "plan_feedback"'));
+  assert.ok(callback.includes('evidenceType: "plan_edit"'));
+  assert.ok(callback.includes('evidenceType: "plan_approval"'));
+  assert.ok(callback.includes("Rendering/catalog integrity is authoritative"));
+  assert.ok(worker.includes('DJ_PROFILE_VERSION = "ensemblis.dj-profile.v2"'));
+  assert.ok(worker.includes("canonical transition planning still owns stretch limits"));
   assert.ok(sourceContract.includes('SOURCE_CONTRACT_VERSION = "ensemblis.automix-source.v1"'));
   assert.ok(sourceContract.includes("raw.version !== SOURCE_CONTRACT_VERSION"));
 });

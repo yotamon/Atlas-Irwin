@@ -169,6 +169,19 @@ class AutoMixSetIntelligenceTest(unittest.TestCase):
         self.assertEqual(preferred_transition_style("clean", adventurous), "clean")
         self.assertEqual(preferred_transition_style("creative", conservative), "creative")
 
+    def test_profile_v2_normalizes_movement_preferences_without_expanding_safety(self) -> None:
+        profile = normalize_dj_profile({
+            "tempo_movement": 3.0,
+            "energy_dynamics": -1.0,
+            "learned_confidence": 0.7,
+            "evidence_count": 12,
+        })
+        self.assertEqual(profile["version"], "ensemblis.dj-profile.v2")
+        self.assertEqual(profile["tempo_movement"], 1.0)
+        self.assertEqual(profile["energy_dynamics"], 0.0)
+        self.assertEqual(profile["learned_confidence"], 0.7)
+        self.assertEqual(profile["evidence_count"], 12)
+
     def test_selected_tracks_are_rewindowed_after_duration_curation(self) -> None:
         tracks = [self._track(index) for index in range(8)]
         initial_window_ms = tracks[0].window_end_ms - tracks[0].window_start_ms
@@ -197,11 +210,17 @@ class AutoMixSetIntelligenceTest(unittest.TestCase):
             "dj",
             5 * 60 * 1000,
             set_intent={"must_play_track_ids": ["track-4"], "target_track_count": 3},
-            dj_profile={"harmonic_adventure": 0.72, "transition_aggressiveness": 0.55, "exploration": 0.7},
+            dj_profile={
+                "harmonic_adventure": 0.72,
+                "transition_aggressiveness": 0.55,
+                "exploration": 0.7,
+                "tempo_movement": 0.6,
+                "energy_dynamics": 0.65,
+            },
         )
         manifest = build_mixplan(plan, source_fingerprints=[])
         self.assertEqual(manifest["set_intent"]["version"], "ensemblis.set-intent.v1")
-        self.assertEqual(manifest["dj_profile"]["version"], "ensemblis.dj-profile.v1")
+        self.assertEqual(manifest["dj_profile"]["version"], "ensemblis.dj-profile.v2")
         self.assertEqual(manifest["selection_summary"]["selected_count"], 3)
         self.assertEqual(manifest["requested_transition_style"], "dj")
         self.assertTrue(isinstance(manifest.get("plan_hash"), str) and len(manifest["plan_hash"]) == 64)

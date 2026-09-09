@@ -1,11 +1,13 @@
 begin;
 
-select plan(12);
+select plan(18);
 
 select has_table('public', 'dj_profiles', 'DJ profiles table exists');
 select has_table('public', 'dj_preference_evidence', 'DJ preference evidence table exists');
 select has_column('public', 'dj_profiles', 'explicit_preferences', 'DJ profile keeps explicit preferences separately');
 select has_column('public', 'dj_profiles', 'learned_preferences', 'DJ profile keeps learned preferences separately');
+select has_column('public', 'dj_preference_evidence', 'evidence_key', 'DJ evidence has a stable idempotency key');
+select has_column('public', 'dj_preference_evidence', 'weight', 'DJ evidence has bounded learning weight');
 
 insert into auth.users (id, email, aud, role, created_at, updated_at)
 values
@@ -126,6 +128,73 @@ select is(
   'completed verified AutoMix sessions may become inspectable learning evidence'
 );
 
+insert into public.dj_preference_evidence (
+  owner_id, artist_id, automix_job_id, evidence_type, evidence_key, verdict, signal, weight
+)
+values
+  (
+    '16000000-0000-0000-0000-000000000001',
+    (select artist_id from public.tracks where id='56000000-0000-0000-0000-000000000001'),
+    '66000000-0000-0000-0000-000000000001',
+    'plan_edit',
+    'reorder_and_lock',
+    'accepted',
+    '{"tempoMovement":0.65,"energyDynamics":0.45}'::jsonb,
+    0.78
+  ),
+  (
+    '16000000-0000-0000-0000-000000000001',
+    (select artist_id from public.tracks where id='56000000-0000-0000-0000-000000000001'),
+    '66000000-0000-0000-0000-000000000001',
+    'plan_edit',
+    'override_transition',
+    'accepted',
+    '{"transitionAggressiveness":0.8}'::jsonb,
+    0.88
+  );
+
+select is(
+  (select count(*)::integer from public.dj_preference_evidence where automix_job_id='66000000-0000-0000-0000-000000000001' and evidence_type='plan_edit'),
+  2,
+  'one completed revision can keep multiple distinct structured decisions'
+);
+
+select throws_ok(
+  $$insert into public.dj_preference_evidence (
+      owner_id, artist_id, automix_job_id, evidence_type, evidence_key, verdict, signal, weight
+    ) values (
+      '16000000-0000-0000-0000-000000000001',
+      (select artist_id from public.tracks where id='56000000-0000-0000-0000-000000000001'),
+      '66000000-0000-0000-0000-000000000001',
+      'plan_edit',
+      'reorder_and_lock',
+      'accepted',
+      '{"tempoMovement":0.9}'::jsonb,
+      0.78
+    )$$,
+  '23505',
+  null,
+  'the same structured decision key is idempotent per completed revision'
+);
+
+select throws_ok(
+  $$insert into public.dj_preference_evidence (
+      owner_id, artist_id, automix_job_id, evidence_type, evidence_key, verdict, signal, weight
+    ) values (
+      '16000000-0000-0000-0000-000000000001',
+      (select artist_id from public.tracks where id='56000000-0000-0000-0000-000000000001'),
+      '66000000-0000-0000-0000-000000000001',
+      'plan_approval',
+      'invalid-weight',
+      'accepted',
+      '{}'::jsonb,
+      1.1
+    )$$,
+  '23514',
+  null,
+  'evidence weight is database-bounded to a meaningful zero-to-one interval'
+);
+
 select set_config('request.jwt.claim.sub', '16000000-0000-0000-0000-000000000002', true);
 set local role authenticated;
 select is((select count(*)::integer from public.dj_profiles), 0, 'another account cannot read the first DJ profile');
@@ -140,6 +209,17 @@ select ok(
       and indexname='dj_profiles_owner_id_artist_id_key'
   ),
   'one durable DJ profile is enforced per owner and artist'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_indexes
+    where schemaname='public'
+      and tablename='dj_preference_evidence'
+      and indexname='dj_preference_evidence_event_key'
+  ),
+  'structured DJ evidence has one stable event-level unique index'
 );
 
 select * from finish();
