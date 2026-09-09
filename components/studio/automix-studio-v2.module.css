@@ -422,7 +422,7 @@
   align-items: end;
   justify-content: space-between;
   gap: var(--en-space-6);
-  margin-top: var(--en-space-7);
+  margin-top: var(--en-space-8);
   padding: var(--en-space-6) 0;
   border-top: 1px solid color-mix(in srgb, var(--en-accent) 46%, var(--en-line));
   border-bottom: 1px solid var(--en-line);
@@ -466,7 +466,7 @@
 }
 
 .job {
-  padding: clamp(var(--en-space-5), 3vw, var(--en-space-7)) 0;
+  padding: clamp(var(--en-space-5), 3vw, var(--en-space-8)) 0;
   border-bottom: 1px solid var(--en-line);
 }
 
@@ -822,7 +822,7 @@
 
   .hero {
     min-height: 0;
-    padding: var(--en-space-7) 0;
+    padding: var(--en-space-8) 0;
   }
 
   .heroCopy h2 {
