@@ -8,6 +8,7 @@ from pathlib import Path
 
 from . import main as worker_main
 from .automix import AutomixWorkerRequest, execute_automix
+from .contract import validate_request_envelope
 from .mastering_processor import MasteringWorkerRequest, execute_mastering
 from .music_intelligence_v4_runtime import analyze_music as analyze_music_v4
 from .social_finishing import SocialWorkerRequest, execute_social
@@ -31,6 +32,7 @@ def main() -> None:
     try:
         raw = request_path.read_text(encoding="utf-8")
         payload = json.loads(raw)
+        validate_request_envelope(payload)
         if payload.get("job_type") == "finish_social_video":
             request = SocialWorkerRequest.model_validate(payload)
             executor = execute_social
