@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.automix_manifest_personalized import build_personalized_mixplan
+from app.automix_manifest_personalized import build_mixplan
 from app.automix_model import MusicalKey, TrackDescriptor, normalize_dj_bpm
 from app.automix_planner_personalized import build_set_intelligent_plan
 from app.automix_set_intelligence import (
@@ -186,7 +186,7 @@ class AutoMixSetIntelligenceTest(unittest.TestCase):
             for item in plan["tracks"]
         ]
         self.assertTrue(any(window > initial_window_ms for window in rendered_windows))
-        self.assertTrue(plan["quality_contract"]["selected_track_rewindowing"])
+        self.assertTrue(plan["quality_contract"]["post_curation_window_resizing"])
 
     def test_personalized_mixplan_hashes_planning_provenance(self) -> None:
         tracks = [self._track(index) for index in range(5)]
@@ -199,11 +199,11 @@ class AutoMixSetIntelligenceTest(unittest.TestCase):
             set_intent={"must_play_track_ids": ["track-4"], "target_track_count": 3},
             dj_profile={"harmonic_adventure": 0.72, "transition_aggressiveness": 0.55, "exploration": 0.7},
         )
-        manifest = build_personalized_mixplan(plan, source_fingerprints=[])
-        planning = manifest["planning"]
-        self.assertEqual(planning["set_intent"]["version"], "ensemblis.set-intent.v1")
-        self.assertEqual(planning["dj_profile"]["version"], "ensemblis.dj-profile.v1")
-        self.assertEqual(planning["selection_summary"]["selected_count"], 3)
+        manifest = build_mixplan(plan, source_fingerprints=[])
+        self.assertEqual(manifest["set_intent"]["version"], "ensemblis.set-intent.v1")
+        self.assertEqual(manifest["dj_profile"]["version"], "ensemblis.dj-profile.v1")
+        self.assertEqual(manifest["selection_summary"]["selected_count"], 3)
+        self.assertEqual(manifest["requested_transition_style"], "dj")
         self.assertTrue(isinstance(manifest.get("plan_hash"), str) and len(manifest["plan_hash"]) == 64)
 
 
