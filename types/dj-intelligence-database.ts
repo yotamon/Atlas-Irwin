@@ -30,6 +30,7 @@ export type DjProfileRow = {
 };
 
 export type DjEvidenceType = "plan_feedback" | "plan_edit" | "plan_approval";
+export type DjLibraryHistorySourceKind = "rekordbox" | "serato" | "traktor" | "local_library";
 
 export type DjPreferenceEvidenceRow = {
   id: string;
@@ -45,6 +46,21 @@ export type DjPreferenceEvidenceRow = {
   updated_at: string;
 };
 
+export type DjLibraryHistoryEvidenceRow = {
+  id: string;
+  owner_id: string;
+  artist_id: string;
+  source_kind: DjLibraryHistorySourceKind;
+  source_id: string;
+  source_revision: string;
+  evidence_key: string;
+  signal: Json;
+  weight: number;
+  sample_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
 type ExistingTables = Database["public"]["Tables"];
 
 export type DjIntelligenceDatabase = Omit<Database, "public"> & {
@@ -52,6 +68,7 @@ export type DjIntelligenceDatabase = Omit<Database, "public"> & {
     Tables: ExistingTables & {
       dj_profiles: Table<DjProfileRow>;
       dj_preference_evidence: Table<DjPreferenceEvidenceRow>;
+      dj_library_history_evidence: Table<DjLibraryHistoryEvidenceRow>;
     };
   };
 };
