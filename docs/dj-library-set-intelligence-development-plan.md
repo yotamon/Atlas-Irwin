@@ -1,721 +1,561 @@
-# DJ Library Bridge & Set Intelligence Development Plan
+# Ensemblis AutoMix, Set Intelligence & DJ Library Development Plan
 
-**Status:** Proposed execution plan  
+**Status:** Active execution plan  
 **Product:** Ensemblis  
-**Scope:** Local DJ library connectivity, personal DJ intelligence, set planning, transition preview and local mix rendering  
+**Scope:** AutoMix quality, mix/set planning, DJ intelligence, external DJ libraries and eventual local-device execution  
 **Canonical branch:** `main`  
 **Last reconciled:** 2026-09-09
 
 ## 1. Executive decision
 
-Ensemblis should **not** become a cloud music locker for a DJ's full local collection.
+The program starts from **what Ensemblis already has**: a working, rendered AutoMix engine, Track Intelligence V4, mastering/tempo evidence, stem activity intelligence, durable mix jobs and the existing web-based catalog workflow.
 
-The product contract is:
+We will make AutoMix substantially better **before** building Rekordbox integration, a Windows/macOS companion or local-library synchronization.
 
-> **Connect your library to Ensemblis. Keep the raw music on your computer. Sync the intelligence, not the collection.**
+The execution principle is:
 
-The existing web application remains the primary Ensemblis UI and control plane. A small native companion, **Ensemblis Library Bridge**, runs on the user's computer and owns access to local audio files, local DJ-library databases, filesystem changes, heavyweight local audio operations, transition previews and final mix rendering.
+> **First make Ensemblis excellent at planning and rendering mixes from music it already understands. Then widen where the music can come from and where the mix can execute.**
 
-The cloud stores durable, portable intelligence about the library: recording identity, musical analysis, library relationships, DJ behavior/profile data, set plans and job state. Raw local audio is not uploaded by default.
+The long-term architecture still supports Rekordbox, Serato, Traktor and a native Library Bridge, but those are expansion layers. They must plug into a mature, source-agnostic AutoMix/Set Intelligence core instead of defining that core.
 
-This architecture gives Ensemblis the advantages of a web product while preserving the storage economics, privacy, reliability and native media access required by serious DJ libraries.
+This deliberately reverses the earlier roadmap. Native library/device work is now late-stage infrastructure, not the starting milestone.
 
-## 2. Why this belongs in Ensemblis
+## 2. Product direction
 
-Ensemblis already treats music analysis as the source of downstream decisions. Set Intelligence extends that principle from an artist's release catalog to a DJ's working library.
+Ensemblis should serve three overlapping users without becoming three separate products:
 
-The intended loop is:
+- an artist who wants a coherent album/catalog mix from their own music;
+- a producer/artist/DJ who wants to combine their own catalog with a broader DJ library;
+- a DJ who wants intelligent set preparation based on their library, history and style.
+
+The common core is the same:
 
 ```text
-Local DJ library
-      ↓
-Library Intelligence
-      ↓
-Personal DJ Profile
-      ↓
+Music Ensemblis understands
+        ↓
+Musical + Mix Intelligence
+        ↓
 Set Intent
-      ↓
-Set Plan
-      ↓
-Transition Plan
-      ↓
-Preview / Local Render
-      ↓
-DJ edits, locks, substitutions and feedback
-      ↓
-Better Personal DJ Profile
+        ↓
+Global Set Plan
+        ↓
+Transition Plans
+        ↓
+Preview / Edit / Lock / Replace
+        ↓
+AutoMix Render / DJ Export
+        ↓
+Feedback + Outcomes
+        ↓
+Better Personal DJ Intelligence
 ```
 
-The differentiator is not generic playlist recommendation. The system should learn **how this person DJs**: selection habits, sequencing, energy movement, harmonic tolerance, preferred transition patterns, cue behavior, set context and explicit corrections.
+External libraries only change the **input boundary**. Local rendering only changes the **execution boundary**. Neither should require rewriting set planning or transition intelligence.
 
-## 3. Goals
+## 3. Existing AutoMix baseline
 
-The program must make the following user experience possible:
+The current implementation is the foundation, not a prototype to discard.
 
-1. A user connects a large local music library once without uploading the full collection.
-2. Ensemblis incrementally notices new, changed, moved and unavailable files.
-3. Ensemblis can reason about the library from any browser even when the source computer is offline, as long as the required derived intelligence was previously synced.
-4. The user can ask for a set by duration, context, musical direction and constraints.
-5. Ensemblis produces an editable, explainable Set Plan rather than a black-box playlist.
-6. Transition previews are rendered from local source audio without uploading full source files.
-7. A complete DJ mix can be rendered locally from the approved Set Plan.
-8. Rekordbox is the first structured DJ-library source; Serato and Traktor follow behind adapters.
-9. Library data, device access and raw audio remain private by default and scoped to the owning workspace/user.
-10. Existing Ensemblis Track Intelligence and media-worker foundations are reused instead of duplicated.
+On `main`, AutoMix already includes:
 
-## 4. Non-goals
+- canonical `ensemblis.automix.v1` planning contracts;
+- music-aware showcase-window selection;
+- BPM normalization and local tempo/beat-stability reasoning;
+- Camelot/harmonic compatibility;
+- energy-curve ordering;
+- mastering-quality awareness;
+- vocal and bass collision evidence from stem/activity intelligence;
+- variable-tempo safeguards;
+- deterministic transition strategies including quick mix, bass swap, harmonic blend, breakdown swap, echo out and drop cut;
+- Signalsmith-based time stretching with a hard stretch cap and no pitch shift;
+- adaptive channel loudness and final mix normalization/true-peak safety;
+- durable artist-scoped AutoMix jobs and callback/output lineage;
+- an existing Studio mix workflow and rendered output asset.
 
-The first program is **not** intended to:
+The roadmap must therefore evolve this engine rather than introduce a parallel `Set Intelligence` implementation.
 
-- host an entire DJ library in Supabase Storage;
-- replace Rekordbox, Serato or Traktor as the live performance application;
-- require open inbound ports on the user's machine;
-- give the desktop companion direct Redis/BullMQ credentials;
-- synchronize arbitrary local filesystem paths to the cloud;
-- upload complete audio files merely to calculate ordinary metadata or render local transitions;
-- silently edit the user's source DJ library;
-- promise real-time live-deck control in the first release;
-- train shared models on a user's local music without explicit future consent and policy work.
+## 4. North star
 
-## 5. Architectural invariants
+The target product should be able to answer:
 
-These are hard design constraints, not implementation suggestions.
+> **Given this music, this DJ/artist, this context and this desired journey, what is the best set we can build, why is each track here, how should every handoff work, and can Ensemblis render or export it safely?**
 
-### 5.1 Raw audio is local by default
+A successful AutoMix is not simply technically seamless. It must feel intentionally programmed by a musically competent DJ.
 
-A local file path and the full audio payload remain on the device unless the user explicitly invokes an operation whose contract permits a temporary derived upload.
-
-### 5.2 Cloud stores portable intelligence
-
-The cloud may store stable recording IDs, metadata, hashes/fingerprints, analysis summaries, embeddings whose license permits commercial use, DJ-library metadata, playlist relationships, cues, history, set plans and anonymized execution metrics required to operate the feature.
-
-### 5.3 Path is not identity
-
-Moving a track from one folder or drive to another must not create a new logical recording or force unnecessary re-analysis.
-
-### 5.4 Device connectivity is outbound only
-
-Library Bridge initiates an authenticated outbound connection to Ensemblis. Ensemblis never requires users to expose a port, configure NAT or make the local machine directly reachable from the internet.
-
-### 5.5 Cloud jobs and device jobs are different execution targets
-
-The existing server/cloud worker remains appropriate for cloud-owned work. Local-media work must be explicitly routed to a paired device.
-
-### 5.6 Derived audio uploads are purpose-bound and temporary
-
-A short transition preview or an explicitly requested proxy may be uploaded using a short-lived signed URL and retention policy. Uploading a preview must never imply permission to retain or reuse the source recording.
-
-### 5.7 DJ-source adapters are isolated
-
-Rekordbox, Serato and Traktor parsing rules must live behind a common source-adapter contract. Product logic must not depend directly on one vendor's database/export format.
-
-## 6. Target architecture
+The quality hierarchy is:
 
 ```text
-                              ENSEMBLIS CLOUD
-┌───────────────────────────────────────────────────────────────────────┐
-│                                                                       │
-│  Next.js /studio                                                      │
-│      │                                                                │
-│      ├── Library UI                                                   │
-│      ├── Set Builder                                                  │
-│      ├── Set Intelligence                                             │
-│      └── Device / job status                                          │
-│                                                                       │
-│  Supabase / Postgres                                                  │
-│      ├── devices                                                      │
-│      ├── library_sources                                              │
-│      ├── recordings / library_tracks / variants                       │
-│      ├── track intelligence                                           │
-│      ├── DJ profile / history                                         │
-│      ├── set_plans / set_items / transition_plans                     │
-│      └── device_jobs                                                   │
-│                                                                       │
-│  Job Router                                                           │
-│      ├──────────────────────────► existing cloud media worker          │
-│      │                                                                │
-│      └──► Device Gateway                                              │
-│               │                                                       │
-└───────────────┼───────────────────────────────────────────────────────┘
-                │ authenticated outbound WSS / HTTPS
-                │
-                ▼
-                         USER COMPUTER
-┌───────────────────────────────────────────────────────────────────────┐
-│  Ensemblis Library Bridge                                             │
-│                                                                       │
-│  Pairing/auth       Local SQLite       Device job runner               │
-│       │                  │                    │                        │
-│       ├──────────────────┼────────────────────┤                        │
-│       │                  │                    │                        │
-│  Source adapters     File watcher       Audio runtime                  │
-│   ├─ folders          + reconcile        ├─ FFmpeg                     │
-│   ├─ Rekordbox                          ├─ fingerprinting               │
-│   ├─ Serato                             ├─ local analysis               │
-│   └─ Traktor                            ├─ preview renderer             │
-│                                         └─ mix renderer                │
-│                                                │                      │
-│                                                ▼                      │
-│                                      Local DJ audio library            │
-└───────────────────────────────────────────────────────────────────────┘
+1. Track selection
+2. Global set arc
+3. Transition feasibility
+4. Transition musicality
+5. DSP/render quality
+6. Output mastering
 ```
 
-The architectural split is:
+Perfect crossfades cannot rescue a weak set order.
+
+## 5. Architectural invariants from day one
+
+### 5.1 Planner is source-agnostic
+
+The planner consumes normalized musical evidence and stable track identities. It must not care whether the source eventually came from an Ensemblis artist catalog, Rekordbox, Serato, Traktor or a local folder.
+
+### 5.2 Renderer is execution-target agnostic
+
+A versioned render manifest should be executable by the current cloud media worker today and by a future local Library Bridge later.
+
+### 5.3 Track Intelligence remains canonical musical evidence
+
+AutoMix must deepen its use of Track Intelligence V4, Lyrics/Stem Intelligence and mastering evidence rather than create competing analysis vocabulary.
+
+### 5.4 LLMs do not perform DSP or replace deterministic planning
+
+An LLM may interpret natural-language Set Intent and explain decisions. Ordering, constraints, musical compatibility, transition feasibility and render instructions remain structured and testable.
+
+### 5.5 Every transition is explainable
+
+A transition should expose measured evidence, planner reasoning, confidence, risk flags and fallback behavior.
+
+### 5.6 Global quality beats greedy adjacency
+
+The engine must optimize a complete set arc, not only the next most compatible track.
+
+### 5.7 User control is first-class
+
+Locks, substitutions, reorder operations, transition overrides and regeneration around fixed choices must be durable plan operations rather than UI-only hacks.
+
+### 5.8 Future local audio stays local by default
+
+When native library support eventually arrives, local paths and full source audio remain on the device unless an explicit operation requires a temporary derived upload.
+
+## 6. Target core architecture
 
 ```text
-Control / Intelligence Plane  = Ensemblis Cloud
-Media / Device Plane          = Ensemblis Library Bridge
+                     ENSEMBLIS MIX INTELLIGENCE CORE
+
+Current catalog / future external source adapters
+                    ↓
+          Normalized Track Evidence
+                    ↓
+        ┌──────────────────────────┐
+        │  Candidate Intelligence  │
+        │  sections / phrases      │
+        │  tempo / key / energy    │
+        │  vocals / bass / stems   │
+        │  mastering / confidence  │
+        └────────────┬─────────────┘
+                     ↓
+               Set Intent
+                     ↓
+        ┌──────────────────────────┐
+        │ Global Sequence Planner  │
+        │ constraints + arc        │
+        │ diversity + narrative    │
+        │ personal preference      │
+        └────────────┬─────────────┘
+                     ↓
+        ┌──────────────────────────┐
+        │ Transition Planner       │
+        │ boundary + phrase        │
+        │ vocal/bass safety        │
+        │ tempo/harmonic fit       │
+        │ technique + confidence   │
+        └────────────┬─────────────┘
+                     ↓
+             Versioned MixPlan
+            /                 \
+           ↓                   ↓
+ Current cloud renderer     Future device renderer
+           ↓                   ↓
+      Mix asset            Local mix / preview
 ```
 
-## 7. Existing Ensemblis integration points
+The most important design rule is that `MixPlan` becomes the durable seam between intelligence and execution.
 
-The implementation should extend the current architecture instead of establishing a second unrelated job system.
+## 7. Canonical plan model
 
-Relevant existing foundations on `main` include:
+The existing plan should evolve compatibly toward a versioned contract with four layers.
 
-- `lib/media-worker/queue.ts` for durable media-job state, stale-job recovery and dispatch semantics;
-- `app/api/cron/media-worker/route.ts` for current media-worker scheduling;
-- `app/api/cron/track-intelligence/route.ts` for track-analysis orchestration;
-- `docs/audio-intelligence-v4.md` for the canonical audio-analysis boundaries and provenance rules;
-- Supabase/Postgres as the durable product state;
-- signed upload URLs as the established pattern for large media results without proxying binary bodies through Next.js routes.
-
-The target execution model becomes:
+### 7.1 Set intent
 
 ```text
-Web/API
-   ↓
-Durable job state
-   ↓
-Job Router
-   ├── execution_target = cloud
-   │      ↓
-   │   existing cloud media worker
-   │
-   └── execution_target = device:<device_id>
-          ↓
-       Device Gateway
-          ↓
-       Library Bridge
+purpose
+duration
+energy profile / custom energy arc
+transition style
+start/end energy
+BPM freedom/range
+must-play tracks
+blocked tracks
+locked positions
+freshness/exploration preference
+vocal-density preference
+transition aggressiveness
+ordering policy
 ```
 
-The current cloud worker's recovery/idempotency patterns should be reused conceptually, but local device jobs should have their own table and protocol rather than overloading video/stem job tables.
+### 7.2 Track placement
 
-## 8. Domain model
-
-Names below are proposed contracts. Exact SQL naming can be refined during migration design, but the boundaries should remain.
-
-### 8.1 `devices`
-
-Represents one paired Library Bridge installation.
-
-Core fields:
+Each planned track should eventually carry:
 
 ```text
-id
-user_id
-workspace_id
-name
-platform
-app_version
-protocol_version
-public_key / credential metadata
-status
-last_seen_at
-capabilities
-created_at
-revoked_at
+track_id
+source analysis fingerprint
+role in set
+selection reasons
+source start/end window
+playback BPM/time factor
+key/energy/tempo evidence
+window confidence
+user lock state
 ```
 
-`capabilities` should describe what the device can actually do, for example:
+### 7.3 Transition plan
 
-```json
-{
-  "ffmpeg": true,
-  "local_analysis": ["metadata", "fingerprint", "waveform", "loudness"],
-  "dj_sources": ["folders", "rekordbox"],
-  "render": ["transition_preview", "full_set"]
-}
-```
-
-### 8.2 `library_sources`
-
-Represents a logical local source, not an exposed path.
-
-Examples:
-
-- local folder;
-- external SSD library;
-- Rekordbox collection;
-- Serato library;
-- Traktor collection.
-
-Cloud fields should include a source ID, device ID, source kind, display name, sync state and timestamps. The exact local path remains in Bridge SQLite.
-
-### 8.3 `recordings`
-
-Represents the musical recording identity independent of a file path.
-
-Candidate identity evidence:
-
-```text
-recording_fingerprint
-content_hash when available
-acoustic fingerprint provider/version
-normalized duration
-canonical metadata hints
-```
-
-A recording can have multiple local file variants and related edits.
-
-### 8.4 `library_tracks`
-
-Represents the user's DJ-library concept of a track and its personal metadata.
-
-Possible fields:
-
-```text
-recording_id
-workspace_id
-artist scope when applicable
-title
-artist_name
-album
-mix_name
-bpm
-key
-rating
-color
-tags
-comment
-play_count
-last_played_at
-added_at
-source_metadata
-```
-
-This layer is where Rekordbox/Serato/Traktor-specific user data is normalized.
-
-### 8.5 Local-only `file_bindings`
-
-This table belongs in Bridge SQLite and must not require a cloud copy of the absolute path.
-
-```text
-library_track_id
-local_source_id
-absolute_path
-file_size
-mtime
-content_hash
-recording_fingerprint
-availability
-last_verified_at
-```
-
-A path move updates a binding. It does not create a new recording.
-
-### 8.6 `track_analysis`
-
-Do not create a competing definition of Ensemblis Track Intelligence. Store local-library analysis using the same provenance discipline as Audio Intelligence V4 and map reusable evidence into existing canonical forms where practical.
-
-Each derived result must carry:
-
-```text
-analysis_version
-analyzer
-analyzer_version
-source_fingerprint
-created_at
-quality/confidence
-```
-
-### 8.7 `dj_profiles`
-
-A structured, inspectable Personal DJ Profile derived from evidence and explicit preferences.
-
-Potential dimensions:
-
-- preferred BPM ranges and movement;
-- harmonic-transition tolerance;
-- energy-curve tendencies;
-- genre/scene relationships;
-- vocal density preferences;
-- preferred intro/outro lengths;
-- transition technique frequency;
-- artist/track repetition avoidance;
-- set-context preferences;
-- explicit likes/dislikes and locked rules.
-
-This must not become opaque chat memory. Every durable preference should have source/evidence and confidence.
-
-### 8.8 `set_plans`, `set_items`, `transition_plans`
-
-`set_plans` stores intent, duration, constraints, target trajectory, model/planner version and lifecycle state.
-
-`set_items` stores ordered selected tracks plus reasons, role in the set, expected start/end windows and user lock/substitution state.
-
-`transition_plans` stores the deterministic media instructions between adjacent items:
+Each adjacent handoff should carry:
 
 ```text
 from_track_id
-from_start_ms / from_end_ms
 to_track_id
-to_start_ms / to_end_ms
-target_bpm
-phrase_length_bars
-transition_technique
-EQ/filter/gain automation parameters when supported
-planner confidence
-user_override state
+technique
+bars / overlap
+source boundary evidence
+phrase/downbeat confidence
+tempo compatibility + reliability
+harmonic compatibility
+vocal collision risk
+bass collision risk
+mastering considerations
+transition confidence
+risk flags
+planner reasons
+fallback technique
+render parameters
 ```
 
-The plan is cloud data. Rendering the plan is a device operation.
+### 7.4 Render manifest
 
-### 8.9 `device_jobs`
-
-Proposed types:
+Render instructions must be deterministic and portable:
 
 ```text
-ANALYZE_TRACK
-CREATE_PROXY
-RENDER_TRANSITION
-RENDER_SET
-REFRESH_LIBRARY_SOURCE
+planner_version
+render_engine_contract_version
+source fingerprints
+ordered source windows
+stretch ratios
+transition automation
+loudness strategy
+output target
+warnings/fallbacks
 ```
 
-Proposed lifecycle:
+This is what allows the same future plan to render in the cloud or on a user's computer.
+
+## 8. Phase 0 — Existing AutoMix audit and contract hardening
+
+**Priority: immediate.**
+
+The first development work is on the current AutoMix engine.
+
+### P0.1 Transition Evidence V2
+
+Improve each transition decision with explicit evidence and confidence:
+
+- boundary confidence at outgoing/incoming mix points;
+- section/phrase suitability;
+- downbeat provenance;
+- tempo reliability;
+- vocal/bass collision evidence quality;
+- risk flags;
+- safe fallback technique;
+- human-readable reasons that distinguish evidence from heuristic assumptions.
+
+Long blends should be vetoed or shortened when musical-boundary confidence is weak, even if BPM/key compatibility is high.
+
+### P0.2 MixPlan contract vNext
+
+Evolve the current plan without breaking existing renders:
+
+- explicit planner version/capabilities;
+- source-analysis fingerprints;
+- transition confidence;
+- plan-level warnings and quality summary;
+- deterministic render-manifest boundary;
+- backward compatibility for existing `automix.v1` jobs/assets.
+
+### P0.3 AutoMix regression benchmark
+
+Build a representative private benchmark that covers:
+
+- electronic grid-stable tracks;
+- variable-tempo/live-feel tracks;
+- vocal-heavy material;
+- sparse instrumental intros/outros;
+- difficult key jumps;
+- large BPM gaps;
+- clipped/poor masters;
+- tracks with/without stems;
+- radio edits versus extended arrangements.
+
+Numeric tests remain necessary but listening evaluation becomes a release gate for planner/DSP changes.
+
+**Exit condition for Phase 0:** AutoMix decisions are versioned, explainable, confidence-aware and safe enough to evolve aggressively without losing reproducibility.
+
+## 9. Phase 1 — AutoMix musical intelligence expansion
+
+### P1.1 Phrase- and section-aware transition points
+
+Today AutoMix already uses structure when choosing showcase windows. The next step is to optimize transition entry/exit points themselves.
+
+For each adjacent pair, evaluate several legal musical handoff candidates:
+
+- phrase boundaries;
+- section boundaries;
+- reliable downbeats;
+- intro/outro windows;
+- breakdown/drop boundaries;
+- stem entry/exit/lift/release events.
+
+Choose a handoff based on the complete transition, not merely the selected track-window edge.
+
+### P1.2 Energy curves inside tracks
+
+Move from one scalar energy value per track toward local energy around candidate transition points.
+
+This lets the planner understand cases such as:
+
+- high-energy track with a calm outro;
+- low-average-energy track with a powerful late peak;
+- deliberate breakdown into a stronger next track;
+- ending a track before an unwanted energy reset.
+
+### P1.3 Better vocal intelligence
+
+Use available vocal stem and lyric timing evidence to distinguish:
+
+- vocal-on-vocal collision;
+- spoken/sparse vocal tolerance;
+- instrumental phrase into vocal entry;
+- chorus/hook collision;
+- intentional vocal handoff.
+
+No vocal stem should degrade gracefully to conservative structural evidence.
+
+### P1.4 Better low-end/percussive intelligence
+
+Use stem activity and arrangement events to improve bass swaps, percussion-led blends and breakdown transitions.
+
+### P1.5 Key intelligence confidence
+
+Do not over-weight uncertain key estimates. Prefer canonical/known key metadata when reliable and preserve analyzer provenance.
+
+### P1.6 Transition technique expansion
+
+Add techniques only when they have deterministic DSP definitions and benchmark evidence. Candidate future families include:
+
+- phrase-aligned EQ blend;
+- percussion-led blend;
+- breakdown handoff;
+- filtered transition;
+- loop-assisted extension;
+- controlled double-drop preparation;
+- tempo-bridge transition where musically safe.
+
+**Exit condition for Phase 1:** AutoMix is meaningfully better at choosing *where* and *how* to mix, not just which tracks sit next to each other.
+
+## 10. Phase 2 — Global Set Intelligence
+
+This phase turns AutoMix from a renderer with ordering intelligence into a full set-programming engine.
+
+### P2.1 Structured Set Intent
+
+Add a structured intent model that can be filled by controls or parsed from natural language.
+
+Example:
+
+> 55-minute warm-up, restrained first 15 minutes, mostly my nu-disco catalog, avoid two vocal-heavy songs in a row, peak in the final third and finish warm rather than explosive.
+
+The LLM translates this into constraints. The planner owns execution.
+
+### P2.2 Global arc optimization
+
+Optimize the whole sequence for:
+
+- target energy trajectory;
+- BPM movement;
+- harmonic flow without monotonous key locking;
+- vocal density;
+- stylistic narrative;
+- artist/track repetition;
+- diversity versus familiarity;
+- opening/closing suitability;
+- transition feasibility across the entire route.
+
+### P2.3 Duration-aware selection
+
+AutoMix should decide how much of each track to use rather than dividing target duration approximately across all selected tracks.
+
+The planner can omit weak candidates, extend strong passages and shorten material while preserving complete musical units.
+
+### P2.4 Plan alternatives
+
+Generate useful alternatives such as:
 
 ```text
-PLANNED
-  ↓
-WAITING_FOR_DEVICE
-  ↓
-DISPATCHED
-  ↓
-RUNNING
-  ↓
-UPLOADING_RESULT   (only when a cloud result is required)
-  ↓
-COMPLETED
+Safer / smoother
+More adventurous
+Higher energy
+More of my own music
+More instrumental
+Different peak track
 ```
 
-Terminal alternatives:
+Alternatives should branch from the same stable Set Intent and preserve user locks.
+
+### P2.5 Explainability
+
+Every placement should answer why it is there, for example:
 
 ```text
-FAILED
-CANCELLED
-EXPIRED
+- establishes the requested restrained opening
+- creates the first meaningful energy lift
+- provides an instrumental bridge between two vocal-heavy tracks
+- harmonic relationship is safe but not repetitive
+- this arrangement offers a clean 32-bar outgoing phrase
 ```
 
-Every job needs an idempotency key, retry policy, execution target and request/result provenance.
+**Exit condition for Phase 2:** a human can use Ensemblis to program a convincing set even before pressing Render.
 
-## 9. Track identity and reconciliation
+## 11. Phase 3 — AutoMix Studio UX and editing
 
-Track identity is one of the highest-risk parts of the system and must be implemented before sophisticated Set Intelligence.
+The web app remains the primary UI.
 
-### 9.1 Identity hierarchy
+### P3.1 Set Builder workspace
 
-Use multiple evidence layers:
+Evolve the current mix workspace into an interactive set plan with:
 
-1. exact content hash for byte-identical files;
-2. acoustic fingerprint for the same recording across encodes;
-3. duration + normalized metadata as supporting evidence only;
-4. explicit DJ-library external IDs where available;
-5. user-confirmed merge/split corrections for ambiguous cases.
+- energy/BPM trajectory;
+- ordered tracks;
+- selected source windows;
+- transition confidence/risk;
+- selection reasons;
+- timeline duration;
+- warnings.
 
-### 9.2 Recording versus variant
+### P3.2 Editing operations
 
-The system must distinguish:
+Support durable operations:
+
+- lock track/position;
+- replace one suggestion;
+- reorder;
+- block track;
+- regenerate around locks;
+- change one transition technique;
+- regenerate one transition;
+- save versions;
+- compare variants.
+
+### P3.3 Transition previews
+
+Before rendering a full set, let users preview only an adjacent handoff using current cloud sources.
+
+This is deliberately implemented **before** local-device work so the transition product experience can be validated on infrastructure that already exists.
+
+### P3.4 Plan-first rendering
+
+Full render becomes an explicit execution of an approved/versioned plan, making planning and rendering separable product concepts.
+
+**Exit condition for Phase 3:** users can iteratively shape a mix instead of submitting one opaque AutoMix job and waiting for a finished file.
+
+## 12. Phase 4 — Personal DJ Intelligence
+
+Personalization begins using evidence already available inside Ensemblis before external DJ history exists.
+
+### P4.1 Explicit preferences
+
+Learn only from inspectable evidence such as:
+
+- accepted/rejected track suggestions;
+- locks;
+- substitutions;
+- reordering;
+- selected transition alternatives;
+- explicit user settings;
+- saved set variants.
+
+### P4.2 DJ Profile
+
+Maintain a structured profile with confidence/source for dimensions such as:
+
+- preferred BPM movement;
+- harmonic tolerance;
+- energy-shape tendencies;
+- vocal density;
+- transition aggressiveness;
+- preferred opening/closing behavior;
+- technique preference;
+- exploration versus familiarity.
+
+### P4.3 Feedback loop
 
 ```text
-Song / composition concept
-        ↓
-Recording / edit
-        ├── Extended Mix
-        ├── Radio Edit
-        └── Remaster
-              ↓
-File variants
-        ├── WAV
-        ├── AIFF
-        └── MP3
+Set Plan
+   ↓
+User edits / preview choices
+   ↓
+Structured evidence
+   ↓
+Bounded DJ Profile update
+   ↓
+Future planner scoring
 ```
 
-Two encodes of the same extended mix may share a `recording_id`. A radio edit and extended mix should normally remain different recordings because their mixability and structure differ.
+Personalization may re-rank or adjust bounded planner weights. It must not override hard safety/quality constraints.
 
-### 9.3 Move/rename reconciliation
+**Exit condition for Phase 4:** Ensemblis starts to feel like *my* DJ assistant using only interactions the product already owns.
 
-On filesystem change:
+## 13. Phase 5 — Production hardening and scale
+
+Before broadening inputs, make the core operationally mature.
+
+Deliver:
+
+- plan/job idempotency;
+- resumable/retry-safe rendering;
+- deterministic source lineage;
+- exact master fingerprint checks;
+- transition-preview caching where valid;
+- cost/runtime metrics;
+- planner and renderer version compatibility;
+- mix-level QA diagnostics;
+- benchmark regression in CI/private evaluation;
+- output manifest persisted with asset lineage;
+- graceful behavior when optional intelligence is missing.
+
+A mix should remain reproducible from its plan and source fingerprints even after the planner evolves.
+
+## 14. Phase 6 — Source and execution adapter contracts
+
+Only after the core is mature do we generalize the edges required by DJ software/local libraries.
+
+### P6.1 Normalized external track contract
+
+Define a source-neutral input carrying stable identity plus available evidence:
 
 ```text
-old path disappears
-new path appears
-      ↓
-exact hash / fingerprint match
-      ↓
-update local file binding
-      ↓
-no cloud track duplication
-no re-analysis unless source bytes/analysis version require it
+track identity
+source identity
+metadata
+analysis provenance
+user tags/rating
+playlist relationships
+cue/grid data when available
+availability
 ```
 
-### 9.4 External drive behavior
-
-A disconnected drive changes **availability**, not identity.
-
-Cloud Set Intelligence may continue using previously synced metadata. Preview/render actions surface a clear `source offline` state and can enqueue work as `WAITING_FOR_DEVICE` until the relevant source returns.
-
-## 10. Sync protocol
-
-The Bridge should maintain a local SQLite manifest and synchronize deltas, not resubmit the whole library.
-
-### Initial scan
-
-```text
-select source
-   ↓
-enumerate candidate files / DJ records
-   ↓
-read metadata
-   ↓
-compute cheap identity evidence
-   ↓
-reconcile local manifest
-   ↓
-send metadata batches
-   ↓
-run required local analysis
-   ↓
-send derived intelligence batches
-```
-
-### Incremental changes
-
-Use native filesystem watching plus periodic reconciliation because filesystem event streams are not perfectly reliable.
-
-Events should collapse into durable operations such as:
-
-```text
-TRACK_ADDED
-TRACK_CONTENT_CHANGED
-TRACK_METADATA_CHANGED
-TRACK_MOVED
-TRACK_REMOVED_FROM_SOURCE
-SOURCE_OFFLINE
-SOURCE_ONLINE
-PLAYLIST_CHANGED
-DJ_METADATA_CHANGED
-```
-
-The cloud API must be idempotent. A client restart or duplicate event must not create duplicate rows.
-
-### Sync cursors
-
-Each source should track:
-
-```text
-local_revision
-last_cloud_ack_revision
-last_full_reconcile_at
-```
-
-Batch payloads should have bounded sizes, retry with exponential backoff and resume from the last acknowledged revision.
-
-## 11. Library Bridge implementation
-
-### 11.1 Technology
-
-Recommended baseline:
-
-```text
-Tauri 2
-Rust
-SQLite
-FFmpeg
-native filesystem watcher
-OS credential/keychain storage
-```
-
-The Bridge should remain intentionally small. The complete product UI continues to live in `/studio`.
-
-### 11.2 Bridge modules
-
-```text
-bridge/
-  app shell / tray
-  auth + pairing
-  device presence
-  local SQLite store
-  source adapters
-  filesystem reconcile
-  fingerprinting
-  local analysis providers
-  device job runner
-  FFmpeg/render engine
-  upload client for signed temporary outputs
-  auto-update
-  structured logs / diagnostics export
-```
-
-### 11.3 Local database
-
-SQLite stores information that is device-specific or sensitive to expose remotely:
-
-- local paths;
-- source mount information;
-- filesystem timestamps;
-- local file hashes;
-- source parser cursors;
-- pending sync outbox;
-- device-job checkpoints;
-- temporary render paths;
-- local capability cache.
-
-### 11.4 Background behavior
-
-The application should support:
-
-- system tray operation;
-- launch at login as opt-in;
-- paused sync;
-- bandwidth-aware uploads;
-- CPU-aware background analysis;
-- laptop/battery safeguards;
-- clear progress and error state;
-- graceful restart/resume.
-
-Do not make the desktop app a second full UI surface.
-
-## 12. Pairing, authentication and Device Gateway
-
-### 12.1 Pairing
-
-Recommended flow:
-
-```text
-Web: Connect computer
-   ↓
-short-lived pairing code / deep link
-   ↓
-Bridge authenticates user in browser
-   ↓
-server issues device-scoped credential
-   ↓
-credential stored in OS keychain
-   ↓
-device appears in Ensemblis Settings / Connections
-```
-
-A user must be able to revoke a device from the web even if the device is offline.
-
-### 12.2 Gateway
-
-The Bridge establishes outbound WSS or a fallback long-poll/HTTPS channel to the Device Gateway.
-
-The gateway is responsible for:
-
-- authenticated presence;
-- protocol-version negotiation;
-- capability advertisement;
-- device-job notification;
-- progress events;
-- cancellation;
-- reconnect/resume.
-
-The Bridge must **never** receive direct Supabase service-role, Redis or BullMQ credentials.
-
-### 12.3 Protocol versioning
-
-Every connection and job should carry a protocol version. The server should be able to reject unsupported Bridge versions with a human-readable upgrade requirement instead of failing media work unpredictably.
-
-## 13. Device job contract
-
-A device job should contain only stable IDs and execution instructions, never absolute local paths.
-
-Example transition job:
-
-```json
-{
-  "type": "RENDER_TRANSITION",
-  "deviceId": "...",
-  "fromLibraryTrackId": "...",
-  "toLibraryTrackId": "...",
-  "fromWindowMs": [222000, 255000],
-  "toWindowMs": [31000, 64000],
-  "targetBpm": 124.2,
-  "bars": 16,
-  "technique": "bass_swap",
-  "output": {
-    "kind": "temporary_preview",
-    "codec": "aac"
-  }
-}
-```
-
-The Bridge resolves stable track IDs to local bindings at execution time.
-
-### Reliability requirements
-
-- claim jobs atomically;
-- heartbeat long jobs;
-- make retries idempotent;
-- persist local checkpoints;
-- recover after process restart;
-- expire stale signed upload URLs and request fresh ones;
-- distinguish device-offline from execution-failed;
-- do not mark a render failed merely because a device temporarily disconnected;
-- allow safe cancellation.
-
-## 14. Audio-analysis strategy
-
-Use a hybrid model rather than blindly moving all existing cloud analysis to desktop.
-
-### Local first
-
-Good candidates for the device:
-
-- container/codec metadata;
-- duration;
-- exact hash;
-- acoustic fingerprint;
-- waveform summary;
-- loudness / peak analysis;
-- tempo/beat support analysis where dependencies are commercially safe;
-- basic spectral features;
-- preview extraction;
-- deterministic render operations.
-
-### Reuse canonical Ensemblis intelligence
-
-Audio Intelligence V4 already defines provenance, musical units, rhythm confidence and analysis tiers. Local-library results should map into these concepts rather than creating a parallel incompatible vocabulary.
-
-### Optional cloud-heavy analysis
-
-When a future licensed model genuinely requires cloud GPU compute:
-
-```text
-raw local master
-      ↓
-local preprocessing
-      ├── feature vectors / embeddings
-      └── selected normalized excerpt when required
-                 ↓
-short-lived signed upload
-                 ↓
-cloud specialist model
-                 ↓
-derived result + provenance
-                 ↓
-proxy deleted by retention policy
-```
-
-Any such provider must declare commercial license compatibility, input-retention behavior and whether audio leaves the user's device.
-
-## 15. DJ-source adapter architecture
-
-Define one normalized interface before implementing vendor-specific support.
-
-Conceptual adapter:
+### P6.2 Source adapter interface
 
 ```text
 DjLibrarySourceAdapter
@@ -730,790 +570,288 @@ DjLibrarySourceAdapter
   getRevision()
 ```
 
-### Phase order
+### P6.3 Execution adapter
 
-1. plain local folders;
-2. Rekordbox;
-3. Serato;
-4. Traktor.
+The renderer receives a versioned MixPlan/manifest and resolves source media through an execution adapter.
 
-Rekordbox should be the first rich adapter because it gives the product an end-to-end reference for playlists, cues, grids and history. The exact supported import/export mechanism must be validated against current vendor formats and license/terms before implementation.
+Initial adapter:
 
-Writes back into third-party DJ libraries are a separate future capability and require explicit safety/backup rules. Initial integrations should be read-only plus exported playlist/set artifacts.
+```text
+CloudCatalogExecutionAdapter
+```
 
-## 16. Personal DJ Intelligence
+Later:
 
-Set Intelligence should reason from both musical evidence and personal evidence.
+```text
+LocalLibraryExecutionAdapter
+```
 
-### 16.1 Musical features
+This prevents local-device concerns from leaking into planner logic.
 
-Candidate signals include:
+## 15. Phase 7 — Rekordbox integration
 
-- BPM and reliable tempo range;
-- key / tonal compatibility;
-- phrase and section boundaries;
-- energy curve;
-- groove/rhythmic character;
-- vocal density and overlap risk;
-- timbral similarity/difference;
-- intro/outro suitability;
-- breakdown/drop structure;
-- loudness and headroom considerations;
-- available cue/beat-grid evidence.
+Rekordbox becomes the first rich external DJ source **after** AutoMix/Set Intelligence is already valuable.
 
-### 16.2 Personal evidence
+### P7.1 Read/import support
 
-Candidate evidence includes:
+Validate current vendor-supported mechanisms and terms at implementation time, then import what can be supported safely:
 
-- prior playlist/set adjacency;
-- play history;
-- cue-point placement;
+- tracks;
+- playlists/crates;
+- BPM/key metadata;
 - ratings/tags/colors;
-- recurring artist/label/genre clusters;
-- preferred BPM movement;
-- repeated transition patterns;
-- explicit user substitutions and rejected suggestions;
-- track locks;
-- user feedback after preview/render.
+- cues/hot cues;
+- beat grid;
+- play history where available.
 
-### 16.3 Explainability
+The adapter is read-only first.
 
-Every selected track should be able to answer **why it is here**.
+### P7.2 DJ-history personalization
 
-Example reasons:
+Feed normalized historical evidence into the same Personal DJ Profile rather than creating Rekordbox-specific recommendation logic.
+
+### P7.3 Export
+
+Support safe playlist/set export formats where possible. Direct mutation of a user's Rekordbox database is a separate future capability and requires backup/compatibility guarantees.
+
+**Exit condition for Phase 7:** a Rekordbox DJ can get a better Ensemblis Set Plan using their existing library/history without changing the AutoMix core.
+
+## 16. Phase 8 — Native Library Bridge for Windows and macOS
+
+The native companion is now an execution/storage expansion, not the product foundation.
+
+### 16.1 Product contract
+
+> **Keep the raw library on your computer. Sync the intelligence, not the collection.**
+
+The existing Ensemblis web app remains the primary UI. A small **Ensemblis Library Bridge** handles local file access, filesystem changes, local DJ databases, local analysis and local rendering.
+
+### 16.2 Recommended baseline
 
 ```text
-- preserves the requested early-set restraint
-- moves energy upward without a vocal clash
-- harmonic relationship is compatible with the previous track
-- you frequently sequence this track after sparse percussion-led material
-- extended intro provides a clean 32-bar entry
+Tauri 2
+Rust
+SQLite
+FFmpeg / deterministic DSP dependencies
+native filesystem watcher
+OS keychain / credential manager
 ```
 
-Do not expose pseudo-scientific certainty. Reasons should distinguish measured musical evidence, inferred personal preference and planner heuristics.
+### 16.3 Security invariants
 
-## 17. Set planning
+- outbound authenticated connection only;
+- no open inbound port;
+- no Supabase service-role credential on device;
+- no direct Redis/BullMQ credentials;
+- local paths remain in Bridge SQLite;
+- device-scoped revocable credential;
+- temporary derived uploads only when explicitly required.
 
-A Set Intent should capture enough context to constrain the planner without forcing users into a complex form.
+### 16.4 Device model
 
-Suggested fields:
-
-```text
-duration
-context / venue / purpose
-desired energy arc
-starting and ending energy
-BPM range or freedom
-style / scene direction
-must-play tracks
-blocked tracks/artists
-freshness preference
-vocal density preference
-transition aggressiveness
-exploration vs familiarity
-```
-
-The planner should operate in stages:
+Cloud stores device identity/capabilities/presence and durable device jobs. The Bridge stores local path bindings and resolves stable track IDs locally.
 
 ```text
-Intent
-  ↓
-Candidate retrieval
-  ↓
-Hard constraint filtering
-  ↓
-Global energy / tempo / narrative trajectory
-  ↓
-Sequence optimization
-  ↓
-Transition feasibility scoring
-  ↓
-Diversity / repetition checks
-  ↓
-Explainable Set Plan
-```
-
-Do not optimize only adjacent track compatibility. A technically smooth sequence can still be a bad set. The planner must score the **global arc** as well as each transition.
-
-## 18. Transition planning
-
-Transition planning is deterministic media instruction derived from musical analysis, not merely prose from an LLM.
-
-Initial supported transition families can be deliberately constrained:
-
-- phrase-aligned blend;
-- bass swap;
-- EQ blend;
-- filter-assisted blend;
-- short cut/drop transition where musically justified;
-- outro-to-intro conservative blend.
-
-Each transition plan should validate:
-
-- phrase boundary alignment;
-- beat-grid confidence;
-- tempo stretch bounds;
-- vocal overlap risk;
-- bass overlap risk;
-- gain/loudness safety;
-- sufficient source audio before/after cue windows.
-
-Low-confidence plans should degrade to safer transitions or explicitly require review.
-
-## 19. Transition preview workflow
-
-```text
-User clicks Preview Transition
-        ↓
-cloud creates RENDER_TRANSITION device job
-        ↓
-Gateway dispatches to paired online device
-        ↓
-Bridge resolves local file bindings
-        ↓
-Bridge renders only the required windows
-        ↓
-Bridge uploads short preview through signed URL
-        ↓
-cloud marks job complete
-        ↓
-browser streams preview
-        ↓
-temporary object expires/deletes
-```
-
-The first version may use temporary object storage because it is operationally simple and keeps the browser experience normal. Direct device-to-browser streaming can be evaluated later but is not required for product validation.
-
-## 20. Full mix rendering
-
-A full mix render is explicitly user-triggered.
-
-```text
-SetPlan + TransitionPlan[]
-          ↓
-RENDER_SET
-          ↓
+Cloud MixPlan
+     ↓
+execution_target = device:<id>
+     ↓
+Device Gateway
+     ↓  outbound authenticated WSS/HTTPS
 Library Bridge
-          ↓
-resolve local sources
-          ↓
-render deterministic timeline
-          ↓
-write final WAV/AIFF locally
+     ↓
+local source resolution
+     ↓
+preview or full render
 ```
 
-Default output should stay local. Optional cloud upload/export is a separate user action.
+### 16.5 Local library identity
 
-The render engine must emit a machine-readable manifest containing:
+Path must never become identity. Use exact hashes, acoustic fingerprints and source metadata so renames/moves do not duplicate recordings.
 
-- source recording IDs;
-- source file fingerprints;
-- exact in/out windows;
-- stretch ratios;
-- transition parameters;
-- render-engine version;
-- output hash;
-- warnings/fallbacks.
+A disconnected external drive changes **availability**, not musical identity or cloud intelligence.
 
-This makes renders reproducible and debuggable.
+### 16.6 Delta sync
 
-## 21. Product UX
+The Bridge maintains a local manifest/outbox and sends incremental metadata/intelligence changes. Native filesystem events are backed by periodic reconciliation.
 
-### Connections / Library setup
+**Exit condition for Phase 8:** the same Set Plan engine can work with a very large local library without Ensemblis becoming a cloud music locker.
 
-The web experience should make the local/cloud boundary explicit:
+## 17. Phase 9 — Serato, Traktor and broader DJ workflows
+
+Add Serato and Traktor behind the same source contract, then evaluate:
+
+- richer history ingestion;
+- cross-library deduplication;
+- DJ-software cue/grid export;
+- local transition previews;
+- local full-set rendering;
+- hybrid sets mixing artist catalog + local library;
+- live-preparation integrations where vendor APIs permit them.
+
+No vendor-specific feature should bypass normalized track evidence or Personal DJ Profile.
+
+## 18. Data model direction
+
+Do not build all future tables now. Introduce them only when their phase begins, but preserve these conceptual boundaries:
 
 ```text
-Connect your DJ library
+Current
+  automix_jobs
+  artist/catalog tracks
+  Track Intelligence
+  media assets / lineage
 
-Your audio stays on this computer by default.
-Ensemblis syncs metadata and musical intelligence so you can plan sets anywhere.
+AutoMix evolution
+  versioned MixPlan
+  Set Intent
+  plan versions / edits
+  transition previews
+  structured DJ preferences
 
-[Download / Open Library Bridge]
+External-library evolution
+  recordings
+  library_tracks
+  library_sources
+  source relationships
+
+Native-device evolution
+  devices
+  device_jobs
+  local-only file_bindings (SQLite)
 ```
 
-After pairing:
+`recordings` represent musical recording identity. `file_bindings` represent where one device can currently find bytes. These concepts must remain separate.
+
+## 19. Quality metrics
+
+Infrastructure health matters, but product quality is primarily musical.
+
+Track metrics over time:
 
 ```text
-Yotam-PC                     Online
-DJ SSD                       Connected
-13,842 tracks                Synced
-24 new tracks                Analyzing
-Last sync                    2 min ago
-```
-
-### Library states
-
-Every track should have understandable availability/analysis states such as:
-
-```text
-Available locally
-Source offline
-Analyzing
-Intelligence ready
-Needs re-analysis
-Missing local source
-```
-
-### Set Builder
-
-The first useful interface should support:
-
-- natural-language Set Intent;
-- duration/context controls;
-- generated ordered plan;
-- reason per track;
-- energy/BPM trajectory;
-- lock track;
-- replace suggestion;
-- reorder;
-- preview adjacent transition;
-- regenerate around locked items;
-- save version;
-- render/export.
-
-## 22. Privacy and security
-
-### Cloud must not store by default
-
-- absolute local paths;
-- arbitrary directory listings unrelated to connected sources;
-- full source audio;
-- OS usernames embedded in paths;
-- raw third-party DJ database files unless explicitly needed for a support workflow.
-
-### Device credential
-
-- device-scoped, not service-role;
-- stored in OS keychain/credential manager;
-- revocable server-side;
-- rotated safely;
-- minimum API scope;
-- never logged.
-
-### Temporary audio
-
-- signed purpose-specific upload URLs;
-- random object keys;
-- private bucket;
-- short retention;
-- deletion job plus lifecycle policy;
-- no public stable URL;
-- no model-training reuse.
-
-### Multi-tenant boundary
-
-All durable cloud objects must be scoped through the same Workspace/User/Artist authorization model used elsewhere in Ensemblis. Service-role workflows must validate lineage explicitly before dispatching jobs or issuing signed URLs.
-
-## 23. Observability and supportability
-
-A feature that interacts with local files needs excellent diagnostics.
-
-Record cloud-side events for:
-
-- device connected/disconnected;
-- source sync started/completed/failed;
-- batch acknowledgement;
-- job planned/dispatched/started/completed/failed;
-- preview upload completed/expired;
-- protocol/version mismatch;
-- capability mismatch.
-
-The Bridge should keep rotating local structured logs and expose **Export diagnostics** with secrets and local paths redacted by default.
-
-Useful metrics:
-
-```text
-pairing success rate
-initial scan completion rate
-tracks indexed / minute
-incremental sync latency
-identity dedupe rate
-analysis success rate
-preview time-to-first-audio
+transition preview acceptance
+track replacement rate
+manual reorder rate
+transition override rate
+set-plan save/render rate
+first-plan acceptance
+human preference versus baseline planner
+vocal-collision regression
+unsafe-stretch regression
+boundary-confidence distribution
+render failure rate
 render realtime factor
-job retry rate
-source-offline recovery rate
-Bridge crash-free sessions
+final loudness / true-peak conformance
 ```
 
-## 24. Testing strategy
+For major planner changes, blind A/B listening is mandatory alongside numeric regression.
 
-### Unit tests
+## 20. Testing strategy
 
-- recording identity decisions;
-- move/rename reconciliation;
-- sync cursor/outbox behavior;
-- Set Intent validation;
-- transition feasibility rules;
-- device-job state transitions;
-- capability negotiation;
-- adapter normalization.
+### Deterministic unit/contract tests
 
-### Contract tests
+Cover:
 
-- cloud ↔ Bridge protocol versioning;
-- idempotent batch sync;
-- duplicate delivery;
-- disconnect/reconnect while job runs;
-- cancellation;
-- expired upload URL refresh;
-- revoked device credential;
-- unsupported old client.
+- BPM/key compatibility;
+- tempo-drift classification;
+- boundary confidence;
+- transition risk/fallbacks;
+- vocal/bass collision vetoes;
+- Set Intent hard constraints;
+- global sequence invariants;
+- plan versioning;
+- render-manifest reproducibility;
+- DSP transition length/finite samples;
+- true-peak/loudness safety.
 
-### Fixture libraries
+### Representative catalog evaluation
 
-Maintain synthetic/redistributable fixtures for:
+Use private/redistributable material representing different arrangements and production conditions. Do not commit private unreleased music to the public repository.
 
-- same recording in WAV/MP3;
-- moved files;
-- duplicate copies;
-- radio versus extended edits;
-- malformed tags;
-- missing files;
-- external drive disappearance;
-- playlist changes;
-- cue/beat-grid import.
+### Human listening
 
-Do not commit private artist/DJ collections to the public repository.
+Evaluate both transitions and the complete set journey. A technically correct transition can still be musically wrong.
 
-### Audio quality tests
+## 21. PR execution order
 
-For preview/render engine changes, add deterministic fixtures plus listening evaluation for:
-
-- phrase alignment;
-- tempo stretch artifacts;
-- bass overlap;
-- vocal clashes;
-- gain jumps;
-- render continuity;
-- end-to-end set arc quality.
-
-The Set Intelligence benchmark should include blind human preference, not only numeric compatibility scores.
-
-## 25. Deployment and distribution
-
-The web/cloud portion remains deployed with the existing Ensemblis stack.
-
-Library Bridge needs its own release pipeline:
+The intended implementation sequence is now:
 
 ```text
-GitHub Actions
-   ↓
-Tauri builds
-   ├── Windows
-   ├── macOS Intel/Apple Silicon
-   └── Linux when support is ready
-   ↓
-code signing / notarization
-   ↓
-signed release metadata
-   ↓
-Bridge auto-update
+A1  Transition Evidence V2 + confidence/risk/fallbacks
+A2  MixPlan vNext + render-manifest compatibility
+A3  AutoMix benchmark/evaluation expansion
+
+B1  Transition-point optimization
+B2  local energy + stem/lyric transition evidence
+B3  transition-technique/DSP expansion
+
+C1  Set Intent
+C2  global set optimizer
+C3  duration-aware track/window selection
+C4  alternatives + explainability
+
+D1  interactive Set Builder
+D2  lock/replace/reorder/version plan operations
+D3  transition preview
+D4  plan-first full render
+
+E1  Personal DJ Profile
+E2  feedback learning loop
+E3  personalized planner scoring
+
+F1  production/reliability hardening
+F2  source/execution adapter contracts
+
+G1  Rekordbox read adapter
+G2  Rekordbox history → DJ Profile
+G3  safe export workflows
+
+H1  Windows/macOS Library Bridge
+H2  local folder sync + identity/reconciliation
+H3  local execution adapter
+H4  local preview/full render
+
+I1  Serato
+I2  Traktor
+I3  advanced hybrid/live workflows
 ```
 
-Production distribution must not ship unsigned binaries as the normal path. Code-signing/notarization work should be planned before public beta, not after it.
+Every PR must keep `main` deployable and preserve existing AutoMix outputs unless a versioned migration intentionally changes behavior.
 
-The Bridge and web app must tolerate at least one supported protocol-version overlap so a web deployment does not instantly break users who have not auto-updated yet.
+## 22. Immediate implementation slice
 
-## 26. Implementation phases and PR sequence
+Development begins with **A1 — Transition Evidence V2**.
 
-The sequence below is intentionally incremental. Each PR should leave `main` deployable and avoid requiring the entire desktop program to ship at once.
-
-### Phase A — Architecture contracts and web-only proof
-
-#### PR A1 — Domain contracts + feature flag
+The first code change should improve the existing planner, not add desktop infrastructure.
 
 Deliver:
 
-- shared TypeScript contracts for devices, library sources, stable recording identity, Set Intent and DeviceJob payloads;
-- feature flag for DJ Library / Set Intelligence;
-- validation schemas;
-- no production-visible behavior by default.
-
-Exit criteria:
-
-- contracts compile and are covered by tests;
-- no local path is represented in cloud DTOs;
-- execution target is explicit.
-
-#### PR A2 — Browser local-library prototype
-
-Use browser directory access only as a validation layer, not final architecture.
-
-Deliver:
-
-- opt-in prototype for choosing a local folder where supported;
-- local manifest generation;
-- metadata/fingerprint proof;
-- no raw-audio persistence in cloud;
-- simple local-library list in Studio.
-
-Exit criteria:
-
-- a representative large folder can be indexed without full-file uploads;
-- refresh reuses existing identity instead of duplicating tracks;
-- product assumptions are validated before native Bridge investment.
-
-### Phase B — Cloud device foundation
-
-#### PR B1 — Supabase device/library schema
-
-Deliver additive migrations for:
-
-- devices;
-- library_sources;
-- recordings/library_tracks;
-- device_jobs;
-- set plan foundations;
-- RLS/policies;
-- typed database contracts.
-
-Exit criteria:
-
-- tenant isolation tests pass;
-- device revocation is modeled;
-- schemas are additive/reversible.
-
-#### PR B2 — Pairing + Connections UI
-
-Deliver:
-
-- device pairing flow;
-- device list/state in Connections/Settings;
-- revoke device;
-- capability model;
-- protocol-version contract.
-
-Exit criteria:
-
-- a simulated client can pair, authenticate, reconnect and be revoked.
-
-#### PR B3 — Device Gateway + durable DeviceJobs
-
-Deliver:
-
-- authenticated outbound device channel;
-- presence;
-- job notification/claim;
-- progress/heartbeat;
-- cancellation/reconnect;
-- stale/retry semantics aligned with existing media-worker reliability principles.
-
-Exit criteria:
-
-- simulated offline device moves jobs to a non-failure waiting state;
-- duplicate dispatch cannot execute the same non-idempotent output twice;
-- Redis/service-role credentials never reach the client.
-
-### Phase C — Native Library Bridge
-
-#### PR C1 — Tauri shell, auth and local store
-
-Deliver:
-
-- Tauri 2 app skeleton;
-- pairing/deep-link handling;
-- keychain credential storage;
-- local SQLite migrations;
-- tray/status UI;
-- auto-start opt-in;
-- diagnostics foundation.
-
-Exit criteria:
-
-- Windows and macOS development builds pair with Ensemblis;
-- restart preserves safe device identity;
-- revoke forces re-pair.
-
-#### PR C2 — Folder source + delta sync
-
-Deliver:
-
-- folder selection;
-- filesystem watcher;
-- periodic reconciliation;
-- local manifest/outbox;
-- batch metadata sync;
-- move/rename/offline-drive handling.
-
-Exit criteria:
-
-- adding one track syncs one delta;
-- moving a track preserves identity;
-- disconnecting a source does not delete cloud intelligence;
-- reconnect resumes without full rebuild when possible.
-
-#### PR C3 — Local fingerprint + analysis runtime
-
-Deliver:
-
-- exact hash and acoustic fingerprint provider;
-- local metadata/waveform/loudness analysis;
-- provenance/versioning;
-- background CPU controls;
-- re-analysis scheduling on version changes.
-
-Exit criteria:
-
-- same recording across supported encodes reconciles correctly within benchmark tolerance;
-- unsupported/corrupt files fail individually, not the library scan;
-- analyzer upgrade produces controlled re-analysis rather than duplicate tracks.
-
-### Phase D — First real DJ library integration
-
-#### PR D1 — Rekordbox read adapter
-
-Deliver:
-
-- validated Rekordbox import adapter;
-- normalized playlists;
-- cues/hot cues where legally/technically supported;
-- beat-grid metadata where available;
-- ratings/tags/colors/history where available;
-- source revision/delta strategy.
-
-Exit criteria:
-
-- adapter fixtures cover common and malformed cases;
-- product remains functional when fields are unavailable;
-- adapter is read-only.
-
-#### PR D2 — Personal DJ Profile v1
-
-Deliver:
-
-- structured evidence-backed DJ profile;
-- derivation from playlists/history/cues/tags;
-- explicit user preference controls;
-- inspectable evidence and confidence.
-
-Exit criteria:
-
-- deleting/revoking source evidence does not leave unexplained durable preferences;
-- profile computation is deterministic for the same evidence/version.
-
-### Phase E — Set Intelligence
-
-#### PR E1 — Set Intent + candidate retrieval
-
-Deliver:
-
-- Set Builder surface;
-- natural-language intent mapped to structured constraints;
-- candidate retrieval/filtering;
-- must-play/block/lock semantics;
-- explainable reasons.
-
-Exit criteria:
-
-- hard constraints are never violated silently;
-- unavailable local source does not prevent planning from synced intelligence;
-- user can regenerate around locked tracks.
-
-#### PR E2 — Global sequence planner
-
-Deliver:
-
-- energy/BPM trajectory planning;
-- global sequence optimization;
-- harmonic/rhythm/vocal/structure transition scoring;
-- diversity/repetition checks;
-- versioned SetPlan output.
-
-Exit criteria:
-
-- representative human review beats simple BPM/key sorting;
-- planner exposes weak-confidence transitions;
-- same plan version/input is reproducible within declared stochastic rules.
-
-#### PR E3 — Transition Plan v1
-
-Deliver:
-
-- phrase-aligned deterministic transition instructions;
-- safe initial technique set;
-- feasibility checks/fallbacks;
-- render manifest schema.
-
-Exit criteria:
-
-- every transition either yields a renderable deterministic plan or a clear review/fallback state.
-
-### Phase F — Local preview and AutoMixer output
-
-#### PR F1 — Local transition preview
-
-Deliver:
-
-- `RENDER_TRANSITION` DeviceJob;
-- FFmpeg/DSP local render path;
-- signed temporary preview upload;
-- browser playback;
-- expiry/deletion lifecycle.
-
-Exit criteria:
-
-- no full source file upload;
-- target preview latency is measurable;
-- disconnected device gives actionable waiting state;
-- temporary object is private and expires.
-
-#### PR F2 — Full local set render
-
-Deliver:
-
-- `RENDER_SET` DeviceJob;
-- deterministic set timeline renderer;
-- progress/cancel/resume policy;
-- local output selection;
-- render manifest and output hash.
-
-Exit criteria:
-
-- complete benchmark set renders without cloud source upload;
-- source missing mid-render gives recoverable actionable state;
-- rerunning same plan is reproducible within codec tolerances.
-
-### Phase G — Expansion
-
-#### PR G1 — Set feedback loop
-
-Use replacements, locks, rejected suggestions and preview feedback to improve Personal DJ Profile with bounded, inspectable evidence.
-
-#### PR G2 — Serato adapter
-
-Add behind the same source contract.
-
-#### PR G3 — Traktor adapter
-
-Add behind the same source contract.
-
-#### PR G4 — Export workflows
-
-Provide safe exports into formats supported by target DJ software. Writing directly into vendor libraries remains separate until backup/compatibility guarantees are proven.
-
-#### PR G5 — Advanced local/cloud analysis providers
-
-Add only when a measured Set Intelligence quality gap justifies the cost/licensing complexity.
-
-## 27. Rollout strategy
-
-### Internal development
-
-- hidden feature flag;
-- synthetic fixture libraries;
-- Ensemblis development accounts only.
-
-### Private alpha
-
-- small number of DJs with diverse library sizes;
-- Rekordbox first;
-- explicit diagnostics consent;
-- no automatic writes to DJ libraries;
-- previews and renders clearly beta-labelled.
-
-### Beta gates
-
-Recommended gates before wider release:
-
-```text
-> 95% successful pairing
-> 99% incremental sync operations without manual repair
-> 99.5% device-job terminal-state correctness
-< 1% duplicate-recording rate after reconciliation on benchmark libraries
-zero known cross-tenant data exposure
-zero raw-source uploads outside explicit contracts
-transition-preview success > 95% when sources are online
-crash-free Bridge sessions > 99%
-```
-
-Set quality must additionally pass human listening/usefulness evaluation. Infrastructure success alone is not product success.
-
-## 28. Risk register
-
-| Risk | Impact | Mitigation |
-| --- | --- | --- |
-| Vendor library formats change | Import breaks | Adapter isolation, fixtures, version detection, read-only first |
-| False recording dedupe | Wrong metadata/analysis association | Multi-signal identity, confidence, user correction, never metadata-only merge |
-| Local paths leak to cloud/logs | Privacy failure | DTO prohibition, redaction tests, local-only binding table |
-| Bridge offline during render | Confusing failure | `WAITING_FOR_DEVICE`, resumable state, clear UI |
-| Large first scan consumes CPU | Poor UX | throttling, pause, battery policy, staged cheap→deep analysis |
-| Web and Bridge version drift | Broken clients | protocol negotiation, compatibility window, forced-update only when required |
-| Temporary previews retained | Rights/privacy issue | private storage, TTL/lifecycle deletion, audit metrics |
-| Planner sounds technically smooth but musically bad | Product failure | global arc scoring, DJ-profile evidence, human benchmark, explicit feedback |
-| Research model has incompatible license | Commercial risk | provider registry/license gate, no silent model download |
-| Device credential compromise | Account/device access risk | narrow scope, keychain, rotation, revocation, no service credentials |
-
-## 29. Decisions already made by this plan
-
-These should not be reopened casually during implementation:
-
-1. Ensemblis stays web-first.
-2. A lightweight native Bridge is the long-term local-media solution.
-3. Full local libraries are not uploaded by default.
-4. Local paths remain local.
-5. Cloud and device jobs have explicit execution targets.
-6. The Bridge does not connect directly to Redis/BullMQ and never receives Supabase service-role credentials.
-7. The device connection is outbound.
-8. Preview upload is derived/temporary; full mix output is local by default.
-9. Rekordbox is the first rich DJ-source adapter; adapter architecture must support Serato and Traktor.
-10. Recording identity is independent of path and file encoding.
-11. Set Intelligence is global-set planning plus transition feasibility, not only adjacent BPM/key matching.
-12. Personal DJ preferences remain structured, evidence-backed and inspectable.
-
-## 30. Questions intentionally deferred until implementation evidence exists
-
-These do not block Phase A/B:
-
-- Which commercially safe acoustic fingerprint implementation gives the best local performance/accuracy?
-- Which local analysis modules should be native Rust versus packaged Python/sidecar workloads?
-- Whether direct device-to-browser preview streaming is worth the complexity after temporary preview upload is measured.
-- How much of existing Audio Intelligence V4 should execute locally versus the current cloud worker for connected libraries.
-- Which exact Rekordbox access/export path is technically and contractually appropriate at implementation time.
-- Whether Linux should be a supported public Bridge target at initial beta.
-- Which advanced transition DSP techniques justify a dedicated native DSP layer beyond FFmpeg filters.
-
-Every deferred decision should be resolved with a benchmark, compatibility finding or product requirement rather than preference alone.
-
-## 31. Definition of done for the program
-
-The first complete version is done when a user can:
-
-1. install and pair Library Bridge;
-2. connect a large folder/Rekordbox library without uploading the source collection;
-3. see the library and sync status in Ensemblis;
-4. add/move/remove tracks and receive incremental reconciliation;
-5. disconnect/reconnect an external source without losing cloud intelligence;
-6. ask Ensemblis for a structured set with duration/context/constraints;
-7. inspect why each track was selected;
-8. lock, replace and reorder tracks;
-9. preview a transition using local source audio;
-10. render the approved complete set locally;
-11. return later from another browser and continue planning from synced intelligence;
-12. revoke the device and immediately prevent future device-job dispatch;
-13. verify through product messaging and behavior that the raw library was never silently uploaded.
-
-## 32. Recommended first implementation slice
-
-Start with **A1 → A2 → B1**, not with the desktop app.
-
-That sequence proves three high-risk assumptions cheaply:
-
-```text
-Can Ensemblis represent a local-only library cleanly?
-        ↓
-Can identity/reconciliation work without cloud audio storage?
-        ↓
-Is the resulting intelligence sufficient to make Set Builder useful?
-```
-
-Once those contracts are stable, build the Device Gateway and Tauri Bridge around proven data shapes rather than allowing the desktop implementation to define the product architecture accidentally.
-
-The first engineering milestone should therefore be named:
-
-> **Local Library Intelligence Foundation**
-
-Its success criterion is not "desktop app exists". It is:
-
-> **Ensemblis understands a useful local DJ library without owning the audio files.**
+- outgoing/incoming musical-boundary evidence around current transition points;
+- confidence derived from boundary, tempo and activity evidence;
+- structured risk flags;
+- safe fallback technique in every transition plan;
+- long-blend veto/shortening when boundary evidence is weak;
+- plan-level transition quality summary;
+- regression tests proving high BPM/key compatibility cannot override weak structural evidence.
+
+This gives immediate value to every AutoMix generated from the current Ensemblis catalog and creates fields that the future interactive Set Builder can expose.
+
+## 23. Definition of done for the broader program
+
+The broad program is complete when a user can:
+
+1. create a musically convincing set from existing Ensemblis music;
+2. understand the global set arc and why every track was selected;
+3. inspect and preview every transition;
+4. lock, replace, reorder and regenerate around their choices;
+5. render a deterministic, high-quality mix;
+6. have Ensemblis learn bounded DJ preferences from their edits;
+7. later connect Rekordbox and benefit from the exact same planner;
+8. later connect a Windows/macOS local library without uploading the complete collection;
+9. mix artist-owned catalog tracks and external DJ-library tracks in one coherent plan;
+10. render/export through the appropriate cloud, local or DJ-software execution adapter without changing the core planning model.
+
+The immediate success criterion is intentionally narrower:
+
+> **Make AutoMix better now, using the intelligence Ensemblis already has, while making every new contract reusable by the future DJ-library architecture.**
