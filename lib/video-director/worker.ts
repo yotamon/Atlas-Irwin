@@ -2,6 +2,7 @@ import "server-only";
 
 import { kickMediaWorkerQueue } from "@/lib/media-worker/queue";
 import { mediaWorkerReadiness as sharedMediaWorkerReadiness } from "@/lib/media-worker/sandbox";
+import type { MediaWorkerJobType } from "@/lib/media-worker/contract";
 import type { Json } from "@/types/database";
 import type { MusicMap } from "./creative-director";
 import type { ExtendedMusicVideoProject, VideoDatabase } from "@/types/video-database";
@@ -89,19 +90,16 @@ export function fallbackMusicMap(durationSeconds: number): MusicMap {
   };
 }
 
-type WorkerJobType =
-  | "analyze_audio"
-  | "extract_frame"
-  | "render_master"
-  | "render_social"
-  | "render_promo"
-  | "render_hook";
+type VideoWorkerJobType = Extract<
+  MediaWorkerJobType,
+  "analyze_audio" | "extract_frame" | "render_master" | "render_social" | "render_promo" | "render_hook"
+>;
 
 export async function queueMediaWorkerJob(input: {
   db: SupabaseClient<VideoDatabase>;
   project: ExtendedMusicVideoProject;
   ownerId: string;
-  jobType: WorkerJobType;
+  jobType: VideoWorkerJobType;
   payload: Record<string, unknown>;
   idempotencyKey: string;
 }) {
