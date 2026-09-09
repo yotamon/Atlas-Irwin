@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AutoMixRenderRecovery } from "@/components/studio/automix-render-recovery";
 import { DjIntelligencePanel } from "@/components/studio/dj-intelligence-panel";
+import { LibraryBridgePanel } from "@/components/studio/library-bridge-panel";
 import { RekordboxImportPanel } from "@/components/studio/rekordbox-import-panel";
 import { SetBuilderWorkspace } from "@/components/studio/set-builder-workspace";
 import { PageHeader } from "@/components/studio/ui";
@@ -29,6 +30,7 @@ export default async function AutoMixPage() {
         action={<Link className="button" href={href("/studio/music")}>Back to music</Link>}
       />
       <DjIntelligencePanel artistId={artist.artistId} />
+      <LibraryBridgePanel artistId={artist.artistId} />
       <RekordboxImportPanel artistId={artist.artistId} />
       <SetBuilderWorkspace
         artistId={artist.artistId}
