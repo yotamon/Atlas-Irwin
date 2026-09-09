@@ -107,19 +107,88 @@ def transition_score(a: TrackDescriptor, b: TrackDescriptor, position: float, pu
     }
 
 
-def order_tracks(tracks: list[TrackDescriptor], purpose: Purpose, profile: EnergyProfile) -> list[TrackDescriptor]:
+def _variant_transition_bonus(metrics: dict[str, float], variant: str) -> float:
+    if variant == "safe":
+        return (
+            0.055 * metrics["boundary_safety"]
+            + 0.045 * metrics["tempo_reliability"]
+            + 0.03 * (1.0 - metrics["vocal_collision"])
+            + 0.02 * metrics["mastering_quality"]
+        )
+    if variant == "adventurous":
+        harmonic_contrast = _clip01(1.0 - abs(metrics["harmonic"] - 0.64) / 0.64)
+        return (
+            0.055 * harmonic_contrast
+            + 0.025 * metrics["energy_fit"]
+            + 0.02 * metrics["boundary_safety"]
+        )
+    return 0.0
+
+
+def _candidate_legal_at_position(
+    track: TrackDescriptor,
+    position: int,
+    locked_positions: dict[str, int],
+    reserved_positions: dict[int, str],
+) -> bool:
+    locked = locked_positions.get(track.id)
+    if locked is not None and locked != position:
+        return False
+    reserved_track = reserved_positions.get(position)
+    return reserved_track is None or reserved_track == track.id
+
+
+def order_tracks(
+    tracks: list[TrackDescriptor],
+    purpose: Purpose,
+    profile: EnergyProfile,
+    *,
+    locked_positions: dict[str, int] | None = None,
+    preferred_order: list[str] | None = None,
+    variant: str = "recommended",
+) -> list[TrackDescriptor]:
     if len(tracks) <= 2 or purpose == "journey":
         return tracks
-    beam: list[tuple[float, tuple[int, ...]]] = []
+    if variant not in {"safe", "recommended", "adventurous"}:
+        raise ValueError(f"Unsupported AutoMix plan variant: {variant}")
+
     n = len(tracks)
+    known = {track.id for track in tracks}
+    locks = {
+        track_id: int(position)
+        for track_id, position in (locked_positions or {}).items()
+        if track_id in known
+    }
+    if any(position < 0 or position >= n for position in locks.values()):
+        raise ValueError("A locked set position is outside the selected-track range")
+    if len(set(locks.values())) != len(locks):
+        raise ValueError("Two tracks cannot occupy the same locked set position")
+    reserved_positions = {position: track_id for track_id, position in locks.items()}
+    preferred = [track_id for track_id in (preferred_order or []) if track_id in known]
+    preferred.extend(track.id for track in tracks if track.id not in preferred)
+    preferred_rank = {track_id: index for index, track_id in enumerate(preferred)}
+
+    beam: list[tuple[float, tuple[int, ...]]] = []
     for index, track in enumerate(tracks):
+        if not _candidate_legal_at_position(track, 0, locks, reserved_positions):
+            continue
         target = _energy_target(0.0, purpose, profile)
         identity = track.window_score
         start_fit = _clip01(1.0 - abs(track.energy - target) / 0.7)
         quality = float(mastering_profile(track.music_map)["quality_score"])
-        beam.append((0.52 * identity + 0.38 * start_fit + 0.10 * quality, (index,)))
+        seed_bonus = 0.025 * _clip01(1.0 - preferred_rank.get(track.id, index) / max(1, n - 1))
+        if variant == "safe":
+            base = 0.48 * identity + 0.32 * start_fit + 0.20 * quality
+        elif variant == "adventurous":
+            base = 0.48 * identity + 0.44 * start_fit + 0.08 * quality
+        else:
+            base = 0.52 * identity + 0.38 * start_fit + 0.10 * quality
+        beam.append((base + seed_bonus, (index,)))
+    if not beam:
+        raise ValueError("Set position locks leave no legal opening track")
     beam.sort(reverse=True, key=lambda item: item[0])
     beam = beam[: min(24, len(beam))]
+
     for depth in range(1, n):
         expanded: list[tuple[float, tuple[int, ...]]] = []
         position = depth / max(1, n - 1)
@@ -129,9 +198,20 @@ def order_tracks(tracks: list[TrackDescriptor], purpose: Purpose, profile: Energ
             for nxt in range(n):
                 if nxt in used:
                     continue
-                metrics = transition_score(last, tracks[nxt], position, purpose, profile)
-                novelty = 0.025 if tracks[nxt].key.camelot != last.key.camelot else 0.0
-                expanded.append((score + metrics["total"] + novelty, (*path, nxt)))
+                candidate = tracks[nxt]
+                if not _candidate_legal_at_position(candidate, depth, locks, reserved_positions):
+                    continue
+                metrics = transition_score(last, candidate, position, purpose, profile)
+                novelty = 0.025 if candidate.key.camelot != last.key.camelot else 0.0
+                preferred_distance = abs(preferred_rank.get(candidate.id, depth) - depth)
+                preferred_bonus = 0.035 * _clip01(1.0 - preferred_distance / max(1, n - 1))
+                variant_bonus = _variant_transition_bonus(metrics, variant)
+                expanded.append((
+                    score + metrics["total"] + novelty + preferred_bonus + variant_bonus,
+                    (*path, nxt),
+                ))
+        if not expanded:
+            raise ValueError("Set position locks do not permit a complete legal route")
         expanded.sort(reverse=True, key=lambda item: item[0])
         beam = expanded[:128]
     return [tracks[index] for index in beam[0][1]] if beam else tracks
@@ -200,6 +280,50 @@ def choose_transition(a: TrackDescriptor, b: TrackDescriptor, score: dict[str, f
         technique, bars = "bass_swap", min(bars, 16)
         reasons.append("bass activity vetoed overlapping low-end during the harmonic blend")
     return technique, bars, beatmatch, reasons
+
+
+def _apply_transition_override(
+    requested: str | None,
+    *,
+    metrics: dict[str, float],
+    canonical: tuple[str, int, bool, list[str]],
+) -> tuple[str, int, bool, list[str], bool]:
+    technique, bars, beatmatch, reasons = canonical
+    if not requested or requested == technique:
+        return technique, bars, beatmatch, reasons, bool(requested)
+
+    tempo_safe = (
+        metrics["tempo_reliability"] >= 0.68
+        and metrics["constant_stretch_safe"] >= 0.5
+        and metrics["stretch_delta"] <= MAX_BEATMATCH_STRETCH
+    )
+    if requested == "drop_cut":
+        return "drop_cut", 0, False, [*reasons, "artist explicitly selected the conservative phrase-aligned cut"], True
+    if requested == "echo_out":
+        return "echo_out", 0, False, [*reasons, "artist explicitly selected an echo-out handoff"], True
+    if requested == "quick_mix":
+        if not tempo_safe:
+            raise ValueError("Quick-mix override is unsafe because local tempo evidence cannot support beatmatching")
+        return "quick_mix", 4, True, [*reasons, "artist explicitly selected a short beatmatched handoff"], True
+    if requested == "bass_swap":
+        if not tempo_safe or metrics["boundary_safety"] < 0.45 or metrics["vocal_collision"] >= 0.34:
+            raise ValueError("Bass-swap override is unsafe for the measured tempo, boundary or vocal evidence")
+        return "bass_swap", 16, True, [*reasons, "artist explicitly selected a controlled low-end handoff"], True
+    if requested == "harmonic_blend":
+        if (
+            not tempo_safe
+            or metrics["harmonic"] < 0.84
+            or metrics["boundary_safety"] < 0.70
+            or metrics["vocal_collision"] > 0.18
+            or metrics["bass_collision"] >= 0.34
+        ):
+            raise ValueError("Harmonic-blend override is unsafe for the measured harmonic, boundary, vocal or bass evidence")
+        return "harmonic_blend", 32, True, [*reasons, "artist explicitly selected a long harmonic blend"], True
+    if requested == "breakdown_swap":
+        if not tempo_safe or metrics["boundary_safety"] < 0.62 or metrics["vocal_collision"] > 0.22:
+            raise ValueError("Breakdown-swap override is unsafe for the measured tempo, boundary or vocal evidence")
+        return "breakdown_swap", 16, True, [*reasons, "artist explicitly selected a breakdown handoff"], True
+    raise ValueError(f"Unsupported transition override technique: {requested}")
 
 
 def _transition_confidence(metrics: dict[str, float]) -> float:
@@ -276,8 +400,27 @@ def _safe_region_descriptor(track: TrackDescriptor, *, entry_ms: int | None = No
     return replace(track, window_start_ms=start, window_end_ms=end)
 
 
-def build_plan(tracks: list[TrackDescriptor], purpose: Purpose, profile: EnergyProfile, style: TransitionStyle, target_duration_ms: int) -> dict[str, Any]:
-    ordered = order_tracks(tracks, purpose, profile)
+def build_plan(
+    tracks: list[TrackDescriptor],
+    purpose: Purpose,
+    profile: EnergyProfile,
+    style: TransitionStyle,
+    target_duration_ms: int,
+    *,
+    locked_positions: dict[str, int] | None = None,
+    preferred_order: list[str] | None = None,
+    variant: str = "recommended",
+    transition_overrides: dict[tuple[str, str], str] | None = None,
+) -> dict[str, Any]:
+    ordered = order_tracks(
+        tracks,
+        purpose,
+        profile,
+        locked_positions=locked_positions,
+        preferred_order=preferred_order,
+        variant=variant,
+    )
+    transition_override_values = transition_overrides or {}
     transitions: list[dict[str, Any]] = []
     for index, (a, b) in enumerate(zip(ordered[:-1], ordered[1:])):
         from_region = choose_transition_region(a.music_map, a.window_end_ms, "exit")
@@ -289,7 +432,12 @@ def build_plan(tracks: list[TrackDescriptor], purpose: Purpose, profile: EnergyP
         if b_eval.window_start_ms == b.window_start_ms:
             to_region = {**to_region, "ms": b.window_start_ms, "fallback_to_window_edge": True}
         metrics = transition_score(a_eval, b_eval, (index + 1) / max(1, len(ordered) - 1), purpose, profile)
-        technique, bars, beatmatch, reasons = choose_transition(a_eval, b_eval, metrics, style)
+        requested_override = transition_override_values.get((a.id, b.id))
+        technique, bars, beatmatch, reasons, user_override = _apply_transition_override(
+            requested_override,
+            metrics=metrics,
+            canonical=choose_transition(a_eval, b_eval, metrics, style),
+        )
         from_boundary = transition_boundary_evidence(a.music_map, int(from_region["ms"]), "exit")
         to_boundary = transition_boundary_evidence(b.music_map, int(to_region["ms"]), "entry")
         fallback_technique, fallback_bars = _safe_fallback(metrics, beatmatch)
@@ -317,6 +465,8 @@ def build_plan(tracks: list[TrackDescriptor], purpose: Purpose, profile: EnergyP
                 "harmonic_evidence_confidence": round(metrics["harmonic_evidence_confidence"], 4),
             },
             "reasons": reasons,
+            "user_override": user_override,
+            "requested_technique": requested_override,
         })
 
     effective: list[TrackDescriptor] = []
@@ -349,6 +499,7 @@ def build_plan(tracks: list[TrackDescriptor], purpose: Purpose, profile: EnergyP
             "energy": round(track.energy, 4),
             "window_score": round(track.window_score, 4),
             "region_adjusted": track.window_start_ms != ordered[index].window_start_ms or track.window_end_ms != ordered[index].window_end_ms,
+            "position_locked": locked_positions is not None and track.id in locked_positions,
         })
 
     for index, transition in enumerate(transitions):
@@ -362,6 +513,8 @@ def build_plan(tracks: list[TrackDescriptor], purpose: Purpose, profile: EnergyP
             max_b = int((b.window_end_ms - b.window_start_ms) * 0.42)
             overlap = max(0, min(requested, max_a, max_b))
             if overlap < int(round(4 * beat_ms)):
+                if transition.get("user_override"):
+                    raise ValueError("The requested transition override does not fit the available phrase-aware source windows")
                 transition["technique"] = "drop_cut"
                 transition["beatmatch"] = False
                 transition["bars"] = 0
@@ -392,6 +545,7 @@ def build_plan(tracks: list[TrackDescriptor], purpose: Purpose, profile: EnergyP
         "tracks": timeline_tracks,
         "transitions": transitions,
         "quality_summary": _quality_summary(transitions),
+        "plan_variant": variant,
         "quality_contract": {
             "max_beatmatch_stretch_percent": int(MAX_BEATMATCH_STRETCH * 100),
             "pitch_shift_semitones": 0,
@@ -407,5 +561,7 @@ def build_plan(tracks: list[TrackDescriptor], purpose: Purpose, profile: EnergyP
             "safe_transition_fallbacks": True,
             "phrase_aware_transition_regions": True,
             "hook_protection": True,
+            "position_lock_constraints": bool(locked_positions),
+            "transition_overrides_fail_closed": True,
         },
     }
