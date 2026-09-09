@@ -34,18 +34,24 @@ test("tracks with an existing master never require a duplicate upload just to ge
 });
 
 test("release detail keeps canonical release access independent from optional enrichment services", async () => {
-  const [page, boundary] = await Promise.all([
+  const [page, loader, boundary] = await Promise.all([
     source("app/studio/(protected)/releases/[id]/page.tsx"),
+    source("lib/studio/release-workspace.ts"),
     source("app/studio/(protected)/releases/[id]/error.tsx"),
   ]);
 
-  assert.match(page, /music\.from\("releases"\).*\.maybeSingle\(\)/s);
-  assert.match(page, /if \(releaseResult\.error\) throw new Error/);
-  assert.match(page, /const campaign = campaignResult\.error \? null : campaignResult\.data/);
-  assert.match(page, /const vaultTracks = vaultsResult\.error \? \[\] : vaultsResult\.data \?\? \[\]/);
-  assert.match(page, /const safeMoments = momentsError \? \[\] : moments \?\? \[\]/);
-  assert.match(page, /const safeTrackLyrics = trackLyricsError \? \[\] : trackLyrics \?\? \[\]/);
-  assert.match(page, /if \(providerScheduleError\) throw new Error/);
+  assert.match(page, /loadReleaseWorkspaceSnapshot/);
+  assert.doesNotMatch(page, /\.from\("releases"\)/);
+  assert.doesNotMatch(page, /campaignResult/);
+  assert.doesNotMatch(page, /providerScheduleError/);
+
+  assert.match(loader, /from\("releases"\).*\.maybeSingle\(\)/s);
+  assert.match(loader, /if \(releaseResult\.error\) throw new Error/);
+  assert.match(loader, /const campaign = campaignResult\.error \? null : campaignResult\.data/);
+  assert.match(loader, /const vaultTracks = vaultsResult\.error \? \[\] : vaultsResult\.data \?\? \[\]/);
+  assert.match(loader, /const safeMoments = momentsResult\.error \? \[\] : momentsResult\.data \?\? \[\]/);
+  assert.match(loader, /const safeTrackLyrics = trackLyricsResult\.error \? \[\] : trackLyricsResult\.data \?\? \[\]/);
+  assert.match(loader, /if \(providerScheduleError\) throw new Error/);
 
   assert.match(boundary, /This release could not finish loading/);
   assert.match(boundary, /onClick=\{reset\}/);
