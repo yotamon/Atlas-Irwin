@@ -6,7 +6,7 @@ use crate::{
 };
 use anyhow::Context;
 use reqwest::blocking::{Client, Response};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::time::Duration;
 use url::Url;
 
@@ -50,24 +50,27 @@ pub fn claim_pairing(
     platform: &str,
     app_version: &str,
 ) -> anyhow::Result<PairResponse> {
-    let response = require_success(client()?.post(api_url(api_base_url, "/api/dj-library/device/pair")?)
-        .json(&json!({
-            "version": "ensemblis.dj-library-device-pair.v1",
-            "pairingCode": pairing_code.trim(),
-            "publicId": public_id,
-            "name": name,
-            "platform": platform,
-            "appVersion": app_version,
-            "capabilities": {
-                "scanLocalLibrary": true,
-                "resolveLocalMedia": true,
-                "deltaSync": true,
-                "rekordboxXml": false,
-                "seratoCrates": false,
-                "traktorNml": false
-            }
-        }))
-        .send()?)?;
+    let response = require_success(
+        client()?
+            .post(api_url(api_base_url, "/api/dj-library/device/pair")?)
+            .json(&json!({
+                "version": "ensemblis.dj-library-device-pair.v1",
+                "pairingCode": pairing_code.trim(),
+                "publicId": public_id,
+                "name": name,
+                "platform": platform,
+                "appVersion": app_version,
+                "capabilities": {
+                    "scanLocalLibrary": true,
+                    "resolveLocalMedia": true,
+                    "deltaSync": true,
+                    "rekordboxXml": false,
+                    "seratoCrates": false,
+                    "traktorNml": false
+                }
+            }))
+            .send()?,
+    )?;
     let paired: PairResponse = response.json()?;
     store_device_credential(&paired.credential)?;
     db.set_setting("api_base_url", api_base_url)?;
@@ -114,22 +117,33 @@ pub fn sync_next_batch(db: &BridgeDb) -> anyhow::Result<bool> {
         Some(value) => value,
         None => return Ok(false),
     };
-    let api_base = db.get_setting("api_base_url")?.context("Bridge API is not configured")?;
+    let api_base = db
+        .get_setting("api_base_url")?
+        .context("Bridge API is not configured")?;
     let credential = auth_header()?;
     let expected_revision = pending.envelope.delta.target_revision.clone();
     let bodies = sync_chunk_bodies(&pending.envelope);
 
     for (index, body) in bodies.iter().enumerate() {
-        let response = require_success(client()?.post(api_url(&api_base, "/api/dj-library/device/sync")?)
-            .bearer_auth(&credential)
-            .json(body)
-            .send()?)?;
+        let response = require_success(
+            client()?
+                .post(api_url(&api_base, "/api/dj-library/device/sync")?)
+                .bearer_auth(&credential)
+                .json(body)
+                .send()?,
+        )?;
         let reply: Value = response.json()?;
-        let accepted_revision = reply.get("revision").and_then(Value::as_str).unwrap_or_default();
+        let accepted_revision = reply
+            .get("revision")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
         if accepted_revision != expected_revision {
             anyhow::bail!("cloud acknowledged a different DJ-library revision");
         }
-        let complete = reply.get("complete").and_then(Value::as_bool).unwrap_or(false);
+        let complete = reply
+            .get("complete")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
         if complete {
             // A retry can discover that the target revision was already committed by a prior
             // attempt. In that case no further chunks are necessary and the local outbox can ack.
@@ -145,12 +159,17 @@ pub fn sync_next_batch(db: &BridgeDb) -> anyhow::Result<bool> {
 }
 
 fn post_job_result(db: &BridgeDb, result: &DeviceJobResult) -> anyhow::Result<()> {
-    let api_base = db.get_setting("api_base_url")?.context("Bridge API is not configured")?;
+    let api_base = db
+        .get_setting("api_base_url")?
+        .context("Bridge API is not configured")?;
     let credential = auth_header()?;
-    require_success(client()?.post(api_url(&api_base, "/api/dj-library/device/jobs")?)
-        .bearer_auth(credential)
-        .json(result)
-        .send()?)?;
+    require_success(
+        client()?
+            .post(api_url(&api_base, "/api/dj-library/device/jobs")?)
+            .bearer_auth(credential)
+            .json(result)
+            .send()?,
+    )?;
     Ok(())
 }
 
@@ -184,12 +203,27 @@ fn execute_job(db: &BridgeDb, job: &DeviceJob) -> DeviceJobResult {
             job_id: job.id.clone(),
             status: "failed".to_string(),
             result: None,
-            error: Some(format!("unsupported device job type: {}", job.job_type)),
+            error: Some(format!(
+                "unsupported device job type: {}",
+                job.job_type
+            )),
         };
     }
-    let source_id = job.payload.get("sourceId").and_then(Value::as_str).unwrap_or_default();
-    let source_track_id = job.payload.get("sourceTrackId").and_then(Value::as_str).unwrap_or_default();
-    let fingerprint = job.payload.get("recordingFingerprint").and_then(Value::as_str).unwrap_or_default();
+    let source_id = job
+        .payload
+        .get("sourceId")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let source_track_id = job
+        .payload
+        .get("sourceTrackId")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let fingerprint = job
+        .payload
+        .get("recordingFingerprint")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
     match resolve_verified_media(db, source_id, source_track_id, fingerprint) {
         Ok(_) => DeviceJobResult {
             job_id: job.id.clone(),
@@ -208,20 +242,33 @@ fn execute_job(db: &BridgeDb, job: &DeviceJob) -> DeviceJobResult {
 }
 
 pub fn poll_and_execute_jobs(db: &BridgeDb) -> anyhow::Result<usize> {
-    let api_base = db.get_setting("api_base_url")?.context("Bridge API is not configured")?;
+    let api_base = db
+        .get_setting("api_base_url")?
+        .context("Bridge API is not configured")?;
     let credential = auth_header()?;
-    let response = require_success(client()?.get(api_url(&api_base, "/api/dj-library/device/jobs")?)
-        .bearer_auth(credential)
-        .send()?)?;
+    let response = require_success(
+        client()?
+            .get(api_url(&api_base, "/api/dj-library/device/jobs")?)
+            .bearer_auth(credential)
+            .send()?,
+    )?;
     let body: Value = response.json()?;
-    let jobs: Vec<DeviceJob> = serde_json::from_value(body.get("jobs").cloned().unwrap_or_else(|| json!([])))?;
+    let jobs: Vec<DeviceJob> = serde_json::from_value(
+        body.get("jobs")
+            .cloned()
+            .unwrap_or_else(|| json!([])),
+    )?;
     let mut completed = 0;
     for job in jobs {
         // resolve_media is deliberately read-only and idempotent. Re-executing a stale cloud claim
         // after a crash is safer than suppressing it and orphaning the job forever.
         db.remember_job(&job.id, &job.idempotency_key, &job.job_type, &job.payload)?;
         let result = execute_job(db, &job);
-        let local_status = if result.status == "completed" { "completed" } else { "failed" };
+        let local_status = if result.status == "completed" {
+            "completed"
+        } else {
+            "failed"
+        };
         db.complete_job(&job.id, local_status, result.result.as_ref())?;
         post_job_result(db, &result)?;
         completed += 1;
@@ -232,7 +279,7 @@ pub fn poll_and_execute_jobs(db: &BridgeDb) -> anyhow::Result<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{SourceDelta, SyncEnvelope, DEVICE_SYNC_VERSION};
+    use crate::model::{DEVICE_SYNC_VERSION, SourceDelta, SyncEnvelope};
 
     #[test]
     fn production_transport_rejects_plain_http() {
@@ -257,6 +304,9 @@ mod tests {
         let chunks = sync_chunk_bodies(&envelope);
         assert_eq!(chunks.len(), 1);
         assert_eq!(chunks[0]["batch"]["count"], 1);
-        assert_eq!(chunks[0]["delta"]["removedSourceTrackIds"][0], "old");
+        assert_eq!(
+            chunks[0]["delta"]["removedSourceTrackIds"][0],
+            "old"
+        );
     }
 }
