@@ -21,6 +21,7 @@ import type { StemDatabase, TrackStem } from "@/types/stem-database";
 
 const PREVIEW_BUCKET = "automix-previews";
 const STALE_PREVIEW_MS = 20 * 60 * 1000;
+const PREVIEW_PURGE_BATCH = 50;
 
 function json(value: unknown): Json {
   return value as Json;
@@ -184,6 +185,37 @@ async function preparePreview(preview: AutoMixTransitionPreview) {
   };
 }
 
+export async function purgeExpiredAutoMixPreviews() {
+  const service = createServiceClient();
+  const db = asAutoMixClient(service) as SupabaseClient<AutoMixDatabase>;
+  const expired = await db.from("automix_transition_previews")
+    .select("id,output_bucket,output_path,result_payload")
+    .eq("status", "completed")
+    .lt("expires_at", new Date().toISOString())
+    .order("expires_at")
+    .limit(PREVIEW_PURGE_BATCH);
+  if (expired.error) throw new Error(expired.error.message);
+
+  let purged = 0;
+  for (const row of expired.data ?? []) {
+    const preview = row as Pick<AutoMixTransitionPreview, "id" | "output_bucket" | "output_path" | "result_payload">;
+    const removal = await service.storage
+      .from(preview.output_bucket || PREVIEW_BUCKET)
+      .remove([preview.output_path]);
+    if (removal.error) continue;
+    const resultPayload = {
+      ...record(preview.result_payload),
+      preview_purged_at: new Date().toISOString(),
+    };
+    const update = await db.from("automix_transition_previews")
+      .update({ result_payload: json(resultPayload) })
+      .eq("id", preview.id)
+      .eq("status", "completed");
+    if (!update.error) purged += 1;
+  }
+  return { inspected: expired.data?.length ?? 0, purged };
+}
+
 async function recoverStalePreviews(db: SupabaseClient<AutoMixDatabase>) {
   const active = await db.from("automix_transition_previews")
     .select("*")
@@ -212,6 +244,7 @@ async function recoverStalePreviews(db: SupabaseClient<AutoMixDatabase>) {
 export async function kickAutoMixPreviewQueue() {
   const service = createServiceClient();
   const db = asAutoMixClient(service) as SupabaseClient<AutoMixDatabase>;
+  await purgeExpiredAutoMixPreviews().catch(() => ({ inspected: 0, purged: 0 }));
   if (await recoverStalePreviews(db)) return { dispatched: false, busy: true };
 
   const planned = await db.from("automix_transition_previews")
