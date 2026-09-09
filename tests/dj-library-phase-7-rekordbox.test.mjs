@@ -56,8 +56,8 @@ const fixture = `<?xml version="1.0" encoding="UTF-8"?>
 </DJ_PLAYLISTS>`;
 
 test("Rekordbox XML parser normalizes official collection, grid, cues, playlists and history", async () => {
-  const module = await loadTypeScriptModule("lib/dj-library/rekordbox-xml.ts", sourceContractPrelude);
-  const parsed = module.parseRekordboxXml({ xml: fixture, sourceId: "fixture" });
+  const loadedModule = await loadTypeScriptModule("lib/dj-library/rekordbox-xml.ts", sourceContractPrelude);
+  const parsed = loadedModule.parseRekordboxXml({ xml: fixture, sourceId: "fixture" });
 
   assert.equal(parsed.tracks.length, 2);
   assert.equal(parsed.tracks[0].metadata.title, "First & Bright");
@@ -73,31 +73,31 @@ test("Rekordbox XML parser normalizes official collection, grid, cues, playlists
 });
 
 test("Rekordbox XML parser rejects DTD/entity declarations and unsafe input", async () => {
-  const module = await loadTypeScriptModule("lib/dj-library/rekordbox-xml.ts", sourceContractPrelude);
+  const loadedModule = await loadTypeScriptModule("lib/dj-library/rekordbox-xml.ts", sourceContractPrelude);
   assert.throws(
-    () => module.parseRekordboxXml({ xml: `<!DOCTYPE x [<!ENTITY leak SYSTEM "file:///etc/passwd">]>${fixture}` }),
+    () => loadedModule.parseRekordboxXml({ xml: `<!DOCTYPE x [<!ENTITY leak SYSTEM "file:///etc/passwd">]>${fixture}` }),
     /DTD\/entity declarations/,
   );
-  assert.throws(() => module.parseRekordboxXml({ xml: "<xml/>" }), /not a supported Rekordbox/);
+  assert.throws(() => loadedModule.parseRekordboxXml({ xml: "<xml/>" }), /not a supported Rekordbox/);
 });
 
 test("safe Rekordbox export requires explicit local file URIs and round-trips normalized evidence", async () => {
-  const module = await loadTypeScriptModule("lib/dj-library/rekordbox-xml.ts", sourceContractPrelude);
-  const parsed = module.parseRekordboxXml({ xml: fixture, sourceId: "fixture" });
+  const loadedModule = await loadTypeScriptModule("lib/dj-library/rekordbox-xml.ts", sourceContractPrelude);
+  const parsed = loadedModule.parseRekordboxXml({ xml: fixture, sourceId: "fixture" });
 
   assert.throws(
-    () => module.exportRekordboxXml({ tracks: parsed.tracks, playlists: parsed.playlists, locationForTrack: () => null }),
+    () => loadedModule.exportRekordboxXml({ tracks: parsed.tracks, playlists: parsed.playlists, locationForTrack: () => null }),
     /explicit local file:\/\//,
   );
 
-  const exported = module.exportRekordboxXml({
+  const exported = loadedModule.exportRekordboxXml({
     tracks: parsed.tracks,
     playlists: parsed.playlists,
     locationForTrack: (track) => `file://localhost/D:/Export/${track.sourceTrackId}.wav`,
   });
   assert.ok(exported.includes('<DJ_PLAYLISTS Version="1.0.0">'));
   assert.ok(exported.includes('POSITION_MARK Name="Drop" Type="0"'));
-  const roundTrip = module.parseRekordboxXml({ xml: exported, sourceId: "roundtrip" });
+  const roundTrip = loadedModule.parseRekordboxXml({ xml: exported, sourceId: "roundtrip" });
   assert.equal(roundTrip.tracks.length, 2);
   assert.equal(roundTrip.tracks[0].metadata.rating, 4);
   assert.equal(roundTrip.tracks[0].cuePoints.some((cue) => cue.kind === "loop"), true);
