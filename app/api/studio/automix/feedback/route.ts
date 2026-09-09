@@ -32,8 +32,6 @@ function averageSignals(values: unknown[]) {
     "harmonicAdventure",
     "transitionAggressiveness",
     "exploration",
-    "openingEnergy",
-    "closingEnergy",
   ] as const;
   return Object.fromEntries(keys.map((key) => {
     const samples = signals
