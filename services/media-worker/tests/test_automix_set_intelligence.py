@@ -8,7 +8,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from app.automix_manifest_personalized import build_personalized_mixplan
 from app.automix_model import MusicalKey, TrackDescriptor, normalize_dj_bpm
+from app.automix_planner_personalized import build_set_intelligent_plan
 from app.automix_set_intelligence import (
     normalize_dj_profile,
     preferred_transition_style,
@@ -28,6 +30,10 @@ class AutoMixSetIntelligenceTest(unittest.TestCase):
             camelot=camelot,
             label=f"Key {camelot}",
         )
+        timeline = [
+            {"ms": ms, "bpm": bpm_value, "deviation_bpm": 0.0}
+            for ms in range(0, 240_001, 5_000)
+        ]
         return TrackDescriptor(
             id=f"track-{index}",
             title=f"Track {index}",
@@ -35,11 +41,36 @@ class AutoMixSetIntelligenceTest(unittest.TestCase):
             path=Path(f"/{index}.wav"),
             music_map={
                 "duration_ms": 240_000,
+                "beat_stability": {
+                    "classification": "stable",
+                    "confidence": 0.96,
+                    "local_jitter_bpm": 0.1,
+                    "timeline": timeline,
+                },
                 "master_qc": {
                     "technical_ready": True,
                     "integrated_lufs": -10.0,
                     "true_peak_dbtp": -1.0,
                     "clipping_ratio": 0.0,
+                },
+                "sections": [
+                    {"start_ms": 0, "end_ms": 60_000, "label": "intro", "confidence": 0.92, "boundary_confidence": 0.92},
+                    {"start_ms": 60_000, "end_ms": 180_000, "label": "groove", "confidence": 0.9, "boundary_confidence": 0.9},
+                    {"start_ms": 180_000, "end_ms": 240_000, "label": "outro", "confidence": 0.93, "boundary_confidence": 0.93},
+                ],
+                "phrases": [
+                    {"start_ms": 60_000, "end_ms": 120_000, "confidence": 0.9},
+                    {"start_ms": 120_000, "end_ms": 180_000, "confidence": 0.9},
+                ],
+                "downbeat_source": "model",
+                "downbeats_ms": list(range(0, 240_001, 2_000)),
+                "moments": {
+                    "musical_identity": [
+                        {"start_ms": 90_000, "end_ms": 120_000, "score": max(0.45, 0.92 - index * 0.035)},
+                    ],
+                    "story_arc": [
+                        {"start_ms": 90_000, "end_ms": 120_000, "score": max(0.45, 0.9 - index * 0.03)},
+                    ],
                 },
             },
             duration_ms=240_000,
@@ -48,7 +79,7 @@ class AutoMixSetIntelligenceTest(unittest.TestCase):
             key=key,
             energy=energy_value,
             loudness_lufs=-10.0,
-            window_start_ms=30_000,
+            window_start_ms=60_000,
             window_end_ms=150_000,
             window_score=max(0.45, 0.92 - index * 0.035),
         )
@@ -122,6 +153,43 @@ class AutoMixSetIntelligenceTest(unittest.TestCase):
         self.assertEqual(preferred_transition_style("dj", adventurous), "creative")
         self.assertEqual(preferred_transition_style("clean", adventurous), "clean")
         self.assertEqual(preferred_transition_style("creative", conservative), "creative")
+
+    def test_selected_tracks_are_rewindowed_after_duration_curation(self) -> None:
+        tracks = [self._track(index) for index in range(8)]
+        initial_window_ms = tracks[0].window_end_ms - tracks[0].window_start_ms
+        plan = build_set_intelligent_plan(
+            tracks,
+            "booking",
+            "dynamic",
+            "dj",
+            6 * 60 * 1000,
+            set_intent={"target_track_count": 3},
+        )
+        self.assertEqual(plan["selection_summary"]["selected_count"], 3)
+        rendered_windows = [
+            int(item["source_end_ms"]) - int(item["source_start_ms"])
+            for item in plan["tracks"]
+        ]
+        self.assertTrue(any(window > initial_window_ms for window in rendered_windows))
+        self.assertTrue(plan["quality_contract"]["selected_track_rewindowing"])
+
+    def test_personalized_mixplan_hashes_planning_provenance(self) -> None:
+        tracks = [self._track(index) for index in range(5)]
+        plan = build_set_intelligent_plan(
+            tracks,
+            "booking",
+            "dynamic",
+            "dj",
+            5 * 60 * 1000,
+            set_intent={"must_play_track_ids": ["track-4"], "target_track_count": 3},
+            dj_profile={"harmonic_adventure": 0.72, "transition_aggressiveness": 0.55, "exploration": 0.7},
+        )
+        manifest = build_personalized_mixplan(plan, source_fingerprints=[])
+        planning = manifest["planning"]
+        self.assertEqual(planning["set_intent"]["version"], "ensemblis.set-intent.v1")
+        self.assertEqual(planning["dj_profile"]["version"], "ensemblis.dj-profile.v1")
+        self.assertEqual(planning["selection_summary"]["selected_count"], 3)
+        self.assertTrue(isinstance(manifest.get("plan_hash"), str) and len(manifest["plan_hash"]) == 64)
 
 
 if __name__ == "__main__":
