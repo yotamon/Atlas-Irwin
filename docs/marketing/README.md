@@ -290,6 +290,20 @@ Only `LIVE` and `BETA` may be presented as immediately usable functionality. `CO
 
 The direction is **Editorial Music Technology**: a blend of high-end music hardware, contemporary music publishing, club culture, record artwork and sophisticated software.
 
+The detailed visual authority for the future marketing site is `visual-design-system.md`, with the homepage-specific composition in `homepage-visual-spec.md`.
+
+Current design direction intentionally keeps the existing Ensemblis Studio DNA:
+
+```text
+Obsidian       #080B09
+Paper          #F6F8F4
+Signal Lime    #B7F36A
+Violet         #8A7CFF
+Mint           #5CE1C6
+```
+
+`Manrope` remains the product/UI typeface. The v1 marketing direction pairs it selectively with `Instrument Serif` for large editorial statements, subject to final implementation/prototype validation.
+
 Avoid generic AI visual clichés:
 
 - purple gradients
@@ -340,9 +354,14 @@ This marketing-site specification is distinct from `docs/ensemblis-sites-roadmap
 
 ## Documents in this folder
 
-- `homepage-wireframe.md` — exact homepage story, sections, copy, scroll choreography and interactive demo.
-- `implementation-blueprint.md` — motion, audio, responsive, accessibility, performance, analytics, SEO and technical architecture.
-- `decision-log.md` — accepted decisions and intentionally open implementation questions.
+Read in this order:
+
+1. `README.md` — positioning, audience, brand thesis and product pillars.
+2. `homepage-wireframe.md` — exact homepage story, sections, copy and scroll narrative.
+3. `visual-design-system.md` — canonical marketing visual language: typography, palette, grid, surfaces, waveform, data and motion aesthetics.
+4. `homepage-visual-spec.md` — concrete homepage composition, dimensions, section geometry, visual transformations and responsive translation.
+5. `implementation-blueprint.md` — motion/audio architecture, responsive behavior, accessibility, performance, analytics, SEO and technical implementation guidance.
+6. `decision-log.md` — accepted decisions and intentionally open implementation questions.
 
 ## Non-negotiable design principles
 
