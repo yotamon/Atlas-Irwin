@@ -31,7 +31,7 @@ begin
     from (
       select
         c.conname,
-        array_agg(a.attname order by key_column.ordinality) as column_names
+        array_agg(a.attname::text order by key_column.ordinality) as column_names
       from pg_constraint c
       cross join lateral unnest(c.conkey) with ordinality as key_column(attnum, ordinality)
       join pg_attribute a
