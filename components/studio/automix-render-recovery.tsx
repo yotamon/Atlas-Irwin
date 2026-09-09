@@ -63,7 +63,8 @@ export function AutoMixRenderRecovery({ artistId }: { artistId: string }) {
   if (!failedRender) return null;
 
   async function retry() {
-    if (retrying || hasActiveRender) return;
+    const target = failedRender;
+    if (!target || retrying || hasActiveRender) return;
     setRetrying(true);
     setMessage("");
     try {
@@ -73,7 +74,7 @@ export function AutoMixRenderRecovery({ artistId }: { artistId: string }) {
         body: JSON.stringify({
           artistId,
           action: "retry_render",
-          parentJobId: failedRender.id,
+          parentJobId: target.id,
         }),
       });
       const body = await response.json().catch(() => null);
