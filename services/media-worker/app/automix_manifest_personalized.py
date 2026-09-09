@@ -21,6 +21,9 @@ def build_mixplan(plan: dict[str, Any], *, source_fingerprints: list[dict[str, A
         "selection_summary": _record(plan.get("selection_summary")),
         "omitted_tracks": _records(plan.get("omitted_tracks")),
         "dj_profile": _record(plan.get("dj_profile")),
+        "plan_directives": _record(plan.get("plan_directives")),
+        "plan_lineage": _record(plan.get("plan_lineage")),
+        "plan_variant": plan.get("plan_variant"),
         "requested_transition_style": plan.get("requested_transition_style"),
         "effective_transition_style": plan.get("effective_transition_style"),
     })
