@@ -96,8 +96,11 @@ export function DjIntelligencePanel({ artistId }: { artistId: string }) {
   const [feedbackSaving, setFeedbackSaving] = useState(false);
   const [status, setStatus] = useState("");
   const currentArtistId = useRef(artistId);
-  currentArtistId.current = artistId;
   const loading = loadedArtistId !== artistId || refreshing;
+
+  useEffect(() => {
+    currentArtistId.current = artistId;
+  }, [artistId]);
 
   useEffect(() => {
     const controller = new AbortController();
