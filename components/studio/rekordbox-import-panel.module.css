@@ -154,9 +154,9 @@
 }
 
 .error {
-  color: var(--studio-danger);
-  background: color-mix(in srgb, var(--studio-danger) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--studio-danger) 28%, transparent);
+  color: var(--en-danger);
+  background: color-mix(in srgb, var(--en-danger) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--en-danger) 28%, transparent);
 }
 
 .success {
