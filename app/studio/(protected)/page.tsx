@@ -7,7 +7,7 @@ import {
   SectionHeading,
   type SemanticTone,
 } from "@/components/studio/patterns";
-import { PageHeader, Status } from "@/components/studio/ui";
+import { Page, PageHeader, Status } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { loadArtistOperatingSnapshot } from "@/lib/studio/artist-operating-snapshot";
@@ -117,11 +117,12 @@ export default async function TodayPage() {
   const contextCount = remainingDecisions.length + handling.length + comingUp.length;
 
   return (
-    <div className="studio-v2-page ensemblis-today-page">
+    <Page className="ensemblis-today-page">
       <PageHeader
+        eyebrow="Artist operating view"
         title="Today"
         description={`One clear next move for ${artist.artistName}. Background work stays collapsed until you want it.`}
-        action={<Link href={href("/studio/settings/artist")}>Working profile</Link>}
+        action={<Link className="button ghost" href={href("/studio/settings/artist")}>Working profile</Link>}
       />
 
       <PriorityHero
@@ -214,6 +215,6 @@ export default async function TodayPage() {
           </section>
         </div>
       </details>
-    </div>
+    </Page>
   );
 }
