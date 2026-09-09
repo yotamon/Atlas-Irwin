@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AutoMixRenderRecovery } from "@/components/studio/automix-render-recovery";
 import { DjIntelligencePanel } from "@/components/studio/dj-intelligence-panel";
 import { SetBuilderWorkspace } from "@/components/studio/set-builder-workspace";
 import { PageHeader } from "@/components/studio/ui";
@@ -32,6 +33,7 @@ export default async function AutoMixPage() {
         artistName={artist.artistName}
         tracks={tracks.data ?? []}
       />
+      <AutoMixRenderRecovery artistId={artist.artistId} />
     </div>
   );
 }
