@@ -138,4 +138,29 @@ grant select on public.dj_library_source_tracks to authenticated;
 revoke all on public.dj_library_device_jobs from anon, authenticated;
 grant select on public.dj_library_device_jobs to authenticated;
 
-for each row execute function private.set_updated_at();
+drop trigger if exists set_dj_library_devices_updated_at on public.dj_library_devices;
+create trigger set_dj_library_devices_updated_at
+  before update on public.dj_library_devices
+  for each row execute function private.set_updated_at();
+
+drop trigger if exists set_dj_library_device_sources_updated_at on public.dj_library_device_sources;
+create trigger set_dj_library_device_sources_updated_at
+  before update on public.dj_library_device_sources
+  for each row execute function private.set_updated_at();
+
+drop trigger if exists set_dj_library_source_tracks_updated_at on public.dj_library_source_tracks;
+create trigger set_dj_library_source_tracks_updated_at
+  before update on public.dj_library_source_tracks
+  for each row execute function private.set_updated_at();
+
+drop trigger if exists set_dj_library_device_jobs_updated_at on public.dj_library_device_jobs;
+create trigger set_dj_library_device_jobs_updated_at
+  before update on public.dj_library_device_jobs
+  for each row execute function private.set_updated_at();
+
+comment on table public.dj_library_devices is
+  'Revocable native Library Bridge devices. Credential hashes are server-only and local filesystem paths never enter this table.';
+comment on table public.dj_library_source_tracks is
+  'Path-free normalized DJ-library evidence synchronized from a paired device.';
+comment on table public.dj_library_device_jobs is
+  'Durable idempotent work for a paired native bridge. Job payloads must never contain local filesystem paths.';
