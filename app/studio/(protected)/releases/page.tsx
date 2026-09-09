@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { MusicLibraryNav } from "@/components/studio/music-library-nav";
 import { ReleaseCatalog } from "@/components/studio/release-catalog";
-import { EmptyState, PageHeader } from "@/components/studio/ui";
+import { EmptyState, Page, PageHeader } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
@@ -70,8 +70,9 @@ export default async function ReleasesPage({
         : enriched;
 
   return (
-    <div className="studio-v2-page release-catalog-page">
+    <Page width="wide" className="release-catalog-page">
       <PageHeader
+        eyebrow="Music library"
         title="Releases"
         description={`Collections inside ${artist.artistName}'s Music library. Open a release for its tracklist, release work and results; open an individual song for its master and intelligence.`}
         action={<Link className="button primary" href={href("/studio/releases/new")}>New release</Link>}
@@ -92,6 +93,6 @@ export default async function ReleasesPage({
           label="Create release"
         />
       )}
-    </div>
+    </Page>
   );
 }
