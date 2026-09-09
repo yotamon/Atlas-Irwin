@@ -108,6 +108,27 @@ class AutoMixPlanDirectivesTest(unittest.TestCase):
         self.assertTrue(plan["tracks"][2]["position_locked"])
         self.assertIn("track-7", plan["set_intent"]["must_play_track_ids"])
 
+    def test_two_track_route_honors_locked_reorder(self) -> None:
+        tracks = [self._track(0), self._track(1)]
+        plan = build_set_intelligent_plan(
+            tracks,
+            "booking",
+            "dynamic",
+            "dj",
+            4 * 60 * 1000,
+            set_intent={"allow_omissions": False},
+            plan_directives={
+                "preferred_order_track_ids": ["track-1", "track-0"],
+                "locked_positions": [
+                    {"track_id": "track-1", "position": 0},
+                    {"track_id": "track-0", "position": 1},
+                ],
+            },
+        )
+        self.assertEqual([item["track_id"] for item in plan["tracks"]], ["track-1", "track-0"])
+        self.assertTrue(all(item["position_locked"] for item in plan["tracks"]))
+        self.assertTrue(plan["quality_contract"]["small_route_locks_are_hard"])
+
     def test_lock_can_expand_target_count_when_required_position_is_later(self) -> None:
         tracks = [self._track(index) for index in range(8)]
         plan = build_set_intelligent_plan(
