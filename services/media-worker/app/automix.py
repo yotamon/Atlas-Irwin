@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import tempfile
+import time
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Literal
 
@@ -12,7 +13,13 @@ from pydantic import BaseModel, Field
 
 from . import main as worker_main
 from .automix_evaluation import evaluate_mixplan
-from .automix_manifest import MIXPLAN_VERSION, mixplan_hash, validate_mixplan
+from .automix_manifest import (
+    AUTOMATION_VERSION,
+    MIXPLAN_VERSION,
+    RENDER_ENGINE_CONTRACT_VERSION,
+    mixplan_hash,
+    validate_mixplan,
+)
 from .automix_manifest_personalized import build_mixplan
 from .automix_mixplan_renderer import render_mixplan
 from .automix_model import (
@@ -23,6 +30,8 @@ from .automix_model import (
 from .automix_planner_personalized import build_set_intelligent_plan
 from .mastering_inspector import enrich_music_map_with_mastering
 from .music_intelligence_v4_runtime import analyze_music as analyze_music_v4
+
+RENDERER_VERSION = "ensemblis.media-worker.automix.v1"
 
 
 class AutomixWorkerRequest(BaseModel):
@@ -186,7 +195,10 @@ def _plan_warnings(plan: dict[str, Any]) -> list[dict[str, Any]]:
 def _engine_metadata(execution_mode: str) -> dict[str, Any]:
     return {
         "version": AUTOMIX_VERSION,
+        "renderer_version": RENDERER_VERSION,
         "mixplan_version": MIXPLAN_VERSION,
+        "transition_automation_version": AUTOMATION_VERSION,
+        "render_engine_contract_version": RENDER_ENGINE_CONTRACT_VERSION,
         "execution_mode": execution_mode,
         "render_contract": "validated_mixplan_only",
         "set_intelligence": "duration-aware candidate curation + bounded personal DJ profile + durable plan directives",
@@ -199,11 +211,66 @@ def _engine_metadata(execution_mode: str) -> dict[str, Any]:
     }
 
 
+def _execution_metrics(
+    started_at: float,
+    *,
+    execution_mode: str,
+    source_track_count: int,
+    output_duration_ms: int = 0,
+    output_bytes: int = 0,
+) -> dict[str, Any]:
+    wall_ms = max(0, int(round((time.perf_counter() - started_at) * 1000)))
+    realtime_factor = round(wall_ms / output_duration_ms, 4) if output_duration_ms > 0 else None
+    return {
+        "version": "ensemblis.automix-execution-metrics.v1",
+        "scope": "source_preparation+planning+render+encode+upload" if execution_mode != "plan_only" else "source_preparation+planning",
+        "execution_mode": execution_mode,
+        "wall_time_ms": wall_ms,
+        "output_duration_ms": output_duration_ms or None,
+        "realtime_factor": realtime_factor,
+        "source_track_count": source_track_count,
+        "output_bytes": output_bytes or None,
+    }
+
+
+def _qa_diagnostics(
+    plan: dict[str, Any],
+    mixplan: dict[str, Any],
+    warnings: list[dict[str, Any]],
+    render_meta: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    transitions = _list_records(mixplan.get("transitions"))
+    tracks = _list_records(mixplan.get("tracks"))
+    provenance = _record(mixplan.get("provenance"))
+    risk_flag_count = sum(len(item.get("risk_flags")) for item in transitions if isinstance(item.get("risk_flags"), list))
+    low_confidence = sum(1 for item in transitions if _safe_float(item.get("confidence"), 0.5) < 0.6)
+    stretch_deltas = [
+        abs(_safe_float(_record(item.get("playback")).get("time_factor"), 1.0) - 1.0)
+        for item in tracks
+    ]
+    render = render_meta or {}
+    return {
+        "version": "ensemblis.automix-qa.v1",
+        "plan_hash": str(mixplan.get("plan_hash") or ""),
+        "transition_count": len(transitions),
+        "low_confidence_transition_count": low_confidence,
+        "risk_flag_count": risk_flag_count,
+        "warning_count": len(warnings),
+        "max_abs_stretch_delta": round(max(stretch_deltas, default=0.0), 6),
+        "source_fingerprint_count": len(_list_records(provenance.get("source_fingerprints"))),
+        "quality_summary": _record(plan.get("quality_summary")),
+        "output_duration_ms": int(render.get("duration_ms") or 0) or None,
+        "final_measured_lufs": render.get("final_measured_lufs"),
+        "ceiling_dbtp": render.get("ceiling_dbtp"),
+    }
+
+
 async def automix_job(
     payload: dict[str, Any],
     workdir: Path,
     on_plan: PlanCallback | None = None,
 ) -> dict[str, Any]:
+    started_at = time.perf_counter()
     raw_tracks = _list_records(payload.get("tracks"))
     purpose = str(payload.get("purpose") or "booking")
     profile = str(payload.get("energy_profile") or "dynamic")
@@ -277,6 +344,12 @@ async def automix_job(
             "evaluation": evaluation,
             "warnings": warnings,
             "engine": _engine_metadata(execution_mode),
+            "execution_metrics": _execution_metrics(
+                started_at,
+                execution_mode=execution_mode,
+                source_track_count=len(raw_tracks),
+            ),
+            "qa_diagnostics": _qa_diagnostics(published_plan, mixplan, warnings),
         }
 
     wav_path, render_meta = await asyncio.to_thread(render_mixplan, tracks, mixplan, workdir)
@@ -292,12 +365,14 @@ async def automix_job(
         mime_type = "audio/mpeg"
     await _upload_streaming(upload_url, output_path, mime_type)
     sha256 = await asyncio.to_thread(worker_main.sha256_file, output_path)
+    file_size = output_path.stat().st_size
+    output_duration_ms = int(render_meta.get("duration_ms") or 0)
     return {
         "uploaded": True,
-        "file_size": output_path.stat().st_size,
+        "file_size": file_size,
         "mime_type": mime_type,
         "sha256": sha256,
-        "output": {"file_size": output_path.stat().st_size, "mime_type": mime_type, "sha256": sha256},
+        "output": {"file_size": file_size, "mime_type": mime_type, "sha256": sha256},
         "phase": "complete",
         "plan": published_plan,
         "render_manifest": mixplan,
@@ -305,6 +380,14 @@ async def automix_job(
         "render": render_meta,
         "warnings": warnings,
         "engine": _engine_metadata(execution_mode),
+        "execution_metrics": _execution_metrics(
+            started_at,
+            execution_mode=execution_mode,
+            source_track_count=len(raw_tracks),
+            output_duration_ms=output_duration_ms,
+            output_bytes=file_size,
+        ),
+        "qa_diagnostics": _qa_diagnostics(published_plan, mixplan, warnings, render_meta),
     }
 
 
