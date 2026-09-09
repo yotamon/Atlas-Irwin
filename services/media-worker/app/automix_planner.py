@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import math
+from collections import Counter
 from typing import Any
 
 import numpy as np
 
-from .automix_intelligence import mastering_profile, tempo_profile, transition_activity
+from .automix_intelligence import (
+    mastering_profile,
+    tempo_profile,
+    transition_activity,
+    transition_boundary_evidence,
+)
 from .automix_model import (
     AUTOMIX_VERSION, MAX_BEATMATCH_STRETCH, EnergyProfile, Purpose, TrackDescriptor, TransitionStyle,
     _clip01, _list_records, harmonic_compatibility, bpm_compatibility,
@@ -46,16 +52,30 @@ def transition_score(a: TrackDescriptor, b: TrackDescriptor, position: float, pu
     tempo_reliability = math.sqrt(float(a_tempo["reliability"]) * float(b_tempo["reliability"]))
     constant_safe = float(bool(a_tempo["constant_stretch_safe"]) and bool(b_tempo["constant_stretch_safe"]))
     harmonic = harmonic_compatibility(a.key, b.key)
+    harmonic_evidence_confidence = math.sqrt(max(0.0, a.key.confidence) * max(0.0, b.key.confidence))
     energy_target = _energy_target(position, purpose, profile)
     energy_fit = _clip01(1.0 - abs(b.energy - energy_target) / 0.65)
     flow = _clip01(1.0 - max(0.0, a.energy - b.energy - 0.18) / 0.55)
     safe_stretch = 1.0 if stretch_delta <= MAX_BEATMATCH_STRETCH else _clip01(1.0 - (stretch_delta - MAX_BEATMATCH_STRETCH) / 0.12)
     activity = transition_activity(a.music_map, a.window_end_ms, b.music_map, b.window_start_ms, 16_000)
     vocal_safety = 1.0 - float(activity["vocal_collision"])
+    activity_evidence_confidence = math.sqrt(float(activity["vocal_confidence"]) * float(activity["bass_confidence"]))
     mastering_a = mastering_profile(a.music_map)
     mastering_b = mastering_profile(b.music_map)
     mastering_quality = math.sqrt(float(mastering_a["quality_score"]) * float(mastering_b["quality_score"]))
-    total = _clip01(
+    from_boundary = transition_boundary_evidence(a.music_map, a.window_end_ms, "exit")
+    to_boundary = transition_boundary_evidence(b.music_map, b.window_start_ms, "entry")
+    boundary_confidence = math.sqrt(
+        float(from_boundary["boundary_confidence"]) * float(to_boundary["boundary_confidence"])
+    )
+    boundary_suitability = math.sqrt(float(from_boundary["suitability"]) * float(to_boundary["suitability"]))
+    boundary_safety = math.sqrt(max(0.0, boundary_confidence) * max(0.0, boundary_suitability))
+
+    # Preserve the established V1 musical score while allowing structural evidence to
+    # penalize transitions whose selected edges are poorly supported. This is purposely
+    # bounded so Transition Evidence V2 improves ordering without rewriting the existing
+    # AutoMix personality in one release.
+    base_total = _clip01(
         0.25 * harmonic
         + 0.22 * tempo
         + 0.16 * energy_fit
@@ -65,9 +85,12 @@ def transition_score(a: TrackDescriptor, b: TrackDescriptor, position: float, pu
         + 0.05 * vocal_safety
         + 0.03 * mastering_quality
     )
+    total = _clip01(base_total * (0.88 + 0.12 * boundary_safety))
     return {
         "total": total,
+        "base_total": base_total,
         "harmonic": harmonic,
+        "harmonic_evidence_confidence": harmonic_evidence_confidence,
         "tempo": tempo,
         "energy_fit": energy_fit,
         "flow": flow,
@@ -76,7 +99,11 @@ def transition_score(a: TrackDescriptor, b: TrackDescriptor, position: float, pu
         "constant_stretch_safe": constant_safe,
         "vocal_collision": float(activity["vocal_collision"]),
         "bass_collision": float(activity["bass_collision"]),
+        "activity_evidence_confidence": activity_evidence_confidence,
         "mastering_quality": mastering_quality,
+        "boundary_confidence": boundary_confidence,
+        "boundary_suitability": boundary_suitability,
+        "boundary_safety": boundary_safety,
         "a_exit_bpm": a_exit,
         "b_entry_bpm": b_entry,
     }
@@ -126,6 +153,7 @@ def choose_transition(a: TrackDescriptor, b: TrackDescriptor, score: dict[str, f
     tempo_safe = score["tempo_reliability"] >= 0.68 and score["constant_stretch_safe"] >= 0.5
     beatmatch = stretch_delta <= MAX_BEATMATCH_STRETCH and tempo_safe
     vocal_collision = score["vocal_collision"]
+    boundary_safety = score.get("boundary_safety", 0.5)
     a_label = _section_label_near(a.music_map, a.window_end_ms)
     b_label = _section_label_near(b.music_map, b.window_start_ms)
     sparse = any(word in f"{a_label} {b_label}" for word in ("intro", "outro", "break", "bridge", "instrumental"))
@@ -135,6 +163,13 @@ def choose_transition(a: TrackDescriptor, b: TrackDescriptor, score: dict[str, f
         beatmatch = False
         technique, bars = "echo_out", 0
         reasons.append("variable tempo evidence makes a sustained fixed-grid beatmatch unsafe")
+    elif boundary_safety < 0.38:
+        if beatmatch and vocal_collision < 0.34:
+            technique, bars = "quick_mix", 4
+            reasons.append("weak musical-boundary evidence vetoed a long blend and reduced the handoff to four bars")
+        else:
+            technique, bars, beatmatch = "drop_cut", 0, False
+            reasons.append("weak musical-boundary evidence requires a conservative non-overlapping handoff")
     elif vocal_collision >= 0.34:
         if beatmatch:
             technique, bars = "quick_mix", 4
@@ -142,15 +177,19 @@ def choose_transition(a: TrackDescriptor, b: TrackDescriptor, score: dict[str, f
         else:
             technique, bars = "echo_out", 0
             reasons.append("vocal collision and tempo mismatch require a phrase-safe handoff")
-    elif beatmatch and score["harmonic"] >= 0.84 and sparse and vocal_collision <= 0.18 and style != "clean":
+    elif beatmatch and score["harmonic"] >= 0.84 and sparse and vocal_collision <= 0.18 and style != "clean" and boundary_safety >= 0.70:
         technique, bars = "harmonic_blend", 32
-        reasons.append("compatible key, stable local tempo and low vocal collision support a long blend")
-    elif beatmatch and score["tempo"] >= 0.78 and style != "clean":
+        reasons.append("compatible key, stable local tempo, strong boundaries and low vocal collision support a long blend")
+    elif beatmatch and score["tempo"] >= 0.78 and style != "clean" and boundary_safety >= 0.52:
         technique, bars = "bass_swap", 16
-        reasons.append("stable local tempo supports a phrase transition with controlled low-end handoff")
+        reasons.append("stable local tempo and supported musical boundaries allow a phrase transition with controlled low-end handoff")
     elif beatmatch and style == "clean":
-        technique, bars = "quick_mix", 8
-        reasons.append("clean locally stable beatmatched transition")
+        bars = 8 if boundary_safety >= 0.55 else 4
+        technique = "quick_mix"
+        reasons.append("clean locally stable beatmatched transition sized to boundary confidence")
+    elif beatmatch:
+        technique, bars = "quick_mix", 4
+        reasons.append("beatmatch is safe but structural evidence is not strong enough for a longer blend")
     elif score["harmonic"] < 0.52 or stretch_delta > 0.10:
         technique, bars, beatmatch = "echo_out", 0, False
         reasons.append("avoids forcing an audible tempo or harmonic mismatch")
@@ -158,13 +197,56 @@ def choose_transition(a: TrackDescriptor, b: TrackDescriptor, score: dict[str, f
         technique, bars, beatmatch = "drop_cut", 0, False
         reasons.append("phrase-aligned cut preserves both masters without destructive stretching")
 
-    if style == "creative" and beatmatch and technique == "bass_swap" and sparse and vocal_collision <= 0.22:
+    if style == "creative" and beatmatch and technique == "bass_swap" and sparse and vocal_collision <= 0.22 and boundary_safety >= 0.62:
         technique, bars = "breakdown_swap", 16
-        reasons.append("creative contrast is supported by sparse sections and vocal safety")
+        reasons.append("creative contrast is supported by sparse sections, structural confidence and vocal safety")
     if score["bass_collision"] >= 0.34 and technique == "harmonic_blend":
         technique, bars = "bass_swap", min(bars, 16)
         reasons.append("bass activity vetoed overlapping low-end during the harmonic blend")
     return technique, bars, beatmatch, reasons
+
+
+def _transition_confidence(metrics: dict[str, float]) -> float:
+    confidence = (
+        0.27 * metrics["tempo_reliability"]
+        + 0.25 * metrics["boundary_safety"]
+        + 0.16 * metrics["activity_evidence_confidence"]
+        + 0.12 * metrics["harmonic_evidence_confidence"]
+        + 0.10 * metrics["mastering_quality"]
+        + 0.10 * metrics["total"]
+    )
+    return _clip01(confidence)
+
+
+def _transition_risk_flags(metrics: dict[str, float]) -> list[str]:
+    flags: list[str] = []
+    if metrics["boundary_safety"] < 0.45:
+        flags.append("weak_boundary_evidence")
+    if metrics["tempo_reliability"] < 0.68:
+        flags.append("tempo_unreliable")
+    if metrics["stretch_delta"] > MAX_BEATMATCH_STRETCH:
+        flags.append("beatmatch_stretch_exceeds_limit")
+    if metrics["vocal_collision"] >= 0.34:
+        flags.append("vocal_collision")
+    if metrics["bass_collision"] >= 0.34:
+        flags.append("bass_collision")
+    if metrics["harmonic"] < 0.52:
+        flags.append("harmonic_tension")
+    if metrics["harmonic_evidence_confidence"] < 0.45:
+        flags.append("key_evidence_uncertain")
+    if metrics["activity_evidence_confidence"] < 0.45:
+        flags.append("activity_evidence_sparse")
+    if metrics["mastering_quality"] < 0.58:
+        flags.append("source_master_review")
+    return flags
+
+
+def _safe_fallback(metrics: dict[str, float], beatmatch: bool) -> tuple[str, int]:
+    if metrics["tempo_reliability"] < 0.68 or metrics["stretch_delta"] > MAX_BEATMATCH_STRETCH:
+        return "echo_out", 0
+    if beatmatch and metrics["boundary_safety"] >= 0.45:
+        return "quick_mix", 4
+    return "drop_cut", 0
 
 
 def _cluster_playback_bpms(ordered: list[TrackDescriptor], transitions: list[dict[str, Any]], tempos: list[dict[str, Any]]) -> list[float]:
@@ -184,6 +266,34 @@ def _cluster_playback_bpms(ordered: list[TrackDescriptor], transitions: list[dic
     return targets
 
 
+def _quality_summary(transitions: list[dict[str, Any]]) -> dict[str, Any]:
+    if not transitions:
+        return {
+            "transition_count": 0,
+            "mean_score": 1.0,
+            "mean_confidence": 1.0,
+            "minimum_confidence": 1.0,
+            "risky_transition_count": 0,
+            "risk_flags": {},
+        }
+    scores = [float(item.get("score") or 0.0) for item in transitions]
+    confidences = [float(item.get("confidence") or 0.0) for item in transitions]
+    flags = Counter(
+        flag
+        for item in transitions
+        for flag in item.get("risk_flags") or []
+        if isinstance(flag, str)
+    )
+    return {
+        "transition_count": len(transitions),
+        "mean_score": round(float(np.mean(scores)), 4),
+        "mean_confidence": round(float(np.mean(confidences)), 4),
+        "minimum_confidence": round(min(confidences), 4),
+        "risky_transition_count": sum(1 for item in transitions if item.get("risk_flags")),
+        "risk_flags": dict(sorted(flags.items())),
+    }
+
+
 def build_plan(tracks: list[TrackDescriptor], purpose: Purpose, profile: EnergyProfile, style: TransitionStyle, target_duration_ms: int) -> dict[str, Any]:
     ordered = order_tracks(tracks, purpose, profile)
     tempos = [_tempo(track) for track in ordered]
@@ -191,6 +301,9 @@ def build_plan(tracks: list[TrackDescriptor], purpose: Purpose, profile: EnergyP
     for index, (a, b) in enumerate(zip(ordered[:-1], ordered[1:])):
         metrics = transition_score(a, b, (index + 1) / max(1, len(ordered) - 1), purpose, profile)
         technique, bars, beatmatch, reasons = choose_transition(a, b, metrics, style)
+        from_boundary = transition_boundary_evidence(a.music_map, a.window_end_ms, "exit")
+        to_boundary = transition_boundary_evidence(b.music_map, b.window_start_ms, "entry")
+        fallback_technique, fallback_bars = _safe_fallback(metrics, beatmatch)
         transitions.append({
             "from_track_id": a.id,
             "to_track_id": b.id,
@@ -198,7 +311,20 @@ def build_plan(tracks: list[TrackDescriptor], purpose: Purpose, profile: EnergyP
             "bars": bars,
             "beatmatch": beatmatch,
             "score": round(metrics["total"], 4),
+            "confidence": round(_transition_confidence(metrics), 4),
             "metrics": {key: round(value, 4) for key, value in metrics.items()},
+            "risk_flags": _transition_risk_flags(metrics),
+            "fallback": {"technique": fallback_technique, "bars": fallback_bars},
+            "evidence": {
+                "from_boundary": from_boundary,
+                "to_boundary": to_boundary,
+                "boundary_confidence": round(metrics["boundary_confidence"], 4),
+                "boundary_suitability": round(metrics["boundary_suitability"], 4),
+                "boundary_safety": round(metrics["boundary_safety"], 4),
+                "tempo_reliability": round(metrics["tempo_reliability"], 4),
+                "activity_evidence_confidence": round(metrics["activity_evidence_confidence"], 4),
+                "harmonic_evidence_confidence": round(metrics["harmonic_evidence_confidence"], 4),
+            },
             "reasons": reasons,
         })
 
@@ -244,12 +370,16 @@ def build_plan(tracks: list[TrackDescriptor], purpose: Purpose, profile: EnergyP
                 transition["bars"] = 0
                 overlap = 0
                 transition["reasons"].append("available phrase window was too short for a safe blend")
+                if "insufficient_blend_window" not in transition["risk_flags"]:
+                    transition["risk_flags"].append("insufficient_blend_window")
         elif transition["technique"] == "echo_out":
             overlap = 1800
         else:
             overlap = 0
         transition["overlap_ms"] = overlap
-        transition["activity"] = transition_activity(a.music_map, a.window_end_ms, b.music_map, b.window_start_ms, overlap)
+        activity = transition_activity(a.music_map, a.window_end_ms, b.music_map, b.window_start_ms, overlap)
+        transition["activity"] = activity
+        transition["evidence"]["activity"] = activity
 
     estimated = 0
     for track, item in zip(ordered, timeline_tracks):
@@ -264,6 +394,7 @@ def build_plan(tracks: list[TrackDescriptor], purpose: Purpose, profile: EnergyP
         "estimated_duration_ms": max(0, estimated),
         "tracks": timeline_tracks,
         "transitions": transitions,
+        "quality_summary": _quality_summary(transitions),
         "quality_contract": {
             "max_beatmatch_stretch_percent": int(MAX_BEATMATCH_STRETCH * 100),
             "pitch_shift_semitones": 0,
@@ -274,5 +405,8 @@ def build_plan(tracks: list[TrackDescriptor], purpose: Purpose, profile: EnergyP
             "low_end_collision_control": True,
             "variable_tempo_aware": True,
             "unstable_tempo_never_forced_to_grid": True,
+            "boundary_confidence_aware": True,
+            "structured_transition_risk": True,
+            "safe_transition_fallbacks": True,
         },
     }
