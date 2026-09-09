@@ -4,28 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Ensemblis Library Bridge</title>
-  <style>
-    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background:#0b0d10; color:#f4f1ea; }
-    * { box-sizing:border-box; }
-    body { margin:0; min-height:100vh; background:radial-gradient(circle at 20% 0%,#1c2430 0,transparent 40%),#0b0d10; }
-    main { width:min(900px,calc(100% - 40px)); margin:0 auto; padding:48px 0 72px; display:grid; gap:22px; }
-    header { display:grid; gap:8px; }
-    .eyebrow { text-transform:uppercase; letter-spacing:.12em; font-size:.72rem; color:#9da6b2; font-weight:700; }
-    h1 { margin:0; font-size:clamp(2rem,5vw,3.6rem); letter-spacing:-.045em; }
-    p { margin:0; color:#aeb6c0; line-height:1.6; }
-    section { padding:22px; border:1px solid #2a3039; border-radius:20px; background:rgba(20,23,28,.88); display:grid; gap:16px; }
-    .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
-    input { min-width:240px; flex:1; background:#0d1014; color:#f4f1ea; border:1px solid #333a45; border-radius:12px; padding:12px 13px; }
-    button { appearance:none; border:1px solid #38404b; border-radius:999px; padding:11px 15px; background:#171b21; color:#f4f1ea; cursor:pointer; font-weight:700; }
-    button.primary { background:#f4f1ea; color:#101216; border-color:#f4f1ea; }
-    button:disabled { opacity:.5; cursor:not-allowed; }
-    .stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
-    .stat { padding:14px; border:1px solid #292f38; border-radius:14px; background:#101318; }
-    .stat small { display:block; color:#8e98a5; margin-bottom:5px; }
-    .stat strong { font-size:1.35rem; }
-    #log { white-space:pre-wrap; font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace; color:#b8c2ce; min-height:72px; }
-    @media(max-width:700px){ .stats{grid-template-columns:1fr;} main{width:min(100% - 24px,900px);padding-top:28px;} }
-  </style>
+  <link rel="stylesheet" href="./app.css" />
 </head>
 <body>
 <main>
@@ -67,33 +46,6 @@
     <div id="log" role="status">Ready.</div>
   </section>
 </main>
-<script>
-  const invoke = window.__TAURI__.core.invoke;
-  const log = document.getElementById('log');
-  const setLog = (value) => { log.textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2); };
-  async function run(label, fn) {
-    setLog(label + '…');
-    try { const result = await fn(); setLog(result ?? label + ' complete.'); await refresh(); return result; }
-    catch (error) { setLog(String(error)); throw error; }
-  }
-  async function refresh() {
-    const status = await invoke('bridge_status');
-    document.getElementById('paired').textContent = status.paired ? 'Paired' : 'Not paired';
-    document.getElementById('sources').textContent = String(status.sources);
-    document.getElementById('pending').textContent = String(status.pendingSyncBatches);
-    if (status.apiBaseUrl) document.getElementById('api').value = status.apiBaseUrl;
-  }
-  document.getElementById('pair').onclick = () => run('Pairing device', () => invoke('pair_device', {
-    apiBaseUrl: document.getElementById('api').value.trim(),
-    pairingCode: document.getElementById('code').value.trim(),
-    deviceName: null
-  }));
-  document.getElementById('unpair').onclick = () => run('Removing local device credential', () => invoke('unpair_device'));
-  document.getElementById('add').onclick = () => run('Scanning selected music folder', () => invoke('choose_and_scan_source', { sourceKind:'local_library' }));
-  document.getElementById('sync').onclick = () => run('Syncing path-free library changes', () => invoke('sync_pending'));
-  document.getElementById('jobs').onclick = () => run('Checking device jobs', () => invoke('poll_device_jobs'));
-  document.getElementById('refresh').onclick = () => run('Refreshing bridge status', refresh);
-  refresh().catch(error => setLog(String(error)));
-</script>
+<script src="./app.js" defer></script>
 </body>
 </html>
