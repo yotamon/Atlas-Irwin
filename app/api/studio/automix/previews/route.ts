@@ -35,15 +35,39 @@ function isFresh(preview: Pick<AutoMixTransitionPreview, "expires_at">) {
   return Number.isFinite(expires) && expires > Date.now();
 }
 
-async function signedPreview(preview: AutoMixTransitionPreview) {
-  if (preview.status !== "completed" || !isFresh(preview)) return { ...preview, preview_url: null };
-  const service = createServiceClient();
-  const signed = await service.storage
-    .from(preview.output_bucket || PREVIEW_BUCKET)
-    .createSignedUrl(preview.output_path, 15 * 60);
+function publicPreviewError(preview: AutoMixTransitionPreview) {
+  if (!preview.error) return null;
+  if (/canonical master changed/i.test(preview.error)) {
+    return "A canonical master changed after this MixPlan was verified. Create a new AutoMix session before previewing this transition.";
+  }
+  return "This transition preview could not be rendered. You can retry without changing the full mix.";
+}
+
+async function publicPreview(preview: AutoMixTransitionPreview) {
+  let previewUrl: string | null = null;
+  if (preview.status === "completed" && isFresh(preview)) {
+    const service = createServiceClient();
+    const signed = await service.storage
+      .from(preview.output_bucket || PREVIEW_BUCKET)
+      .createSignedUrl(preview.output_path, 15 * 60);
+    previewUrl = signed.error ? null : signed.data?.signedUrl ?? null;
+  }
+
+  // Deliberately return a projection rather than spreading the database row. Queued rows contain
+  // one-time signed upload credentials, source payloads and a callback verifier that must stay server-only.
   return {
-    ...preview,
-    preview_url: signed.error ? null : signed.data?.signedUrl ?? null,
+    id: preview.id,
+    automix_job_id: preview.automix_job_id,
+    transition_index: preview.transition_index,
+    status: preview.status,
+    result_payload: preview.result_payload,
+    error: publicPreviewError(preview),
+    expires_at: preview.expires_at,
+    started_at: preview.started_at,
+    completed_at: preview.completed_at,
+    created_at: preview.created_at,
+    updated_at: preview.updated_at,
+    preview_url: previewUrl,
   };
 }
 
@@ -71,7 +95,7 @@ export async function GET(request: Request) {
     if (!latestByTransition.has(preview.transition_index)) latestByTransition.set(preview.transition_index, preview);
   }
   return NextResponse.json({
-    previews: await Promise.all([...latestByTransition.values()].map(signedPreview)),
+    previews: await Promise.all([...latestByTransition.values()].map(publicPreview)),
   });
 }
 
@@ -121,7 +145,7 @@ export async function POST(request: Request) {
     .map((row) => row as AutoMixTransitionPreview)
     .find((preview) => preview.status !== "completed" || isFresh(preview));
   if (reusable) {
-    return NextResponse.json({ preview: await signedPreview(reusable), duplicate: true }, { status: 202 });
+    return NextResponse.json({ preview: await publicPreview(reusable), duplicate: true }, { status: 202 });
   }
 
   const previewId = randomUUID();
@@ -163,7 +187,9 @@ export async function POST(request: Request) {
         .eq("transition_index", transitionIndex)
         .in("status", ["planned", "queued", "running"])
         .maybeSingle();
-      if (active.data) return NextResponse.json({ preview: active.data, duplicate: true }, { status: 202 });
+      if (active.data) {
+        return NextResponse.json({ preview: await publicPreview(active.data as AutoMixTransitionPreview), duplicate: true }, { status: 202 });
+      }
     }
     return NextResponse.json({ error: "Could not create the transition preview." }, { status: 500 });
   }
@@ -171,5 +197,5 @@ export async function POST(request: Request) {
   after(async () => {
     await kickAutoMixPreviewQueue().catch(() => undefined);
   });
-  return NextResponse.json({ preview: inserted.data }, { status: 202 });
+  return NextResponse.json({ preview: await publicPreview(inserted.data as AutoMixTransitionPreview) }, { status: 202 });
 }
