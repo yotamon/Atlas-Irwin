@@ -203,10 +203,7 @@ fn execute_job(db: &BridgeDb, job: &DeviceJob) -> DeviceJobResult {
             job_id: job.id.clone(),
             status: "failed".to_string(),
             result: None,
-            error: Some(format!(
-                "unsupported device job type: {}",
-                job.job_type
-            )),
+            error: Some(format!("unsupported device job type: {}", job.job_type)),
         };
     }
     let source_id = job
@@ -253,11 +250,8 @@ pub fn poll_and_execute_jobs(db: &BridgeDb) -> anyhow::Result<usize> {
             .send()?,
     )?;
     let body: Value = response.json()?;
-    let jobs: Vec<DeviceJob> = serde_json::from_value(
-        body.get("jobs")
-            .cloned()
-            .unwrap_or_else(|| json!([])),
-    )?;
+    let jobs: Vec<DeviceJob> =
+        serde_json::from_value(body.get("jobs").cloned().unwrap_or_else(|| json!([])))?;
     let mut completed = 0;
     for job in jobs {
         // resolve_media is deliberately read-only and idempotent. Re-executing a stale cloud claim
@@ -304,9 +298,6 @@ mod tests {
         let chunks = sync_chunk_bodies(&envelope);
         assert_eq!(chunks.len(), 1);
         assert_eq!(chunks[0]["batch"]["count"], 1);
-        assert_eq!(
-            chunks[0]["delta"]["removedSourceTrackIds"][0],
-            "old"
-        );
+        assert_eq!(chunks[0]["delta"]["removedSourceTrackIds"][0], "old");
     }
 }
