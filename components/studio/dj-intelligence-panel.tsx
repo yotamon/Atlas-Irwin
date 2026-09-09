@@ -171,7 +171,9 @@ export function DjIntelligencePanel({ artistId }: { artistId: string }) {
         <div className={styles.profileHeader}>
           <div>
             <strong>Personal DJ profile</strong>
-            <small>{evidenceCount} plan signal{evidenceCount === 1 ? "" : "s"} · learned influence capped at {Math.round(learnedConfidence * 100)}%</small>
+            <small>
+              {evidenceCount} plan signal{evidenceCount === 1 ? "" : "s"} · learning confidence {Math.round(learnedConfidence * 100)}% · automatic nudge never exceeds ±5 points
+            </small>
           </div>
           <label className={styles.toggle}>
             <input
@@ -215,8 +217,8 @@ export function DjIntelligencePanel({ artistId }: { artistId: string }) {
             <span className="section-label">Bounded learning</span>
             <strong>Explicit choices stay authoritative.</strong>
             <small>
-              Approved mixes can nudge the profile by only a small bounded amount. They cannot override BPM safety,
-              vocal/bass collision vetoes, source quality checks, stretch limits or your direct settings.
+              Approved mixes can make only a small bounded adjustment to your direct settings. They cannot override BPM safety,
+              vocal/bass collision vetoes, source quality checks, stretch limits or your explicit preferences.
             </small>
           </div>
           <div className={styles.actions}>
