@@ -15,6 +15,7 @@
 @import "./controls.css" layer(ensemblis-patterns);
 @import "./shell.css" layer(ensemblis-shell);
 @import "./compositions.css" layer(ensemblis-compositions);
+@import "./architecture.css" layer(ensemblis-compositions);
 @import "./video-editor.css" layer(ensemblis-compositions);
 @import "./video-editor-variants.css" layer(ensemblis-compositions);
 @import "./video-editor-source.css" layer(ensemblis-compositions);
