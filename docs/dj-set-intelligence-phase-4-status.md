@@ -1,8 +1,9 @@
 # DJ Set Intelligence Phase 4 Status
 
 **Phase:** Personal DJ Intelligence  
-**Status:** Implementation complete, validation pending  
-**Profile contract:** `ensemblis.dj-profile.v2`
+**Status:** Complete, validated and merged  
+**Profile contract:** `ensemblis.dj-profile.v2`  
+**Merged:** PR #213 · `c657037d5442981eb2dd0b8e2bdde4cc38631d7d`
 
 ## Delivered in this phase
 
@@ -19,17 +20,16 @@
 - worker regression coverage;
 - product contract coverage.
 
-## Exit gate
+## Validation completed
 
-Phase 4 is considered complete only after:
+The merge gate passed on the final PR head:
 
-1. Studio product contracts pass;
-2. TypeScript typecheck passes;
-3. lint passes;
-4. database migration + pgTAP behavior tests pass;
-5. AutoMix/Media Worker regression tests pass;
-6. browser smoke passes;
-7. production build passes;
-8. PR has no unresolved review threads.
+- Studio product contracts;
+- TypeScript typecheck;
+- lint;
+- database migration replay and pgTAP behavior tests;
+- AutoMix / Media Worker regression tests;
+- browser smoke;
+- no unresolved review threads.
 
-After this gate, the roadmap proceeds to Phase 5 production hardening before external DJ-library adapters.
+Phase 5 production hardening follows from this validated baseline before external DJ-library adapters are introduced.
