@@ -45,6 +45,8 @@ The Studio and worker use a source-neutral Set Intent contract with:
 
 The Studio now treats the selected catalog tracks as a **candidate pool**. For normal DJ modes the user can let Ensemblis curate that pool for the requested duration, keep every candidate, set a target track count, bound the BPM range and mark individual tracks as must-play. `journey` is deliberately different: it preserves every selected track and the supplied order.
 
+`journey` is a hard preservation contract, not a UI convention. The API normalizer, durable queue preparation and worker normalization all force omissions off, make every supplied track must-play and fix the target count to the full candidate count. The canonical planner also preserves source order for Journey. A contradictory hard filter therefore fails visibly rather than silently changing the artist's narrative.
+
 The API validates and snapshots Set Intent into `automix_jobs.request_payload`, includes it in idempotency, and forwards the same normalized contract to the worker.
 
 ## Personal DJ Intelligence v1
@@ -57,7 +59,9 @@ Current effective dimensions are deliberately limited to signals that actually a
 - transition aggressiveness;
 - exploration.
 
-The Studio exposes these controls in `DJ & Mixes`. Users can also rate the latest completed verified plan. Positive ratings contribute bounded evidence; negative ratings are stored without guessing what the user disliked.
+The Studio exposes these controls in `DJ & Mixes`. Users can also rate the latest completed verified plan. Positive ratings contribute bounded evidence; negative ratings are stored without guessing what the user disliked. Learning confidence is capped at 60%, while the effective automatic adjustment to any explicit preference remains below five percentage points.
+
+The API and database both reject feedback from unfinished AutoMix sessions, so a partially rendered or superseded plan cannot become learning evidence.
 
 ## Candidate curation and duration correctness
 
@@ -76,21 +80,27 @@ This is intentionally not a second or approximate crossfade engine. The preview 
 - accepts only a completed parent AutoMix session with a verified MixPlan hash;
 - validates the MixPlan again and rejects tampered provenance;
 - derives the exact two tracks and transition instructions from the verified manifest;
-- revalidates the canonical-master fingerprints before rendering;
+- revalidates the canonical-master fingerprints before rendering and again before accepting the completed preview;
 - routes the isolated handoff through the same canonical AutoMix renderer and DSP used by the full mix;
 - crops the rendered result around the transition rather than inventing a separate preview technique.
 
 Preview artifacts live in the private `automix-previews` bucket. Upload credentials, callback verifiers, source payloads, storage paths and worker identifiers stay server-only. The browser receives a deliberately small public projection and, after completion, a 15-minute signed playback URL.
 
-Preview access expires after 24 hours. Expired completed artifacts are lazily purged from private storage during subsequent preview activity, while the durable preview row remains as non-playable lineage/history. The database additionally caps requested retention at 25 hours.
+Preview access lasts 24 hours from successful render completion. Expired completed artifacts are lazily purged from private storage during subsequent preview activity, while the durable preview row remains as non-playable lineage/history. The database additionally caps requested retention at 25 hours.
 
 Transition-index validation is based on the actual rendered MixPlan transition count, not the original candidate count. This matters after candidate curation, where a ten-track candidate pool may produce a six-track set.
+
+## Durable queue behavior
+
+AutoMix and transition previews are durable jobs. Queue preparation failures are terminalized before the queue moves on, so a missing canonical master, stale lineage or failed private upload credential cannot leave the oldest planned row permanently blocking every later job.
+
+Worker callbacks use compare-and-set status transitions. Only the callback that actually wins a terminal transition owns Sandbox cleanup and next-job dispatch. Late duplicate callbacks are acknowledged without stopping the shared named Sandbox, which prevents an old worker generation from interrupting newly dispatched work.
 
 ## Source-neutral boundary
 
 `lib/automix/source-contract.ts` defines `ensemblis.automix-source.v1` and the adapter boundary that future source integrations must implement. The current artist catalog is the first source kind. Later integrations may add `local_library`, `rekordbox`, `serato` and `traktor` without changing Set Intelligence or MixPlan semantics.
 
-The contract explicitly separates source kind from execution target. Today catalog audio is cloud-readable and renders in the cloud. A future local-library source can use the same planner contract while declaring `executionTarget: "device"`.
+The contract explicitly separates source kind from execution target. Today catalog audio is cloud-readable and renders in the cloud. A future local-library source can use the same planner contract while declaring `executionTarget: "device"`. A supplied incompatible contract version is rejected rather than silently reinterpreted as v1.
 
 ## Reproducibility
 
