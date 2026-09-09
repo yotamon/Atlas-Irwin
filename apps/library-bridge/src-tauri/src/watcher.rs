@@ -3,7 +3,7 @@ use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use std::{
     path::{Path, PathBuf},
-    sync::{mpsc, Arc, Mutex},
+    sync::{Arc, Mutex, mpsc},
     thread,
     time::Duration,
 };
@@ -37,15 +37,35 @@ impl LibraryWatcher {
         let watcher = Arc::new(Mutex::new(watcher));
 
         ensure_watches(&watcher, &sources);
-        spawn_event_reconciler(Arc::clone(&db), Arc::clone(&watcher), Arc::clone(&sources), event_rx);
+        spawn_event_reconciler(
+            Arc::clone(&db),
+            Arc::clone(&watcher),
+            Arc::clone(&sources),
+            event_rx,
+        );
         spawn_periodic_reconciler(Arc::clone(&db), Arc::clone(&watcher), Arc::clone(&sources));
 
-        Ok(Self { watcher, sources, db })
+        Ok(Self {
+            watcher,
+            sources,
+            db,
+        })
     }
 
-    pub fn register_source(&self, source_id: &str, source_kind: &str, root: &Path) -> anyhow::Result<()> {
-        let mut sources = self.sources.lock().map_err(|_| anyhow::anyhow!("watch source registry is unavailable"))?;
-        if let Some(existing) = sources.iter_mut().find(|source| source.source_id == source_id) {
+    pub fn register_source(
+        &self,
+        source_id: &str,
+        source_kind: &str,
+        root: &Path,
+    ) -> anyhow::Result<()> {
+        let mut sources = self
+            .sources
+            .lock()
+            .map_err(|_| anyhow::anyhow!("watch source registry is unavailable"))?;
+        if let Some(existing) = sources
+            .iter_mut()
+            .find(|source| source.source_id == source_id)
+        {
             existing.source_kind = source_kind.to_string();
             existing.root_path = root.to_path_buf();
         } else {
@@ -57,7 +77,10 @@ impl LibraryWatcher {
         }
         persist_sources(&self.db, &sources)?;
         if root.is_dir() {
-            let mut watcher = self.watcher.lock().map_err(|_| anyhow::anyhow!("filesystem watcher is unavailable"))?;
+            let mut watcher = self
+                .watcher
+                .lock()
+                .map_err(|_| anyhow::anyhow!("filesystem watcher is unavailable"))?;
             let _ = watcher.watch(root, RecursiveMode::Recursive);
         }
         Ok(())
@@ -79,7 +102,10 @@ fn persist_sources(db: &BridgeDb, sources: &[WatchedSource]) -> anyhow::Result<(
 }
 
 fn snapshot_sources(sources: &Arc<Mutex<Vec<WatchedSource>>>) -> Vec<WatchedSource> {
-    sources.lock().map(|value| value.clone()).unwrap_or_default()
+    sources
+        .lock()
+        .map(|value| value.clone())
+        .unwrap_or_default()
 }
 
 fn ensure_watches(
@@ -87,7 +113,9 @@ fn ensure_watches(
     sources: &Arc<Mutex<Vec<WatchedSource>>>,
 ) {
     let snapshot = snapshot_sources(sources);
-    let Ok(mut watcher) = watcher.lock() else { return };
+    let Ok(mut watcher) = watcher.lock() else {
+        return;
+    };
     for source in snapshot {
         if source.root_path.is_dir() {
             let _ = watcher.watch(&source.root_path, RecursiveMode::Recursive);
@@ -102,7 +130,12 @@ fn reconcile(db: &BridgeDb, sources: &Arc<Mutex<Vec<WatchedSource>>>) {
         if !source.root_path.is_dir() {
             continue;
         }
-        let _ = scanner::scan_source(db, &source.source_id, &source.source_kind, &source.root_path);
+        let _ = scanner::scan_source(
+            db,
+            &source.source_id,
+            &source.source_kind,
+            &source.root_path,
+        );
     }
 }
 
@@ -158,6 +191,11 @@ mod tests {
         };
         persist_sources(&db, std::slice::from_ref(&source)).unwrap();
         assert_eq!(load_sources(&db).unwrap(), vec![source]);
-        assert!(db.get_setting(WATCHED_SOURCES_SETTING).unwrap().unwrap().contains(root.to_string_lossy().as_ref()));
+        assert!(
+            db.get_setting(WATCHED_SOURCES_SETTING)
+                .unwrap()
+                .unwrap()
+                .contains(root.to_string_lossy().as_ref())
+        );
     }
 }
