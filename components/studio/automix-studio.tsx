@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FiCheck,
   FiDownload,
+  FiLock,
   FiMoreVertical,
   FiMusic,
   FiRefreshCw,
@@ -51,6 +52,7 @@ type PlanTrack = {
   energy?: number;
   key?: { label?: string; camelot?: string; confidence?: number };
   tempo?: { classification?: string; reliability?: number };
+  selection_reasons?: string[];
 };
 
 type PlanTransition = {
@@ -69,11 +71,29 @@ type PlanTransition = {
   };
 };
 
+type SelectionSummary = {
+  candidate_count?: number;
+  eligible_count?: number;
+  selected_count?: number;
+  omitted_count?: number;
+  duration_aware_curation?: boolean;
+  must_play_count?: number;
+};
+
+type OmittedTrack = {
+  track_id?: string;
+  title?: string;
+  reason?: string;
+};
+
 type AutoMixPlan = {
   estimated_duration_ms?: number;
   tracks?: PlanTrack[];
   transitions?: PlanTransition[];
   quality_contract?: Record<string, unknown>;
+  selection_summary?: SelectionSummary;
+  omitted_tracks?: OmittedTrack[];
+  effective_transition_style?: string;
 };
 
 const PURPOSES: Array<{ id: AutoMixPurpose; label: string; description: string }> = [
@@ -167,9 +187,16 @@ function percent(value?: number) {
   return typeof value === "number" && Number.isFinite(value) ? `${Math.round(value * 100)}%` : "—";
 }
 
+function reasonLabel(value?: string) {
+  if (!value) return "not selected for this route";
+  return value.replaceAll("_", " ");
+}
+
 function AutoMixPlanView({ plan }: { plan: AutoMixPlan }) {
   const tracks = Array.isArray(plan.tracks) ? plan.tracks : [];
   const transitions = Array.isArray(plan.transitions) ? plan.transitions : [];
+  const omitted = Array.isArray(plan.omitted_tracks) ? plan.omitted_tracks : [];
+  const selection = plan.selection_summary;
   if (!tracks.length) return null;
 
   return (
@@ -181,6 +208,23 @@ function AutoMixPlanView({ plan }: { plan: AutoMixPlan }) {
         </div>
         <span>{formatDuration(plan.estimated_duration_ms)}</span>
       </div>
+
+      {selection ? (
+        <div className={styles.preflight}>
+          <strong>
+            {selection.selected_count ?? tracks.length} of {selection.candidate_count ?? tracks.length} candidates selected
+          </strong>
+          <p>
+            Set Intelligence curated the candidate pool for the requested duration before the canonical AutoMix planner optimized the full route.
+            {plan.effective_transition_style ? ` Effective transition character: ${plan.effective_transition_style}.` : ""}
+          </p>
+          {omitted.length ? (
+            <p>
+              Omitted: {omitted.map((item) => `${item.title || "Track"} (${reasonLabel(item.reason)})`).join(" · ")}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       <ol className={styles.planTracks}>
         {tracks.map((track, index) => {
@@ -196,6 +240,7 @@ function AutoMixPlanView({ plan }: { plan: AutoMixPlan }) {
                     {track.key?.camelot ? ` · ${track.key.camelot}` : track.key?.label ? ` · ${track.key.label}` : ""}
                     {track.tempo?.classification ? ` · ${track.tempo.classification.replaceAll("_", " ")}` : ""}
                   </small>
+                  {track.selection_reasons?.length ? <small>{track.selection_reasons.join(" · ")}</small> : null}
                 </div>
                 <span className={styles.planEnergy}>{typeof track.energy === "number" ? `Energy ${Math.round(track.energy * 100)}` : ""}</span>
               </div>
@@ -225,12 +270,17 @@ function AutoMixPlanView({ plan }: { plan: AutoMixPlan }) {
 export function AutoMixStudio({ artistId, artistName, tracks }: AutoMixStudioProps) {
   const available = useMemo(() => tracks.filter((track) => Boolean(track.audio_url)), [tracks]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [mustPlayIds, setMustPlayIds] = useState<string[]>([]);
   const [name, setName] = useState(`${artistName} Booking Mix`);
   const [purpose, setPurpose] = useState<AutoMixPurpose>("booking");
   const [energyProfile, setEnergyProfile] = useState<AutoMixEnergyProfile>("dynamic");
   const [transitionStyle, setTransitionStyle] = useState<AutoMixTransitionStyle>("dj");
   const [outputFormat, setOutputFormat] = useState<AutoMixOutputFormat>("mp3");
   const [durationMinutes, setDurationMinutes] = useState(20);
+  const [allowOmissions, setAllowOmissions] = useState(true);
+  const [targetTrackCount, setTargetTrackCount] = useState("auto");
+  const [minBpm, setMinBpm] = useState("");
+  const [maxBpm, setMaxBpm] = useState("");
   const [jobs, setJobs] = useState<JobView[]>([]);
   const [loadingJobs, setLoadingJobs] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -283,6 +333,7 @@ export function AutoMixStudio({ artistId, artistName, tracks }: AutoMixStudioPro
   function toggleTrack(trackId: string) {
     setSelectedIds((current) => {
       if (current.includes(trackId)) {
+        setMustPlayIds((locks) => locks.filter((id) => id !== trackId));
         setError("");
         return current.filter((id) => id !== trackId);
       }
@@ -293,6 +344,13 @@ export function AutoMixStudio({ artistId, artistName, tracks }: AutoMixStudioPro
       setError("");
       return [...current, trackId];
     });
+  }
+
+  function toggleMustPlay(trackId: string) {
+    if (purpose === "journey") return;
+    setMustPlayIds((current) => current.includes(trackId)
+      ? current.filter((id) => id !== trackId)
+      : [...current, trackId]);
   }
 
   function moveTrack(sourceId: string, targetId: string) {
@@ -339,6 +397,13 @@ export function AutoMixStudio({ artistId, artistName, tracks }: AutoMixStudioPro
           transitionStyle,
           outputFormat,
           durationMs: durationMinutes * 60 * 1000,
+          setIntent: {
+            allowOmissions: purpose === "journey" ? false : allowOmissions,
+            mustPlayTrackIds: purpose === "journey" ? selectedIds : mustPlayIds,
+            targetTrackCount: targetTrackCount === "auto" ? null : Number(targetTrackCount),
+            minBpm: minBpm ? Number(minBpm) : null,
+            maxBpm: maxBpm ? Number(maxBpm) : null,
+          },
         }),
       });
       const body = await response.json().catch(() => null);
@@ -374,7 +439,7 @@ export function AutoMixStudio({ artistId, artistName, tracks }: AutoMixStudioPro
     <div className={styles.workspace}>
       <section className={styles.hero}>
         <div className={styles.heroCopy}>
-          <span className="section-label">Professional DJ engine / artist catalog only</span>
+          <span className="section-label">Professional DJ engine / artist catalog first</span>
           <h2>Build the set,<br />not a crossfade.</h2>
           <p>
             AutoMix reads phrasing, downbeats, local tempo, harmonic compatibility, vocal and bass activity,
@@ -412,6 +477,7 @@ export function AutoMixStudio({ artistId, artistName, tracks }: AutoMixStudioPro
                 aria-pressed={purpose === item.id}
                 onClick={() => {
                   setPurpose(item.id);
+                  setAllowOmissions(item.id !== "journey");
                   if (item.id === "booking") setName(`${artistName} Booking Mix`);
                   if (item.id === "journey") setName(`${artistName} Artist Journey`);
                 }}
@@ -429,6 +495,12 @@ export function AutoMixStudio({ artistId, artistName, tracks }: AutoMixStudioPro
             <label className="field"><span>Transition character</span><select value={transitionStyle} onChange={(event) => setTransitionStyle(event.target.value as AutoMixTransitionStyle)}><option value="clean">Clean</option><option value="dj">DJ</option><option value="creative">Creative</option></select></label>
             <label className="field"><span>Output</span><select value={outputFormat} onChange={(event) => setOutputFormat(event.target.value as AutoMixOutputFormat)}><option value="mp3">320 kbps MP3</option><option value="wav">24-bit WAV</option></select></label>
           </div>
+          <div className={styles.controlStrip}>
+            <label className="field"><span>Candidate curation</span><select disabled={purpose === "journey"} value={allowOmissions ? "curate" : "all"} onChange={(event) => setAllowOmissions(event.target.value === "curate")}><option value="curate">Let Ensemblis choose</option><option value="all">Keep every candidate</option></select></label>
+            <label className="field"><span>Target tracks</span><select disabled={!allowOmissions || purpose === "journey"} value={targetTrackCount} onChange={(event) => setTargetTrackCount(event.target.value)}><option value="auto">Automatic</option>{Array.from({ length: Math.max(0, selectedIds.length - 1) }, (_, index) => index + 2).map((count) => <option key={count} value={String(count)}>{count} tracks</option>)}</select></label>
+            <label className="field"><span>Minimum BPM</span><input type="number" min="60" max="200" step="0.1" placeholder="Any" value={minBpm} onChange={(event) => setMinBpm(event.target.value)} /></label>
+            <label className="field"><span>Maximum BPM</span><input type="number" min="60" max="200" step="0.1" placeholder="Any" value={maxBpm} onChange={(event) => setMaxBpm(event.target.value)} /></label>
+          </div>
         </div>
       </section>
 
@@ -436,7 +508,7 @@ export function AutoMixStudio({ artistId, artistName, tracks }: AutoMixStudioPro
         <div className={styles.stageIntro}>
           <span className="section-label">02 / Source material</span>
           <h2>Choose the records.</h2>
-          <p>{selectedIds.length} selected · choose 2–20 mastered tracks yourself</p>
+          <p>{selectedIds.length} selected · this is the candidate pool, not necessarily the final set</p>
         </div>
         <div className={styles.stageBody}>
           <div className={styles.catalogList}>
@@ -447,7 +519,7 @@ export function AutoMixStudio({ artistId, artistName, tracks }: AutoMixStudioPro
                   <span className={styles.catalogIndex}>{String(index + 1).padStart(2, "0")}</span>
                   <span className={styles.check}>{active ? <FiCheck /> : <FiMusic />}</span>
                   <span className={styles.catalogCopy}><strong>{track.title}</strong><small>{track.is_primary ? "Primary master" : "Canonical master"}</small></span>
-                  <span className={styles.catalogState}>{active ? "In set" : "Add"}</span>
+                  <span className={styles.catalogState}>{active ? "Candidate" : "Add"}</span>
                 </button>
               );
             })}
@@ -460,43 +532,47 @@ export function AutoMixStudio({ artistId, artistName, tracks }: AutoMixStudioPro
         <div className={styles.stageIntro}>
           <span className="section-label">03 / Seed order</span>
           <h2>{purpose === "journey" ? "Your order is the story." : "Give the planner a starting point."}</h2>
-          <p>{purpose === "journey" ? "Journey mode preserves this exact order." : "Drag the tracks into a useful seed order. The verified engine plan may reorder them only after it has analyzed the actual masters."}</p>
+          <p>{purpose === "journey" ? "Journey mode preserves this exact order and keeps every selected track." : "Drag the candidates into a useful seed order, then lock any tracks that absolutely must survive curation."}</p>
         </div>
         <div className={styles.stageBody}>
           <div className={styles.runningOrder}>
-            {selected.map((track, index) => (
-              <div
-                className={`${styles.orderRow} ${draggedId === track.id ? styles.dragging : ""}`}
-                key={track.id}
-                draggable
-                onDragStart={(event) => { setDraggedId(track.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", track.id); }}
-                onDragEnd={() => setDraggedId(null)}
-                onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }}
-                onDrop={(event) => { event.preventDefault(); const sourceId = event.dataTransfer.getData("text/plain") || draggedId; if (sourceId) moveTrack(sourceId, track.id); setDraggedId(null); }}
-              >
-                <span className={styles.grip} aria-hidden><FiMoreVertical /></span>
-                <span className={styles.orderIndex}>{String(index + 1).padStart(2, "0")}</span>
-                <div className={styles.orderCopy}><strong>{track.title}</strong><small>{purpose === "journey" ? "Locked narrative position" : "Seed position · planner can improve it after analysis"}</small></div>
-                <div className={styles.orderActions}>
-                  <button type="button" aria-label={`Move ${track.title} up`} disabled={index === 0} onClick={() => nudgeTrack(index, -1)}>↑</button>
-                  <button type="button" aria-label={`Move ${track.title} down`} disabled={index === selected.length - 1} onClick={() => nudgeTrack(index, 1)}>↓</button>
-                  <button type="button" aria-label={`Remove ${track.title} from set`} onClick={() => toggleTrack(track.id)}><FiX /></button>
+            {selected.map((track, index) => {
+              const mustPlay = purpose === "journey" || mustPlayIds.includes(track.id);
+              return (
+                <div
+                  className={`${styles.orderRow} ${draggedId === track.id ? styles.dragging : ""}`}
+                  key={track.id}
+                  draggable
+                  onDragStart={(event) => { setDraggedId(track.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", track.id); }}
+                  onDragEnd={() => setDraggedId(null)}
+                  onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }}
+                  onDrop={(event) => { event.preventDefault(); const sourceId = event.dataTransfer.getData("text/plain") || draggedId; if (sourceId) moveTrack(sourceId, track.id); setDraggedId(null); }}
+                >
+                  <span className={styles.grip} aria-hidden><FiMoreVertical /></span>
+                  <span className={styles.orderIndex}>{String(index + 1).padStart(2, "0")}</span>
+                  <div className={styles.orderCopy}><strong>{track.title}</strong><small>{purpose === "journey" ? "Locked narrative position" : mustPlay ? "Must play · cannot be omitted" : "Candidate · planner may curate or reorder"}</small></div>
+                  <div className={styles.orderActions}>
+                    {purpose !== "journey" ? <button type="button" aria-label={`${mustPlay ? "Unlock" : "Lock"} ${track.title} as must play`} aria-pressed={mustPlay} title={mustPlay ? "Must play" : "Mark as must play"} onClick={() => toggleMustPlay(track.id)}><FiLock /></button> : null}
+                    <button type="button" aria-label={`Move ${track.title} up`} disabled={index === 0} onClick={() => nudgeTrack(index, -1)}>↑</button>
+                    <button type="button" aria-label={`Move ${track.title} down`} disabled={index === selected.length - 1} onClick={() => nudgeTrack(index, 1)}>↓</button>
+                    <button type="button" aria-label={`Remove ${track.title} from set`} onClick={() => toggleTrack(track.id)}><FiX /></button>
+                  </div>
                 </div>
-              </div>
-            ))}
-            {!selected.length ? <p className={styles.empty}>Nothing is selected yet. Choose the records you want in this mix.</p> : null}
+              );
+            })}
+            {!selected.length ? <p className={styles.empty}>Nothing is selected yet. Choose the records you want Ensemblis to consider.</p> : null}
           </div>
 
           <div className={styles.preflight}>
             <strong>What happens after you start</strong>
-            <p>Ensemblis analyzes the selected masters, builds the real DJ plan, publishes that verified order and transition reasoning into the session, then renders and measures the final master. No plan is presented as “verified” before the engine has actually calculated it.</p>
+            <p>Ensemblis analyzes every candidate master, applies your Set Intent, curates the right material for the requested duration, builds the global DJ route, publishes the verified order and transition reasoning into the session, then renders and measures the final master.</p>
           </div>
 
           {error ? <div className={styles.error} role="alert">{error}</div> : null}
           <div className={styles.createBar}>
             <div>
               <span className={styles.readiness}>{selectedIds.length >= 2 ? "READY FOR ANALYSIS" : "NEEDS MUSIC"}</span>
-              <strong>{selectedIds.length >= 2 ? `${selectedIds.length} tracks selected by you` : "Choose at least two tracks"}</strong>
+              <strong>{selectedIds.length >= 2 ? `${selectedIds.length} candidates · ${purpose === "journey" ? selectedIds.length : mustPlayIds.length} must play` : "Choose at least two tracks"}</strong>
               <small>Pitch preserved · fixed-grid stretch capped by the engine&apos;s quality contract · final loudness measured · -1.0 dBTP safety ceiling enforced</small>
             </div>
             <button className="button primary" type="button" disabled={creating || selectedIds.length < 2} onClick={createMix}><FiZap /> {creating ? "Starting engine…" : "Analyze, plan & render"}</button>
@@ -508,7 +584,7 @@ export function AutoMixStudio({ artistId, artistName, tracks }: AutoMixStudioPro
         <div className={styles.stageIntro}>
           <span className="section-label">04 / Sessions</span>
           <h2>Mix room.</h2>
-          <p>Each session keeps source lineage, the verified DJ plan, render state and measured final audio together.</p>
+          <p>Each session keeps source lineage, candidate decisions, the verified DJ plan, render state and measured final audio together.</p>
           <button className="button" type="button" disabled={loadingJobs} onClick={() => void loadJobs()}><FiRefreshCw /> Refresh sessions</button>
         </div>
 
@@ -524,7 +600,7 @@ export function AutoMixStudio({ artistId, artistName, tracks }: AutoMixStudioPro
                 <article className={`${styles.job} ${ACTIVE.has(job.status) ? styles.activeJob : ""}`} key={job.id}>
                   <div className={styles.jobTop}>
                     <span className={styles.jobIndex}>{String(index + 1).padStart(2, "0")}</span>
-                    <div className={styles.jobIdentity}><small>{job.purpose.replaceAll("_", " ")} · {job.track_ids.length} tracks</small><strong>{job.name}</strong></div>
+                    <div className={styles.jobIdentity}><small>{job.purpose.replaceAll("_", " ")} · {job.track_ids.length} candidates</small><strong>{job.name}</strong></div>
                     <span className={`${styles.status} ${styles[`status_${job.status}`] ?? ""}`}>{statusLabel(job.status)}</span>
                   </div>
 
