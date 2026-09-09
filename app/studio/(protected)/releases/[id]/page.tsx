@@ -37,7 +37,7 @@ export default async function ReleaseDetail({
   const artist = await resolveActiveArtistContext(supabase, user, requestedArtistId);
   const scopedHref = (path: string) => ensemblisArtistHref(path, artist.artistId);
 
-  let snapshot;
+  let snapshot: Awaited<ReturnType<typeof loadReleaseWorkspaceSnapshot>>;
   try {
     snapshot = await loadReleaseWorkspaceSnapshot({
       db: supabase,
