@@ -81,6 +81,7 @@ jobs:
           services/media-worker/app/social_finishing.py
           services/media-worker/app/automix_model.py
           services/media-worker/app/automix_intelligence.py
+          services/media-worker/app/automix_transition_regions.py
           services/media-worker/app/automix_planner.py
           services/media-worker/app/automix_manifest.py
           services/media-worker/app/automix_evaluation.py
