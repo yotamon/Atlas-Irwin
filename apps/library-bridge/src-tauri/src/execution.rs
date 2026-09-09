@@ -8,7 +8,8 @@ pub fn resolve_verified_media(
     source_track_id: &str,
     expected_fingerprint: &str,
 ) -> anyhow::Result<PathBuf> {
-    let binding = db.resolve_binding(source_id, source_track_id)?
+    let binding = db
+        .resolve_binding(source_id, source_track_id)?
         .context("source track is not available on this device")?;
     if binding.recording_fingerprint != expected_fingerprint {
         anyhow::bail!("local binding does not match the frozen recording identity");
@@ -41,11 +42,23 @@ mod tests {
         scan_source(&db, "local", "local_library", &library).unwrap();
         let outbox = db.next_outbox().unwrap().unwrap();
         let track = &outbox.envelope.delta.changed_tracks[0];
-        let verified = resolve_verified_media(&db, "local", &track.source_track_id, &track.recording_fingerprint).unwrap();
+        let verified = resolve_verified_media(
+            &db,
+            "local",
+            &track.source_track_id,
+            &track.recording_fingerprint,
+        )
+        .unwrap();
         assert_eq!(verified, path);
 
         fs::write(&path, b"changed-after-scan").unwrap();
-        let error = resolve_verified_media(&db, "local", &track.source_track_id, &track.recording_fingerprint).unwrap_err();
+        let error = resolve_verified_media(
+            &db,
+            "local",
+            &track.source_track_id,
+            &track.recording_fingerprint,
+        )
+        .unwrap_err();
         assert!(error.to_string().contains("changed after"));
     }
 }
