@@ -20,4 +20,6 @@ A pull request being merged is not sufficient proof that a change is live. A pro
 5. Confirm the deployment Git SHA matches the intended `main` commit or a descendant that contains it.
 6. For UI changes, verify at least one affected route against the production deployment after promotion.
 
+If Vercel rejects deployments because the Hobby API deployment quota has been exhausted, wait until deployment capacity is available again and then retrigger from `main`; do not treat a merged commit as live until the verification checklist above passes.
+
 This document exists so release completion is never inferred from GitHub merge state alone.
