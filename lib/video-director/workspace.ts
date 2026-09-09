@@ -8,6 +8,7 @@ import { openAIDirectorReadiness } from "@/lib/video-director/openai-director";
 import { mediaWorkerReadiness } from "@/lib/video-director/worker";
 import { higgsfieldReadiness } from "@/lib/video-providers/higgsfield/client";
 import type { VideoWorkspaceData } from "@/components/studio/video-director/workspace-types";
+import type { ArtistScopedMusicDatabase } from "@/types/artist-scoped-music-database";
 import type { Database, Json, MediaAsset } from "@/types/database";
 import type { LyricsDatabase } from "@/types/lyrics-database";
 import type { StemDatabase } from "@/types/stem-database";
@@ -52,6 +53,7 @@ export async function loadVideoWorkspaceSnapshot(input: {
   projectId: string;
 }): Promise<VideoWorkspaceData> {
   const videoDb = input.db as unknown as SupabaseClient<VideoDatabase>;
+  const musicDb = input.db as unknown as SupabaseClient<ArtistScopedMusicDatabase>;
   const lyricsDb = input.db as unknown as SupabaseClient<LyricsDatabase>;
   const stemDb = input.db as unknown as SupabaseClient<StemDatabase>;
 
@@ -88,7 +90,7 @@ export async function loadVideoWorkspaceSnapshot(input: {
     videoDb.from("music_video_approvals").select("*").eq("project_id", project.id).eq("owner_id", input.ownerId).order("created_at", { ascending: false }),
     videoDb.from("music_video_renders").select("*").eq("project_id", project.id).eq("owner_id", input.ownerId).order("created_at", { ascending: false }),
     videoDb.from("music_video_worker_jobs").select("*").eq("project_id", project.id).eq("owner_id", input.ownerId).order("created_at", { ascending: false }).limit(50),
-    (input.db as unknown as SupabaseClient<Database>).from("media_links").select("id,media_asset_id,role,release_id,track_id,artist_id")
+    musicDb.from("media_links").select("id,media_asset_id,role,release_id,track_id,artist_id")
       .eq("owner_id", input.ownerId).eq("artist_id", input.artistId)
       .or(projectMediaLinkScopeFilter(project.release_id, project.track_id)),
     input.db.from("media_assets").select("*")
