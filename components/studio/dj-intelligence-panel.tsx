@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FiRefreshCw, FiSave, FiSliders, FiThumbsDown, FiThumbsUp } from "react-icons/fi";
 import styles from "./dj-intelligence-panel.module.css";
 
@@ -16,6 +16,13 @@ type JobSummary = {
   name: string;
   status: string;
   result_payload: unknown;
+};
+
+type IntelligenceSnapshot = {
+  preferences: Preferences;
+  learnedConfidence: number;
+  evidenceCount: number;
+  latestJob: JobSummary | null;
 };
 
 const DEFAULTS: Preferences = {
@@ -56,6 +63,28 @@ function planFromJob(job: JobSummary) {
   return Object.keys(plan).length ? plan : null;
 }
 
+async function fetchIntelligenceSnapshot(artistId: string, signal?: AbortSignal): Promise<IntelligenceSnapshot> {
+  const [profileResponse, jobsResponse] = await Promise.all([
+    fetch(`/api/studio/automix/preferences?artist=${encodeURIComponent(artistId)}`, { cache: "no-store", signal }),
+    fetch(`/api/studio/automix?artist=${encodeURIComponent(artistId)}`, { cache: "no-store", signal }),
+  ]);
+  const profileBody = await profileResponse.json().catch(() => null);
+  const jobsBody = await jobsResponse.json().catch(() => null);
+  if (!profileResponse.ok) throw new Error(String(record(profileBody).error || "Could not load DJ preferences."));
+  if (!jobsResponse.ok) throw new Error(String(record(jobsBody).error || "Could not load AutoMix sessions."));
+  const jobs = Array.isArray(record(jobsBody).jobs) ? record(jobsBody).jobs as JobSummary[] : [];
+  return {
+    preferences: asPreferences(record(profileBody).preferences),
+    learnedConfidence: Number(record(profileBody).learnedConfidence || 0),
+    evidenceCount: Number(record(profileBody).evidenceCount || 0),
+    latestJob: jobs.find((job) => job.status === "completed" && planFromJob(job)) ?? null,
+  };
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
 export function DjIntelligencePanel({ artistId }: { artistId: string }) {
   const [preferences, setPreferences] = useState<Preferences>(DEFAULTS);
   const [learnedConfidence, setLearnedConfidence] = useState(0);
@@ -66,38 +95,29 @@ export function DjIntelligencePanel({ artistId }: { artistId: string }) {
   const [saving, setSaving] = useState(false);
   const [feedbackSaving, setFeedbackSaving] = useState(false);
   const [status, setStatus] = useState("");
+  const currentArtistId = useRef(artistId);
+  currentArtistId.current = artistId;
   const loading = loadedArtistId !== artistId || refreshing;
-
-  const load = useCallback(async (signal?: AbortSignal) => {
-    try {
-      const [profileResponse, jobsResponse] = await Promise.all([
-        fetch(`/api/studio/automix/preferences?artist=${encodeURIComponent(artistId)}`, { cache: "no-store", signal }),
-        fetch(`/api/studio/automix?artist=${encodeURIComponent(artistId)}`, { cache: "no-store", signal }),
-      ]);
-      const profileBody = await profileResponse.json().catch(() => null);
-      const jobsBody = await jobsResponse.json().catch(() => null);
-      if (!profileResponse.ok) throw new Error(String(record(profileBody).error || "Could not load DJ preferences."));
-      if (!jobsResponse.ok) throw new Error(String(record(jobsBody).error || "Could not load AutoMix sessions."));
-      if (signal?.aborted) return;
-      setPreferences(asPreferences(record(profileBody).preferences));
-      setLearnedConfidence(Number(record(profileBody).learnedConfidence || 0));
-      setEvidenceCount(Number(record(profileBody).evidenceCount || 0));
-      const jobs = Array.isArray(record(jobsBody).jobs) ? record(jobsBody).jobs as JobSummary[] : [];
-      setLatestJob(jobs.find((job) => job.status === "completed" && planFromJob(job)) ?? null);
-      setStatus("");
-    } catch (error) {
-      if (signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) return;
-      setStatus(error instanceof Error ? error.message : "Could not load Personal DJ Intelligence.");
-    } finally {
-      if (!signal?.aborted) setLoadedArtistId(artistId);
-    }
-  }, [artistId]);
 
   useEffect(() => {
     const controller = new AbortController();
-    void load(controller.signal);
+    void fetchIntelligenceSnapshot(artistId, controller.signal)
+      .then((snapshot) => {
+        if (controller.signal.aborted) return;
+        setPreferences(snapshot.preferences);
+        setLearnedConfidence(snapshot.learnedConfidence);
+        setEvidenceCount(snapshot.evidenceCount);
+        setLatestJob(snapshot.latestJob);
+        setStatus("");
+        setLoadedArtistId(artistId);
+      })
+      .catch((error) => {
+        if (controller.signal.aborted || isAbortError(error)) return;
+        setStatus(error instanceof Error ? error.message : "Could not load Personal DJ Intelligence.");
+        setLoadedArtistId(artistId);
+      });
     return () => controller.abort();
-  }, [load]);
+  }, [artistId]);
 
   function updatePreference(key: keyof Omit<Preferences, "enabled">, percent: number) {
     setPreferences((current) => ({ ...current, [key]: percent / 100 }));
@@ -105,12 +125,22 @@ export function DjIntelligencePanel({ artistId }: { artistId: string }) {
 
   async function refresh() {
     if (refreshing) return;
+    const requestedArtistId = artistId;
     setRefreshing(true);
     setStatus("");
     try {
-      await load();
+      const snapshot = await fetchIntelligenceSnapshot(requestedArtistId);
+      if (currentArtistId.current !== requestedArtistId) return;
+      setPreferences(snapshot.preferences);
+      setLearnedConfidence(snapshot.learnedConfidence);
+      setEvidenceCount(snapshot.evidenceCount);
+      setLatestJob(snapshot.latestJob);
+      setLoadedArtistId(requestedArtistId);
+    } catch (error) {
+      if (currentArtistId.current !== requestedArtistId) return;
+      setStatus(error instanceof Error ? error.message : "Could not load Personal DJ Intelligence.");
     } finally {
-      setRefreshing(false);
+      if (currentArtistId.current === requestedArtistId) setRefreshing(false);
     }
   }
 
