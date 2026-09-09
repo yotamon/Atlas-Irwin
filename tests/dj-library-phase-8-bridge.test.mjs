@@ -85,6 +85,20 @@ test("Studio exposes explicit pairing and revocation without exposing credential
   assert.ok(page.includes("<LibraryBridgePanel"));
 });
 
+test("Studio track discovery is path-free, bounded and fails closed on incomplete musical evidence", async () => {
+  const route = await source("app/api/studio/dj-library/tracks/route.ts");
+
+  assert.ok(route.includes("MAX_PAGE_SIZE = 200"));
+  assert.ok(route.includes("planningReady"));
+  assert.ok(route.includes('"duration_missing"'));
+  assert.ok(route.includes('"bpm_missing"'));
+  assert.ok(route.includes('"key_missing"'));
+  assert.ok(route.includes("recordingFingerprint"));
+  assert.equal(route.includes("root_path"), false);
+  assert.equal(route.includes("credential_hash"), false);
+  assert.equal(route.includes("filePath"), false);
+});
+
 test("cloud can queue exact content-identity media verification without learning a path", async () => {
   const route = await source("app/api/studio/dj-library/device-jobs/route.ts");
 
@@ -93,4 +107,15 @@ test("cloud can queue exact content-identity media verification without learning
   assert.ok(route.includes("assertPathFree(payload"));
   assert.ok(route.includes("idempotencyKey"));
   assert.equal(route.includes("filePath"), false);
+});
+
+test("local renderer sidecar reuses canonical MixPlan validation and DSP instead of forking the engine", async () => {
+  const renderer = await source("apps/library-bridge/renderer/bridge_renderer.py");
+
+  assert.ok(renderer.includes("from app.automix_manifest import mixplan_hash, validate_mixplan"));
+  assert.ok(renderer.includes("from app.automix_mixplan_renderer import render_mixplan"));
+  assert.ok(renderer.includes("validate_mixplan(mixplan)"));
+  assert.ok(renderer.includes("mixplan_hash(mixplan)"));
+  assert.ok(renderer.includes("MAX_REQUEST_BYTES = 16 * 1024 * 1024"));
+  assert.equal(renderer.includes("download("), false, "local renderer must not upload or fetch local audio through cloud helpers");
 });
