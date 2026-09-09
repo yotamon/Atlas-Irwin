@@ -290,6 +290,7 @@ export async function POST(request: Request) {
       ? result.mime_type
       : job.output_format === "wav" ? "audio/wav" : "audio/mpeg";
     const render = record(result.render);
+    const renderManifest = record(result.render_manifest);
 
     const latestBeforeCatalog = await db.from("automix_jobs")
       .select("status")
@@ -337,8 +338,13 @@ export async function POST(request: Request) {
           engine: result.engine ?? null,
           quality_contract: record(result.plan).quality_contract ?? null,
           plan_lineage: record(record(result.plan).plan_lineage),
-          approved_mixplan_hash: typeof record(result.render_manifest).plan_hash === "string"
-            ? record(result.render_manifest).plan_hash
+          render_manifest: renderManifest,
+          evaluation: result.evaluation ?? null,
+          qa_diagnostics: result.qa_diagnostics ?? null,
+          execution_metrics: result.execution_metrics ?? null,
+          render_measurements: render,
+          approved_mixplan_hash: typeof renderManifest.plan_hash === "string"
+            ? renderManifest.plan_hash
             : null,
         }),
       }).select("*").single();
