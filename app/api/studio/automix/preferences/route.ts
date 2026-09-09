@@ -91,3 +91,49 @@ export async function PATCH(request: Request) {
     plannerProfile: plannerDjProfile(saved.data),
   });
 }
+
+export async function DELETE(request: Request) {
+  const body = record(await request.json().catch(() => null));
+  const artistId = typeof body.artistId === "string" ? body.artistId.trim() : "";
+  if (!UUID_RE.test(artistId)) {
+    return NextResponse.json({ error: "A valid artist is required." }, { status: 400 });
+  }
+
+  const { supabase, user } = await requireStudioAdmin();
+  const artist = await resolveArtistContext(supabase, user, artistId);
+  const db = asDjIntelligenceClient(supabase);
+
+  const history = await db.from("dj_library_history_evidence")
+    .delete()
+    .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId);
+  if (history.error) {
+    return NextResponse.json({ error: "Could not reset imported DJ-library learning." }, { status: 500 });
+  }
+
+  const decisions = await db.from("dj_preference_evidence")
+    .delete()
+    .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId);
+  if (decisions.error) {
+    return NextResponse.json({ error: "Could not reset Set Builder learning evidence." }, { status: 500 });
+  }
+
+  const profile = await db.from("dj_profiles")
+    .delete()
+    .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId);
+  if (profile.error) {
+    return NextResponse.json({ error: "Could not reset Personal DJ Intelligence." }, { status: 500 });
+  }
+
+  const defaults = normalizeDjPreferences({});
+  return NextResponse.json({
+    reset: true,
+    preferences: defaults,
+    learnedPreferences: defaults,
+    learnedConfidence: 0,
+    evidenceCount: 0,
+    plannerProfile: plannerDjProfile(null),
+  });
+}
