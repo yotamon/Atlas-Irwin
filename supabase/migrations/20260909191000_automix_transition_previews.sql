@@ -31,6 +31,7 @@ create table if not exists public.automix_transition_previews (
   expires_at timestamptz not null default (now() + interval '24 hours'),
   started_at timestamptz,
   completed_at timestamptz,
+  purged_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -39,7 +40,7 @@ create index if not exists automix_transition_previews_owner_idx
   on public.automix_transition_previews(owner_id, artist_id, created_at desc);
 create index if not exists automix_transition_previews_expiry_idx
   on public.automix_transition_previews(expires_at)
-  where status = 'completed';
+  where status = 'completed' and purged_at is null;
 create unique index if not exists automix_transition_previews_active_transition_idx
   on public.automix_transition_previews(owner_id, automix_job_id, transition_index)
   where status in ('planned','queued','running');
@@ -138,4 +139,4 @@ create policy "automix_transition_previews_update_own"
 grant select, insert, update on public.automix_transition_previews to authenticated;
 
 comment on table public.automix_transition_previews is
-  'Short-lived private previews rendered from one transition of a verified MixPlan. Source masters remain canonical and unchanged.';
+  'Short-lived private previews rendered from one transition of a verified MixPlan. Source masters remain canonical and unchanged; purged_at records private storage cleanup without erasing lineage.';
