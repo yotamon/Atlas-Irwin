@@ -2,13 +2,8 @@
    Framing is reserved for meaningful objects and feature moments. Structural
    sections use rhythm and rules instead of stacks of near-identical cards. */
 
-/* Page rhythm has one source. Legacy v2 pages already participate in the same
-   grid flow; reset compatibility margins before applying the canonical gap. */
-.studio-root .studio-page {
-  display: grid;
-  gap: var(--en-section-gap);
-}
-
+/* Compatibility styles still carry local margins. The canonical page grid owns
+   spacing, so direct siblings are normalized before intentional hardening. */
 .studio-root :where(.studio-page, .studio-v2-page) > * + * {
   margin-top: 0;
 }
