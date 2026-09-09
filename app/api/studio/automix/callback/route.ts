@@ -97,8 +97,9 @@ export async function POST(request: Request) {
   const requestPayload = record(job.request_payload);
   if (!authorized(request, requestPayload)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // The callback that won the terminal state transition owns Sandbox cleanup. A late duplicate
+  // must never stop a shared named Sandbox after cleanup has already dispatched the next job.
   if (["completed", "failed", "cancelled"].includes(job.status)) {
-    scheduleCleanup();
     return NextResponse.json({ ok: true, duplicate: true });
   }
 
@@ -116,11 +117,7 @@ export async function POST(request: Request) {
       .select("id")
       .maybeSingle();
     if (update.error) return NextResponse.json({ error: update.error.message }, { status: 500 });
-    if (!update.data) {
-      scheduleCleanup();
-      return NextResponse.json({ ok: true, duplicate: true });
-    }
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, duplicate: !update.data });
   }
 
   if (status === "failed") {
@@ -137,13 +134,18 @@ export async function POST(request: Request) {
       .select("id")
       .maybeSingle();
     if (update.error) return NextResponse.json({ error: update.error.message }, { status: 500 });
-    scheduleCleanup();
+    if (update.data) scheduleCleanup();
     return NextResponse.json({ ok: true, duplicate: !update.data });
   }
 
   try {
+    const path = typeof requestPayload.upload_path === "string" ? requestPayload.upload_path : job.output_path;
+    const bucket = typeof requestPayload.upload_bucket === "string" ? requestPayload.upload_bucket : job.output_bucket;
+    const publicUrl = typeof requestPayload.public_url === "string" ? requestPayload.public_url : "";
+    if (!path || !bucket || !publicUrl) throw new Error("AutoMix callback is missing output lineage.");
+
     if (!(await canonicalMastersStillMatch(job))) {
-      const message = "A canonical track master changed while this mix was rendering. The late mix was kept out of the active catalog.";
+      const message = "A canonical track master changed while this mix was rendering. The stale output was discarded before it could enter the catalog.";
       const staleUpdate = await db.from("automix_jobs").update({
         status: "cancelled",
         request_payload: json(terminalRequestPayload(requestPayload)),
@@ -156,14 +158,13 @@ export async function POST(request: Request) {
         .select("id")
         .maybeSingle();
       if (staleUpdate.error) throw new Error(staleUpdate.error.message);
-      scheduleCleanup();
+      if (staleUpdate.data) {
+        await service.storage.from(bucket).remove([path]).catch(() => undefined);
+        scheduleCleanup();
+      }
       return NextResponse.json({ ok: true, stale: Boolean(staleUpdate.data), duplicate: !staleUpdate.data });
     }
 
-    const path = typeof requestPayload.upload_path === "string" ? requestPayload.upload_path : job.output_path;
-    const bucket = typeof requestPayload.upload_bucket === "string" ? requestPayload.upload_bucket : job.output_bucket;
-    const publicUrl = typeof requestPayload.public_url === "string" ? requestPayload.public_url : "";
-    if (!path || !bucket || !publicUrl) throw new Error("AutoMix callback is missing output lineage.");
     const mimeType = typeof result.mime_type === "string"
       ? result.mime_type
       : job.output_format === "wav" ? "audio/wav" : "audio/mpeg";
@@ -176,7 +177,6 @@ export async function POST(request: Request) {
       .maybeSingle();
     if (latestBeforeCatalog.error) throw new Error(latestBeforeCatalog.error.message);
     if (!latestBeforeCatalog.data || !["queued", "running"].includes(latestBeforeCatalog.data.status)) {
-      scheduleCleanup();
       return NextResponse.json({ ok: true, duplicate: true });
     }
 
@@ -246,7 +246,6 @@ export async function POST(request: Request) {
         await service.from("media_assets").delete().eq("id", asset.id).eq("owner_id", job.owner_id);
         await service.storage.from(bucket).remove([path]);
       }
-      scheduleCleanup();
       return NextResponse.json({ ok: true, duplicate: true, cancelled: latest.data?.status === "cancelled" });
     }
 
