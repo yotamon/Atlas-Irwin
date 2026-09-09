@@ -1,8 +1,13 @@
-use crate::model::{CloudTrackDelta, ScanSummary, ScannedTrack, SourceDelta, SyncEnvelope, DEVICE_SYNC_VERSION};
+use crate::model::{
+    CloudTrackDelta, DEVICE_SYNC_VERSION, ScanSummary, ScannedTrack, SourceDelta, SyncEnvelope,
+};
 use anyhow::Context;
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Map, Value};
-use std::{collections::HashMap, path::{Path, PathBuf}};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
 #[derive(Debug, Clone)]
 pub struct BridgeDb {
@@ -123,29 +128,46 @@ impl BridgeDb {
     }
 
     pub fn get_setting(&self, key: &str) -> anyhow::Result<Option<String>> {
-        Ok(self.open()?.query_row(
-            "select value from settings where key=?1",
-            params![key],
-            |row| row.get(0),
-        ).optional()?)
+        Ok(self
+            .open()?
+            .query_row(
+                "select value from settings where key=?1",
+                params![key],
+                |row| row.get(0),
+            )
+            .optional()?)
     }
 
     pub fn source_count(&self) -> anyhow::Result<usize> {
-        let count: i64 = self.open()?.query_row("select count(*) from sources", [], |row| row.get(0))?;
+        let count: i64 = self
+            .open()?
+            .query_row("select count(*) from sources", [], |row| row.get(0))?;
         Ok(count.max(0) as usize)
     }
 
     pub fn pending_outbox_count(&self) -> anyhow::Result<usize> {
-        let count: i64 = self.open()?.query_row("select count(*) from outbox where status='pending'", [], |row| row.get(0))?;
+        let count: i64 = self.open()?.query_row(
+            "select count(*) from outbox where status='pending'",
+            [],
+            |row| row.get(0),
+        )?;
         Ok(count.max(0) as usize)
     }
 
     pub fn source_root(&self, source_id: &str) -> anyhow::Result<Option<(String, PathBuf)>> {
-        Ok(self.open()?.query_row(
-            "select source_kind,root_path from sources where source_id=?1",
-            params![source_id],
-            |row| Ok((row.get::<_, String>(0)?, PathBuf::from(row.get::<_, String>(1)?))),
-        ).optional()?)
+        Ok(self
+            .open()?
+            .query_row(
+                "select source_kind,root_path from sources where source_id=?1",
+                params![source_id],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        PathBuf::from(row.get::<_, String>(1)?),
+                    ))
+                },
+            )
+            .optional()?)
     }
 
     pub fn cached_fingerprint(
@@ -156,11 +178,14 @@ impl BridgeDb {
         modified_unix_ms: i64,
     ) -> anyhow::Result<Option<String>> {
         let path = path.to_string_lossy();
-        Ok(self.open()?.query_row(
-            "select recording_fingerprint from file_bindings where source_id=?1 and path=?2 and file_size=?3 and modified_unix_ms=?4",
-            params![source_id, path.as_ref(), size as i64, modified_unix_ms],
-            |row| row.get(0),
-        ).optional()?)
+        Ok(self
+            .open()?
+            .query_row(
+                "select recording_fingerprint from file_bindings where source_id=?1 and path=?2 and file_size=?3 and modified_unix_ms=?4",
+                params![source_id, path.as_ref(), size as i64, modified_unix_ms],
+                |row| row.get(0),
+            )
+            .optional()?)
     }
 
     pub fn persist_scan(
@@ -173,32 +198,47 @@ impl BridgeDb {
     ) -> anyhow::Result<ScanSummary> {
         let mut connection = self.open()?;
         let transaction = connection.transaction()?;
-        let synced_revision: Option<String> = transaction.query_row(
-            "select synced_revision from sources where source_id=?1",
-            params![source_id],
-            |row| row.get(0),
-        ).optional()?.flatten();
+        let synced_revision: Option<String> = transaction
+            .query_row(
+                "select synced_revision from sources where source_id=?1",
+                params![source_id],
+                |row| row.get(0),
+            )
+            .optional()?
+            .flatten();
 
         let mut previous = HashMap::<String, String>::new();
         {
             let mut statement = transaction.prepare(
                 "select source_track_id,payload_hash from sync_state where source_id=?1",
             )?;
-            let rows = statement.query_map(params![source_id], |row| Ok((row.get(0)?, row.get(1)?)))?;
+            let rows = statement.query_map(params![source_id], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })?;
             for row in rows {
                 let (track_id, payload_hash): (String, String) = row?;
                 previous.insert(track_id, payload_hash);
             }
         }
 
-        let current: HashMap<&str, &str> = tracks.iter()
-            .map(|track| (track.cloud.source_track_id.as_str(), track.payload_hash.as_str()))
+        let current: HashMap<&str, &str> = tracks
+            .iter()
+            .map(|track| {
+                (
+                    track.cloud.source_track_id.as_str(),
+                    track.payload_hash.as_str(),
+                )
+            })
             .collect();
-        let changed_tracks: Vec<CloudTrackDelta> = tracks.iter()
-            .filter(|track| previous.get(&track.cloud.source_track_id) != Some(&track.payload_hash))
+        let changed_tracks: Vec<CloudTrackDelta> = tracks
+            .iter()
+            .filter(|track| {
+                previous.get(&track.cloud.source_track_id) != Some(&track.payload_hash)
+            })
             .map(|track| track.cloud.clone())
             .collect();
-        let removed_source_track_ids: Vec<String> = previous.keys()
+        let removed_source_track_ids: Vec<String> = previous
+            .keys()
             .filter(|track_id| !current.contains_key(track_id.as_str()))
             .cloned()
             .collect();
@@ -206,9 +246,18 @@ impl BridgeDb {
         transaction.execute(
             "insert into sources(source_id,source_kind,root_path,scan_revision,synced_revision) values (?1,?2,?3,?4,?5)
              on conflict(source_id) do update set source_kind=excluded.source_kind,root_path=excluded.root_path,scan_revision=excluded.scan_revision,updated_at=current_timestamp",
-            params![source_id, source_kind, root.to_string_lossy().as_ref(), revision, synced_revision],
+            params![
+                source_id,
+                source_kind,
+                root.to_string_lossy().as_ref(),
+                revision,
+                synced_revision
+            ],
         )?;
-        transaction.execute("delete from file_bindings where source_id=?1", params![source_id])?;
+        transaction.execute(
+            "delete from file_bindings where source_id=?1",
+            params![source_id],
+        )?;
 
         for track in tracks {
             transaction.execute(
@@ -248,7 +297,10 @@ impl BridgeDb {
                 },
             };
             let state = tracks.iter().fold(Map::new(), |mut state, track| {
-                state.insert(track.cloud.source_track_id.clone(), Value::String(track.payload_hash.clone()));
+                state.insert(
+                    track.cloud.source_track_id.clone(),
+                    Value::String(track.payload_hash.clone()),
+                );
                 state
             });
             // A newer unsent scan supersedes an older one. Both are relative to the last
@@ -260,7 +312,12 @@ impl BridgeDb {
             transaction.execute(
                 "insert into outbox(source_id,target_revision,payload_json,state_json,status) values (?1,?2,?3,?4,'pending')
                  on conflict(source_id,target_revision) do update set payload_json=excluded.payload_json,state_json=excluded.state_json,status='pending',sent_at=null",
-                params![source_id, revision, serde_json::to_string(&envelope)?, Value::Object(state).to_string()],
+                params![
+                    source_id,
+                    revision,
+                    serde_json::to_string(&envelope)?,
+                    Value::Object(state).to_string()
+                ],
             )?;
         }
 
@@ -277,15 +334,22 @@ impl BridgeDb {
     }
 
     pub fn next_outbox(&self) -> anyhow::Result<Option<PendingOutbox>> {
-        let value: Option<(i64, String)> = self.open()?.query_row(
-            "select id,payload_json from outbox where status='pending' order by id asc limit 1",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        ).optional()?;
-        value.map(|(id, payload)| Ok(PendingOutbox {
-            id,
-            envelope: serde_json::from_str(&payload)?,
-        })).transpose()
+        let value: Option<(i64, String)> = self
+            .open()?
+            .query_row(
+                "select id,payload_json from outbox where status='pending' order by id asc limit 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        value
+            .map(|(id, payload)| {
+                Ok(PendingOutbox {
+                    id,
+                    envelope: serde_json::from_str(&payload)?,
+                })
+            })
+            .transpose()
     }
 
     pub fn acknowledge_outbox(&self, id: i64) -> anyhow::Result<()> {
@@ -297,8 +361,13 @@ impl BridgeDb {
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )?;
         let state: Map<String, Value> = serde_json::from_str::<Value>(&row.2)?
-            .as_object().cloned().context("invalid local sync state")?;
-        transaction.execute("delete from sync_state where source_id=?1", params![row.0])?;
+            .as_object()
+            .cloned()
+            .context("invalid local sync state")?;
+        transaction.execute(
+            "delete from sync_state where source_id=?1",
+            params![row.0],
+        )?;
         for (track_id, hash) in state {
             let hash = hash.as_str().context("invalid local payload hash")?;
             transaction.execute(
@@ -318,15 +387,33 @@ impl BridgeDb {
         Ok(())
     }
 
-    pub fn resolve_binding(&self, source_id: &str, source_track_id: &str) -> anyhow::Result<Option<LocalBinding>> {
-        Ok(self.open()?.query_row(
-            "select path,recording_fingerprint from file_bindings where source_id=?1 and source_track_id=?2",
-            params![source_id, source_track_id],
-            |row| Ok(LocalBinding { path: PathBuf::from(row.get::<_, String>(0)?), recording_fingerprint: row.get(1)? }),
-        ).optional()?)
+    pub fn resolve_binding(
+        &self,
+        source_id: &str,
+        source_track_id: &str,
+    ) -> anyhow::Result<Option<LocalBinding>> {
+        Ok(self
+            .open()?
+            .query_row(
+                "select path,recording_fingerprint from file_bindings where source_id=?1 and source_track_id=?2",
+                params![source_id, source_track_id],
+                |row| {
+                    Ok(LocalBinding {
+                        path: PathBuf::from(row.get::<_, String>(0)?),
+                        recording_fingerprint: row.get(1)?,
+                    })
+                },
+            )
+            .optional()?)
     }
 
-    pub fn remember_job(&self, id: &str, idempotency_key: &str, job_type: &str, payload: &Value) -> anyhow::Result<bool> {
+    pub fn remember_job(
+        &self,
+        id: &str,
+        idempotency_key: &str,
+        job_type: &str,
+        payload: &Value,
+    ) -> anyhow::Result<bool> {
         let changed = self.open()?.execute(
             "insert or ignore into device_jobs(cloud_job_id,idempotency_key,job_type,status,payload_json) values (?1,?2,?3,'received',?4)",
             params![id, idempotency_key, job_type, payload.to_string()],
@@ -334,7 +421,12 @@ impl BridgeDb {
         Ok(changed > 0)
     }
 
-    pub fn complete_job(&self, id: &str, status: &str, result: Option<&Value>) -> anyhow::Result<()> {
+    pub fn complete_job(
+        &self,
+        id: &str,
+        status: &str,
+        result: Option<&Value>,
+    ) -> anyhow::Result<()> {
         self.open()?.execute(
             "update device_jobs set status=?2,result_json=?3,updated_at=current_timestamp where cloud_job_id=?1",
             params![id, status, result.map(Value::to_string)],
