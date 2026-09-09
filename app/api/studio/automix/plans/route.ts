@@ -183,6 +183,11 @@ function planManifest(job: AutoMixJob) {
   return typeof manifest.plan_hash === "string" && manifest.plan_hash.length === 64 ? manifest : null;
 }
 
+function approvedMixplan(job: AutoMixJob) {
+  const manifest = record(record(job.request_payload).approved_mixplan);
+  return typeof manifest.plan_hash === "string" && manifest.plan_hash.length === 64 ? manifest : null;
+}
+
 function lineageFromJob(job: AutoMixJob) {
   const request = record(job.request_payload);
   const lineage = record(request.plan_lineage);
@@ -198,6 +203,22 @@ function stableHash(value: unknown) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
+async function catalogSourceUrls(
+  supabase: Awaited<ReturnType<typeof requireStudioAdmin>>["supabase"],
+  ownerId: string,
+  artistId: string,
+  trackIds: string[],
+) {
+  const music = asArtistScopedMusicClient(supabase);
+  const tracks = await music.from("tracks")
+    .select("id,audio_url")
+    .eq("owner_id", ownerId)
+    .eq("artist_id", artistId)
+    .in("id", trackIds);
+  if (tracks.error) throw new Error("Could not validate the selected catalog tracks.");
+  return new Map((tracks.data ?? []).map((track) => [track.id, track.audio_url]));
+}
+
 async function validateCatalogTracks(
   supabase: Awaited<ReturnType<typeof requireStudioAdmin>>["supabase"],
   ownerId: string,
@@ -208,17 +229,29 @@ async function validateCatalogTracks(
     throw new Error("Choose 2-20 unique tracks.");
   }
   if (trackIds.some((id) => !UUID_RE.test(id))) throw new Error("Every selected track must be valid.");
-  const music = asArtistScopedMusicClient(supabase);
-  const tracks = await music.from("tracks")
-    .select("id,audio_url")
-    .eq("owner_id", ownerId)
-    .eq("artist_id", artistId)
-    .in("id", trackIds);
-  if (tracks.error) throw new Error("Could not validate the selected catalog tracks.");
-  const byId = new Map((tracks.data ?? []).map((track) => [track.id, track]));
-  if (trackIds.some((id) => !byId.get(id)?.audio_url)) {
+  const byId = await catalogSourceUrls(supabase, ownerId, artistId, trackIds);
+  if (trackIds.some((id) => !byId.get(id))) {
     throw new Error("Every selected track must have a canonical master.");
   }
+}
+
+async function frozenManifestStillMatchesCatalog(
+  supabase: Awaited<ReturnType<typeof requireStudioAdmin>>["supabase"],
+  ownerId: string,
+  artistId: string,
+  trackIds: string[],
+  manifest: Record<string, unknown>,
+) {
+  const expected = records(record(manifest.provenance).source_fingerprints);
+  if (expected.length !== trackIds.length) return false;
+  const expectedById = new Map(expected.map((item) => [
+    String(item.track_id ?? ""),
+    typeof item.audio_url === "string" ? item.audio_url : "",
+  ]));
+  if (expectedById.size !== trackIds.length) return false;
+  const current = await catalogSourceUrls(supabase, ownerId, artistId, trackIds);
+  if (current.size !== trackIds.length) return false;
+  return trackIds.every((trackId) => Boolean(expectedById.get(trackId)) && expectedById.get(trackId) === current.get(trackId));
 }
 
 function settingsFromBody(body: Record<string, unknown>, artistName: string): JobSettings {
@@ -394,6 +427,61 @@ export async function POST(request: Request) {
     if (parentResult.error) throw new Error(parentResult.error.message);
     if (!parentResult.data) return NextResponse.json({ error: "Set plan not found." }, { status: 404 });
     const parent = parentResult.data as AutoMixJob;
+
+    if (action === "retry_render") {
+      const requestPayload = record(parent.request_payload);
+      const frozen = approvedMixplan(parent);
+      if (parent.status !== "failed" || requestPayload.execution_mode !== "approved_render" || !frozen) {
+        return NextResponse.json({ error: "Only a failed approved render can be retried without replanning." }, { status: 409 });
+      }
+      const settings = settingsFromParent(parent, {});
+      await validateCatalogTracks(supabase, user.id, artist.artistId, settings.trackIds);
+      if (!(await frozenManifestStillMatchesCatalog(supabase, user.id, artist.artistId, settings.trackIds, frozen))) {
+        return NextResponse.json({
+          error: "A canonical master changed after this MixPlan was approved. Build a new verified plan instead of retrying stale instructions.",
+        }, { status: 409 });
+      }
+      const previousLineage = record(requestPayload.plan_lineage);
+      const approvedPlanHash = String(frozen.plan_hash);
+      const approvedPlanJobId = typeof previousLineage.approved_plan_job_id === "string"
+        ? previousLineage.approved_plan_job_id
+        : typeof previousLineage.parent_job_id === "string"
+          ? previousLineage.parent_job_id
+          : null;
+      const lineage = {
+        version: "ensemblis.plan-lineage.v1",
+        root_job_id: typeof previousLineage.root_job_id === "string" ? previousLineage.root_job_id : parent.id,
+        parent_job_id: parent.id,
+        revision: typeof previousLineage.revision === "number" && Number.isInteger(previousLineage.revision)
+          ? previousLineage.revision
+          : 1,
+        operation: "retry_approved_render",
+        approved_plan_hash: approvedPlanHash,
+        approved_plan_job_id: approvedPlanJobId,
+        retry_of_job_id: parent.id,
+      };
+      const idempotencyKey = stableHash({
+        owner: user.id,
+        artist: artist.artistId,
+        action,
+        retryOf: parent.id,
+        planHash: approvedPlanHash,
+        outputFormat: settings.outputFormat,
+      });
+      const created = await insertJob({
+        db,
+        ownerId: user.id,
+        artistId: artist.artistId,
+        settings,
+        executionMode: "approved_render",
+        lineage,
+        approvedMixplan: frozen,
+        idempotencyKey,
+      });
+      after(async () => { await kickAutoMixQueue().catch(() => undefined); });
+      return NextResponse.json({ job: created.job, duplicate: created.duplicate, retried: true }, { status: 202 });
+    }
+
     const manifest = planManifest(parent);
     if (parent.status !== "completed" || !manifest) {
       return NextResponse.json({ error: "Only a completed verified plan can be revised, compared or rendered." }, { status: 409 });
@@ -480,6 +568,11 @@ export async function POST(request: Request) {
     if (action === "render") {
       const settings = settingsFromParent(parent, body);
       await validateCatalogTracks(supabase, user.id, artist.artistId, settings.trackIds);
+      if (!(await frozenManifestStillMatchesCatalog(supabase, user.id, artist.artistId, settings.trackIds, manifest))) {
+        return NextResponse.json({
+          error: "A canonical master changed after this MixPlan was verified. Build a new plan before rendering.",
+        }, { status: 409 });
+      }
       const approvedPlanHash = String(manifest.plan_hash);
       const lineage = {
         version: "ensemblis.plan-lineage.v1",
@@ -488,6 +581,7 @@ export async function POST(request: Request) {
         revision: parentLineage.revision,
         operation: "approve_render",
         approved_plan_hash: approvedPlanHash,
+        approved_plan_job_id: parent.id,
       };
       const idempotencyKey = stableHash({
         owner: user.id,
