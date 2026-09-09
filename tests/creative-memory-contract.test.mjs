@@ -136,9 +136,18 @@ test("Production surfaces strongest remembered references with reasons before pa
 test("Video project deep links and Quick Video orchestration cannot cross active artists", async () => {
   await requireSnippets("app/studio/(protected)/video/[id]/page.tsx", [
     "resolveActiveArtistContext",
+    "loadVideoWorkspaceSnapshot",
+    "artistId: artist.artistId",
+  ]);
+  await requireSnippets("lib/video-director/workspace.ts", [
+    "loadVideoProjectContext",
+    '.eq("artist_id", input.artistId)',
+    "resolveProjectAudioUrl(videoDb, project, input.ownerId, input.artistId)",
+  ]);
+  await requireSnippets("lib/video-director/context.ts", [
     "asArtistScopedMusicClient",
-    '.eq("artist_id", artist.artistId)',
-    "resolveProjectAudioUrl(db, project, user.id, artist.artistId)",
+    '.eq("artist_id", artistId)',
+    "expectedArtistId: artistId",
   ]);
   await requireSnippets("app/studio/quick-video-actions.ts", [
     "resolveActiveArtistContext",
