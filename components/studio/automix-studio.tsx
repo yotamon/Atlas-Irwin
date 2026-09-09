@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FiCheck,
   FiDownload,
+  FiHeadphones,
   FiLock,
   FiMoreVertical,
   FiMusic,
@@ -16,6 +17,7 @@ import type {
   AutoMixJob,
   AutoMixOutputFormat,
   AutoMixPurpose,
+  AutoMixTransitionPreview,
   AutoMixTransitionStyle,
 } from "@/types/automix-database";
 import { ProcessingState } from "./processing-state";
@@ -37,6 +39,7 @@ type OutputAsset = {
 };
 
 type JobView = AutoMixJob & { output?: OutputAsset | null };
+type TransitionPreviewView = AutoMixTransitionPreview & { preview_url?: string | null };
 
 type AutoMixStudioProps = {
   artistId: string;
@@ -106,6 +109,7 @@ const PURPOSES: Array<{ id: AutoMixPurpose; label: string; description: string }
 ];
 
 const ACTIVE = new Set<AutoMixJob["status"]>(["planned", "queued", "running"]);
+const PREVIEW_ACTIVE = new Set<AutoMixTransitionPreview["status"]>(["planned", "queued", "running"]);
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -129,6 +133,17 @@ function statusLabel(status: AutoMixJob["status"]) {
     completed: "Ready",
     failed: "Failed",
     cancelled: "Cancelled",
+  }[status];
+}
+
+function previewStatusLabel(status: AutoMixTransitionPreview["status"]) {
+  return {
+    planned: "Waiting for worker",
+    queued: "Queued",
+    running: "Rendering transition",
+    completed: "Preview ready",
+    failed: "Preview failed",
+    cancelled: "Preview cancelled",
   }[status];
 }
 
@@ -192,7 +207,25 @@ function reasonLabel(value?: string) {
   return value.replaceAll("_", " ");
 }
 
-function AutoMixPlanView({ plan }: { plan: AutoMixPlan }) {
+function previewKey(jobId: string, transitionIndex: number) {
+  return `${jobId}:${transitionIndex}`;
+}
+
+function AutoMixPlanView({
+  plan,
+  jobId,
+  canPreview,
+  previews,
+  previewBusy,
+  onPreviewTransition,
+}: {
+  plan: AutoMixPlan;
+  jobId: string;
+  canPreview: boolean;
+  previews: Record<string, TransitionPreviewView>;
+  previewBusy: Record<string, boolean>;
+  onPreviewTransition: (jobId: string, transitionIndex: number) => void;
+}) {
   const tracks = Array.isArray(plan.tracks) ? plan.tracks : [];
   const transitions = Array.isArray(plan.transitions) ? plan.transitions : [];
   const omitted = Array.isArray(plan.omitted_tracks) ? plan.omitted_tracks : [];
@@ -229,6 +262,11 @@ function AutoMixPlanView({ plan }: { plan: AutoMixPlan }) {
       <ol className={styles.planTracks}>
         {tracks.map((track, index) => {
           const transition = index < transitions.length ? transitions[index] : null;
+          const key = previewKey(jobId, index);
+          const preview = previews[key];
+          const previewIsActive = Boolean(preview && PREVIEW_ACTIVE.has(preview.status));
+          const requestIsBusy = Boolean(previewBusy[key]);
+          const previewReady = preview?.status === "completed" && Boolean(preview.preview_url);
           return (
             <li key={track.track_id ?? `${track.title}-${index}`}>
               <div className={styles.planTrack}>
@@ -257,6 +295,49 @@ function AutoMixPlanView({ plan }: { plan: AutoMixPlan }) {
                     <span>Vocal collision <b>{percent(transition.metrics?.vocal_collision)}</b></span>
                   </div>
                   {transition.reasons?.length ? <p>{transition.reasons.join(" · ")}</p> : null}
+
+                  <div className={styles.transitionPreview}>
+                    <div className={styles.transitionPreviewTop}>
+                      <div>
+                        <span className={styles.previewEyebrow}>Canonical transition preview</span>
+                        <small>
+                          {canPreview
+                            ? preview ? previewStatusLabel(preview.status) : "Render only this handoff using the verified MixPlan and the same AutoMix DSP."
+                            : "Preview becomes available after the completed mix verifies this exact plan."}
+                        </small>
+                      </div>
+                      {canPreview ? (
+                        <button
+                          className={styles.previewButton}
+                          type="button"
+                          disabled={requestIsBusy || previewIsActive}
+                          onClick={() => onPreviewTransition(jobId, index)}
+                        >
+                          {previewIsActive || requestIsBusy ? <FiRefreshCw aria-hidden /> : <FiHeadphones aria-hidden />}
+                          {requestIsBusy
+                            ? "Requesting…"
+                            : previewIsActive
+                              ? "Rendering…"
+                              : previewReady
+                                ? "Refresh link"
+                                : preview?.status === "failed"
+                                  ? "Retry preview"
+                                  : "Preview transition"}
+                        </button>
+                      ) : null}
+                    </div>
+
+                    {previewReady && preview.preview_url ? (
+                      <div className={styles.transitionPreviewPlayer}>
+                        <audio controls preload="metadata" src={preview.preview_url}>
+                          Your browser does not support audio playback.
+                        </audio>
+                        <small>Private temporary playback link. The preview is rendered from the same verified transition instructions as the full mix.</small>
+                      </div>
+                    ) : null}
+
+                    {preview?.error ? <p className={styles.previewError}>{preview.error}</p> : null}
+                  </div>
                 </div>
               ) : null}
             </li>
@@ -286,6 +367,8 @@ export function AutoMixStudio({ artistId, artistName, tracks }: AutoMixStudioPro
   const [creating, setCreating] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [transitionPreviews, setTransitionPreviews] = useState<Record<string, TransitionPreviewView>>({});
+  const [previewBusy, setPreviewBusy] = useState<Record<string, boolean>>({});
   const [error, setError] = useState("");
 
   const trackById = useMemo(() => new Map(available.map((track) => [track.id, track])), [available]);
@@ -315,6 +398,24 @@ export function AutoMixStudio({ artistId, artistName, tracks }: AutoMixStudioPro
     }
   }, [fetchJobs]);
 
+  const loadTransitionPreviews = useCallback(async (jobId: string, quiet = true) => {
+    const response = await fetch(
+      `/api/studio/automix/previews?artist=${encodeURIComponent(artistId)}&job=${encodeURIComponent(jobId)}`,
+      { cache: "no-store" },
+    );
+    const body = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(responseError(body, "Could not load transition previews."));
+    const bodyRecord = asRecord(body);
+    const rows = Array.isArray(bodyRecord.previews) ? bodyRecord.previews as TransitionPreviewView[] : [];
+    setTransitionPreviews((current) => {
+      const next = { ...current };
+      for (const preview of rows) next[previewKey(jobId, preview.transition_index)] = preview;
+      return next;
+    });
+    if (!quiet) setError("");
+    return rows;
+  }, [artistId]);
+
   useEffect(() => {
     let active = true;
     void fetchJobs()
@@ -329,6 +430,24 @@ export function AutoMixStudio({ artistId, artistName, tracks }: AutoMixStudioPro
     const timer = window.setInterval(() => void loadJobs(true), 3000);
     return () => window.clearInterval(timer);
   }, [jobs, loadJobs]);
+
+  const activePreviewJobIds = useMemo(() => [...new Set(
+    Object.values(transitionPreviews)
+      .filter((preview) => PREVIEW_ACTIVE.has(preview.status))
+      .map((preview) => preview.automix_job_id),
+  )].sort(), [transitionPreviews]);
+  const previewPollingKey = activePreviewJobIds.join("|");
+
+  useEffect(() => {
+    if (!previewPollingKey) return;
+    const poll = () => {
+      for (const jobId of activePreviewJobIds) {
+        void loadTransitionPreviews(jobId).catch(() => undefined);
+      }
+    };
+    const timer = window.setInterval(poll, 2500);
+    return () => window.clearInterval(timer);
+  }, [activePreviewJobIds, loadTransitionPreviews, previewPollingKey]);
 
   function toggleTrack(trackId: string) {
     setSelectedIds((current) => {
@@ -432,6 +551,34 @@ export function AutoMixStudio({ artistId, artistName, tracks }: AutoMixStudioPro
       setError(cancelError instanceof Error ? cancelError.message : "Could not cancel this session.");
     } finally {
       setCancellingId(null);
+    }
+  }
+
+  async function requestTransitionPreview(jobId: string, transitionIndex: number) {
+    const key = previewKey(jobId, transitionIndex);
+    if (previewBusy[key]) return;
+    setPreviewBusy((current) => ({ ...current, [key]: true }));
+    setError("");
+    try {
+      const response = await fetch("/api/studio/automix/previews", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ artistId, jobId, transitionIndex }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(responseError(body, "Could not create the transition preview."));
+      const preview = asRecord(body).preview;
+      if (preview && typeof preview === "object" && !Array.isArray(preview)) {
+        setTransitionPreviews((current) => ({
+          ...current,
+          [key]: preview as TransitionPreviewView,
+        }));
+      }
+      await loadTransitionPreviews(jobId).catch(() => undefined);
+    } catch (previewError) {
+      setError(previewError instanceof Error ? previewError.message : "Could not create the transition preview.");
+    } finally {
+      setPreviewBusy((current) => ({ ...current, [key]: false }));
     }
   }
 
@@ -618,7 +765,16 @@ export function AutoMixStudio({ artistId, artistName, tracks }: AutoMixStudioPro
                     </div>
                   ) : null}
 
-                  {plan ? <AutoMixPlanView plan={plan} /> : null}
+                  {plan ? (
+                    <AutoMixPlanView
+                      plan={plan}
+                      jobId={job.id}
+                      canPreview={job.status === "completed"}
+                      previews={transitionPreviews}
+                      previewBusy={previewBusy}
+                      onPreviewTransition={(previewJobId, transitionIndex) => void requestTransitionPreview(previewJobId, transitionIndex)}
+                    />
+                  ) : null}
 
                   {job.status === "completed" && job.output?.public_url ? (
                     <div className={styles.player}>
