@@ -96,6 +96,14 @@ function adjacentRatios(values: number[]) {
   return result;
 }
 
+function adjacentAbsoluteDeltas(values: number[]) {
+  const result: number[] = [];
+  for (let index = 0; index < values.length - 1; index += 1) {
+    result.push(Math.abs(values[index + 1] - values[index]));
+  }
+  return result;
+}
+
 function transitionAggressivenessForTechnique(value: unknown) {
   return {
     drop_cut: 0.16,
@@ -131,15 +139,19 @@ export function feedbackSignalFromPlan(value: unknown): DjPreferenceSignal {
     .filter(Number.isFinite);
   const meanHarmonic = mean(harmonics, 0.78);
   const meanBars = mean(bars, 8);
-  const meanTempoDelta = mean(adjacentRatios(playbackBpms), 0.04);
-  const meanEnergyDelta = mean(adjacentRatios(energies), 0.16);
+  const tempoDeltas = adjacentRatios(playbackBpms);
+  const energyDeltas = adjacentAbsoluteDeltas(energies);
 
   return {
     harmonicAdventure: clamp01((0.92 - meanHarmonic) / 0.5),
     transitionAggressiveness: clamp01((meanBars / 24) * 0.78 + creativeShare * 0.22),
-    exploration: candidateCount > 0 ? clamp01(omittedCount / candidateCount + 0.35) : 0.45,
-    tempoMovement: clamp01(meanTempoDelta / 0.12),
-    energyDynamics: clamp01(meanEnergyDelta / 0.42),
+    exploration: candidateCount > 0 ? clamp01(omittedCount / candidateCount + 0.35) : DEFAULT_DJ_PREFERENCES.exploration,
+    tempoMovement: tempoDeltas.length
+      ? clamp01(mean(tempoDeltas, 0) / 0.12)
+      : DEFAULT_DJ_PREFERENCES.tempoMovement,
+    energyDynamics: energyDeltas.length
+      ? clamp01(mean(energyDeltas, 0) / 0.42)
+      : DEFAULT_DJ_PREFERENCES.energyDynamics,
   };
 }
 
@@ -275,7 +287,7 @@ export async function recordDjPreferenceEvidence({
     verdict,
     signal: json(signal),
     weight: clampWeight(weight),
-  }, { onConflict: "owner_id,artist_id,automix_job_id,evidence_type" }).select("*").single();
+  }, { onConflict: "owner_id,artist_id,automix_job_id,evidence_type,evidence_key" }).select("*").single();
   if (evidence.error) throw new Error(evidence.error.message);
   const profile = await recalculateDjProfile(client, ownerId, artistId);
   return { evidence: evidence.data, profile };
