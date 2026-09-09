@@ -80,7 +80,7 @@ select ok(
     from pg_indexes
     where schemaname='public'
       and tablename='dj_profiles'
-      and indexname='dj_profiles_owner_artist_unique'
+      and indexname='dj_profiles_owner_id_artist_id_key'
   ),
   'one durable DJ profile is enforced per owner and artist'
 );
