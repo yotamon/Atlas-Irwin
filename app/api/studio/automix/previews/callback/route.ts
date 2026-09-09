@@ -5,6 +5,7 @@ import {
   MEDIA_WORKER_CALLBACK_HASH_KEY,
   scheduleMediaWorkerSandboxCleanup,
 } from "@/lib/media-worker/sandbox";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { AutoMixTransitionPreview } from "@/types/automix-database";
 import type { Json } from "@/types/database";
@@ -17,6 +18,12 @@ function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
+}
+
+function records(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+    : [];
 }
 
 function json(value: unknown): Json {
@@ -50,6 +57,34 @@ function terminalRequestPayload(value: unknown) {
 
 function scheduleCleanup() {
   after(scheduleMediaWorkerSandboxCleanup());
+}
+
+async function canonicalMastersStillMatch(
+  preview: AutoMixTransitionPreview,
+  requestPayload: Record<string, unknown>,
+) {
+  const expectedTracks = records(requestPayload.tracks);
+  if (expectedTracks.length !== 2) return false;
+
+  const expected = new Map<string, string>();
+  for (const item of expectedTracks) {
+    const trackId = typeof item.id === "string" ? item.id : "";
+    const audioUrl = typeof item.audio_url === "string" ? item.audio_url : "";
+    if (!trackId || !audioUrl || expected.has(trackId)) return false;
+    expected.set(trackId, audioUrl);
+  }
+  if (expected.size !== 2) return false;
+
+  const service = createServiceClient();
+  const musicDb = asArtistScopedMusicClient(service);
+  const current = await musicDb.from("tracks")
+    .select("id,audio_url")
+    .eq("owner_id", preview.owner_id)
+    .eq("artist_id", preview.artist_id)
+    .in("id", [...expected.keys()]);
+  if (current.error) throw new Error(current.error.message);
+  if ((current.data ?? []).length !== expected.size) return false;
+  return (current.data ?? []).every((track) => Boolean(track.audio_url) && expected.get(track.id) === track.audio_url);
 }
 
 export async function POST(request: Request) {
@@ -111,6 +146,30 @@ export async function POST(request: Request) {
   const requestBucket = typeof requestPayload.upload_bucket === "string" ? requestPayload.upload_bucket : preview.output_bucket;
   if (!requestPath || !requestBucket || result.uploaded !== true) {
     return NextResponse.json({ error: "Transition preview callback is missing private output lineage." }, { status: 409 });
+  }
+
+  try {
+    if (!(await canonicalMastersStillMatch(preview, requestPayload))) {
+      const message = "A canonical master changed while this transition preview was rendering. The stale preview was discarded.";
+      await service.storage.from(requestBucket).remove([requestPath]).catch(() => undefined);
+      const staleUpdate = await db.from("automix_transition_previews").update({
+        status: "cancelled",
+        request_payload: json(terminalRequestPayload(requestPayload)),
+        result_payload: json(result),
+        error: message,
+        completed_at: new Date().toISOString(),
+      }).eq("id", preview.id)
+        .in("status", ["queued", "running"])
+        .select("id")
+        .maybeSingle();
+      if (staleUpdate.error) throw new Error(staleUpdate.error.message);
+      scheduleCleanup();
+      return NextResponse.json({ ok: true, stale: Boolean(staleUpdate.data), duplicate: !staleUpdate.data });
+    }
+  } catch (error) {
+    return NextResponse.json({
+      error: error instanceof Error ? error.message : "Could not verify transition preview source lineage.",
+    }, { status: 500 });
   }
 
   const update = await db.from("automix_transition_previews").update({
