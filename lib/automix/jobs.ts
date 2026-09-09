@@ -1,6 +1,10 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  asDjIntelligenceClient,
+  plannerDjProfile,
+} from "@/lib/automix/personalization";
 import { dispatchMediaWorkerJob } from "@/lib/media-worker/dispatcher";
 import {
   createMediaWorkerCallbackCredential,
@@ -16,6 +20,7 @@ import type { StemDatabase, TrackStem } from "@/types/stem-database";
 
 const AUTOMIX_BUCKET = "public-media";
 const STALE_JOB_MS = 50 * 60 * 1000;
+const MAX_PREPARATION_SKIPS = 8;
 
 export function asAutoMixClient(client: SupabaseClient<Database> | SupabaseClient<AutoMixDatabase>) {
   return client as unknown as SupabaseClient<AutoMixDatabase>;
@@ -41,12 +46,17 @@ function withoutCredential(value: Record<string, unknown>) {
   const next = { ...value };
   delete next[MEDIA_WORKER_CALLBACK_HASH_KEY];
   delete next.upload_url;
+  delete next.tracks;
   return next;
 }
 
 function busyError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   return /already processing|worker is busy/i.test(message);
+}
+
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message.trim() ? error.message : fallback;
 }
 
 export function autoMixOutputPath(job: Pick<AutoMixJob, "owner_id" | "artist_id" | "id" | "output_format">) {
@@ -67,10 +77,10 @@ function bestStemByCategory(stems: TrackStem[], category: "vocals" | "bass") {
 
 async function prepareCatalogPayload(job: AutoMixJob) {
   const service = createServiceClient();
-  const db = asAutoMixClient(service);
   const musicDb = asArtistScopedMusicClient(service);
   const stemDb = asStemClient(service) as SupabaseClient<StemDatabase>;
-  const [trackResult, intelligenceResult, stemResult] = await Promise.all([
+  const djDb = asDjIntelligenceClient(service);
+  const [trackResult, intelligenceResult, stemResult, djProfileResult] = await Promise.all([
     musicDb.from("tracks")
       .select("id,title,audio_url,artist_id,owner_id")
       .eq("owner_id", job.owner_id)
@@ -85,8 +95,13 @@ async function prepareCatalogPayload(job: AutoMixJob) {
       .eq("owner_id", job.owner_id)
       .in("track_id", job.track_ids)
       .eq("status", "ready"),
+    djDb.from("dj_profiles")
+      .select("*")
+      .eq("owner_id", job.owner_id)
+      .eq("artist_id", job.artist_id)
+      .maybeSingle(),
   ]);
-  const firstError = trackResult.error || intelligenceResult.error || stemResult.error;
+  const firstError = trackResult.error || intelligenceResult.error || stemResult.error || djProfileResult.error;
   if (firstError) throw new Error(firstError.message);
 
   const trackById = new Map((trackResult.data ?? []).map((track) => [track.id, track]));
@@ -138,8 +153,18 @@ async function prepareCatalogPayload(job: AutoMixJob) {
   }
   const publicUrl = service.storage.from(job.output_bucket || AUTOMIX_BUCKET).getPublicUrl(outputPath).data.publicUrl;
   const base = withoutCredential(record(job.request_payload));
+  const baseIntent = record(base.set_intent);
+  const journey = job.purpose === "journey";
+  const setIntent = {
+    ...baseIntent,
+    version: "ensemblis.set-intent.v1",
+    // Journey is a hard preservation contract at every boundary. Persisted payloads from older
+    // clients cannot re-enable omissions or make only part of the supplied narrative optional.
+    allow_omissions: journey ? false : baseIntent.allow_omissions !== false,
+    must_play_track_ids: journey ? [...job.track_ids] : baseIntent.must_play_track_ids,
+    target_track_count: journey ? job.track_ids.length : baseIntent.target_track_count,
+  };
   return {
-    db,
     payload: {
       ...base,
       tracks,
@@ -148,6 +173,9 @@ async function prepareCatalogPayload(job: AutoMixJob) {
       transition_style: job.transition_style,
       duration_ms: job.target_duration_ms,
       output_format: job.output_format,
+      set_intent: setIntent,
+      // Snapshot the effective profile only when the durable session is actually queued.
+      dj_profile: plannerDjProfile(djProfileResult.data),
       upload_url: upload.data.signedUrl,
       upload_bucket: job.output_bucket || AUTOMIX_BUCKET,
       upload_path: outputPath,
@@ -184,68 +212,102 @@ async function recoverStaleJobs(db: SupabaseClient<AutoMixDatabase>) {
   return hasActive;
 }
 
+async function failPlannedPreparation(
+  db: SupabaseClient<AutoMixDatabase>,
+  job: AutoMixJob,
+  error: unknown,
+) {
+  const message = errorMessage(error, "AutoMix could not prepare this session for rendering.");
+  const update = await db.from("automix_jobs").update({
+    status: "failed",
+    request_payload: json(withoutCredential(record(job.request_payload))),
+    error: message,
+    completed_at: new Date().toISOString(),
+  }).eq("id", job.id)
+    .eq("status", "planned")
+    .select("id")
+    .maybeSingle();
+  if (update.error) throw new Error(update.error.message);
+  return Boolean(update.data);
+}
+
 export async function kickAutoMixQueue() {
   const service = createServiceClient();
   const db = asAutoMixClient(service);
   if (await recoverStaleJobs(db)) return { dispatched: false, busy: true };
 
-  const planned = await db.from("automix_jobs")
-    .select("*")
-    .eq("status", "planned")
-    .order("created_at")
-    .limit(1)
-    .maybeSingle();
-  if (planned.error) throw new Error(planned.error.message);
-  if (!planned.data) return { dispatched: false, busy: false };
-  const job = planned.data as AutoMixJob;
-  const prepared = await prepareCatalogPayload(job);
-  const credential = createMediaWorkerCallbackCredential();
-  const requestPayload = {
-    ...prepared.payload,
-    [MEDIA_WORKER_CALLBACK_HASH_KEY]: credential.hash,
-  };
+  // Preparation can fail because a master was removed, lineage changed, or storage is unavailable.
+  // Mark that durable job terminal and keep walking so one poisoned planned row cannot block the queue.
+  for (let attempt = 0; attempt < MAX_PREPARATION_SKIPS; attempt += 1) {
+    const planned = await db.from("automix_jobs")
+      .select("*")
+      .eq("status", "planned")
+      .order("created_at")
+      .limit(1)
+      .maybeSingle();
+    if (planned.error) throw new Error(planned.error.message);
+    if (!planned.data) return { dispatched: false, busy: false };
+    const job = planned.data as AutoMixJob;
 
-  const claimed = await db.from("automix_jobs").update({
-    status: "queued",
-    source_fingerprints: json(prepared.fingerprints),
-    request_payload: json(requestPayload),
-    output_path: prepared.outputPath,
-    error: null,
-    external_job_id: null,
-    started_at: null,
-    completed_at: null,
-  }).eq("id", job.id).eq("status", "planned").select("*").maybeSingle();
-  if (claimed.error) throw new Error(claimed.error.message);
-  if (!claimed.data) return { dispatched: false, busy: false };
-
-  try {
-    const dispatch = await dispatchMediaWorkerJob({
-      jobId: job.id,
-      jobType: "render_automix",
-      payload: requestPayload,
-      callbackUrl: `${getSiteUrl()}/api/studio/automix/callback`,
-      callbackToken: credential.token,
-    });
-    const update = await db.from("automix_jobs").update({ external_job_id: dispatch.sandboxName }).eq("id", job.id);
-    if (update.error) throw new Error(update.error.message);
-    return { dispatched: true, busy: false };
-  } catch (error) {
-    if (busyError(error)) {
-      await db.from("automix_jobs").update({
-        status: "planned",
-        request_payload: json(withoutCredential(record(job.request_payload))),
-        external_job_id: null,
-        error: null,
-      }).eq("id", job.id);
-      return { dispatched: false, busy: true };
+    let prepared: Awaited<ReturnType<typeof prepareCatalogPayload>>;
+    try {
+      prepared = await prepareCatalogPayload(job);
+    } catch (error) {
+      const failed = await failPlannedPreparation(db, job, error);
+      if (!failed) continue;
+      continue;
     }
-    const message = error instanceof Error ? error.message : "AutoMix dispatch failed.";
-    await db.from("automix_jobs").update({
-      status: "failed",
-      request_payload: json(withoutCredential(requestPayload)),
-      error: message,
-      completed_at: new Date().toISOString(),
-    }).eq("id", job.id);
-    throw new Error(message);
+
+    const credential = createMediaWorkerCallbackCredential();
+    const requestPayload = {
+      ...prepared.payload,
+      [MEDIA_WORKER_CALLBACK_HASH_KEY]: credential.hash,
+    };
+
+    const claimed = await db.from("automix_jobs").update({
+      status: "queued",
+      source_fingerprints: json(prepared.fingerprints),
+      request_payload: json(requestPayload),
+      output_path: prepared.outputPath,
+      error: null,
+      external_job_id: null,
+      started_at: null,
+      completed_at: null,
+    }).eq("id", job.id).eq("status", "planned").select("*").maybeSingle();
+    if (claimed.error) throw new Error(claimed.error.message);
+    if (!claimed.data) continue;
+
+    try {
+      const dispatch = await dispatchMediaWorkerJob({
+        jobId: job.id,
+        jobType: "render_automix",
+        payload: requestPayload,
+        callbackUrl: `${getSiteUrl()}/api/studio/automix/callback`,
+        callbackToken: credential.token,
+      });
+      const update = await db.from("automix_jobs").update({ external_job_id: dispatch.sandboxName }).eq("id", job.id);
+      if (update.error) throw new Error(update.error.message);
+      return { dispatched: true, busy: false };
+    } catch (error) {
+      if (busyError(error)) {
+        await db.from("automix_jobs").update({
+          status: "planned",
+          request_payload: json(withoutCredential(record(job.request_payload))),
+          external_job_id: null,
+          error: null,
+        }).eq("id", job.id);
+        return { dispatched: false, busy: true };
+      }
+      const message = errorMessage(error, "AutoMix dispatch failed.");
+      await db.from("automix_jobs").update({
+        status: "failed",
+        request_payload: json(withoutCredential(requestPayload)),
+        error: message,
+        completed_at: new Date().toISOString(),
+      }).eq("id", job.id);
+      throw new Error(message);
+    }
   }
+
+  return { dispatched: false, busy: false };
 }

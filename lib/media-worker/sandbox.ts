@@ -4,8 +4,8 @@ import { createHash, randomBytes } from "node:crypto";
 import { Sandbox } from "@vercel/sandbox";
 
 export const MEDIA_WORKER_CALLBACK_HASH_KEY = "__atlas_callback_token_sha256";
-const MEDIA_WORKER_RUNTIME_VERSION = 11;
-const MEDIA_WORKER_BOOTSTRAP_VERSION = 8;
+const MEDIA_WORKER_RUNTIME_VERSION = 12;
+const MEDIA_WORKER_BOOTSTRAP_VERSION = 9;
 const MEDIA_WORKER_PYTHON_VERSION = "3.13.14";
 const MEDIA_WORKER_SANDBOX_IMAGE = "vercel/sandbox/universal@sha256:0e3e3617e824397f170fc7c43ccaa565dd7ac36518e83ead3d41e077cd9f6ec7";
 const HOBBY_MAX_SANDBOX_MS = 45 * 60 * 1000;
@@ -219,9 +219,18 @@ files = {
     "app/social_finishing.py": f"{base}/app/social_finishing.py",
     "app/automix_model.py": f"{base}/app/automix_model.py",
     "app/automix_intelligence.py": f"{base}/app/automix_intelligence.py",
+    "app/automix_transition_regions.py": f"{base}/app/automix_transition_regions.py",
     "app/automix_planner.py": f"{base}/app/automix_planner.py",
+    "app/automix_set_intelligence.py": f"{base}/app/automix_set_intelligence.py",
+    "app/automix_planner_personalized.py": f"{base}/app/automix_planner_personalized.py",
+    "app/automix_manifest.py": f"{base}/app/automix_manifest.py",
+    "app/automix_manifest_personalized.py": f"{base}/app/automix_manifest_personalized.py",
+    "app/automix_evaluation.py": f"{base}/app/automix_evaluation.py",
     "app/automix_dsp.py": f"{base}/app/automix_dsp.py",
+    "app/automix_transition_dsp_v2.py": f"{base}/app/automix_transition_dsp_v2.py",
+    "app/automix_mixplan_renderer.py": f"{base}/app/automix_mixplan_renderer.py",
     "app/automix.py": f"{base}/app/automix.py",
+    "app/automix_preview.py": f"{base}/app/automix_preview.py",
     "app/runner.py": f"{base}/app/runner.py",
     "requirements.txt": f"{base}/requirements.txt",
     "requirements-audio-advanced.txt": f"{base}/requirements-audio-advanced.txt",
@@ -275,10 +284,13 @@ import allin1_infer
 import imageio_ffmpeg
 from PIL import Image
 from app.automix import AutomixWorkerRequest
+from app.automix_preview import AutomixPreviewWorkerRequest
+from app.automix_manifest import MIXPLAN_VERSION
+from app.automix_set_intelligence import SET_INTENT_VERSION
 from app.mastering_processor import MasteringWorkerRequest
 from app.stem_intelligence import ANALYSIS_VERSION
 from app.social_finishing import SocialWorkerRequest
-print("Atlas Media Worker ready", imageio_ffmpeg.get_ffmpeg_exe(), "stem-analysis", ANALYSIS_VERSION, "mastering", MasteringWorkerRequest.__name__, "social-finishing", SocialWorkerRequest.__name__, "automix", AutomixWorkerRequest.__name__)
+print("Atlas Media Worker ready", imageio_ffmpeg.get_ffmpeg_exe(), "stem-analysis", ANALYSIS_VERSION, "mastering", MasteringWorkerRequest.__name__, "social-finishing", SocialWorkerRequest.__name__, "automix", AutomixWorkerRequest.__name__, "preview", AutomixPreviewWorkerRequest.__name__, "mixplan", MIXPLAN_VERSION, "set-intent", SET_INTENT_VERSION)
 PY
 }
 
@@ -308,7 +320,8 @@ export async function dispatchMediaWorkerJob(input: {
     | "render_audio_scene"
     | "master_audio"
     | "finish_social_video"
-    | "render_automix";
+    | "render_automix"
+    | "render_automix_preview";
   payload: Record<string, unknown>;
   callbackUrl: string;
   callbackToken: string;
@@ -358,7 +371,7 @@ export function scheduleMediaWorkerSandboxCleanup() {
       // The Sandbox may already be stopped or have reached its Hobby timeout.
     }
     // Terminal callbacks invoke this only after durable state has been reconciled. Give the
-    // detached runner a moment to release its lock, then dispatch the oldest durable workload.
+    // detached runner a moment to release its lock, then dispatch the next durable workload.
     await new Promise((resolve) => setTimeout(resolve, 1200));
     let dispatched = false;
     try {
@@ -374,7 +387,7 @@ export function scheduleMediaWorkerSandboxCleanup() {
         const result = await kickMasteringQueue();
         dispatched = result.dispatched;
       } catch {
-        // Mastering work is durable. Give AutoMix a chance below.
+        // Mastering work is durable. Give full AutoMix a chance below.
       }
     }
     if (!dispatched) {
@@ -383,7 +396,16 @@ export function scheduleMediaWorkerSandboxCleanup() {
         const result = await kickAutoMixQueue();
         dispatched = result.dispatched;
       } catch {
-        // AutoMix work is durable. Give marketing finishing a chance below.
+        // Full AutoMix work is durable. Give transition previews a chance below.
+      }
+    }
+    if (!dispatched) {
+      try {
+        const { kickAutoMixPreviewQueue } = await import("@/lib/automix/previews");
+        const result = await kickAutoMixPreviewQueue();
+        dispatched = result.dispatched;
+      } catch {
+        // Preview work is durable. Give marketing finishing a chance below.
       }
     }
     if (!dispatched) {

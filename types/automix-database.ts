@@ -40,12 +40,35 @@ export type AutoMixJob = {
   updated_at: string;
 };
 
+export type AutoMixTransitionPreview = {
+  id: string;
+  owner_id: string;
+  artist_id: string;
+  automix_job_id: string;
+  transition_index: number;
+  status: AutoMixJobStatus;
+  idempotency_key: string;
+  output_bucket: string;
+  output_path: string;
+  request_payload: Json;
+  result_payload: Json;
+  external_job_id: string | null;
+  error: string | null;
+  expires_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  purged_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 type ExistingTables = Database["public"]["Tables"];
 
 export type AutoMixDatabase = Omit<Database, "public"> & {
   public: Omit<Database["public"], "Tables"> & {
     Tables: ExistingTables & {
       automix_jobs: Table<AutoMixJob>;
+      automix_transition_previews: Table<AutoMixTransitionPreview>;
     };
   };
 };

@@ -12,14 +12,15 @@ from pydantic import BaseModel, Field
 
 from . import main as worker_main
 from .automix_evaluation import evaluate_mixplan
-from .automix_manifest import MIXPLAN_VERSION, build_mixplan
+from .automix_manifest import MIXPLAN_VERSION
+from .automix_manifest_personalized import build_mixplan
 from .automix_mixplan_renderer import render_mixplan
 from .automix_model import (
     AUTOMIX_VERSION, MAX_RENDER_MS, MAX_TRACKS, MIN_TRACK_WINDOW_MS, SAMPLE_RATE,
     EnergyProfile, Purpose, TrackDescriptor, TransitionStyle, _energy_from_map,
     _list_records, _record, _safe_float, choose_showcase_window, estimate_key, normalize_dj_bpm,
 )
-from .automix_planner import build_plan
+from .automix_planner_personalized import build_set_intelligent_plan
 from .mastering_inspector import enrich_music_map_with_mastering
 from .music_intelligence_v4_runtime import analyze_music as analyze_music_v4
 
@@ -166,7 +167,15 @@ async def automix_job(
     worker_main.validate_remote_url(upload_url)
 
     tracks = await prepare_tracks(raw_tracks, workdir, purpose, target_duration_ms)  # type: ignore[arg-type]
-    plan = build_plan(tracks, purpose, profile, style, target_duration_ms)  # type: ignore[arg-type]
+    plan = build_set_intelligent_plan(
+        tracks,
+        purpose,  # type: ignore[arg-type]
+        profile,  # type: ignore[arg-type]
+        style,  # type: ignore[arg-type]
+        target_duration_ms,
+        set_intent=_record(payload.get("set_intent")),
+        dj_profile=_record(payload.get("dj_profile")),
+    )
     mixplan = build_mixplan(plan, source_fingerprints=_source_fingerprints(raw_tracks))
     evaluation = evaluate_mixplan(mixplan)
     published_plan = {**plan, "render_manifest": mixplan, "evaluation": evaluation}
@@ -213,6 +222,7 @@ async def automix_job(
             "version": AUTOMIX_VERSION,
             "mixplan_version": MIXPLAN_VERSION,
             "render_contract": "validated_mixplan_only",
+            "set_intelligence": "duration-aware candidate curation + bounded personal DJ profile",
             "time_stretch": "Signalsmith Stretch via python-stretch",
             "pitch_shift": "disabled",
             "mastering_analysis": "Ensemblis Mastering Inspector",

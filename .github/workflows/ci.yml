@@ -105,9 +105,18 @@ jobs:
           services/media-worker/app/social_finishing.py
           services/media-worker/app/automix_model.py
           services/media-worker/app/automix_intelligence.py
+          services/media-worker/app/automix_transition_regions.py
           services/media-worker/app/automix_planner.py
+          services/media-worker/app/automix_set_intelligence.py
+          services/media-worker/app/automix_planner_personalized.py
+          services/media-worker/app/automix_manifest.py
+          services/media-worker/app/automix_manifest_personalized.py
+          services/media-worker/app/automix_evaluation.py
           services/media-worker/app/automix_dsp.py
+          services/media-worker/app/automix_transition_dsp_v2.py
+          services/media-worker/app/automix_mixplan_renderer.py
           services/media-worker/app/automix.py
+          services/media-worker/app/automix_preview.py
           services/media-worker/app/runner.py
 
       - name: Install Media Worker audio regression dependencies

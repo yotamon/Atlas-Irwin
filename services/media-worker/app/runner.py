@@ -9,6 +9,7 @@ from typing import Any
 
 from . import main as worker_main
 from .automix import AutomixWorkerRequest, execute_automix
+from .automix_preview import AutomixPreviewWorkerRequest, execute_automix_preview
 from .mastering_processor import MasteringWorkerRequest, execute_mastering
 from .music_intelligence_v4_runtime import analyze_music as analyze_music_v4
 from .social_finishing import SocialWorkerRequest, execute_social
@@ -36,6 +37,7 @@ CONTRACT_JOB_TYPES = frozenset({
     "master_audio",
     "finish_social_video",
     "render_automix",
+    "render_automix_preview",
 })
 
 
@@ -71,6 +73,9 @@ def main() -> None:
         elif payload.get("job_type") == "render_automix":
             request = AutomixWorkerRequest.model_validate(payload)
             executor = execute_automix
+        elif payload.get("job_type") == "render_automix_preview":
+            request = AutomixPreviewWorkerRequest.model_validate(payload)
+            executor = execute_automix_preview
         else:
             request = WorkerRequest.model_validate(payload)
             executor = execute

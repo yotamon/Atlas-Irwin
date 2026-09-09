@@ -60,6 +60,58 @@ function terminalRequestPayload(value: unknown) {
   return next;
 }
 
+function uniqueTrackIds(value: unknown, allowed: Set<string>) {
+  if (!Array.isArray(value)) return [];
+  const result: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "string") continue;
+    const id = item.trim();
+    if (!allowed.has(id) || result.includes(id)) continue;
+    result.push(id);
+  }
+  return result;
+}
+
+function optionalBpm(value: unknown) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.max(60, Math.min(200, Math.round(value * 10) / 10));
+}
+
+function sanitizeSetIntent(value: unknown, trackIds: string[], purpose: AutoMixPurpose) {
+  const raw = record(value);
+  const allowed = new Set(trackIds);
+  let mustPlayTrackIds = uniqueTrackIds(raw.mustPlayTrackIds ?? raw.must_play_track_ids, allowed);
+  const blockedTrackIds = uniqueTrackIds(raw.blockedTrackIds ?? raw.blocked_track_ids, allowed);
+  let minBpm = optionalBpm(raw.minBpm ?? raw.min_bpm);
+  let maxBpm = optionalBpm(raw.maxBpm ?? raw.max_bpm);
+  if (minBpm !== null && maxBpm !== null && minBpm > maxBpm) [minBpm, maxBpm] = [maxBpm, minBpm];
+  const targetRaw = raw.targetTrackCount ?? raw.target_track_count;
+  let targetTrackCount = typeof targetRaw === "number" && Number.isFinite(targetRaw)
+    ? Math.max(2, Math.min(trackIds.length, Math.round(targetRaw)))
+    : null;
+  let allowOmissions = typeof (raw.allowOmissions ?? raw.allow_omissions) === "boolean"
+    ? Boolean(raw.allowOmissions ?? raw.allow_omissions)
+    : true;
+
+  // Journey is an API-level preservation contract. A client cannot opt into omissions or make
+  // only part of the narrative optional; conflicting filters fail later instead of silently dropping tracks.
+  if (purpose === "journey") {
+    allowOmissions = false;
+    mustPlayTrackIds = [...trackIds];
+    targetTrackCount = trackIds.length;
+  }
+
+  return {
+    version: "ensemblis.set-intent.v1",
+    allow_omissions: allowOmissions,
+    must_play_track_ids: mustPlayTrackIds,
+    blocked_track_ids: blockedTrackIds,
+    min_bpm: minBpm,
+    max_bpm: maxBpm,
+    target_track_count: targetTrackCount,
+  };
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const artistId = url.searchParams.get("artist")?.trim() || "";
@@ -113,6 +165,11 @@ export async function POST(request: Request) {
     : 20 * 60 * 1000;
   const durationMs = Math.max(90_000, Math.min(60 * 60 * 1000, durationMsRaw));
   const name = typeof body.name === "string" && body.name.trim() ? body.name.trim().slice(0, 120) : "AutoMix";
+  const setIntent = sanitizeSetIntent(body.setIntent, trackIds, purpose);
+  const conflict = setIntent.must_play_track_ids.find((id) => setIntent.blocked_track_ids.includes(id));
+  if (conflict) {
+    return NextResponse.json({ error: "A track cannot be both must-play and blocked." }, { status: 400 });
+  }
 
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveArtistContext(supabase, user, artistId);
@@ -138,6 +195,7 @@ export async function POST(request: Request) {
     transitionStyle,
     outputFormat,
     durationMs,
+    setIntent,
     minuteBucket,
   })).digest("hex");
   const partialJob = { owner_id: user.id, artist_id: artist.artistId, id: jobId, output_format: outputFormat };
@@ -159,7 +217,15 @@ export async function POST(request: Request) {
     idempotency_key: idempotencyKey,
     output_bucket: "public-media",
     output_path: outputPath,
-    request_payload: json({ name, purpose, energy_profile: energyProfile, transition_style: transitionStyle, duration_ms: durationMs, output_format: outputFormat }),
+    request_payload: json({
+      name,
+      purpose,
+      energy_profile: energyProfile,
+      transition_style: transitionStyle,
+      duration_ms: durationMs,
+      output_format: outputFormat,
+      set_intent: setIntent,
+    }),
     result_payload: json({ phase: "queued" }),
   }).select("*").single();
 
