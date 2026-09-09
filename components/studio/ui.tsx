@@ -3,42 +3,67 @@ import Link from "next/link";
 import { SubmitButton } from "./submit-button";
 import { EnsemblisTooltip } from "./tooltip";
 
-type ButtonVariant = "default" | "primary" | "danger";
+type ButtonVariant = "default" | "primary" | "secondary" | "ghost" | "danger";
+type ButtonSize = "sm" | "md" | "lg";
 export type StatusTone = "neutral" | "accent" | "success" | "attention" | "danger";
+type PageWidth = "narrow" | "default" | "wide" | "full";
+type GridColumns = 2 | 3 | 4;
 
-function buttonClassName(variant: ButtonVariant, className = "") {
-  const variantClass = variant === "primary" ? " primary" : variant === "danger" ? " danger-text" : "";
-  return `button${variantClass}${className ? ` ${className}` : ""}`;
+function classes(...values: Array<string | false | null | undefined>) {
+  return values.filter(Boolean).join(" ");
 }
 
-export function Button({ variant = "default", className = "", type = "button", ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
-  return <button {...props} type={type} className={buttonClassName(variant, className)} />;
+function buttonClassName(variant: ButtonVariant, size: ButtonSize, className = "") {
+  return classes(
+    "button",
+    variant !== "default" && variant,
+    size !== "md" && `button-${size}`,
+    className,
+  );
+}
+
+export function Button({
+  variant = "default",
+  size = "md",
+  className = "",
+  type = "button",
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: ButtonSize }) {
+  return <button {...props} type={type} className={buttonClassName(variant, size, className)} />;
 }
 
 export function ButtonLink({
   href,
   children,
   variant = "default",
+  size = "md",
   className = "",
 }: {
   href: string;
   children: ReactNode;
-  variant?: Exclude<ButtonVariant, "danger">;
+  variant?: ButtonVariant;
+  size?: ButtonSize;
   className?: string;
 }) {
-  return <Link href={href} className={buttonClassName(variant, className)}>{children}</Link>;
+  return <Link href={href} className={buttonClassName(variant, size, className)}>{children}</Link>;
 }
 
 export function IconButton({
   label,
   children,
   className = "",
+  variant = "ghost",
   ...props
-}: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "aria-label" | "title"> & { label: string; children: ReactNode }) {
+}: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "aria-label" | "title"> & {
+  label: string;
+  children: ReactNode;
+  variant?: ButtonVariant;
+}) {
   return (
     <EnsemblisTooltip label={label}>
       <Button
         {...props}
+        variant={variant}
         aria-label={label}
         data-icon-button
         className={className}
@@ -53,23 +78,167 @@ export function Tooltip({ label, children }: { label: string; children: ReactEle
   return <EnsemblisTooltip label={label}>{children}</EnsemblisTooltip>;
 }
 
+export function Page({
+  children,
+  width = "default",
+  className = "",
+}: {
+  children: ReactNode;
+  width?: PageWidth;
+  className?: string;
+}) {
+  return (
+    <div
+      className={classes("studio-page", className)}
+      data-width={width === "default" ? undefined : width}
+    >
+      {children}
+    </div>
+  );
+}
+
 export function PageHeader({
   title,
   description,
+  eyebrow,
   action,
+  actions,
 }: {
   title: string;
   description?: string;
+  eyebrow?: ReactNode;
+  action?: ReactNode;
+  actions?: ReactNode;
+}) {
+  const resolvedActions = actions ?? action;
+  return (
+    <header className="studio-page-header">
+      <div className="studio-page-header-copy">
+        {eyebrow ? <span className="en-eyebrow">{eyebrow}</span> : null}
+        <h1>{title}</h1>
+        {description ? <p>{description}</p> : null}
+      </div>
+      {resolvedActions ? <div className="actions">{resolvedActions}</div> : null}
+    </header>
+  );
+}
+
+export function SectionHeader({
+  title,
+  description,
+  eyebrow,
+  action,
+}: {
+  title: string;
+  description?: ReactNode;
+  eyebrow?: ReactNode;
   action?: ReactNode;
 }) {
   return (
-    <header className="studio-page-header">
-      <div>
-        <h1>{title}</h1>
-        {description && <p>{description}</p>}
+    <div className="studio-section-header">
+      <div className="studio-section-header-copy">
+        {eyebrow ? <span className="en-eyebrow">{eyebrow}</span> : null}
+        <h2>{title}</h2>
+        {description ? <p>{description}</p> : null}
       </div>
-      {action ? <div className="actions">{action}</div> : null}
-    </header>
+      {action ? <div className="studio-actions">{action}</div> : null}
+    </div>
+  );
+}
+
+export function Section({
+  title,
+  description,
+  eyebrow,
+  action,
+  children,
+  feature = false,
+  className = "",
+}: {
+  title?: string;
+  description?: ReactNode;
+  eyebrow?: ReactNode;
+  action?: ReactNode;
+  children: ReactNode;
+  feature?: boolean;
+  className?: string;
+}) {
+  return (
+    <section
+      className={classes("studio-section", className)}
+      data-surface={feature ? "feature" : undefined}
+    >
+      {(title || description || eyebrow || action) ? (
+        <SectionHeader
+          title={title ?? ""}
+          description={description}
+          eyebrow={eyebrow}
+          action={action}
+        />
+      ) : null}
+      {children}
+    </section>
+  );
+}
+
+export function Stack({
+  children,
+  gap = "default",
+  className = "",
+}: {
+  children: ReactNode;
+  gap?: "compact" | "default" | "roomy";
+  className?: string;
+}) {
+  return (
+    <div className={classes("studio-stack", className)} data-gap={gap === "default" ? undefined : gap}>
+      {children}
+    </div>
+  );
+}
+
+export function Grid({
+  children,
+  columns,
+  className = "",
+}: {
+  children: ReactNode;
+  columns?: GridColumns;
+  className?: string;
+}) {
+  return <div className={classes("studio-grid", className)} data-columns={columns}>{children}</div>;
+}
+
+export function Split({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <div className={classes("studio-split", className)}>{children}</div>;
+}
+
+export function Actions({
+  children,
+  align = "start",
+  className = "",
+}: {
+  children: ReactNode;
+  align?: "start" | "end";
+  className?: string;
+}) {
+  return <div className={classes("studio-actions", className)} data-align={align}>{children}</div>;
+}
+
+export function ActionBar({
+  children,
+  message,
+  className = "",
+}: {
+  children: ReactNode;
+  message?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={classes("studio-action-bar", className)}>
+      {message ? <div className="studio-action-bar-copy">{message}</div> : <span />}
+      <Actions align="end">{children}</Actions>
+    </div>
   );
 }
 
@@ -85,7 +254,7 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <section className={`studio-panel${className ? ` ${className}` : ""}`}>
+    <section className={classes("studio-panel", className)}>
       {(title || action) && (
         <div className="panel-head">
           {title ? <h2>{title}</h2> : <span />}
@@ -98,7 +267,34 @@ export function Panel({
 }
 
 export function Surface({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <section className={`studio-panel feature${className ? ` ${className}` : ""}`}>{children}</section>;
+  return <section className={classes("studio-panel", "feature", className)}>{children}</section>;
+}
+
+export function StatePanel({
+  title,
+  body,
+  children,
+  icon,
+  tone = "neutral",
+  role,
+  className = "",
+}: {
+  title: string;
+  body?: ReactNode;
+  children?: ReactNode;
+  icon?: ReactNode;
+  tone?: StatusTone;
+  role?: "status" | "alert";
+  className?: string;
+}) {
+  return (
+    <div className={classes("studio-state", className)} data-tone={tone} role={role}>
+      {icon ? <div className="studio-state-icon" aria-hidden>{icon}</div> : null}
+      <h3>{title}</h3>
+      {body ? <p>{body}</p> : null}
+      {children ? <Actions>{children}</Actions> : null}
+    </div>
+  );
 }
 
 export function EmptyState({
@@ -113,11 +309,17 @@ export function EmptyState({
   label?: string;
 }) {
   return (
-    <div className="empty-state">
-      <div className="empty-orbit" aria-hidden />
-      <h3>{title}</h3>
-      <p>{body}</p>
+    <StatePanel title={title} body={body}>
       {href && label ? <ButtonLink href={href}>{label}</ButtonLink> : null}
+    </StatePanel>
+  );
+}
+
+export function LoadingState({ label = "Loading" }: { label?: string }) {
+  return (
+    <div className="studio-state studio-state-loading" role="status" aria-live="polite">
+      <div className="studio-loading" aria-hidden><span /><span /><span /></div>
+      <span className="sr-only">{label}</span>
     </div>
   );
 }
@@ -154,7 +356,7 @@ export function Field({
   required?: boolean;
 }) {
   return (
-    <label className={wide ? "field wide" : "field"} data-invalid={Boolean(error) || undefined}>
+    <label className={classes("field", wide && "wide")} data-invalid={Boolean(error) || undefined}>
       <span>{label}{required ? <small aria-hidden> · required</small> : null}</span>
       {children}
       {hint ? <small className="field-hint">{hint}</small> : null}
@@ -164,17 +366,38 @@ export function Field({
 }
 
 export function FormSection({
+  title,
+  description,
   children,
   className = "",
 }: {
+  title?: string;
+  description?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
-  return <section className={`ensemblis-form-section${className ? ` ${className}` : ""}`}>{children}</section>;
+  return (
+    <section className={classes("ensemblis-form-section", className)}>
+      {(title || description) ? <SectionHeader title={title ?? ""} description={description} /> : null}
+      {children}
+    </section>
+  );
+}
+
+export function FormGrid({
+  children,
+  columns = 2,
+  className = "",
+}: {
+  children: ReactNode;
+  columns?: 1 | 2 | 3;
+  className?: string;
+}) {
+  return <div className={classes("studio-form-grid", className)} data-columns={columns}>{children}</div>;
 }
 
 export function FormActions({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`form-actions${className ? ` ${className}` : ""}`}>{children}</div>;
+  return <div className={classes("form-actions", className)}>{children}</div>;
 }
 
 export function Progress({ value, label }: { value: number; label: string }) {
@@ -194,7 +417,7 @@ export function Progress({ value, label }: { value: number; label: string }) {
 }
 
 export function Skeleton({ className = "", label = "Loading" }: { className?: string; label?: string }) {
-  return <span className={`ensemblis-skeleton${className ? ` ${className}` : ""}`} role="status" aria-label={label} />;
+  return <span className={classes("ensemblis-skeleton", className)} role="status" aria-label={label} />;
 }
 
 export function Tabs({
