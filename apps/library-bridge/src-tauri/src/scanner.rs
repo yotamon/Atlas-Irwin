@@ -11,7 +11,9 @@ use std::{
 };
 use walkdir::WalkDir;
 
-const AUDIO_EXTENSIONS: &[&str] = &["wav", "aif", "aiff", "flac", "mp3", "m4a", "aac", "ogg", "opus"];
+const AUDIO_EXTENSIONS: &[&str] = &[
+    "wav", "aif", "aiff", "flac", "mp3", "m4a", "aac", "ogg", "opus",
+];
 
 fn supported_audio(path: &Path) -> bool {
     path.extension()
@@ -116,10 +118,7 @@ pub fn scan_source(
         .with_context(|| format!("could not persist scan for {source_id}"))
 }
 
-pub fn rescan_registered_source(
-    db: &BridgeDb,
-    source_id: &str,
-) -> anyhow::Result<ScanSummary> {
+pub fn rescan_registered_source(db: &BridgeDb, source_id: &str) -> anyhow::Result<ScanSummary> {
     let (kind, root) = db
         .source_root(source_id)?
         .context("DJ library source is not registered on this device")?;
