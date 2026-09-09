@@ -92,10 +92,10 @@ export function AutoMixRenderRecovery({ artistId }: { artistId: string }) {
       <div className={styles.icon}><FiAlertTriangle aria-hidden /></div>
       <div className={styles.copy}>
         <span className="section-label">Render recovery</span>
-        <strong>The approved MixPlan is intact.</strong>
+        <strong>The frozen MixPlan is available for a safe retry.</strong>
         <p>
-          This render attempt failed operationally. Ensemblis can retry the same frozen plan hash with the same source lineage,
-          without choosing a new order or changing a transition.
+          Ensemblis will revalidate the canonical source lineage first. If it still matches, the renderer retries this exact plan hash
+          without choosing a new order or changing a transition. If a master changed, a new verified plan is required instead.
         </p>
         {failedRender.error ? <small>{failedRender.error}</small> : null}
         {message ? <small role="status">{message}</small> : null}
