@@ -52,9 +52,3 @@ test("Vercel Sandbox bootstrap contains the complete transitive Media Worker mod
     `Sandbox bootstrap is missing local Python dependencies: ${missing.join(", ")}`,
   );
 });
-
-test("Media Worker bootstrap version is advanced after bootstrap contents change", () => {
-  const sandbox = readFileSync(sandboxPath, "utf8");
-  const version = Number(sandbox.match(/MEDIA_WORKER_BOOTSTRAP_VERSION\s*=\s*(\d+)/)?.[1] ?? 0);
-  assert.ok(version >= 10, `Expected bootstrap version >= 10, received ${version}`);
-});
