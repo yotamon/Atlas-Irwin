@@ -107,6 +107,17 @@ type SetBuilderWorkspaceProps = {
   tracks: TrackOption[];
 };
 
+type DraftState = {
+  planIdentity: string;
+  order: string[];
+  locks: Set<string>;
+};
+
+type PreviewState = {
+  jobId: string;
+  items: Record<number, PreviewView>;
+};
+
 const ACTIVE = new Set<AutoMixJob["status"]>(["planned", "queued", "running"]);
 const PREVIEW_ACTIVE = new Set<AutoMixTransitionPreview["status"]>(["planned", "queued", "running"]);
 const VARIANTS: Array<{ id: PlanVariant; label: string; description: string }> = [
@@ -270,10 +281,9 @@ export function SetBuilderWorkspace({ artistId, artistName, tracks }: SetBuilder
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [currentJobId, setCurrentJobId] = useState("");
-  const [draftOrder, setDraftOrder] = useState<string[]>([]);
-  const [draftLocks, setDraftLocks] = useState<Set<string>>(new Set());
+  const [draftState, setDraftState] = useState<DraftState>({ planIdentity: "", order: [], locks: new Set() });
   const [comparisonIds, setComparisonIds] = useState<string[]>([]);
-  const [previews, setPreviews] = useState<Record<number, PreviewView>>({});
+  const [previewState, setPreviewState] = useState<PreviewState>({ jobId: "", items: {} });
   const [previewBusy, setPreviewBusy] = useState<number | null>(null);
 
   const fetchJobs = useCallback(async () => {
@@ -296,8 +306,22 @@ export function SetBuilderWorkspace({ artistId, artistName, tracks }: SetBuilder
   }, [fetchJobs]);
 
   useEffect(() => {
-    void loadJobs();
-  }, [loadJobs]);
+    let cancelled = false;
+    void fetchJobs()
+      .then((next) => {
+        if (cancelled) return;
+        setJobs(next);
+        setLoading(false);
+      })
+      .catch((loadError: unknown) => {
+        if (cancelled) return;
+        setError(loadError instanceof Error ? loadError.message : "Could not load Set Builder revisions.");
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchJobs]);
 
   const builderJobs = useMemo(
     () => jobs.filter((job) => ["plan_only", "approved_render"].includes(executionMode(job))),
@@ -307,18 +331,15 @@ export function SetBuilderWorkspace({ artistId, artistName, tracks }: SetBuilder
   const renderJobs = useMemo(() => builderJobs.filter((job) => executionMode(job) === "approved_render"), [builderJobs]);
 
   useEffect(() => {
-    if (currentJobId && planJobs.some((job) => job.id === currentJobId)) return;
-    const preferred = planJobs.find((job) => job.status === "completed") ?? planJobs[0];
-    if (preferred) setCurrentJobId(preferred.id);
-  }, [currentJobId, planJobs]);
-
-  useEffect(() => {
     if (!builderJobs.some((job) => ACTIVE.has(job.status))) return;
     const timer = window.setInterval(() => void loadJobs(true), 2500);
     return () => window.clearInterval(timer);
   }, [builderJobs, loadJobs]);
 
-  const currentJob = planJobs.find((job) => job.id === currentJobId) ?? null;
+  const currentJob = planJobs.find((job) => job.id === currentJobId)
+    ?? planJobs.find((job) => job.status === "completed")
+    ?? planJobs[0]
+    ?? null;
   const currentPlan = planFromJob(currentJob);
   const currentTracks = useMemo(() => Array.isArray(currentPlan?.tracks) ? currentPlan.tracks : [], [currentPlan]);
   const currentTransitions = useMemo(() => Array.isArray(currentPlan?.transitions) ? currentPlan.transitions : [], [currentPlan]);
@@ -327,39 +348,51 @@ export function SetBuilderWorkspace({ artistId, artistName, tracks }: SetBuilder
     [currentTracks],
   );
   const planIdentity = `${currentJob?.id ?? ""}:${planHash(currentPlan)}`;
+  const canonicalLocks = useMemo(() => locksFromPlan(currentPlan), [currentPlan]);
+  const draftMatchesPlan = draftState.planIdentity === planIdentity;
+  const draftOrder = draftMatchesPlan ? draftState.order : currentTrackIds;
+  const draftLocks = draftMatchesPlan ? draftState.locks : canonicalLocks;
 
-  useEffect(() => {
-    setDraftOrder(currentTrackIds);
-    setDraftLocks(locksFromPlan(currentPlan));
-  // currentTrackIds is derived from the selected immutable plan revision; planIdentity is the reset boundary.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [planIdentity]);
-
-  const loadPreviews = useCallback(async (jobId: string) => {
+  const fetchPreviews = useCallback(async (jobId: string) => {
     const response = await fetch(`/api/studio/automix/previews?artist=${encodeURIComponent(artistId)}&job=${encodeURIComponent(jobId)}`, { cache: "no-store" });
     const body = await response.json().catch(() => null);
     if (!response.ok) throw new Error(responseError(body, "Could not load transition previews."));
     const list = Array.isArray(asRecord(body).previews) ? asRecord(body).previews as PreviewView[] : [];
     const next: Record<number, PreviewView> = {};
     for (const preview of list) next[preview.transition_index] = preview;
-    setPreviews(next);
+    return next;
   }, [artistId]);
 
+  const loadPreviews = useCallback(async (jobId: string) => {
+    const next = await fetchPreviews(jobId);
+    setPreviewState({ jobId, items: next });
+  }, [fetchPreviews]);
+
+  const currentPreviewJobId = currentJob?.id ?? "";
+  const previews = previewState.jobId === currentPreviewJobId ? previewState.items : {};
+
   useEffect(() => {
-    setPreviews({});
-    if (!currentJob || currentJob.status !== "completed") return;
-    void loadPreviews(currentJob.id).catch(() => undefined);
-  }, [currentJob?.id, currentJob?.status, loadPreviews]);
+    if (!currentPreviewJobId || currentJob?.status !== "completed") return;
+    let cancelled = false;
+    void fetchPreviews(currentPreviewJobId)
+      .then((next) => {
+        if (!cancelled) setPreviewState({ jobId: currentPreviewJobId, items: next });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [currentJob?.status, currentPreviewJobId, fetchPreviews]);
 
   const hasActivePreview = Object.values(previews).some((preview) => PREVIEW_ACTIVE.has(preview.status));
   useEffect(() => {
-    if (!currentJob || !hasActivePreview) return;
-    const timer = window.setInterval(() => void loadPreviews(currentJob.id).catch(() => undefined), 2200);
+    if (!currentPreviewJobId || !hasActivePreview) return;
+    const timer = window.setInterval(() => void loadPreviews(currentPreviewJobId).catch(() => undefined), 2200);
     return () => window.clearInterval(timer);
-  }, [currentJob, hasActivePreview, loadPreviews]);
+  }, [currentPreviewJobId, hasActivePreview, loadPreviews]);
 
   const draftDirty = currentTrackIds.join("|") !== draftOrder.join("|")
-    || [...locksFromPlan(currentPlan)].sort().join("|") !== [...draftLocks].sort().join("|");
+    || [...canonicalLocks].sort().join("|") !== [...draftLocks].sort().join("|");
 
   const comparisonJobs = comparisonIds
     .map((id) => planJobs.find((job) => job.id === id))
@@ -486,20 +519,16 @@ export function SetBuilderWorkspace({ artistId, artistName, tracks }: SetBuilder
   function moveDraft(index: number, direction: -1 | 1) {
     const target = index + direction;
     if (target < 0 || target >= draftOrder.length) return;
-    setDraftOrder((current) => {
-      const next = [...current];
-      [next[index], next[target]] = [next[target], next[index]];
-      return next;
-    });
+    const next = [...draftOrder];
+    [next[index], next[target]] = [next[target], next[index]];
+    setDraftState({ planIdentity, order: next, locks: new Set(draftLocks) });
   }
 
   function toggleDraftLock(trackId: string) {
-    setDraftLocks((current) => {
-      const next = new Set(current);
-      if (next.has(trackId)) next.delete(trackId);
-      else next.add(trackId);
-      return next;
-    });
+    const next = new Set(draftLocks);
+    if (next.has(trackId)) next.delete(trackId);
+    else next.add(trackId);
+    setDraftState({ planIdentity, order: [...draftOrder], locks: next });
   }
 
   async function excludeTrack(trackId: string) {
@@ -610,7 +639,8 @@ export function SetBuilderWorkspace({ artistId, artistName, tracks }: SetBuilder
       if (!response.ok) throw new Error(responseError(body, "Could not create the transition preview."));
       const preview = asRecord(body).preview;
       if (preview && typeof preview === "object" && !Array.isArray(preview)) {
-        setPreviews((current) => ({ ...current, [index]: preview as PreviewView }));
+        const currentItems = previewState.jobId === currentJob.id ? previewState.items : {};
+        setPreviewState({ jobId: currentJob.id, items: { ...currentItems, [index]: preview as PreviewView } });
       }
       await loadPreviews(currentJob.id).catch(() => undefined);
     } catch (previewError) {
@@ -707,7 +737,7 @@ export function SetBuilderWorkspace({ artistId, artistName, tracks }: SetBuilder
               const plan = planFromJob(job);
               const lineage = lineageFromJob(job);
               const revision = typeof lineage.revision === "number" ? lineage.revision : 1;
-              const selected = job.id === currentJobId;
+              const selected = job.id === currentJob?.id;
               return (
                 <button key={job.id} type="button" className={selected ? styles.revisionActive : ""} onClick={() => setCurrentJobId(job.id)}>
                   <span className={styles.revisionNumber}>v{revision}</span>
@@ -865,7 +895,7 @@ export function SetBuilderWorkspace({ artistId, artistName, tracks }: SetBuilder
               const plan = planFromJob(job);
               const optionVariant = variantFromPlan(plan);
               return (
-                <article key={id} className={id === currentJobId ? styles.comparisonActive : ""}>
+                <article key={id} className={id === currentJob?.id ? styles.comparisonActive : ""}>
                   <span className="section-label">{optionVariant}</span>
                   <h4>{job ? statusLabel(job.status) : "Queued"}</h4>
                   <div className={styles.comparisonFacts}>
