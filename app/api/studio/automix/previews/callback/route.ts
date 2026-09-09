@@ -14,6 +14,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+const PREVIEW_RETENTION_MS = 24 * 60 * 60 * 1000;
+
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -105,8 +107,9 @@ export async function POST(request: Request) {
   const requestPayload = record(preview.request_payload);
   if (!authorized(request, requestPayload)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // A duplicate callback belongs to an already-reconciled worker generation. Never stop the shared
+  // Sandbox here: cleanup from the winning terminal callback may already have dispatched new work.
   if (["completed", "failed", "cancelled"].includes(preview.status)) {
-    scheduleCleanup();
     return NextResponse.json({ ok: true, duplicate: true });
   }
 
@@ -138,7 +141,7 @@ export async function POST(request: Request) {
       .select("id")
       .maybeSingle();
     if (update.error) return NextResponse.json({ error: update.error.message }, { status: 500 });
-    scheduleCleanup();
+    if (update.data) scheduleCleanup();
     return NextResponse.json({ ok: true, duplicate: !update.data });
   }
 
@@ -151,7 +154,6 @@ export async function POST(request: Request) {
   try {
     if (!(await canonicalMastersStillMatch(preview, requestPayload))) {
       const message = "A canonical master changed while this transition preview was rendering. The stale preview was discarded.";
-      await service.storage.from(requestBucket).remove([requestPath]).catch(() => undefined);
       const staleUpdate = await db.from("automix_transition_previews").update({
         status: "cancelled",
         request_payload: json(terminalRequestPayload(requestPayload)),
@@ -163,7 +165,10 @@ export async function POST(request: Request) {
         .select("id")
         .maybeSingle();
       if (staleUpdate.error) throw new Error(staleUpdate.error.message);
-      scheduleCleanup();
+      if (staleUpdate.data) {
+        await service.storage.from(requestBucket).remove([requestPath]).catch(() => undefined);
+        scheduleCleanup();
+      }
       return NextResponse.json({ ok: true, stale: Boolean(staleUpdate.data), duplicate: !staleUpdate.data });
     }
   } catch (error) {
@@ -172,22 +177,21 @@ export async function POST(request: Request) {
     }, { status: 500 });
   }
 
+  const expiresAt = new Date(Date.now() + PREVIEW_RETENTION_MS).toISOString();
   const update = await db.from("automix_transition_previews").update({
     status: "completed",
     request_payload: json(terminalRequestPayload(requestPayload)),
     result_payload: json(result),
     error: null,
     completed_at: new Date().toISOString(),
+    expires_at: expiresAt,
   }).eq("id", preview.id)
     .in("status", ["queued", "running"])
     .select("id")
     .maybeSingle();
   if (update.error) return NextResponse.json({ error: update.error.message }, { status: 500 });
-  if (!update.data) {
-    scheduleCleanup();
-    return NextResponse.json({ ok: true, duplicate: true });
-  }
+  if (!update.data) return NextResponse.json({ ok: true, duplicate: true });
 
   scheduleCleanup();
-  return NextResponse.json({ ok: true, private: true, expiresAt: preview.expires_at });
+  return NextResponse.json({ ok: true, private: true, expiresAt });
 }
