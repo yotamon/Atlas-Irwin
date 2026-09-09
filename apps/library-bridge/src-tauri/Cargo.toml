@@ -17,6 +17,7 @@ tauri-build = { version = "2", features = [] }
 anyhow = "1"
 hex = "0.4"
 keyring = "4.2"
+notify = "8.2.0"
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "rustls"] }
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
