@@ -230,6 +230,7 @@ files = {
     "app/automix_transition_dsp_v2.py": f"{base}/app/automix_transition_dsp_v2.py",
     "app/automix_mixplan_renderer.py": f"{base}/app/automix_mixplan_renderer.py",
     "app/automix.py": f"{base}/app/automix.py",
+    "app/automix_preview.py": f"{base}/app/automix_preview.py",
     "app/runner.py": f"{base}/app/runner.py",
     "requirements.txt": f"{base}/requirements.txt",
     "requirements-audio-advanced.txt": f"{base}/requirements-audio-advanced.txt",
@@ -283,12 +284,13 @@ import allin1_infer
 import imageio_ffmpeg
 from PIL import Image
 from app.automix import AutomixWorkerRequest
+from app.automix_preview import AutomixPreviewWorkerRequest
 from app.automix_manifest import MIXPLAN_VERSION
 from app.automix_set_intelligence import SET_INTENT_VERSION
 from app.mastering_processor import MasteringWorkerRequest
 from app.stem_intelligence import ANALYSIS_VERSION
 from app.social_finishing import SocialWorkerRequest
-print("Atlas Media Worker ready", imageio_ffmpeg.get_ffmpeg_exe(), "stem-analysis", ANALYSIS_VERSION, "mastering", MasteringWorkerRequest.__name__, "social-finishing", SocialWorkerRequest.__name__, "automix", AutomixWorkerRequest.__name__, "mixplan", MIXPLAN_VERSION, "set-intent", SET_INTENT_VERSION)
+print("Atlas Media Worker ready", imageio_ffmpeg.get_ffmpeg_exe(), "stem-analysis", ANALYSIS_VERSION, "mastering", MasteringWorkerRequest.__name__, "social-finishing", SocialWorkerRequest.__name__, "automix", AutomixWorkerRequest.__name__, "preview", AutomixPreviewWorkerRequest.__name__, "mixplan", MIXPLAN_VERSION, "set-intent", SET_INTENT_VERSION)
 PY
 }
 
@@ -318,7 +320,8 @@ export async function dispatchMediaWorkerJob(input: {
     | "render_audio_scene"
     | "master_audio"
     | "finish_social_video"
-    | "render_automix";
+    | "render_automix"
+    | "render_automix_preview";
   payload: Record<string, unknown>;
   callbackUrl: string;
   callbackToken: string;
@@ -384,7 +387,16 @@ export function scheduleMediaWorkerSandboxCleanup() {
         const result = await kickMasteringQueue();
         dispatched = result.dispatched;
       } catch {
-        // Mastering work is durable. Give AutoMix a chance below.
+        // Mastering work is durable. Give transition previews a chance below.
+      }
+    }
+    if (!dispatched) {
+      try {
+        const { kickAutoMixPreviewQueue } = await import("@/lib/automix/previews");
+        const result = await kickAutoMixPreviewQueue();
+        dispatched = result.dispatched;
+      } catch {
+        // Preview work is durable. Give full AutoMix a chance below.
       }
     }
     if (!dispatched) {
