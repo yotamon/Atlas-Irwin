@@ -40,6 +40,7 @@ export interface AutoMixSourceAdapter<TContext = unknown, TTrack = unknown> {
   resolveTracks(context: TContext, trackIds: readonly string[]): Promise<TTrack[]>;
 }
 
+const SOURCE_CONTRACT_VERSION = "ensemblis.automix-source.v1" as const;
 const SOURCE_KINDS = new Set<AutoMixSourceKind>([
   "artist_catalog",
   "local_library",
@@ -50,7 +51,7 @@ const SOURCE_KINDS = new Set<AutoMixSourceKind>([
 
 export function artistCatalogSourceRef(trackId: string): AutoMixSourceTrackRef {
   return {
-    version: "ensemblis.automix-source.v1",
+    version: SOURCE_CONTRACT_VERSION,
     kind: "artist_catalog",
     trackId,
     executionTarget: "cloud",
@@ -61,6 +62,8 @@ export function artistCatalogSourceRef(trackId: string): AutoMixSourceTrackRef {
 export function normalizeAutoMixSourceRef(value: unknown): AutoMixSourceTrackRef | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const raw = value as Record<string, unknown>;
+  // Once a caller declares a contract version, never silently reinterpret another version as v1.
+  if (raw.version !== undefined && raw.version !== SOURCE_CONTRACT_VERSION) return null;
   const kind = raw.kind;
   const trackId = typeof raw.trackId === "string" ? raw.trackId.trim() : "";
   const executionTarget = raw.executionTarget;
@@ -70,7 +73,7 @@ export function normalizeAutoMixSourceRef(value: unknown): AutoMixSourceTrackRef
     ? raw.availability as AutoMixSourceAvailability
     : "unknown";
   return {
-    version: "ensemblis.automix-source.v1",
+    version: SOURCE_CONTRACT_VERSION,
     kind: kind as AutoMixSourceKind,
     trackId,
     executionTarget,
