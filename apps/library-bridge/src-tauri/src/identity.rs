@@ -3,7 +3,8 @@ use sha2::{Digest, Sha256};
 use std::{fs::File, io::Read, path::Path};
 
 pub fn fingerprint_file(path: &Path) -> anyhow::Result<String> {
-    let mut file = File::open(path).with_context(|| format!("could not open {}", path.display()))?;
+    let mut file =
+        File::open(path).with_context(|| format!("could not open {}", path.display()))?;
     let mut digest = Sha256::new();
     let mut buffer = [0_u8; 1024 * 1024];
     loop {
