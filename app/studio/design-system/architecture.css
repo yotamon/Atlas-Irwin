@@ -1,0 +1,340 @@
+/* Canonical Studio layout architecture.
+   Routes describe information hierarchy with semantic composition classes;
+   this layer owns page width, rhythm, forms, action placement and responsive
+   recomposition. Legacy route classes are normalized here while they migrate. */
+
+.studio-root .ensemblis-motion-stage {
+  width: 100%;
+  min-width: 0;
+}
+
+.studio-root :where(.studio-page, .studio-v2-page) {
+  width: min(100%, var(--en-page-max));
+  margin-inline: auto;
+  padding: var(--en-page-block) var(--en-page-gutter) calc(var(--en-page-block) * 1.4);
+}
+
+.studio-root .studio-page[data-width="narrow"] { max-width: var(--en-page-narrow); }
+.studio-root .studio-page[data-width="wide"] { max-width: var(--en-page-wide); }
+.studio-root .studio-page[data-width="full"] { max-width: none; }
+
+/* Existing route archetypes keep their intended reading width without owning
+   gutters or vertical rhythm independently. */
+.studio-root :where(
+  .ensemblis-today-page,
+  .needs-you-page,
+  .music-workspace-page,
+  .release-catalog-page,
+  .create-polish-page,
+  .growth-polish-page,
+  .audience-polish-page,
+  .library-polish-page,
+  .inbox-polish-page,
+  .settings-page
+) {
+  margin-inline: auto;
+}
+
+.studio-root :where(.studio-page, .studio-v2-page) > * + * {
+  margin-top: var(--en-section-gap);
+}
+
+.studio-root .studio-page-header + * {
+  margin-top: 0;
+}
+
+.studio-root .studio-section,
+.studio-root .v2-section {
+  min-width: 0;
+}
+
+.studio-root .studio-section {
+  display: grid;
+  gap: var(--en-content-gap);
+  padding-block: var(--en-space-6);
+  border-top: 1px solid var(--en-line);
+}
+
+.studio-root .studio-section:first-of-type {
+  border-top-color: transparent;
+}
+
+.studio-root .studio-section[data-surface="feature"] {
+  padding: clamp(1.1rem, 2.3vw, 1.65rem);
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-lg);
+  background: color-mix(in srgb, var(--en-surface) 92%, transparent);
+}
+
+.studio-root .studio-section-header,
+.studio-root .v2-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--en-space-4);
+  min-width: 0;
+}
+
+.studio-root .studio-section-header-copy,
+.studio-root .v2-section-heading > div {
+  display: grid;
+  gap: var(--en-space-1);
+  min-width: 0;
+}
+
+.studio-root .studio-section-header h2,
+.studio-root .v2-section-heading h2 {
+  margin: 0;
+  color: var(--en-ink);
+  font-size: clamp(1.18rem, 2vw, 1.55rem);
+  font-weight: var(--en-weight-semibold);
+  line-height: 1.16;
+  letter-spacing: -0.035em;
+  text-transform: none;
+}
+
+.studio-root .studio-section-header p,
+.studio-root .v2-section-heading p {
+  max-width: 48rem;
+  margin: var(--en-space-1) 0 0;
+  color: var(--en-muted);
+  font-size: var(--en-text-md);
+  line-height: var(--en-leading-body);
+}
+
+.studio-root .studio-stack {
+  display: grid;
+  gap: var(--en-content-gap);
+  min-width: 0;
+}
+
+.studio-root .studio-stack[data-gap="compact"] { gap: var(--en-space-3); }
+.studio-root .studio-stack[data-gap="roomy"] { gap: var(--en-section-gap); }
+
+.studio-root .studio-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: var(--en-content-gap);
+  min-width: 0;
+}
+
+.studio-root .studio-grid[data-columns="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.studio-root .studio-grid[data-columns="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.studio-root .studio-grid[data-columns="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+.studio-root .studio-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(17rem, 0.75fr);
+  align-items: start;
+  gap: clamp(1.25rem, 3vw, 2.5rem);
+  min-width: 0;
+}
+
+.studio-root .studio-actions,
+.studio-root .form-actions,
+.studio-root .actions {
+  display: flex;
+  align-items: center;
+  gap: var(--en-space-2);
+  flex-wrap: wrap;
+}
+
+.studio-root .studio-actions[data-align="end"],
+.studio-root .form-actions {
+  justify-content: flex-end;
+}
+
+.studio-root .studio-action-bar {
+  position: sticky;
+  bottom: var(--en-space-4);
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--en-space-4);
+  margin-top: var(--en-section-gap);
+  padding: var(--en-space-3);
+  border: 1px solid var(--en-line-strong);
+  border-radius: var(--en-radius-lg);
+  background: color-mix(in srgb, var(--en-bg-elevated) 91%, transparent);
+  box-shadow: var(--en-shadow-md);
+  backdrop-filter: blur(18px) saturate(115%);
+}
+
+.studio-root .studio-action-bar-copy {
+  min-width: 0;
+  color: var(--en-muted);
+  font-size: var(--en-text-sm);
+  line-height: 1.4;
+}
+
+.studio-root .studio-form,
+.studio-root .ensemblis-form-section {
+  display: grid;
+  gap: var(--en-content-gap);
+  min-width: 0;
+}
+
+.studio-root .ensemblis-form-section {
+  padding-block: var(--en-space-5);
+  border-top: 1px solid var(--en-line);
+}
+
+.studio-root .ensemblis-form-section:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.studio-root .studio-form-grid,
+.studio-root :where(.form-grid, .v2-form-grid) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--en-space-4);
+  min-width: 0;
+}
+
+.studio-root .studio-form-grid[data-columns="1"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.studio-root .studio-form-grid[data-columns="3"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.studio-root .studio-state {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: var(--en-space-3);
+  min-height: 16rem;
+  padding: clamp(2rem, 6vw, 4.5rem) var(--en-space-5);
+  border-top: 1px solid var(--en-line);
+  border-bottom: 1px solid var(--en-line);
+  color: var(--en-muted);
+  text-align: center;
+}
+
+.studio-root .studio-state[data-tone="danger"] { color: var(--en-danger); }
+.studio-root .studio-state[data-tone="attention"] { color: var(--en-warning); }
+.studio-root .studio-state[data-tone="success"] { color: var(--en-mint); }
+
+.studio-root .studio-state-icon {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.studio-root .studio-state-icon > svg {
+  width: var(--en-icon-lg);
+  height: var(--en-icon-lg);
+}
+
+.studio-root .studio-state h2,
+.studio-root .studio-state h3 {
+  max-width: 34rem;
+  margin: 0;
+  color: var(--en-ink);
+  font-size: var(--en-text-2xl);
+  font-weight: var(--en-weight-semibold);
+  letter-spacing: -0.035em;
+}
+
+.studio-root .studio-state p {
+  max-width: 38rem;
+  margin: 0;
+  color: var(--en-muted);
+  font-size: var(--en-text-md);
+  line-height: var(--en-leading-body);
+}
+
+/* Card soup protection. A feature surface may contain semantic sections, but
+   those inner sections do not become another stack of framed cards. */
+.studio-root :where(.studio-panel.feature, .studio-section[data-surface="feature"]) :where(.studio-panel:not(.feature), .studio-section:not([data-surface="feature"])) {
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.studio-root :where(.v2-section, .studio-section) > :where(.v2-section, .studio-panel.feature, .studio-section[data-surface="feature"]) {
+  box-shadow: none;
+}
+
+/* Existing settings cards are deliberately lighter than dashboard cards. */
+.studio-root .v2-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 0;
+  border-top: 1px solid var(--en-line);
+  border-bottom: 1px solid var(--en-line);
+}
+
+.studio-root .v2-settings-grid > a {
+  display: grid;
+  align-content: start;
+  gap: var(--en-space-2);
+  min-width: 0;
+  min-height: 10rem;
+  padding: var(--en-space-5);
+  border: 0;
+  border-right: 1px solid var(--en-line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  transition: background-color var(--en-duration-fast) var(--en-ease-standard), color var(--en-duration-fast) var(--en-ease-standard);
+}
+
+.studio-root .v2-settings-grid > a:last-child { border-right: 0; }
+.studio-root .v2-settings-grid > a:hover,
+.studio-root .v2-settings-grid > a:focus-visible { background: color-mix(in srgb, var(--en-surface-hover) 60%, transparent); }
+.studio-root .v2-settings-grid > a strong { color: var(--en-ink); font-size: var(--en-text-lg); }
+.studio-root .v2-settings-grid > a p { margin: 0; color: var(--en-muted); font-size: var(--en-text-sm); line-height: 1.55; }
+.studio-root .v2-settings-grid > a small { margin-top: auto; color: var(--en-accent); font-size: var(--en-text-xs); font-weight: var(--en-weight-semibold); }
+
+@media (max-width: 960px) {
+  .studio-root .studio-split { grid-template-columns: minmax(0, 1fr); }
+  .studio-root .studio-grid[data-columns="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .studio-root .studio-form-grid[data-columns="3"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 720px) {
+  .studio-root :where(.studio-page, .studio-v2-page) {
+    padding: var(--en-page-block-mobile) var(--en-page-gutter-mobile) calc(6.6rem + env(safe-area-inset-bottom));
+  }
+
+  .studio-root :where(.studio-grid[data-columns="2"], .studio-grid[data-columns="3"], .studio-grid[data-columns="4"], .studio-form-grid, .studio-form-grid[data-columns="3"], .form-grid, .v2-form-grid) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .studio-root .studio-section-header,
+  .studio-root .v2-section-heading {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .studio-root .studio-action-bar {
+    bottom: calc(5.25rem + env(safe-area-inset-bottom));
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .studio-root .studio-action-bar :where(.studio-actions, .form-actions, .actions),
+  .studio-root .studio-action-bar :where(.button, button, a) {
+    width: 100%;
+  }
+
+  .studio-root .v2-settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .studio-root .v2-settings-grid > a {
+    min-height: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--en-line);
+  }
+
+  .studio-root .v2-settings-grid > a:last-child { border-bottom: 0; }
+}
