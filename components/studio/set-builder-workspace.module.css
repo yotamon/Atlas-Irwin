@@ -1,0 +1,1057 @@
+.builder {
+  display: grid;
+  gap: clamp(3.5rem, 7vw, 7rem);
+  padding: clamp(1.5rem, 4vw, 3.5rem) 0 clamp(5rem, 9vw, 9rem);
+}
+
+.builderHero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(16rem, 0.5fr);
+  gap: clamp(2rem, 7vw, 7rem);
+  align-items: end;
+  min-height: clamp(24rem, 48vw, 38rem);
+  padding: clamp(3rem, 8vw, 7rem) 0;
+  overflow: clip;
+  border-top: 1px solid color-mix(in srgb, var(--en-accent) 55%, var(--en-line));
+  border-bottom: 1px solid var(--en-line-strong);
+}
+
+.builderHero::after {
+  content: "PLAN";
+  position: absolute;
+  right: -0.08em;
+  bottom: -0.16em;
+  z-index: -1;
+  color: color-mix(in srgb, var(--en-ink) 2.6%, transparent);
+  font-size: clamp(9rem, 28vw, 24rem);
+  font-weight: var(--en-weight-bold);
+  line-height: 0.74;
+  letter-spacing: -0.11em;
+  pointer-events: none;
+}
+
+.builderHero > div:first-child {
+  display: grid;
+  gap: var(--en-space-5);
+  align-self: end;
+}
+
+.builderHero h2 {
+  max-width: 10ch;
+  margin: 0;
+  font-size: clamp(3.1rem, 7.3vw, 7rem);
+  font-weight: var(--en-weight-semibold);
+  line-height: 0.86;
+  letter-spacing: -0.078em;
+  text-wrap: balance;
+}
+
+.builderHero h2 em {
+  color: var(--en-accent);
+  font-family: var(--en-font-serif, Georgia, serif);
+  font-weight: 400;
+}
+
+.builderHero p {
+  max-width: 48rem;
+  margin: 0;
+  color: var(--en-muted);
+  font-size: clamp(var(--en-text-md), 1.4vw, var(--en-text-xl));
+  line-height: 1.65;
+}
+
+.heroContract {
+  display: grid;
+  gap: var(--en-space-3);
+  align-self: end;
+  padding: var(--en-space-5) 0;
+  border-top: 1px solid var(--en-line-strong);
+  border-bottom: 1px solid var(--en-line);
+}
+
+.heroContract > span,
+.heroContract small {
+  color: var(--en-subtle);
+  font-size: var(--en-text-xs);
+  line-height: 1.5;
+}
+
+.heroContract > span {
+  font-weight: var(--en-weight-semibold);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.heroContract strong {
+  font-size: clamp(1.2rem, 2vw, 1.6rem);
+  font-weight: var(--en-weight-medium);
+  line-height: 1.25;
+}
+
+.setupGrid,
+.workspaceGrid {
+  display: grid;
+  grid-template-columns: minmax(13rem, 0.3fr) minmax(0, 0.7fr);
+  gap: clamp(2.5rem, 6vw, 6rem);
+}
+
+.setupGrid {
+  padding-top: var(--en-space-6);
+  border-top: 1px solid var(--en-line-strong);
+}
+
+.setupIntro {
+  position: sticky;
+  top: 6.5rem;
+  align-self: start;
+  display: grid;
+  gap: var(--en-space-4);
+}
+
+.setupIntro h3,
+.comparisonHeading h3,
+.renderStatus h3,
+.blankPlan h3,
+.planHeader h3 {
+  margin: 0;
+  font-weight: var(--en-weight-medium);
+  letter-spacing: -0.05em;
+}
+
+.setupIntro h3 {
+  max-width: 11ch;
+  font-size: clamp(2.1rem, 4.2vw, 4.3rem);
+  line-height: 0.97;
+}
+
+.setupIntro p,
+.comparisonHeading p,
+.renderStatus p,
+.blankPlan p,
+.planHeader p {
+  margin: 0;
+  color: var(--en-muted);
+  line-height: 1.6;
+}
+
+.setupBody {
+  min-width: 0;
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--en-space-4);
+}
+
+.variantRail {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  margin-top: var(--en-space-8);
+  border-top: 1px solid var(--en-line-strong);
+  border-bottom: 1px solid var(--en-line-strong);
+}
+
+.variantRail button {
+  display: grid;
+  gap: var(--en-space-2);
+  min-height: 8rem;
+  padding: var(--en-space-4);
+  appearance: none;
+  border: 0;
+  border-right: 1px solid var(--en-line);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--en-duration-fast) ease, transform var(--en-duration-normal) var(--en-ease-emphasized);
+}
+
+.variantRail button:last-child {
+  border-right: 0;
+}
+
+.variantRail button:hover,
+.variantRail button:focus-visible {
+  background: color-mix(in srgb, var(--en-ink) 2.5%, transparent);
+}
+
+.variantRail button:focus-visible {
+  outline: 1px solid var(--en-accent);
+  outline-offset: -1px;
+}
+
+.variantRail strong {
+  align-self: end;
+  font-size: var(--en-text-lg);
+  font-weight: var(--en-weight-medium);
+}
+
+.variantRail small {
+  color: var(--en-muted);
+  line-height: 1.45;
+}
+
+.variantRail .variantActive {
+  background: var(--en-accent-soft);
+}
+
+.variantRail .variantActive strong {
+  color: var(--en-accent);
+}
+
+.catalogHeader,
+.editorHeading,
+.trajectoryHeading,
+.decisionBar,
+.revisionsHeading {
+  display: flex;
+  gap: var(--en-space-4);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.catalogHeader {
+  margin-top: var(--en-space-8);
+  padding: 0 0 var(--en-space-4);
+  border-bottom: 1px solid var(--en-line-strong);
+}
+
+.catalogHeader > div:first-child,
+.editorHeading > div:first-child,
+.revisionsHeading {
+  display: grid;
+  gap: var(--en-space-2);
+}
+
+.inlineActions {
+  display: flex;
+  gap: var(--en-space-2);
+}
+
+.inlineActions button,
+.trackTools button,
+.handoffTools > button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--en-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.inlineActions button {
+  padding: var(--en-space-2) var(--en-space-3);
+  border-bottom: 1px solid var(--en-line);
+  font-size: var(--en-text-sm);
+}
+
+.inlineActions button:hover,
+.inlineActions button:focus-visible,
+.trackTools button:hover:not(:disabled),
+.trackTools button:focus-visible,
+.handoffTools > button:hover:not(:disabled),
+.handoffTools > button:focus-visible {
+  color: var(--en-accent);
+}
+
+.catalog {
+  display: grid;
+  max-height: 38rem;
+  overflow: auto;
+}
+
+.catalog > button {
+  display: grid;
+  grid-template-columns: 2.3rem 2.4rem minmax(0, 1fr) auto;
+  gap: var(--en-space-3);
+  align-items: center;
+  min-height: 4.6rem;
+  padding: var(--en-space-3) 0;
+  appearance: none;
+  border: 0;
+  border-bottom: 1px solid var(--en-line);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--en-duration-fast) ease, transform var(--en-duration-normal) var(--en-ease-emphasized);
+}
+
+.catalog > button:hover,
+.catalog > button:focus-visible {
+  transform: translateX(2px);
+  background: color-mix(in srgb, var(--en-ink) 2.2%, transparent);
+}
+
+.catalog > button > span:first-child,
+.catalog > button small {
+  color: var(--en-subtle);
+  font-size: var(--en-text-xs);
+}
+
+.catalog > button strong {
+  overflow: hidden;
+  font-weight: var(--en-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalogCheck {
+  display: grid;
+  width: 1.8rem;
+  height: 1.8rem;
+  place-items: center;
+  border: 1px solid var(--en-line-strong);
+  border-radius: var(--en-radius-pill);
+  color: var(--en-bg);
+}
+
+.catalog .catalogSelected .catalogCheck {
+  border-color: var(--en-accent);
+  background: var(--en-accent);
+}
+
+.catalog .catalogSelected strong {
+  color: var(--en-accent);
+}
+
+.planCta {
+  display: flex;
+  gap: var(--en-space-5);
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--en-space-5);
+  padding: var(--en-space-5) 0;
+  border-top: 1px solid var(--en-line-strong);
+  border-bottom: 1px solid var(--en-line-strong);
+}
+
+.planCta > div {
+  display: grid;
+  gap: var(--en-space-1);
+}
+
+.planCta small,
+.muted,
+.empty {
+  color: var(--en-muted);
+}
+
+.error {
+  display: flex;
+  gap: var(--en-space-3);
+  align-items: flex-start;
+  padding: var(--en-space-4) var(--en-space-5);
+  border: 1px solid color-mix(in srgb, var(--en-danger, #c54b4b) 44%, var(--en-line));
+  background: color-mix(in srgb, var(--en-danger, #c54b4b) 7%, transparent);
+  color: var(--en-ink);
+  line-height: 1.55;
+}
+
+.error svg {
+  flex: 0 0 auto;
+  margin-top: 0.18rem;
+  color: var(--en-danger, #c54b4b);
+}
+
+.workspaceGrid {
+  align-items: start;
+  padding-top: var(--en-space-6);
+  border-top: 1px solid var(--en-line-strong);
+}
+
+.revisions {
+  position: sticky;
+  top: 6.5rem;
+  display: grid;
+  gap: var(--en-space-4);
+}
+
+.revisionList {
+  display: grid;
+  border-top: 1px solid var(--en-line);
+}
+
+.revisionList button {
+  display: grid;
+  grid-template-columns: 2.5rem minmax(0, 1fr) auto;
+  gap: var(--en-space-3);
+  align-items: center;
+  min-height: 4.4rem;
+  padding: var(--en-space-3) 0;
+  appearance: none;
+  border: 0;
+  border-bottom: 1px solid var(--en-line);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.revisionList button:hover,
+.revisionList button:focus-visible,
+.revisionList .revisionActive {
+  color: var(--en-accent);
+}
+
+.revisionNumber {
+  color: var(--en-subtle);
+  font-size: var(--en-text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.revisionList button > span:nth-child(2) {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.revisionList button strong {
+  font-weight: var(--en-weight-medium);
+  text-transform: capitalize;
+}
+
+.revisionList button small {
+  overflow: hidden;
+  color: var(--en-subtle);
+  font-size: var(--en-text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.planStage {
+  min-width: 0;
+}
+
+.blankPlan {
+  display: grid;
+  gap: var(--en-space-4);
+  min-height: 28rem;
+  place-content: center;
+  padding: clamp(2rem, 6vw, 5rem);
+  border: 1px solid var(--en-line);
+  text-align: center;
+}
+
+.blankPlan > svg {
+  width: 2rem;
+  height: 2rem;
+  margin: 0 auto;
+  color: var(--en-accent);
+}
+
+.blankPlan h3 {
+  max-width: 18ch;
+  font-size: clamp(2rem, 4vw, 3.6rem);
+  line-height: 1;
+}
+
+.blankPlan p {
+  max-width: 36rem;
+}
+
+.planHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--en-space-8);
+  align-items: end;
+  padding-bottom: var(--en-space-6);
+  border-bottom: 1px solid var(--en-line-strong);
+}
+
+.planHeader > div:first-child {
+  display: grid;
+  gap: var(--en-space-3);
+}
+
+.planHeader h3 {
+  font-size: clamp(2.4rem, 5vw, 5rem);
+  line-height: 0.95;
+}
+
+.planFacts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(7rem, 1fr));
+  min-width: 19rem;
+  border-top: 1px solid var(--en-line);
+  border-left: 1px solid var(--en-line);
+}
+
+.planFacts span,
+.comparisonFacts span {
+  display: grid;
+  gap: var(--en-space-1);
+  padding: var(--en-space-3);
+  border-right: 1px solid var(--en-line);
+  border-bottom: 1px solid var(--en-line);
+}
+
+.planFacts small,
+.comparisonFacts small {
+  color: var(--en-subtle);
+  font-size: var(--en-text-xs);
+}
+
+.planFacts strong,
+.comparisonFacts strong {
+  font-weight: var(--en-weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.trajectory {
+  margin-top: var(--en-space-8);
+  padding: var(--en-space-5) 0;
+  border-top: 1px solid var(--en-line);
+  border-bottom: 1px solid var(--en-line-strong);
+}
+
+.trajectoryHeading small {
+  color: var(--en-subtle);
+}
+
+.trajectoryPlot {
+  display: grid;
+  grid-auto-columns: minmax(2.4rem, 1fr);
+  grid-auto-flow: column;
+  gap: clamp(0.25rem, 0.8vw, 0.75rem);
+  align-items: end;
+  height: 11rem;
+  margin-top: var(--en-space-5);
+}
+
+.trajectoryPoint {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: var(--en-space-2);
+  align-items: end;
+  height: 100%;
+  min-width: 0;
+}
+
+.energyBar {
+  width: 100%;
+  height: var(--energy, 40%);
+  min-height: 0.4rem;
+  background: color-mix(in srgb, var(--en-accent) 68%, var(--en-ink));
+  transform-origin: bottom;
+  transition: height var(--en-duration-slow) var(--en-ease-emphasized);
+}
+
+.trajectoryPoint small {
+  overflow: hidden;
+  color: var(--en-subtle);
+  font-size: 0.67rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.editor {
+  margin-top: clamp(2.5rem, 6vw, 5rem);
+}
+
+.editorHeading {
+  padding-bottom: var(--en-space-4);
+  border-bottom: 1px solid var(--en-line-strong);
+}
+
+.editorHeading strong {
+  font-weight: var(--en-weight-medium);
+}
+
+.route {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.route > li {
+  display: grid;
+}
+
+.trackRow {
+  display: grid;
+  grid-template-columns: 3.6rem minmax(0, 1fr) auto;
+  gap: var(--en-space-4);
+  align-items: center;
+  min-height: 6.5rem;
+  padding: var(--en-space-4) 0;
+  border-bottom: 1px solid var(--en-line);
+}
+
+.trackIndex {
+  color: var(--en-subtle);
+  font-size: clamp(1.5rem, 3vw, 2.6rem);
+  font-weight: var(--en-weight-medium);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.05em;
+}
+
+.trackIdentity {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.trackIdentity strong {
+  overflow: hidden;
+  font-size: clamp(var(--en-text-lg), 2vw, 1.5rem);
+  font-weight: var(--en-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trackIdentity small,
+.trackIdentity > span {
+  color: var(--en-muted);
+  font-size: var(--en-text-xs);
+  line-height: 1.45;
+}
+
+.trackIdentity > span {
+  color: var(--en-subtle);
+}
+
+.trackTools {
+  display: flex;
+  gap: var(--en-space-1);
+  align-items: center;
+}
+
+.trackTools button {
+  display: grid;
+  width: 2.3rem;
+  height: 2.3rem;
+  place-items: center;
+}
+
+.trackTools button:disabled,
+.handoffTools > button:disabled {
+  opacity: 0.28;
+  cursor: not-allowed;
+}
+
+.trackTools select {
+  max-width: 8.5rem;
+  min-height: 2.3rem;
+  border: 1px solid var(--en-line);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--en-text-xs);
+}
+
+.handoff {
+  display: grid;
+  grid-template-columns: minmax(12rem, 0.9fr) minmax(16rem, 1.1fr) auto;
+  gap: var(--en-space-4);
+  align-items: center;
+  margin: 0 0 0 3.6rem;
+  padding: var(--en-space-3) var(--en-space-4);
+  border-left: 1px solid var(--en-line-strong);
+  background: color-mix(in srgb, var(--en-ink) 1.8%, transparent);
+}
+
+.handoffLead {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--en-space-3);
+  align-items: center;
+}
+
+.safeDot,
+.riskDot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: var(--en-radius-pill);
+}
+
+.safeDot {
+  background: var(--en-accent);
+}
+
+.riskDot {
+  background: var(--en-warning, #c28b35);
+}
+
+.handoffLead > div {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.handoffLead strong {
+  font-size: var(--en-text-sm);
+  font-weight: var(--en-weight-medium);
+}
+
+.handoffLead small,
+.handoff p,
+.risks {
+  color: var(--en-subtle);
+  font-size: var(--en-text-xs);
+  line-height: 1.45;
+}
+
+.handoffMetrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-left: 1px solid var(--en-line);
+}
+
+.handoffMetrics span {
+  display: grid;
+  gap: 0.08rem;
+  padding: var(--en-space-2) var(--en-space-3);
+  border-right: 1px solid var(--en-line);
+  color: var(--en-subtle);
+  font-size: 0.67rem;
+}
+
+.handoffMetrics b {
+  color: var(--en-ink);
+  font-size: var(--en-text-xs);
+  font-weight: var(--en-weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.handoffTools {
+  display: flex;
+  gap: var(--en-space-2);
+  align-items: end;
+}
+
+.handoffTools label {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.handoffTools label span {
+  color: var(--en-subtle);
+  font-size: 0.62rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.handoffTools select {
+  min-height: 2.2rem;
+  border: 1px solid var(--en-line);
+  background: var(--en-bg);
+  color: inherit;
+  font: inherit;
+  font-size: var(--en-text-xs);
+}
+
+.handoffTools > button {
+  display: flex;
+  gap: var(--en-space-2);
+  align-items: center;
+  min-height: 2.2rem;
+  padding: 0 var(--en-space-2);
+  border: 1px solid var(--en-line);
+  font-size: var(--en-text-xs);
+  white-space: nowrap;
+}
+
+.handoff > p,
+.previewPlayer {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.risks {
+  color: var(--en-warning, #a56e20) !important;
+}
+
+.previewPlayer {
+  width: 100%;
+  height: 2.6rem;
+}
+
+.decisionBar {
+  margin-top: clamp(2.5rem, 6vw, 5rem);
+  padding: var(--en-space-5) 0;
+  border-top: 1px solid var(--en-line-strong);
+  border-bottom: 1px solid var(--en-line-strong);
+}
+
+.decisionBar > div:first-child {
+  display: grid;
+  gap: var(--en-space-2);
+  max-width: 38rem;
+}
+
+.decisionBar strong {
+  font-weight: var(--en-weight-medium);
+  line-height: 1.45;
+}
+
+.decisionBar small {
+  color: var(--en-muted);
+  line-height: 1.45;
+}
+
+.decisionBar > div:last-child {
+  display: flex;
+  gap: var(--en-space-3);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.comparison {
+  display: grid;
+  gap: var(--en-space-6);
+  padding-top: var(--en-space-6);
+  border-top: 1px solid var(--en-line-strong);
+}
+
+.comparisonHeading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 0.42fr);
+  gap: var(--en-space-8);
+  align-items: end;
+}
+
+.comparisonHeading > div {
+  display: grid;
+  gap: var(--en-space-3);
+}
+
+.comparisonHeading h3 {
+  max-width: 18ch;
+  font-size: clamp(2.2rem, 5vw, 4.8rem);
+  line-height: 0.95;
+}
+
+.comparisonGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--en-line-strong);
+  border-bottom: 1px solid var(--en-line-strong);
+}
+
+.comparisonGrid article {
+  display: grid;
+  gap: var(--en-space-4);
+  min-height: 22rem;
+  padding: var(--en-space-5);
+  border-right: 1px solid var(--en-line);
+}
+
+.comparisonGrid article:last-child {
+  border-right: 0;
+}
+
+.comparisonGrid .comparisonActive {
+  background: var(--en-accent-soft);
+}
+
+.comparisonGrid h4 {
+  margin: 0;
+  font-size: clamp(1.8rem, 3.2vw, 3rem);
+  font-weight: var(--en-weight-medium);
+  letter-spacing: -0.05em;
+}
+
+.comparisonFacts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--en-line);
+  border-left: 1px solid var(--en-line);
+}
+
+.comparisonGrid p {
+  margin: 0;
+  color: var(--en-muted);
+  font-size: var(--en-text-sm);
+  line-height: 1.55;
+}
+
+.comparisonGrid :global(.button) {
+  align-self: end;
+  justify-self: start;
+}
+
+.renderStatus {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--en-space-8);
+  align-items: end;
+  padding: clamp(2rem, 5vw, 4rem) 0;
+  border-top: 1px solid var(--en-accent);
+  border-bottom: 1px solid var(--en-line-strong);
+}
+
+.renderStatus > div:first-child {
+  display: grid;
+  gap: var(--en-space-3);
+}
+
+.renderStatus h3 {
+  max-width: 18ch;
+  font-size: clamp(2.2rem, 5vw, 4.8rem);
+  line-height: 0.95;
+}
+
+.renderAction {
+  display: grid;
+  gap: var(--en-space-3);
+  justify-items: end;
+}
+
+.renderAction > strong {
+  color: var(--en-accent);
+  font-size: var(--en-text-sm);
+  font-weight: var(--en-weight-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.spin {
+  animation: spin 1.05s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 1100px) {
+  .fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .handoff {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .handoffMetrics {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+
+@media (max-width: 900px) {
+  .builderHero,
+  .setupGrid,
+  .workspaceGrid,
+  .comparisonHeading,
+  .renderStatus,
+  .planHeader {
+    grid-template-columns: 1fr;
+  }
+
+  .builderHero {
+    min-height: auto;
+  }
+
+  .setupIntro,
+  .revisions {
+    position: static;
+  }
+
+  .revisions {
+    order: 2;
+  }
+
+  .planStage {
+    order: 1;
+  }
+
+  .planFacts {
+    min-width: 0;
+  }
+
+  .comparisonGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .comparisonGrid article {
+    min-height: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--en-line);
+  }
+
+  .renderAction {
+    justify-items: start;
+  }
+}
+
+@media (max-width: 680px) {
+  .builder {
+    gap: 3.2rem;
+  }
+
+  .builderHero h2 {
+    font-size: clamp(2.8rem, 15vw, 5rem);
+  }
+
+  .fields,
+  .variantRail,
+  .comparisonFacts {
+    grid-template-columns: 1fr;
+  }
+
+  .variantRail button {
+    min-height: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--en-line);
+  }
+
+  .catalogHeader,
+  .planCta,
+  .editorHeading,
+  .decisionBar,
+  .trajectoryHeading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .catalog > button {
+    grid-template-columns: 2rem 2.2rem minmax(0, 1fr);
+  }
+
+  .catalog > button small {
+    grid-column: 3;
+  }
+
+  .trackRow {
+    grid-template-columns: 2.6rem minmax(0, 1fr);
+  }
+
+  .trackTools {
+    grid-column: 2;
+    flex-wrap: wrap;
+  }
+
+  .handoff {
+    grid-template-columns: 1fr;
+    margin-left: 2.6rem;
+  }
+
+  .handoffMetrics,
+  .handoffTools {
+    grid-column: 1;
+  }
+
+  .handoffTools {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .handoffMetrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .decisionBar > div:last-child {
+    justify-content: flex-start;
+  }
+
+  .planFacts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
