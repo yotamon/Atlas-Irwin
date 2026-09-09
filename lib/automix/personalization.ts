@@ -5,6 +5,7 @@ import type { Database, Json } from "@/types/database";
 import type {
   DjEvidenceType,
   DjIntelligenceDatabase,
+  DjLibraryHistorySourceKind,
   DjPreferenceValues,
   DjProfileRow,
 } from "@/types/dj-intelligence-database";
@@ -36,6 +37,10 @@ function clamp01(value: number) {
 
 function clampWeight(value: number) {
   return Math.max(0.05, Math.min(1, value));
+}
+
+function aggregationWeight(value: unknown) {
+  return Math.max(0.001, Math.min(1, number(value, 1)));
 }
 
 export function asDjIntelligenceClient(
@@ -205,7 +210,7 @@ function weightedLearnedPreferences(rows: Array<{ signal: unknown; weight: unkno
       const signal = record(row.signal);
       const sample = signal[key];
       if (typeof sample !== "number" || !Number.isFinite(sample)) continue;
-      const weight = clampWeight(number(row.weight, 1));
+      const weight = aggregationWeight(row.weight);
       weighted += clamp01(sample) * weight;
       weightSum += weight;
     }
@@ -219,19 +224,38 @@ function weightedLearnedPreferences(rows: Array<{ signal: unknown; weight: unkno
   return { learned: result, learnedConfidence };
 }
 
+function boundedLibraryHistoryRows(rows: Array<{ signal: unknown; weight: unknown }>) {
+  const capped = rows.map((row) => ({
+    signal: row.signal,
+    weight: Math.min(0.4, aggregationWeight(row.weight)),
+    verdict: "accepted" as const,
+  }));
+  const total = capped.reduce((sum, row) => sum + row.weight, 0);
+  // Imported play history is observational and incomplete. Across every library revision combined,
+  // it may contribute at most 1.5 aggregate evidence weight before the global confidence cap.
+  const scale = total > 1.5 ? 1.5 / total : 1;
+  return capped.map((row) => ({ ...row, weight: row.weight * scale }));
+}
+
 export async function recalculateDjProfile(
   client: SupabaseClient<Database> | SupabaseClient<DjIntelligenceDatabase>,
   ownerId: string,
   artistId: string,
 ) {
   const db = asDjIntelligenceClient(client);
-  const [evidence, current] = await Promise.all([
+  const [evidence, libraryHistory, current] = await Promise.all([
     db.from("dj_preference_evidence")
       .select("verdict,signal,weight")
       .eq("owner_id", ownerId)
       .eq("artist_id", artistId)
       .order("created_at", { ascending: false })
       .limit(300),
+    db.from("dj_library_history_evidence")
+      .select("signal,weight")
+      .eq("owner_id", ownerId)
+      .eq("artist_id", artistId)
+      .order("created_at", { ascending: false })
+      .limit(100),
     db.from("dj_profiles")
       .select("*")
       .eq("owner_id", ownerId)
@@ -239,9 +263,12 @@ export async function recalculateDjProfile(
       .maybeSingle(),
   ]);
   if (evidence.error) throw new Error(evidence.error.message);
+  if (libraryHistory.error) throw new Error(libraryHistory.error.message);
   if (current.error) throw new Error(current.error.message);
 
-  const rows = evidence.data ?? [];
+  const deliberateRows = evidence.data ?? [];
+  const historyRows = boundedLibraryHistoryRows(libraryHistory.data ?? []);
+  const rows = [...deliberateRows, ...historyRows];
   const { learned, learnedConfidence } = weightedLearnedPreferences(rows);
   const saved = await db.from("dj_profiles").upsert({
     owner_id: ownerId,
@@ -288,6 +315,50 @@ export async function recordDjPreferenceEvidence({
     signal: json(signal),
     weight: clampWeight(weight),
   }, { onConflict: "owner_id,artist_id,automix_job_id,evidence_type,evidence_key" }).select("*").single();
+  if (evidence.error) throw new Error(evidence.error.message);
+  const profile = await recalculateDjProfile(client, ownerId, artistId);
+  return { evidence: evidence.data, profile };
+}
+
+export async function recordDjLibraryHistoryEvidence({
+  client,
+  ownerId,
+  artistId,
+  sourceKind,
+  sourceId,
+  sourceRevision,
+  evidenceKey,
+  signal,
+  weight,
+  sampleCount,
+}: {
+  client: SupabaseClient<Database> | SupabaseClient<DjIntelligenceDatabase>;
+  ownerId: string;
+  artistId: string;
+  sourceKind: DjLibraryHistorySourceKind;
+  sourceId: string;
+  sourceRevision: string;
+  evidenceKey: string;
+  signal: DjPreferenceSignal;
+  weight: number;
+  sampleCount: number;
+}) {
+  const cleanSourceId = sourceId.trim().slice(0, 160);
+  const cleanRevision = sourceRevision.trim().slice(0, 200);
+  const cleanKey = evidenceKey.trim().slice(0, 160);
+  if (!cleanSourceId || !cleanRevision || !cleanKey) throw new Error("DJ library history evidence requires source identity and revision.");
+  const db = asDjIntelligenceClient(client);
+  const evidence = await db.from("dj_library_history_evidence").upsert({
+    owner_id: ownerId,
+    artist_id: artistId,
+    source_kind: sourceKind,
+    source_id: cleanSourceId,
+    source_revision: cleanRevision,
+    evidence_key: cleanKey,
+    signal: json(signal),
+    weight: Math.min(0.4, clampWeight(weight)),
+    sample_count: Math.max(0, Math.round(sampleCount)),
+  }, { onConflict: "owner_id,artist_id,source_kind,source_id,source_revision,evidence_key" }).select("*").single();
   if (evidence.error) throw new Error(evidence.error.message);
   const profile = await recalculateDjProfile(client, ownerId, artistId);
   return { evidence: evidence.data, profile };
