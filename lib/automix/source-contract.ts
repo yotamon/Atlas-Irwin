@@ -1,5 +1,6 @@
 export const DJ_LIBRARY_CONTRACT_VERSION = "ensemblis.dj-library-source.v1" as const;
-export const AUTOMIX_SOURCE_REF_VERSION = "ensemblis.automix-source.v1" as const;
+export const SOURCE_CONTRACT_VERSION = "ensemblis.automix-source.v1" as const;
+export const AUTOMIX_SOURCE_REF_VERSION = SOURCE_CONTRACT_VERSION;
 
 export type AutoMixSourceKind =
   | "artist_catalog"
