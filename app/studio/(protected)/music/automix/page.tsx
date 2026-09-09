@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { AutoMixStudio } from "@/components/studio/automix-studio";
 import { DjIntelligencePanel } from "@/components/studio/dj-intelligence-panel";
+import { SetBuilderWorkspace } from "@/components/studio/set-builder-workspace";
 import { PageHeader } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
@@ -23,11 +23,11 @@ export default async function AutoMixPage() {
     <div className="studio-v2-page automix-workspace-page">
       <PageHeader
         title="DJ & Mixes"
-        description={`Personal set intelligence, professional planning and offline rendering from ${artist.artistName}'s mastered catalog.`}
+        description={`Plan, audition, revise and render professional sets from ${artist.artistName}'s mastered catalog.`}
         action={<Link className="button" href={href("/studio/music")}>Back to music</Link>}
       />
       <DjIntelligencePanel artistId={artist.artistId} />
-      <AutoMixStudio
+      <SetBuilderWorkspace
         artistId={artist.artistId}
         artistName={artist.artistName}
         tracks={tracks.data ?? []}
