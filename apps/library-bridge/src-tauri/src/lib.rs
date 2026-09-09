@@ -31,12 +31,18 @@ fn command_error(error: impl std::fmt::Display) -> String {
 
 #[tauri::command]
 fn bridge_status(state: State<'_, BridgeState>) -> Result<BridgeStatus, String> {
-    let device_id = state.db.get_setting("device_id").map_err(command_error)?
+    let device_id = state
+        .db
+        .get_setting("device_id")
+        .map_err(command_error)?
         .filter(|value| !value.is_empty());
     Ok(BridgeStatus {
         paired: device_id.is_some() && device_credential().map_err(command_error)?.is_some(),
         device_id,
-        api_base_url: state.db.get_setting("api_base_url").map_err(command_error)?
+        api_base_url: state
+            .db
+            .get_setting("api_base_url")
+            .map_err(command_error)?
             .filter(|value| !value.is_empty()),
         sources: state.db.source_count().map_err(command_error)?,
         pending_sync_batches: state.db.pending_outbox_count().map_err(command_error)?,
@@ -49,7 +55,9 @@ async fn choose_and_scan_source(
     state: State<'_, BridgeState>,
     source_kind: String,
 ) -> Result<Option<ScanSummary>, String> {
-    let path = app.dialog().file()
+    let path = app
+        .dialog()
+        .file()
         .set_title("Choose a DJ music library folder")
         .blocking_pick_folder();
     let Some(path) = path else { return Ok(None) };
@@ -62,17 +70,26 @@ async fn choose_and_scan_source(
     let summary = tauri::async_runtime::spawn_blocking(move || {
         scanner::scan_source(&db, &scan_source_id, &scan_source_kind, &scan_path)
     })
-        .await.map_err(command_error)?
+    .await
+    .map_err(command_error)?
+    .map_err(command_error)?;
+    state
+        .watcher
+        .register_source(&source_id, &source_kind, &path)
         .map_err(command_error)?;
-    state.watcher.register_source(&source_id, &source_kind, &path).map_err(command_error)?;
     Ok(Some(summary))
 }
 
 #[tauri::command]
-async fn rescan_source(state: State<'_, BridgeState>, source_id: String) -> Result<ScanSummary, String> {
+async fn rescan_source(
+    state: State<'_, BridgeState>,
+    source_id: String,
+) -> Result<ScanSummary, String> {
     let db = Arc::clone(&state.db);
     tauri::async_runtime::spawn_blocking(move || scanner::rescan_registered_source(&db, &source_id))
-        .await.map_err(command_error)?.map_err(command_error)
+        .await
+        .map_err(command_error)?
+        .map_err(command_error)
 }
 
 #[tauri::command]
@@ -82,22 +99,34 @@ async fn pair_device(
     pairing_code: String,
     device_name: Option<String>,
 ) -> Result<PairResponse, String> {
-    let public_id = state.db.get_setting("public_id").map_err(command_error)?
+    let public_id = state
+        .db
+        .get_setting("public_id")
+        .map_err(command_error)?
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| Uuid::new_v4().to_string());
-    state.db.set_setting("public_id", &public_id).map_err(command_error)?;
-    let name = device_name.filter(|value| !value.trim().is_empty())
+    state
+        .db
+        .set_setting("public_id", &public_id)
+        .map_err(command_error)?;
+    let name = device_name
+        .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| "Ensemblis Library Bridge".to_string());
     let db = Arc::clone(&state.db);
-    tauri::async_runtime::spawn_blocking(move || network::claim_pairing(
-        &db,
-        &api_base_url,
-        &pairing_code,
-        &public_id,
-        &name,
-        std::env::consts::OS,
-        env!("CARGO_PKG_VERSION"),
-    )).await.map_err(command_error)?.map_err(command_error)
+    tauri::async_runtime::spawn_blocking(move || {
+        network::claim_pairing(
+            &db,
+            &api_base_url,
+            &pairing_code,
+            &public_id,
+            &name,
+            std::env::consts::OS,
+            env!("CARGO_PKG_VERSION"),
+        )
+    })
+    .await
+    .map_err(command_error)?
+    .map_err(command_error)
 }
 
 #[tauri::command]
@@ -109,21 +138,32 @@ async fn sync_pending(state: State<'_, BridgeState>) -> Result<usize, String> {
             sent += 1;
         }
         Ok(sent)
-    }).await.map_err(command_error)?.map_err(command_error)
+    })
+    .await
+    .map_err(command_error)?
+    .map_err(command_error)
 }
 
 #[tauri::command]
 async fn poll_device_jobs(state: State<'_, BridgeState>) -> Result<usize, String> {
     let db = Arc::clone(&state.db);
     tauri::async_runtime::spawn_blocking(move || network::poll_and_execute_jobs(&db))
-        .await.map_err(command_error)?.map_err(command_error)
+        .await
+        .map_err(command_error)?
+        .map_err(command_error)
 }
 
 #[tauri::command]
 fn unpair_device(state: State<'_, BridgeState>) -> Result<(), String> {
     clear_device_credential().map_err(command_error)?;
-    state.db.set_setting("device_id", "").map_err(command_error)?;
-    state.db.set_setting("artist_id", "").map_err(command_error)?;
+    state
+        .db
+        .set_setting("device_id", "")
+        .map_err(command_error)?;
+    state
+        .db
+        .set_setting("artist_id", "")
+        .map_err(command_error)?;
     Ok(())
 }
 
