@@ -1,6 +1,6 @@
 begin;
 
-select plan(8);
+select plan(9);
 
 select has_table('public', 'automix_transition_previews', 'AutoMix transition previews table exists');
 select is(
