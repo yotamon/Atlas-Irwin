@@ -371,7 +371,7 @@ export function scheduleMediaWorkerSandboxCleanup() {
       // The Sandbox may already be stopped or have reached its Hobby timeout.
     }
     // Terminal callbacks invoke this only after durable state has been reconciled. Give the
-    // detached runner a moment to release its lock, then dispatch the oldest durable workload.
+    // detached runner a moment to release its lock, then dispatch the next durable workload.
     await new Promise((resolve) => setTimeout(resolve, 1200));
     let dispatched = false;
     try {
@@ -387,16 +387,7 @@ export function scheduleMediaWorkerSandboxCleanup() {
         const result = await kickMasteringQueue();
         dispatched = result.dispatched;
       } catch {
-        // Mastering work is durable. Give transition previews a chance below.
-      }
-    }
-    if (!dispatched) {
-      try {
-        const { kickAutoMixPreviewQueue } = await import("@/lib/automix/previews");
-        const result = await kickAutoMixPreviewQueue();
-        dispatched = result.dispatched;
-      } catch {
-        // Preview work is durable. Give full AutoMix a chance below.
+        // Mastering work is durable. Give full AutoMix a chance below.
       }
     }
     if (!dispatched) {
@@ -405,7 +396,16 @@ export function scheduleMediaWorkerSandboxCleanup() {
         const result = await kickAutoMixQueue();
         dispatched = result.dispatched;
       } catch {
-        // AutoMix work is durable. Give marketing finishing a chance below.
+        // Full AutoMix work is durable. Give transition previews a chance below.
+      }
+    }
+    if (!dispatched) {
+      try {
+        const { kickAutoMixPreviewQueue } = await import("@/lib/automix/previews");
+        const result = await kickAutoMixPreviewQueue();
+        dispatched = result.dispatched;
+      } catch {
+        // Preview work is durable. Give marketing finishing a chance below.
       }
     }
     if (!dispatched) {
