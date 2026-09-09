@@ -7,7 +7,7 @@ create table if not exists public.dj_profiles (
   artist_id uuid not null references public.artists(id) on delete cascade,
   explicit_preferences jsonb not null default '{}'::jsonb,
   learned_preferences jsonb not null default '{}'::jsonb,
-  learned_confidence real not null default 0 check (learned_confidence between 0 and 1),
+  learned_confidence real not null default 0 check (learned_confidence between 0 and 0.6),
   evidence_count integer not null default 0 check (evidence_count >= 0),
   profile_version integer not null default 1 check (profile_version >= 1),
   created_at timestamptz not null default now(),
@@ -47,9 +47,10 @@ as $$
 declare
   v_owner uuid;
   v_artist uuid;
+  v_status text;
 begin
-  select job.owner_id, job.artist_id
-    into v_owner, v_artist
+  select job.owner_id, job.artist_id, job.status
+    into v_owner, v_artist, v_status
     from public.automix_jobs job
     where job.id = new.automix_job_id;
 
@@ -58,6 +59,9 @@ begin
   end if;
   if v_owner <> new.owner_id or v_artist <> new.artist_id then
     raise exception 'DJ preference evidence must match the AutoMix job owner and artist';
+  end if;
+  if v_status <> 'completed' then
+    raise exception 'DJ preference evidence requires a completed verified AutoMix job';
   end if;
   return new;
 end;
@@ -154,4 +158,4 @@ grant select, insert, update on public.dj_preference_evidence to authenticated;
 comment on table public.dj_profiles is
   'Artist-scoped Personal DJ Intelligence. Explicit preferences dominate; learned preferences may only provide bounded planner nudges.';
 comment on table public.dj_preference_evidence is
-  'Inspectable AutoMix feedback evidence used to evolve bounded learned DJ preferences.';
+  'Inspectable feedback from completed verified AutoMix sessions used to evolve bounded learned DJ preferences.';
