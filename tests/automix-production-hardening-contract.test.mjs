@@ -44,17 +44,36 @@ test("AutoMix emits runtime cost proxies and mix-level QA diagnostics without ch
   assert.ok(worker.includes('"render_engine_contract_version": RENDER_ENGINE_CONTRACT_VERSION'));
 });
 
-test("completed mix assets persist the complete reproducibility and QA lineage", async () => {
+test("complete render lineage stays private while public mix metadata exposes only a safe projection", async () => {
   const callback = await source("app/api/studio/automix/callback/route.ts");
+  const catalogMigration = await source("supabase/migrations/20260630222205_catalog_publishing_system.sql");
+  const automixMigration = await source("supabase/migrations/20260907021000_automix_studio.sql");
+  const metadataBlock = callback.slice(
+    callback.indexOf("metadata: json({"),
+    callback.indexOf('}).select("*").single();'),
+  );
 
-  assert.ok(callback.includes("const renderManifest = record(result.render_manifest)"));
-  assert.ok(callback.includes("render_manifest: renderManifest"));
-  assert.ok(callback.includes("evaluation: result.evaluation ?? null"));
-  assert.ok(callback.includes("qa_diagnostics: result.qa_diagnostics ?? null"));
-  assert.ok(callback.includes("execution_metrics: result.execution_metrics ?? null"));
-  assert.ok(callback.includes("render_measurements: render"));
-  assert.ok(callback.includes("source_fingerprints: job.source_fingerprints"));
-  assert.ok(callback.includes("approved_mixplan_hash:"));
+  assert.ok(catalogMigration.includes('create policy "public read public media_assets"'));
+  assert.ok(catalogMigration.includes("for select to anon using (visibility = 'public' and public_url is not null)"));
+  assert.ok(automixMigration.includes('create policy "automix_jobs_select_own"'));
+  assert.ok(automixMigration.includes("on public.automix_jobs for select to authenticated"));
+
+  assert.ok(callback.includes('version: "ensemblis.automix-public-lineage.v1"'));
+  assert.ok(metadataBlock.includes("public_render_lineage: publicLineage"));
+  assert.ok(metadataBlock.includes("approved_mixplan_hash: publicLineage.plan_hash"));
+  assert.equal(metadataBlock.includes("source_fingerprints"), false);
+  assert.equal(metadataBlock.includes("render_manifest"), false);
+  assert.equal(metadataBlock.includes("evaluation:"), false);
+  assert.equal(metadataBlock.includes("qa_diagnostics"), false);
+  assert.equal(metadataBlock.includes("execution_metrics"), false);
+  assert.equal(metadataBlock.includes("plan_lineage"), false);
+
+  const completedJobUpdate = callback.slice(
+    callback.indexOf('const update = await db.from("automix_jobs").update({', callback.indexOf("const publicLineage")),
+    callback.indexOf("if (update.error)", callback.indexOf("const publicLineage")),
+  );
+  assert.ok(completedJobUpdate.includes("result_payload: json(result)"));
+  assert.ok(completedJobUpdate.includes("output_asset_id: asset.id"));
 });
 
 test("render retries preserve history instead of mutating the failed attempt", async () => {
