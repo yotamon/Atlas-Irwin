@@ -95,6 +95,7 @@ export async function POST(request: Request) {
   if (jobs.error || !jobs.data) return NextResponse.json({ error: "Job not found" }, { status: 404 });
   const job = jobs.data as AutoMixJob;
   const requestPayload = record(job.request_payload);
+  const executionMode = typeof requestPayload.execution_mode === "string" ? requestPayload.execution_mode : "render";
   if (!authorized(request, requestPayload)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   // The callback that won the terminal state transition owns Sandbox cleanup. A late duplicate
@@ -136,6 +137,46 @@ export async function POST(request: Request) {
     if (update.error) return NextResponse.json({ error: update.error.message }, { status: 500 });
     if (update.data) scheduleCleanup();
     return NextResponse.json({ ok: true, duplicate: !update.data });
+  }
+
+  if (executionMode === "plan_only") {
+    try {
+      if (!(await canonicalMastersStillMatch(job))) {
+        const message = "A canonical track master changed while this set was being planned. The stale plan was invalidated before it could be approved or rendered.";
+        const staleUpdate = await db.from("automix_jobs").update({
+          status: "cancelled",
+          request_payload: json(terminalRequestPayload(requestPayload)),
+          result_payload: json(result),
+          error: message,
+          completed_at: new Date().toISOString(),
+        }).eq("id", job.id)
+          .eq("owner_id", job.owner_id)
+          .in("status", ["queued", "running"])
+          .select("id")
+          .maybeSingle();
+        if (staleUpdate.error) throw new Error(staleUpdate.error.message);
+        if (staleUpdate.data) scheduleCleanup();
+        return NextResponse.json({ ok: true, stale: Boolean(staleUpdate.data), duplicate: !staleUpdate.data });
+      }
+
+      const update = await db.from("automix_jobs").update({
+        status: "completed",
+        request_payload: json(terminalRequestPayload(requestPayload)),
+        result_payload: json(result),
+        output_asset_id: null,
+        error: null,
+        completed_at: new Date().toISOString(),
+      }).eq("id", job.id)
+        .eq("owner_id", job.owner_id)
+        .in("status", ["queued", "running"])
+        .select("id")
+        .maybeSingle();
+      if (update.error) throw new Error(update.error.message);
+      if (update.data) scheduleCleanup();
+      return NextResponse.json({ ok: true, planned: Boolean(update.data), duplicate: !update.data });
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "AutoMix planning callback failed" }, { status: 500 });
+    }
   }
 
   try {
@@ -215,6 +256,10 @@ export async function POST(request: Request) {
           source_fingerprints: job.source_fingerprints,
           engine: result.engine ?? null,
           quality_contract: record(result.plan).quality_contract ?? null,
+          plan_lineage: record(record(result.plan).plan_lineage),
+          approved_mixplan_hash: typeof record(result.render_manifest).plan_hash === "string"
+            ? record(result.render_manifest).plan_hash
+            : null,
         }),
       }).select("*").single();
       if (created.error || !created.data) throw new Error(created.error?.message || "Could not register AutoMix output.");
