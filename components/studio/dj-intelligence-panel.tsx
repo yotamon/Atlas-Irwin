@@ -9,8 +9,6 @@ type Preferences = {
   harmonicAdventure: number;
   transitionAggressiveness: number;
   exploration: number;
-  openingEnergy: number;
-  closingEnergy: number;
 };
 
 type JobSummary = {
@@ -25,8 +23,6 @@ const DEFAULTS: Preferences = {
   harmonicAdventure: 0.5,
   transitionAggressiveness: 0.5,
   exploration: 0.45,
-  openingEnergy: 0.42,
-  closingEnergy: 0.58,
 };
 
 function record(value: unknown): Record<string, unknown> {
@@ -46,8 +42,6 @@ function asPreferences(value: unknown): Preferences {
     harmonicAdventure: number("harmonicAdventure", DEFAULTS.harmonicAdventure),
     transitionAggressiveness: number("transitionAggressiveness", DEFAULTS.transitionAggressiveness),
     exploration: number("exploration", DEFAULTS.exploration),
-    openingEnergy: number("openingEnergy", DEFAULTS.openingEnergy),
-    closingEnergy: number("closingEnergy", DEFAULTS.closingEnergy),
   };
 }
 
@@ -160,8 +154,6 @@ export function DjIntelligencePanel({ artistId }: { artistId: string }) {
     { key: "harmonicAdventure", title: "Harmonic adventure", detail: "How much controlled key contrast you enjoy when the transition remains musically safe.", low: "safe", middle: "balanced", high: "adventurous" },
     { key: "transitionAggressiveness", title: "Transition character", detail: "A bounded preference layered on top of AutoMix safety, never a permission to force a bad blend.", low: "restrained", middle: "DJ", high: "creative" },
     { key: "exploration", title: "Exploration", detail: "How readily Set Intelligence should choose less-obvious candidates from the pool you provide.", low: "familiar", middle: "open", high: "explore" },
-    { key: "openingEnergy", title: "Opening energy", detail: "The kind of first impression that tends to feel like you.", low: "patient", middle: "present", high: "immediate" },
-    { key: "closingEnergy", title: "Closing energy", detail: "Where you usually like the set to land after the final arc.", low: "soft", middle: "warm", high: "high" },
   ];
 
   return (
