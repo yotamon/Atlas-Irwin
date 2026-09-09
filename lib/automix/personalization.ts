@@ -13,8 +13,6 @@ export const DEFAULT_DJ_PREFERENCES: DjPreferenceValues = {
   harmonicAdventure: 0.5,
   transitionAggressiveness: 0.5,
   exploration: 0.45,
-  openingEnergy: 0.42,
-  closingEnergy: 0.58,
 };
 
 function record(value: unknown): Record<string, unknown> {
@@ -44,8 +42,6 @@ export function normalizeDjPreferences(value: unknown): DjPreferenceValues {
     harmonicAdventure: clamp01(number(raw.harmonicAdventure, DEFAULT_DJ_PREFERENCES.harmonicAdventure)),
     transitionAggressiveness: clamp01(number(raw.transitionAggressiveness, DEFAULT_DJ_PREFERENCES.transitionAggressiveness)),
     exploration: clamp01(number(raw.exploration, DEFAULT_DJ_PREFERENCES.exploration)),
-    openingEnergy: clamp01(number(raw.openingEnergy, DEFAULT_DJ_PREFERENCES.openingEnergy)),
-    closingEnergy: clamp01(number(raw.closingEnergy, DEFAULT_DJ_PREFERENCES.closingEnergy)),
   };
 }
 
@@ -65,8 +61,6 @@ export function plannerDjProfile(row: DjProfileRow | null | undefined) {
     harmonic_adventure: boundedLearnedNudge(explicit.harmonicAdventure, learned.harmonicAdventure, confidence),
     transition_aggressiveness: boundedLearnedNudge(explicit.transitionAggressiveness, learned.transitionAggressiveness, confidence),
     exploration: boundedLearnedNudge(explicit.exploration, learned.exploration, confidence),
-    opening_energy: boundedLearnedNudge(explicit.openingEnergy, learned.openingEnergy, confidence),
-    closing_energy: boundedLearnedNudge(explicit.closingEnergy, learned.closingEnergy, confidence),
     learned_confidence: confidence,
     evidence_count: row?.evidence_count ?? 0,
   };
@@ -93,9 +87,6 @@ export function feedbackSignalFromPlan(value: unknown) {
   const creativeShare = transitions.length
     ? transitions.filter((item) => ["harmonic_blend", "breakdown_swap"].includes(String(item.technique ?? ""))).length / transitions.length
     : 0;
-  const energies = tracks
-    .map((item) => number(item.energy, Number.NaN))
-    .filter(Number.isFinite);
   const selection = record(plan.selection_summary);
   const candidateCount = Math.max(0, number(selection.candidate_count, tracks.length));
   const omittedCount = Math.max(0, number(selection.omitted_count, 0));
@@ -106,8 +97,6 @@ export function feedbackSignalFromPlan(value: unknown) {
     harmonicAdventure: clamp01((0.92 - meanHarmonic) / 0.5),
     transitionAggressiveness: clamp01((meanBars / 24) * 0.78 + creativeShare * 0.22),
     exploration: candidateCount > 0 ? clamp01(omittedCount / candidateCount + 0.35) : 0.45,
-    openingEnergy: energies.length ? clamp01(energies[0]) : DEFAULT_DJ_PREFERENCES.openingEnergy,
-    closingEnergy: energies.length ? clamp01(energies[energies.length - 1]) : DEFAULT_DJ_PREFERENCES.closingEnergy,
   } satisfies Omit<DjPreferenceValues, "enabled">;
 }
 
