@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { signInStudioAdmin } from "@/lib/auth/studio-login";
 import { createClient } from "@/lib/supabase/server";
+import { studioReturnPath } from "@/lib/auth/studio-return-path";
 
 function value(form: FormData, key: string) {
   return String(form.get(key) ?? "").trim();
@@ -37,6 +38,7 @@ async function trySupabasePassword(
 }
 
 export async function signInStudio(form: FormData) {
+  const returnPath = studioReturnPath(value(form, "next"));
   const password = z.string().min(1).parse(value(form, "password"));
   const email = value(form, "email").toLowerCase();
 
@@ -72,8 +74,8 @@ export async function signInStudio(form: FormData) {
   }
 
   if (!signedIn) {
-    redirect(`/studio/login?error=${encodeURIComponent(failureMessage)}`);
+    redirect(`/studio/login?error=${encodeURIComponent(failureMessage)}&next=${encodeURIComponent(returnPath)}`);
   }
 
-  redirect("/studio");
+  redirect(returnPath);
 }
