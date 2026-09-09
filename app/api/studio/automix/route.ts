@@ -80,20 +80,27 @@ function optionalBpm(value: unknown) {
 function sanitizeSetIntent(value: unknown, trackIds: string[], purpose: AutoMixPurpose) {
   const raw = record(value);
   const allowed = new Set(trackIds);
-  const mustPlayTrackIds = uniqueTrackIds(raw.mustPlayTrackIds ?? raw.must_play_track_ids, allowed);
+  let mustPlayTrackIds = uniqueTrackIds(raw.mustPlayTrackIds ?? raw.must_play_track_ids, allowed);
   const blockedTrackIds = uniqueTrackIds(raw.blockedTrackIds ?? raw.blocked_track_ids, allowed);
   let minBpm = optionalBpm(raw.minBpm ?? raw.min_bpm);
   let maxBpm = optionalBpm(raw.maxBpm ?? raw.max_bpm);
   if (minBpm !== null && maxBpm !== null && minBpm > maxBpm) [minBpm, maxBpm] = [maxBpm, minBpm];
   const targetRaw = raw.targetTrackCount ?? raw.target_track_count;
-  const targetTrackCount = typeof targetRaw === "number" && Number.isFinite(targetRaw)
+  let targetTrackCount = typeof targetRaw === "number" && Number.isFinite(targetRaw)
     ? Math.max(2, Math.min(trackIds.length, Math.round(targetRaw)))
     : null;
-  const allowOmissions = purpose === "journey"
-    ? false
-    : typeof (raw.allowOmissions ?? raw.allow_omissions) === "boolean"
-      ? Boolean(raw.allowOmissions ?? raw.allow_omissions)
-      : true;
+  let allowOmissions = typeof (raw.allowOmissions ?? raw.allow_omissions) === "boolean"
+    ? Boolean(raw.allowOmissions ?? raw.allow_omissions)
+    : true;
+
+  // Journey is an API-level preservation contract. A client cannot opt into omissions or make
+  // only part of the narrative optional; conflicting filters fail later instead of silently dropping tracks.
+  if (purpose === "journey") {
+    allowOmissions = false;
+    mustPlayTrackIds = [...trackIds];
+    targetTrackCount = trackIds.length;
+  }
+
   return {
     version: "ensemblis.set-intent.v1",
     allow_omissions: allowOmissions,
