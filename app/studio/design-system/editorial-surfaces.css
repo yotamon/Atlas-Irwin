@@ -1,0 +1,96 @@
+/* Editorial surface hierarchy.
+   Framing is reserved for meaningful objects and feature moments. Structural
+   sections use rhythm and rules instead of stacks of near-identical cards. */
+
+.studio-root :where(.v2-section) {
+  display: grid;
+  gap: var(--en-content-gap);
+  min-width: 0;
+  padding: var(--en-space-6) 0;
+  border: 0;
+  border-top: 1px solid var(--en-line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.studio-root :where(.v2-section:first-of-type) {
+  border-top-color: transparent;
+}
+
+.studio-root :where(.v2-compact-section) {
+  padding-block: var(--en-space-5);
+}
+
+/* Deliberately featured sections keep their visual emphasis. Existing route
+   selectors with stronger specificity can opt into the feature surface. */
+.studio-root :where(.v2-section.is-feature, .v2-section[data-surface="feature"]) {
+  padding: clamp(1.1rem, 2.4vw, 1.65rem);
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-lg);
+  background: color-mix(in srgb, var(--en-surface) 94%, transparent);
+}
+
+.studio-root :where(.studio-panel.feature, .v2-section[data-surface="feature"]) :where(.v2-section, .studio-panel) {
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Data summaries read as an instrument panel, not a card collection. */
+.studio-root :where(.v2-status-grid, .metric-grid, .analytics-summary-grid) {
+  gap: 0;
+  overflow: hidden;
+  border-top: 1px solid var(--en-line);
+  border-bottom: 1px solid var(--en-line);
+}
+
+.studio-root :where(.v2-status-grid, .metric-grid, .analytics-summary-grid) > :where(article, div) {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* Interactive objects may remain framed, but nested content should not repeat
+   the outer frame. */
+.studio-root :where(.catalog-card, .v2-release-card, .video-project-card, .kanban-card) :where(.studio-panel, .v2-section) {
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.studio-root :where(.catalog-card, .v2-release-card, .video-project-card, .kanban-card):hover {
+  transform: translateY(-1px);
+}
+
+.studio-root :where(.catalog-card, .v2-release-card, .video-project-card, .kanban-card):active {
+  transform: translateY(0);
+}
+
+/* Dense utility rows stay calm until interaction. */
+.studio-root :where(.list-row, .timeline-row, .metric-row, .upload-item) {
+  box-shadow: none;
+}
+
+.studio-root :where(.list-row, .timeline-row, .upload-item):hover {
+  background: color-mix(in srgb, var(--en-surface-hover) 58%, transparent);
+}
+
+/* Tables should remain readable on constrained screens rather than squeeze
+   columns into unusable widths. */
+.studio-root .studio-table-scroll,
+.studio-root :where(.table-wrap, .table-shell) {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--en-line-strong) transparent;
+}
+
+@media (max-width: 720px) {
+  .studio-root :where(.v2-section) {
+    padding-block: var(--en-space-5);
+  }
+
+  .studio-root :where(.catalog-card, .v2-release-card, .video-project-card, .kanban-card):hover {
+    transform: none;
+  }
+}
