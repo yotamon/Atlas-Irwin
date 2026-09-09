@@ -12,8 +12,6 @@ export type DjPreferenceValues = {
   harmonicAdventure: number;
   transitionAggressiveness: number;
   exploration: number;
-  openingEnergy: number;
-  closingEnergy: number;
 };
 
 export type DjProfileRow = {
