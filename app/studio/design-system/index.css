@@ -9,11 +9,13 @@
 @import "./tokens.css" layer(ensemblis-tokens);
 @import "./legacy-compat.generated.css" layer(ensemblis-compat);
 @import "./primitives.css" layer(ensemblis-primitives);
+@import "./primitive-contract.css" layer(ensemblis-primitives);
 @import "./patterns.css" layer(ensemblis-patterns);
 @import "./feedback.css" layer(ensemblis-patterns);
 @import "./overlays.css" layer(ensemblis-patterns);
 @import "./controls.css" layer(ensemblis-patterns);
 @import "./shell.css" layer(ensemblis-shell);
+@import "./shell-contract.css" layer(ensemblis-shell);
 @import "./compositions.css" layer(ensemblis-compositions);
 @import "./architecture.css" layer(ensemblis-compositions);
 @import "./video-editor.css" layer(ensemblis-compositions);
