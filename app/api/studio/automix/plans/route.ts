@@ -282,6 +282,7 @@ async function insertJob({
   lineage,
   approvedMixplan,
   idempotencyKey,
+  jobId: requestedJobId,
 }: {
   db: ReturnType<typeof asAutoMixClient>;
   ownerId: string;
@@ -291,8 +292,9 @@ async function insertJob({
   lineage: Record<string, unknown>;
   approvedMixplan?: Record<string, unknown> | null;
   idempotencyKey: string;
+  jobId?: string;
 }) {
-  const jobId = randomUUID();
+  const jobId = requestedJobId ?? randomUUID();
   const partial = { owner_id: ownerId, artist_id: artistId, id: jobId, output_format: settings.outputFormat };
   const outputPath = autoMixOutputPath(partial);
   const payload: Record<string, unknown> = {
@@ -351,10 +353,10 @@ export async function POST(request: Request) {
     if (action === "create") {
       const settings = settingsFromBody(body, artist.artistName);
       await validateCatalogTracks(supabase, user.id, artist.artistId, settings.trackIds);
-      const jobIdSeed = randomUUID();
+      const jobId = randomUUID();
       const lineage = {
         version: "ensemblis.plan-lineage.v1",
-        root_job_id: jobIdSeed,
+        root_job_id: jobId,
         parent_job_id: null,
         revision: 1,
         operation: "create",
@@ -367,8 +369,6 @@ export async function POST(request: Request) {
         settings,
         minuteBucket,
       });
-      // insertJob generates the durable row ID, so the root identity is corrected to that ID below
-      // through a stable pre-insert lineage seed that never leaks into later revisions.
       const created = await insertJob({
         db,
         ownerId: user.id,
@@ -377,13 +377,8 @@ export async function POST(request: Request) {
         executionMode: "plan_only",
         lineage,
         idempotencyKey,
+        jobId,
       });
-      if (!created.duplicate && created.job?.id) {
-        const correctedLineage = { ...lineage, root_job_id: created.job.id };
-        await db.from("automix_jobs").update({
-          request_payload: json({ ...record(created.job.request_payload), plan_lineage: correctedLineage }),
-        }).eq("id", created.job.id).eq("owner_id", user.id).eq("status", "planned");
-      }
       after(async () => { await kickAutoMixQueue().catch(() => undefined); });
       return NextResponse.json({ job: created.job, duplicate: created.duplicate }, { status: 202 });
     }
@@ -485,21 +480,21 @@ export async function POST(request: Request) {
     if (action === "render") {
       const settings = settingsFromParent(parent, body);
       await validateCatalogTracks(supabase, user.id, artist.artistId, settings.trackIds);
-      const planHash = String(manifest.plan_hash);
+      const approvedPlanHash = String(manifest.plan_hash);
       const lineage = {
         version: "ensemblis.plan-lineage.v1",
         root_job_id: parentLineage.rootJobId,
         parent_job_id: parent.id,
         revision: parentLineage.revision,
         operation: "approve_render",
-        approved_plan_hash: planHash,
+        approved_plan_hash: approvedPlanHash,
       };
       const idempotencyKey = stableHash({
         owner: user.id,
         artist: artist.artistId,
         action,
         parent: parent.id,
-        planHash,
+        planHash: approvedPlanHash,
         outputFormat: settings.outputFormat,
       });
       const created = await insertJob({
