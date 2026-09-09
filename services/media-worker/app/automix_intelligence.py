@@ -9,6 +9,7 @@ import numpy as np
 from .automix_model import _clip01, _list_records, _record, _safe_float, normalize_dj_bpm
 
 TempoClass = Literal["stable", "drifting", "section_tempo_changes", "unstable", "unknown"]
+BoundaryDirection = Literal["entry", "exit"]
 
 
 def _number(value: Any) -> float | None:
@@ -178,6 +179,134 @@ def activity_score(music_map: dict[str, Any], category: str, start_ms: int, end_
     if structural:
         return float(np.mean(structural)), 0.38
     return 0.45, 0.18
+
+
+def _boundary_suitability(label: str, kind: str, direction: BoundaryDirection) -> float:
+    label = label.lower()
+    if label in {"start", "end"}:
+        return 0.96
+    if direction == "entry":
+        if "intro" in label:
+            base = 0.98
+        elif any(token in label for token in ("instrumental", "break", "bridge")):
+            base = 0.86
+        elif any(token in label for token in ("verse", "build")):
+            base = 0.70
+        elif any(token in label for token in ("chorus", "hook", "drop", "vocal")):
+            base = 0.56
+        else:
+            base = 0.68
+        if kind == "section_start":
+            base += 0.06
+        elif kind == "section_end":
+            base -= 0.05
+    else:
+        if "outro" in label:
+            base = 0.98
+        elif any(token in label for token in ("instrumental", "break", "bridge")):
+            base = 0.88
+        elif any(token in label for token in ("verse", "build")):
+            base = 0.67
+        elif any(token in label for token in ("chorus", "hook", "drop", "vocal")):
+            base = 0.57
+        else:
+            base = 0.68
+        if kind == "section_end":
+            base += 0.06
+        elif kind == "section_start":
+            base -= 0.05
+    return _clip01(base)
+
+
+def transition_boundary_evidence(
+    music_map: dict[str, Any],
+    point_ms: int,
+    direction: BoundaryDirection,
+) -> dict[str, Any]:
+    """Describe how trustworthy and mix-friendly a proposed musical handoff point is.
+
+    The function intentionally distinguishes structural evidence from transition
+    suitability. A strong downbeat can be a precise boundary while still being a poor
+    place to enter a vocal hook. This lets the planner shorten/veto long blends without
+    pretending that timing confidence alone implies musical suitability.
+    """
+    duration = max(0, int(_safe_float(music_map.get("duration_ms"), 0.0)))
+    point = max(0, min(duration, int(point_ms))) if duration else max(0, int(point_ms))
+    candidates: list[tuple[int, float, str, str]] = []
+
+    if point == 0:
+        candidates.append((0, 0.92, "track_edge", "start"))
+    if duration and point == duration:
+        candidates.append((duration, 0.92, "track_edge", "end"))
+
+    for section in _list_records(music_map.get("sections")):
+        label = str(section.get("label") or "section").lower()
+        confidence = _clip01(_safe_float(
+            section.get("boundary_confidence"),
+            _safe_float(section.get("confidence"), 0.55),
+        ))
+        start = int(_safe_float(section.get("start_ms"), -1.0))
+        end = int(_safe_float(section.get("end_ms"), -1.0))
+        if start >= 0:
+            candidates.append((start, confidence, "section_start", label))
+        if end >= 0:
+            candidates.append((end, confidence, "section_end", label))
+
+    for phrase in _list_records(music_map.get("phrases")):
+        confidence = _clip01(0.72 * _safe_float(phrase.get("confidence"), 0.5) + 0.12)
+        label = str(phrase.get("label") or "phrase").lower()
+        for key in ("start_ms", "end_ms"):
+            ms = int(_safe_float(phrase.get(key), -1.0))
+            if ms >= 0:
+                candidates.append((ms, confidence, "phrase", label))
+
+    downbeat_source = str(music_map.get("downbeat_source") or "none")
+    downbeat_confidence = 0.96 if downbeat_source == "model" else 0.63 if downbeat_source == "inferred_from_beats" else 0.42
+    for raw in music_map.get("downbeats_ms") or []:
+        if isinstance(raw, (int, float)) and math.isfinite(float(raw)):
+            candidates.append((int(raw), downbeat_confidence, "downbeat", "downbeat"))
+
+    if not candidates:
+        return {
+            "direction": direction,
+            "point_ms": point,
+            "boundary_ms": None,
+            "distance_ms": None,
+            "kind": "none",
+            "label": "unknown",
+            "boundary_confidence": 0.12,
+            "suitability": 0.45,
+            "confidence": 0.18,
+            "downbeat_source": downbeat_source,
+        }
+
+    best: tuple[float, int, float, str, str] | None = None
+    for boundary_ms, raw_confidence, kind, label in candidates:
+        distance = abs(boundary_ms - point)
+        proximity = math.exp(-distance / 1400.0)
+        suitability = _boundary_suitability(label, kind, direction)
+        evidence_score = _clip01(raw_confidence * proximity)
+        combined = _clip01(0.72 * evidence_score + 0.28 * suitability)
+        candidate = (combined, distance, evidence_score, kind, label)
+        if best is None or candidate[0] > best[0] or (candidate[0] == best[0] and distance < best[1]):
+            best = candidate
+            best_boundary_ms = boundary_ms
+            best_suitability = suitability
+
+    assert best is not None
+    combined, distance, evidence_score, kind, label = best
+    return {
+        "direction": direction,
+        "point_ms": point,
+        "boundary_ms": best_boundary_ms,
+        "distance_ms": distance,
+        "kind": kind,
+        "label": label,
+        "boundary_confidence": round(evidence_score, 4),
+        "suitability": round(best_suitability, 4),
+        "confidence": round(combined, 4),
+        "downbeat_source": downbeat_source,
+    }
 
 
 def transition_activity(a_map: dict[str, Any], a_end_ms: int, b_map: dict[str, Any], b_start_ms: int, overlap_ms: int) -> dict[str, float]:
