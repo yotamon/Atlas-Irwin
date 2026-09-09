@@ -61,41 +61,57 @@ export function DjIntelligencePanel({ artistId }: { artistId: string }) {
   const [learnedConfidence, setLearnedConfidence] = useState(0);
   const [evidenceCount, setEvidenceCount] = useState(0);
   const [latestJob, setLatestJob] = useState<JobSummary | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loadedArtistId, setLoadedArtistId] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [feedbackSaving, setFeedbackSaving] = useState(false);
   const [status, setStatus] = useState("");
+  const loading = loadedArtistId !== artistId || refreshing;
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setStatus("");
+  const load = useCallback(async (signal?: AbortSignal) => {
     try {
       const [profileResponse, jobsResponse] = await Promise.all([
-        fetch(`/api/studio/automix/preferences?artist=${encodeURIComponent(artistId)}`, { cache: "no-store" }),
-        fetch(`/api/studio/automix?artist=${encodeURIComponent(artistId)}`, { cache: "no-store" }),
+        fetch(`/api/studio/automix/preferences?artist=${encodeURIComponent(artistId)}`, { cache: "no-store", signal }),
+        fetch(`/api/studio/automix?artist=${encodeURIComponent(artistId)}`, { cache: "no-store", signal }),
       ]);
       const profileBody = await profileResponse.json().catch(() => null);
       const jobsBody = await jobsResponse.json().catch(() => null);
       if (!profileResponse.ok) throw new Error(String(record(profileBody).error || "Could not load DJ preferences."));
       if (!jobsResponse.ok) throw new Error(String(record(jobsBody).error || "Could not load AutoMix sessions."));
+      if (signal?.aborted) return;
       setPreferences(asPreferences(record(profileBody).preferences));
       setLearnedConfidence(Number(record(profileBody).learnedConfidence || 0));
       setEvidenceCount(Number(record(profileBody).evidenceCount || 0));
       const jobs = Array.isArray(record(jobsBody).jobs) ? record(jobsBody).jobs as JobSummary[] : [];
       setLatestJob(jobs.find((job) => job.status === "completed" && planFromJob(job)) ?? null);
+      setStatus("");
     } catch (error) {
+      if (signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) return;
       setStatus(error instanceof Error ? error.message : "Could not load Personal DJ Intelligence.");
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoadedArtistId(artistId);
     }
   }, [artistId]);
 
   useEffect(() => {
-    void load();
+    const controller = new AbortController();
+    void load(controller.signal);
+    return () => controller.abort();
   }, [load]);
 
   function updatePreference(key: keyof Omit<Preferences, "enabled">, percent: number) {
     setPreferences((current) => ({ ...current, [key]: percent / 100 }));
+  }
+
+  async function refresh() {
+    if (refreshing) return;
+    setRefreshing(true);
+    setStatus("");
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
   }
 
   async function save() {
@@ -222,7 +238,7 @@ export function DjIntelligencePanel({ artistId }: { artistId: string }) {
             </small>
           </div>
           <div className={styles.actions}>
-            <button className="button" type="button" disabled={loading} onClick={() => void load()}><FiRefreshCw /> Refresh</button>
+            <button className="button" type="button" disabled={loading} onClick={() => void refresh()}><FiRefreshCw /> Refresh</button>
             <button className="button primary" type="button" disabled={loading || saving} onClick={() => void save()}><FiSave /> {saving ? "Saving…" : "Save profile"}</button>
           </div>
         </div>
