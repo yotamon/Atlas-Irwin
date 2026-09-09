@@ -20,17 +20,18 @@ export default async function VideoProjectPage({
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveActiveArtistContext(supabase, user);
 
+  let data;
   try {
-    const data = await loadVideoWorkspaceSnapshot({
+    data = await loadVideoWorkspaceSnapshot({
       db: createServiceClient(),
       ownerId: user.id,
       artistId: artist.artistId,
       projectId: id,
     });
-
-    return <VideoProjectWorkspace mode={mode === "pro" ? "pro" : "default"} data={data} />;
   } catch (error) {
     if (error instanceof VideoWorkspaceNotFoundError) notFound();
     throw error;
   }
+
+  return <VideoProjectWorkspace mode={mode === "pro" ? "pro" : "default"} data={data} />;
 }
