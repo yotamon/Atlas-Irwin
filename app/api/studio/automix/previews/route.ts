@@ -1,7 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import { after, NextResponse } from "next/server";
 import { asAutoMixClient } from "@/lib/automix/jobs";
-import { autoMixPreviewOutputPath, kickAutoMixPreviewQueue } from "@/lib/automix/previews";
+import {
+  autoMixPreviewOutputPath,
+  kickAutoMixPreviewQueue,
+  purgeExpiredAutoMixPreviews,
+} from "@/lib/automix/previews";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { resolveArtistContext } from "@/lib/studio/artist-context";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -94,6 +98,9 @@ export async function GET(request: Request) {
     const preview = row as AutoMixTransitionPreview;
     if (!latestByTransition.has(preview.transition_index)) latestByTransition.set(preview.transition_index, preview);
   }
+  after(async () => {
+    await purgeExpiredAutoMixPreviews().catch(() => undefined);
+  });
   return NextResponse.json({
     previews: await Promise.all([...latestByTransition.values()].map(publicPreview)),
   });
