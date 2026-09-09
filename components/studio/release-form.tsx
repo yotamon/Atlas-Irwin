@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { SelectField } from "./form-controls";
-import { Field, FormActions, Notice, Submit } from "./ui";
+import { ActionBar, Field, FormGrid, Notice, Submit } from "./ui";
 import { RELEASE_STATUSES, RELEASE_TYPES } from "@/lib/studio/constants";
 import { saveReleaseV2WithState } from "@/app/studio/release-form-actions";
 import { EMPTY_ACTION_FORM_STATE, firstActionFieldError } from "@/lib/studio/form-state";
@@ -40,7 +40,7 @@ export function ReleaseForm({
 
       {state.message ? <Notice tone="danger" role="alert">{state.message}</Notice> : null}
 
-      <div className="form-grid release-essentials-grid">
+      <FormGrid className="release-essentials-grid">
         <Field label="Title" wide required error={error("title")}>
           <input name="title" required autoFocus={!release} aria-invalid={Boolean(error("title")) || undefined} defaultValue={release?.title} />
         </Field>
@@ -55,7 +55,7 @@ export function ReleaseForm({
         <Field label={releaseDateLocked ? "Release date (locked)" : "Release date"}>
           <input type="date" name={releaseDateLocked ? undefined : "release_date"} disabled={releaseDateLocked} defaultValue={release?.release_date ?? ""} />
         </Field>
-      </div>
+      </FormGrid>
 
       {releaseDateLocked ? (
         <div className="v2-provider-lock" role="status">
@@ -71,7 +71,7 @@ export function ReleaseForm({
 
       <details className="studio-advanced-details">
         <summary><span>Advanced details</span><small>Only change these when Ensemblis should not decide for you.</small></summary>
-        <div className="form-grid studio-advanced-grid">
+        <FormGrid className="studio-advanced-grid">
           <SelectField label="Workflow status" name="status" options={RELEASE_STATUS_OPTIONS} defaultValue={release?.status ?? ""} />
           <Field label="Slug override" error={error("slug")}><input name="slug" pattern="[a-z0-9-]+" placeholder="Generated from title" aria-invalid={Boolean(error("slug")) || undefined} defaultValue={release?.slug ?? ""} /></Field>
           <Field label="Core emotion"><input name="core_emotion" defaultValue={release?.core_emotion ?? ""} /></Field>
@@ -89,9 +89,12 @@ export function ReleaseForm({
           <Field label="Public release path" wide><input name="public_release_path" defaultValue={release?.public_release_path ?? ""} /></Field>
           <Field label="Release story" wide><textarea name="story" rows={5} defaultValue={release?.story ?? ""} /></Field>
           <Field label="Private notes" wide><textarea name="notes" rows={4} defaultValue={release?.notes ?? ""} /></Field>
-        </div>
+        </FormGrid>
       </details>
-      <FormActions className="release-form-actions"><Submit>{release ? "Save changes" : "Create workspace"}</Submit></FormActions>
+
+      <ActionBar message={release ? "Changes stay inside this release workspace until a separate publish or distribution action." : "This creates the workspace only. Nothing is published, distributed or charged from this step."}>
+        <Submit>{release ? "Save changes" : "Create workspace"}</Submit>
+      </ActionBar>
     </form>
   );
 }
