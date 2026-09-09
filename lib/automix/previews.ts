@@ -16,7 +16,7 @@ import type {
   AutoMixJob,
   AutoMixTransitionPreview,
 } from "@/types/automix-database";
-import type { Database, Json } from "@/types/database";
+import type { Json } from "@/types/database";
 import type { StemDatabase, TrackStem } from "@/types/stem-database";
 
 const PREVIEW_BUCKET = "automix-previews";
