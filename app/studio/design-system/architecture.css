@@ -9,6 +9,8 @@
 }
 
 .studio-root :where(.studio-page, .studio-v2-page) {
+  display: grid;
+  gap: var(--en-section-gap);
   width: min(100%, var(--en-page-max));
   margin-inline: auto;
   padding: var(--en-page-block) var(--en-page-gutter) calc(var(--en-page-block) * 1.4);
@@ -33,14 +35,6 @@
   .settings-page
 ) {
   margin-inline: auto;
-}
-
-.studio-root :where(.studio-page, .studio-v2-page) > * + * {
-  margin-top: var(--en-section-gap);
-}
-
-.studio-root .studio-page-header + * {
-  margin-top: 0;
 }
 
 .studio-root .studio-section,
@@ -249,6 +243,10 @@
   color: var(--en-muted);
   font-size: var(--en-text-md);
   line-height: var(--en-leading-body);
+}
+
+.studio-root .studio-state-loading .studio-loading {
+  min-height: 0;
 }
 
 /* Card soup protection. A feature surface may contain semantic sections, but
