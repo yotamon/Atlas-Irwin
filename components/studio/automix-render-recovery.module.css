@@ -1,0 +1,51 @@
+.recovery {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--en-space-5);
+  align-items: center;
+  margin-top: var(--en-space-6);
+  padding: var(--en-space-5);
+  border: 1px solid var(--en-warning-line, var(--en-line-strong));
+  background: color-mix(in srgb, var(--en-panel) 86%, var(--en-warning-soft, transparent));
+}
+
+.icon {
+  display: grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  border: 1px solid var(--en-line-strong);
+  color: var(--en-warning-text, var(--en-muted));
+}
+
+.copy {
+  display: grid;
+  gap: var(--en-space-2);
+}
+
+.copy strong {
+  font-size: var(--en-text-md);
+  font-weight: var(--en-weight-medium);
+}
+
+.copy p,
+.copy small {
+  margin: 0;
+  color: var(--en-muted);
+  line-height: 1.55;
+}
+
+.copy small {
+  font-size: var(--en-text-xs);
+}
+
+@media (max-width: 760px) {
+  .recovery {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .recovery > button {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}
