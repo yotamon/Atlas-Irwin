@@ -11,7 +11,8 @@ import numpy as np
 from pydantic import BaseModel, Field
 
 from . import main as worker_main
-from .automix_dsp import render_plan
+from .automix_manifest import MIXPLAN_VERSION, build_mixplan
+from .automix_mixplan_renderer import render_mixplan
 from .automix_model import (
     AUTOMIX_VERSION, MAX_RENDER_MS, MAX_TRACKS, MIN_TRACK_WINDOW_MS, SAMPLE_RATE,
     EnergyProfile, Purpose, TrackDescriptor, TransitionStyle, _energy_from_map,
@@ -78,6 +79,21 @@ def _attach_transition_evidence(music_map: dict[str, Any], raw: dict[str, Any]) 
     if isinstance(bass, list):
         result["automix_bass_activity_curve"] = bass
     return result
+
+
+def _source_fingerprints(raw_tracks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    fingerprints: list[dict[str, Any]] = []
+    for raw in raw_tracks:
+        music_map = _record(raw.get("music_map"))
+        source_audio = _record(music_map.get("source_audio"))
+        fingerprints.append({
+            "track_id": str(raw.get("id") or ""),
+            "audio_url": str(raw.get("audio_url") or ""),
+            "media_asset_id": raw.get("media_asset_id"),
+            "analysis_version": music_map.get("analysis_version") or music_map.get("version"),
+            "source_audio_url": source_audio.get("url"),
+        })
+    return fingerprints
 
 
 async def prepare_tracks(payload_tracks: list[dict[str, Any]], workdir: Path, purpose: Purpose, target_duration_ms: int) -> list[TrackDescriptor]:
@@ -150,9 +166,10 @@ async def automix_job(
 
     tracks = await prepare_tracks(raw_tracks, workdir, purpose, target_duration_ms)  # type: ignore[arg-type]
     plan = build_plan(tracks, purpose, profile, style, target_duration_ms)  # type: ignore[arg-type]
+    mixplan = build_mixplan(plan, source_fingerprints=_source_fingerprints(raw_tracks))
     if on_plan is not None:
-        await on_plan(plan)
-    wav_path, render_meta = await asyncio.to_thread(render_plan, tracks, plan, workdir)
+        await on_plan({**plan, "render_manifest": mixplan})
+    wav_path, render_meta = await asyncio.to_thread(render_mixplan, tracks, mixplan, workdir)
 
     output_format = str(payload.get("output_format") or "mp3").lower()
     if output_format not in {"wav", "mp3"}:
@@ -184,11 +201,14 @@ async def automix_job(
         "sha256": sha256,
         "output": {"file_size": output_path.stat().st_size, "mime_type": mime_type, "sha256": sha256},
         "phase": "complete",
-        "plan": plan,
+        "plan": {**plan, "render_manifest": mixplan},
+        "render_manifest": mixplan,
         "render": render_meta,
         "warnings": warnings,
         "engine": {
             "version": AUTOMIX_VERSION,
+            "mixplan_version": MIXPLAN_VERSION,
+            "render_contract": "validated_mixplan_only",
             "time_stretch": "Signalsmith Stretch via python-stretch",
             "pitch_shift": "disabled",
             "mastering_analysis": "Ensemblis Mastering Inspector",
