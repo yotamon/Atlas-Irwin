@@ -83,9 +83,14 @@ def normalize_set_intent(
     if isinstance(explicit_target, (int, float)) and math.isfinite(float(explicit_target)):
         target_track_count = max(2, min(len(tracks), int(round(float(explicit_target)))))
 
-    allow_omissions = bool(raw.get("allow_omissions", purpose != "journey"))
-    if purpose == "journey" and "allow_omissions" not in raw:
+    # Journey is a preservation contract, not just a UI default. Every supplied track is required,
+    # omissions are impossible, and incompatible hard filters fail visibly rather than changing the story.
+    if purpose == "journey":
+        must_play = [track.id for track in tracks]
         allow_omissions = False
+        target_track_count = len(tracks)
+    else:
+        allow_omissions = bool(raw.get("allow_omissions", True))
 
     return {
         "version": SET_INTENT_VERSION,
