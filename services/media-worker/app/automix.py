@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 from . import main as worker_main
 from .automix_evaluation import evaluate_mixplan
-from .automix_manifest import MIXPLAN_VERSION
+from .automix_manifest import MIXPLAN_VERSION, mixplan_hash, validate_mixplan
 from .automix_manifest_personalized import build_mixplan
 from .automix_mixplan_renderer import render_mixplan
 from .automix_model import (
@@ -98,6 +98,23 @@ def _source_fingerprints(raw_tracks: list[dict[str, Any]]) -> list[dict[str, Any
     return fingerprints
 
 
+def _validate_approved_mixplan_sources(manifest: dict[str, Any], raw_tracks: list[dict[str, Any]]) -> None:
+    provenance = _record(manifest.get("provenance"))
+    expected = _list_records(provenance.get("source_fingerprints"))
+    current = {
+        str(item.get("id") or ""): str(item.get("audio_url") or "")
+        for item in raw_tracks
+        if str(item.get("id") or "")
+    }
+    expected_map = {
+        str(item.get("track_id") or ""): str(item.get("audio_url") or "")
+        for item in expected
+        if str(item.get("track_id") or "")
+    }
+    if not expected_map or expected_map != current:
+        raise ValueError("Approved MixPlan source fingerprints no longer match the canonical candidate pool")
+
+
 async def prepare_tracks(payload_tracks: list[dict[str, Any]], workdir: Path, purpose: Purpose, target_duration_ms: int) -> list[TrackDescriptor]:
     if not 2 <= len(payload_tracks) <= MAX_TRACKS:
         raise ValueError(f"AutoMix requires 2-{MAX_TRACKS} tracks")
@@ -145,6 +162,43 @@ async def prepare_tracks(payload_tracks: list[dict[str, Any]], workdir: Path, pu
 PlanCallback = Callable[[dict[str, Any]], Awaitable[None]]
 
 
+def _plan_warnings(plan: dict[str, Any]) -> list[dict[str, Any]]:
+    warnings: list[dict[str, Any]] = []
+    for item in _list_records(plan.get("tracks")):
+        mastering = _record(item.get("mastering"))
+        tempo = _record(item.get("tempo"))
+        if not bool(mastering.get("technical_ready", True)):
+            warnings.append({
+                "track_id": item.get("track_id"),
+                "code": "source_master_review",
+                "message": "Source master contains technical issues; AutoMix will use conservative gain staging and will not attempt destructive repair.",
+            })
+        if str(tempo.get("classification") or "") in {"drifting", "section_tempo_changes", "unstable"}:
+            warnings.append({
+                "track_id": item.get("track_id"),
+                "code": "variable_tempo",
+                "classification": tempo.get("classification"),
+                "message": "Transition planning used local tempo evidence and avoided forcing unsafe fixed-grid sync.",
+            })
+    return warnings
+
+
+def _engine_metadata(execution_mode: str) -> dict[str, Any]:
+    return {
+        "version": AUTOMIX_VERSION,
+        "mixplan_version": MIXPLAN_VERSION,
+        "execution_mode": execution_mode,
+        "render_contract": "validated_mixplan_only",
+        "set_intelligence": "duration-aware candidate curation + bounded personal DJ profile + durable plan directives",
+        "time_stretch": "Signalsmith Stretch via python-stretch",
+        "pitch_shift": "disabled",
+        "mastering_analysis": "Ensemblis Mastering Inspector",
+        "tempo_strategy": "local tempo evidence; unstable tempo is never forced to a constant grid",
+        "loudness_strategy": "selected-window channel gain plus two-pass final mix loudness normalization",
+        "quality_mode": "offline_high_quality",
+    }
+
+
 async def automix_job(
     payload: dict[str, Any],
     workdir: Path,
@@ -154,6 +208,9 @@ async def automix_job(
     purpose = str(payload.get("purpose") or "booking")
     profile = str(payload.get("energy_profile") or "dynamic")
     style = str(payload.get("transition_style") or "dj")
+    execution_mode = str(payload.get("execution_mode") or "render")
+    if execution_mode not in {"render", "plan_only", "approved_render"}:
+        raise ValueError("Unsupported AutoMix execution mode")
     if purpose not in {"booking", "soundcloud", "journey", "peak_time", "warm_up", "discovery"}:
         raise ValueError("Unsupported AutoMix purpose")
     if profile not in {"smooth", "dynamic", "peak"}:
@@ -161,31 +218,68 @@ async def automix_job(
     if style not in {"clean", "dj", "creative"}:
         raise ValueError("Unsupported AutoMix transition style")
     target_duration_ms = max(2 * MIN_TRACK_WINDOW_MS, min(MAX_RENDER_MS, int(payload.get("duration_ms") or 20 * 60 * 1000)))
-    upload_url = str(payload.get("upload_url") or "")
-    if not upload_url:
-        raise ValueError("AutoMix upload_url is required")
-    worker_main.validate_remote_url(upload_url)
-
-    tracks = await prepare_tracks(raw_tracks, workdir, purpose, target_duration_ms)  # type: ignore[arg-type]
-    plan = build_set_intelligent_plan(
-        tracks,
-        purpose,  # type: ignore[arg-type]
-        profile,  # type: ignore[arg-type]
-        style,  # type: ignore[arg-type]
-        target_duration_ms,
-        set_intent=_record(payload.get("set_intent")),
-        dj_profile=_record(payload.get("dj_profile")),
-    )
-    mixplan = build_mixplan(plan, source_fingerprints=_source_fingerprints(raw_tracks))
-    evaluation = evaluate_mixplan(mixplan)
-    published_plan = {**plan, "render_manifest": mixplan, "evaluation": evaluation}
-    if on_plan is not None:
-        await on_plan(published_plan)
-    wav_path, render_meta = await asyncio.to_thread(render_mixplan, tracks, mixplan, workdir)
 
     output_format = str(payload.get("output_format") or "mp3").lower()
     if output_format not in {"wav", "mp3"}:
         raise ValueError("AutoMix output_format must be wav or mp3")
+    upload_url = str(payload.get("upload_url") or "")
+    if execution_mode != "plan_only":
+        if not upload_url:
+            raise ValueError("AutoMix upload_url is required for rendering")
+        worker_main.validate_remote_url(upload_url)
+
+    tracks = await prepare_tracks(raw_tracks, workdir, purpose, target_duration_ms)  # type: ignore[arg-type]
+    source_fingerprints = _source_fingerprints(raw_tracks)
+
+    if execution_mode == "approved_render":
+        mixplan = _record(payload.get("approved_mixplan"))
+        if not mixplan:
+            raise ValueError("Approved render requires a frozen MixPlan")
+        validate_mixplan(mixplan)
+        expected_hash = str(mixplan.get("plan_hash") or "")
+        if not expected_hash or expected_hash != mixplan_hash(mixplan):
+            raise ValueError("Approved MixPlan hash does not match its canonical instructions")
+        _validate_approved_mixplan_sources(mixplan, raw_tracks)
+        evaluation = evaluate_mixplan(mixplan)
+        plan = {
+            **mixplan,
+            "render_manifest": mixplan,
+            "evaluation": evaluation,
+            "approved_for_render": True,
+        }
+        published_plan = plan
+    else:
+        plan = build_set_intelligent_plan(
+            tracks,
+            purpose,  # type: ignore[arg-type]
+            profile,  # type: ignore[arg-type]
+            style,  # type: ignore[arg-type]
+            target_duration_ms,
+            set_intent=_record(payload.get("set_intent")),
+            dj_profile=_record(payload.get("dj_profile")),
+            plan_directives=_record(payload.get("plan_directives")),
+        )
+        plan["plan_lineage"] = _record(payload.get("plan_lineage"))
+        mixplan = build_mixplan(plan, source_fingerprints=source_fingerprints)
+        evaluation = evaluate_mixplan(mixplan)
+        published_plan = {**plan, "render_manifest": mixplan, "evaluation": evaluation}
+
+    if on_plan is not None:
+        await on_plan(published_plan)
+
+    warnings = _plan_warnings(published_plan)
+    if execution_mode == "plan_only":
+        return {
+            "uploaded": False,
+            "phase": "planned",
+            "plan": published_plan,
+            "render_manifest": mixplan,
+            "evaluation": evaluation,
+            "warnings": warnings,
+            "engine": _engine_metadata(execution_mode),
+        }
+
+    wav_path, render_meta = await asyncio.to_thread(render_mixplan, tracks, mixplan, workdir)
     if output_format == "wav":
         output_path = wav_path
         mime_type = "audio/wav"
@@ -198,14 +292,6 @@ async def automix_job(
         mime_type = "audio/mpeg"
     await _upload_streaming(upload_url, output_path, mime_type)
     sha256 = await asyncio.to_thread(worker_main.sha256_file, output_path)
-    warnings: list[dict[str, Any]] = []
-    for item in _list_records(plan.get("tracks")):
-        mastering = _record(item.get("mastering"))
-        tempo = _record(item.get("tempo"))
-        if not bool(mastering.get("technical_ready", True)):
-            warnings.append({"track_id": item.get("track_id"), "code": "source_master_review", "message": "Source master contains technical issues; AutoMix used conservative gain staging and did not attempt destructive repair."})
-        if str(tempo.get("classification") or "") in {"drifting", "section_tempo_changes", "unstable"}:
-            warnings.append({"track_id": item.get("track_id"), "code": "variable_tempo", "classification": tempo.get("classification"), "message": "Transition planning used local tempo evidence and avoided forcing unsafe fixed-grid sync."})
     return {
         "uploaded": True,
         "file_size": output_path.stat().st_size,
@@ -218,22 +304,12 @@ async def automix_job(
         "evaluation": evaluation,
         "render": render_meta,
         "warnings": warnings,
-        "engine": {
-            "version": AUTOMIX_VERSION,
-            "mixplan_version": MIXPLAN_VERSION,
-            "render_contract": "validated_mixplan_only",
-            "set_intelligence": "duration-aware candidate curation + bounded personal DJ profile",
-            "time_stretch": "Signalsmith Stretch via python-stretch",
-            "pitch_shift": "disabled",
-            "mastering_analysis": "Ensemblis Mastering Inspector",
-            "tempo_strategy": "local tempo evidence; unstable tempo is never forced to a constant grid",
-            "loudness_strategy": "selected-window channel gain plus two-pass final mix loudness normalization",
-            "quality_mode": "offline_high_quality",
-        },
+        "engine": _engine_metadata(execution_mode),
     }
 
 
 async def execute_automix(request: AutomixWorkerRequest) -> str:
+    execution_mode = str(request.payload.get("execution_mode") or "render")
     await worker_main.callback(request, "running", result={"phase": "preparing_sources"})  # type: ignore[arg-type]
     try:
         with tempfile.TemporaryDirectory(prefix="ensemblis-automix-") as directory:
@@ -241,7 +317,10 @@ async def execute_automix(request: AutomixWorkerRequest) -> str:
                 await worker_main.callback(
                     request,
                     "running",
-                    result={"phase": "rendering", "plan": plan},
+                    result={
+                        "phase": "plan_ready" if execution_mode == "plan_only" else "rendering",
+                        "plan": plan,
+                    },
                 )  # type: ignore[arg-type]
 
             result = await automix_job(request.payload, Path(directory), on_plan=publish_plan)
