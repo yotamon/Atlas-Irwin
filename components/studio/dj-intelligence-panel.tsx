@@ -9,6 +9,8 @@ type Preferences = {
   harmonicAdventure: number;
   transitionAggressiveness: number;
   exploration: number;
+  tempoMovement: number;
+  energyDynamics: number;
 };
 
 type JobSummary = {
@@ -20,6 +22,7 @@ type JobSummary = {
 
 type IntelligenceSnapshot = {
   preferences: Preferences;
+  learnedPreferences: Preferences;
   learnedConfidence: number;
   evidenceCount: number;
   latestJob: JobSummary | null;
@@ -30,6 +33,8 @@ const DEFAULTS: Preferences = {
   harmonicAdventure: 0.5,
   transitionAggressiveness: 0.5,
   exploration: 0.45,
+  tempoMovement: 0.42,
+  energyDynamics: 0.52,
 };
 
 function record(value: unknown): Record<string, unknown> {
@@ -49,6 +54,8 @@ function asPreferences(value: unknown): Preferences {
     harmonicAdventure: number("harmonicAdventure", DEFAULTS.harmonicAdventure),
     transitionAggressiveness: number("transitionAggressiveness", DEFAULTS.transitionAggressiveness),
     exploration: number("exploration", DEFAULTS.exploration),
+    tempoMovement: number("tempoMovement", DEFAULTS.tempoMovement),
+    energyDynamics: number("energyDynamics", DEFAULTS.energyDynamics),
   };
 }
 
@@ -75,6 +82,7 @@ async function fetchIntelligenceSnapshot(artistId: string, signal?: AbortSignal)
   const jobs = Array.isArray(record(jobsBody).jobs) ? record(jobsBody).jobs as JobSummary[] : [];
   return {
     preferences: asPreferences(record(profileBody).preferences),
+    learnedPreferences: asPreferences(record(profileBody).learnedPreferences),
     learnedConfidence: Number(record(profileBody).learnedConfidence || 0),
     evidenceCount: Number(record(profileBody).evidenceCount || 0),
     latestJob: jobs.find((job) => job.status === "completed" && planFromJob(job)) ?? null,
@@ -87,6 +95,7 @@ function isAbortError(error: unknown) {
 
 export function DjIntelligencePanel({ artistId }: { artistId: string }) {
   const [preferences, setPreferences] = useState<Preferences>(DEFAULTS);
+  const [learnedPreferences, setLearnedPreferences] = useState<Preferences>(DEFAULTS);
   const [learnedConfidence, setLearnedConfidence] = useState(0);
   const [evidenceCount, setEvidenceCount] = useState(0);
   const [latestJob, setLatestJob] = useState<JobSummary | null>(null);
@@ -108,6 +117,7 @@ export function DjIntelligencePanel({ artistId }: { artistId: string }) {
       .then((snapshot) => {
         if (controller.signal.aborted) return;
         setPreferences(snapshot.preferences);
+        setLearnedPreferences(snapshot.learnedPreferences);
         setLearnedConfidence(snapshot.learnedConfidence);
         setEvidenceCount(snapshot.evidenceCount);
         setLatestJob(snapshot.latestJob);
@@ -135,6 +145,7 @@ export function DjIntelligencePanel({ artistId }: { artistId: string }) {
       const snapshot = await fetchIntelligenceSnapshot(requestedArtistId);
       if (currentArtistId.current !== requestedArtistId) return;
       setPreferences(snapshot.preferences);
+      setLearnedPreferences(snapshot.learnedPreferences);
       setLearnedConfidence(snapshot.learnedConfidence);
       setEvidenceCount(snapshot.evidenceCount);
       setLatestJob(snapshot.latestJob);
@@ -160,7 +171,10 @@ export function DjIntelligencePanel({ artistId }: { artistId: string }) {
       const body = await response.json().catch(() => null);
       if (!response.ok) throw new Error(String(record(body).error || "Could not save DJ preferences."));
       setPreferences(asPreferences(record(body).preferences));
-      setStatus("DJ profile saved. New AutoMix sessions will use this profile as a bounded planning signal.");
+      setLearnedPreferences(asPreferences(record(body).learnedPreferences));
+      setLearnedConfidence(Number(record(body).learnedConfidence || learnedConfidence));
+      setEvidenceCount(Number(record(body).evidenceCount || evidenceCount));
+      setStatus("DJ profile saved. New Set Builder revisions will use it only as a bounded reranking signal.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not save DJ preferences.");
     } finally {
@@ -183,8 +197,9 @@ export function DjIntelligencePanel({ artistId }: { artistId: string }) {
       setLearnedConfidence(Number(record(body).learnedConfidence || 0));
       setEvidenceCount(Number(record(body).evidenceCount || 0));
       setStatus(verdict === "accepted"
-        ? "Saved. Ensemblis can use this approved plan as bounded evidence for future set planning."
-        : "Saved. This plan will not count as positive learning evidence.");
+        ? "Saved. This whole-plan judgement joins your Set Builder edits and approved renders as bounded learning evidence."
+        : "Saved. The rejection stays inspectable, but Ensemblis will not guess which musical dimension you disliked.");
+      await refresh();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not save DJ-plan feedback.");
     } finally {
@@ -201,8 +216,10 @@ export function DjIntelligencePanel({ artistId }: { artistId: string }) {
     high: string;
   }> = [
     { key: "harmonicAdventure", title: "Harmonic adventure", detail: "How much controlled key contrast you enjoy when the transition remains musically safe.", low: "safe", middle: "balanced", high: "adventurous" },
-    { key: "transitionAggressiveness", title: "Transition character", detail: "A bounded preference layered on top of AutoMix safety, never a permission to force a bad blend.", low: "restrained", middle: "DJ", high: "creative" },
+    { key: "transitionAggressiveness", title: "Transition character", detail: "A bounded preference layered on top of AutoMix safety, never permission to force a bad blend.", low: "restrained", middle: "DJ", high: "creative" },
     { key: "exploration", title: "Exploration", detail: "How readily Set Intelligence should choose less-obvious candidates from the pool you provide.", low: "familiar", middle: "open", high: "explore" },
+    { key: "tempoMovement", title: "Tempo movement", detail: "Whether otherwise-valid routes should stay tightly grouped in BPM or travel more between tempo territories.", low: "steady", middle: "moving", high: "wide" },
+    { key: "energyDynamics", title: "Energy contrast", detail: "How much adjacent-track energy contrast you enjoy while the global purpose and arc remain authoritative.", low: "smooth", middle: "dynamic", high: "dramatic" },
   ];
 
   return (
@@ -211,17 +228,17 @@ export function DjIntelligencePanel({ artistId }: { artistId: string }) {
         <span className="section-label">DJ & Mixes / Intelligence</span>
         <h2>Your taste, not a generic playlist.</h2>
         <p>
-          Ensemblis can treat your selected records as a candidate pool, curate for the target duration,
-          then hand the chosen route to the same verified AutoMix planner and renderer.
+          Ensemblis learns from deliberate Set Builder decisions, not passive clicks: what you lock, reorder,
+          replace, override and finally approve becomes bounded evidence for future planning.
         </p>
       </div>
 
       <div className={styles.body}>
         <div className={styles.profileHeader}>
           <div>
-            <strong>Personal DJ profile</strong>
+            <strong>Personal DJ profile v2</strong>
             <small>
-              {evidenceCount} plan signal{evidenceCount === 1 ? "" : "s"} · learning confidence {Math.round(learnedConfidence * 100)}% · automatic nudge never exceeds ±5 points
+              {evidenceCount} decision signal{evidenceCount === 1 ? "" : "s"} · learning confidence {Math.round(learnedConfidence * 100)}% · effective automatic nudge stays below ±5 points
             </small>
           </div>
           <label className={styles.toggle}>
@@ -237,12 +254,14 @@ export function DjIntelligencePanel({ artistId }: { artistId: string }) {
         <div className={styles.controls} aria-disabled={!preferences.enabled}>
           {controls.map((control) => {
             const value = preferences[control.key];
+            const learned = learnedPreferences[control.key];
             const percent = Math.round(value * 100);
             return (
               <label className={styles.control} key={control.key}>
                 <span className={styles.controlCopy}>
                   <strong>{control.title}</strong>
                   <small>{control.detail}</small>
+                  <small>Learned tendency: {Math.round(learned * 100)} · {band(learned, control.low, control.middle, control.high)}</small>
                 </span>
                 <span className={styles.rangeWrap}>
                   <input
@@ -263,11 +282,11 @@ export function DjIntelligencePanel({ artistId }: { artistId: string }) {
 
         <div className={styles.learning}>
           <div className={styles.learningCopy}>
-            <span className="section-label">Bounded learning</span>
+            <span className="section-label">Inspectable bounded learning</span>
             <strong>Explicit choices stay authoritative.</strong>
             <small>
-              Approved mixes can make only a small bounded adjustment to your direct settings. They cannot override BPM safety,
-              vocal/bass collision vetoes, source quality checks, stretch limits or your explicit preferences.
+              Completed edits and approved renders build confidence gradually. Learned tendencies only rerank otherwise valid candidates;
+              they cannot override BPM safety, vocal/bass collision vetoes, source quality checks, stretch limits, hard locks or transition validation.
             </small>
           </div>
           <div className={styles.actions}>
@@ -284,7 +303,7 @@ export function DjIntelligencePanel({ artistId }: { artistId: string }) {
             </div>
             <FiSliders aria-hidden />
           </div>
-          <p className={styles.note}>Only a positive “this feels like me” signal contributes to learned preferences. A rejection is stored as inspectable evidence without guessing what you disliked.</p>
+          <p className={styles.note}>Whole-plan feedback is optional. Your concrete Set Builder edits and approved renders are already stronger evidence. A rejection is stored without guessing why.</p>
           <div className={styles.feedbackActions}>
             <button className="button" type="button" disabled={!latestJob || feedbackSaving} onClick={() => void sendFeedback("accepted")}><FiThumbsUp /> This feels like me</button>
             <button className="button" type="button" disabled={!latestJob || feedbackSaving} onClick={() => void sendFeedback("rejected")}><FiThumbsDown /> Not my direction</button>
