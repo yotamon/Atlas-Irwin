@@ -6,7 +6,7 @@
 
 ## Audit result
 
-The canonical roadmap was reconciled against the implementation before merge. Phase 5 closes the remaining operational, compatibility, observability and reproducibility boundaries without introducing parallel planner or renderer infrastructure.
+The canonical roadmap was reconciled against the implementation before merge. Phase 5 closes the remaining operational, compatibility, observability, privacy and reproducibility boundaries without introducing parallel planner or renderer infrastructure.
 
 Already present before this phase:
 
@@ -17,7 +17,7 @@ Already present before this phase:
 - transition-preview caching/reuse with source-lineage validation;
 - transition fallbacks and graceful optional-intelligence degradation;
 - private/audio regression coverage;
-- output asset lineage containing source fingerprints, engine metadata, quality contract and approved MixPlan hash.
+- durable job-to-output-asset lineage.
 
 ## Added in Phase 5
 
@@ -71,13 +71,14 @@ Each completed worker result emits a versioned QA summary with:
 - quality summary;
 - final output duration/loudness/ceiling evidence when rendered.
 
-### Self-describing output asset lineage
+### Protected reproducibility lineage with a safe public projection
 
-A completed mix asset persists the complete reproducibility payload alongside the audio asset itself:
+The canonical reproducibility payload is stored on the durable `automix_jobs` row and linked directly to its completed output through `output_asset_id`.
+
+The protected job lineage contains:
 
 - full versioned `render_manifest` / MixPlan;
-- approved MixPlan hash;
-- canonical source fingerprints;
+- canonical source fingerprints and source URLs;
 - planner/renderer engine metadata;
 - evaluation result;
 - mix-level QA diagnostics;
@@ -85,7 +86,18 @@ A completed mix asset persists the complete reproducibility payload alongside th
 - final render measurements;
 - quality contract and plan lineage.
 
-The durable AutoMix job still keeps its own complete result payload, but reproduction and diagnostics no longer require that indirect lookup. The asset is independently inspectable and carries the exact instructions that created it.
+This table is artist/admin scoped under RLS and has no anonymous read policy.
+
+The audio asset itself is intentionally public, so its `media_assets.metadata` stores only a safe, versioned `ensemblis.automix-public-lineage.v1` projection:
+
+- approved plan hash;
+- MixPlan/planner/renderer contract versions;
+- renderer version;
+- rendered duration;
+- source-track count;
+- transition count.
+
+Raw source URLs, source fingerprints, the full MixPlan, evaluation, QA payload, execution metrics and private plan lineage are deliberately not copied into public asset metadata. This keeps the output reproducible for Ensemblis while preventing implementation and unreleased-source details from leaking through the public catalog API.
 
 ### Studio recovery UX
 
@@ -100,7 +112,7 @@ The roadmap requirements through Phase 5 are implemented on the same canonical c
 - Phase 2: structured Set Intent, global/duration-aware planning, alternatives and explainability;
 - Phase 3: Set Builder, durable edits, verified transition previews and explicit plan-first rendering;
 - Phase 4: inspectable Personal DJ Intelligence v2 with bounded evidence and safe reranking;
-- Phase 5: idempotency, retry safety, preview reuse, deterministic lineage, compatibility, diagnostics, runtime metrics and self-describing output assets.
+- Phase 5: idempotency, retry safety, preview reuse, deterministic protected lineage, compatibility, diagnostics, runtime metrics and privacy-safe output metadata.
 
 Phases 6+ remain intentionally future work. They broaden source/execution adapters only after this core is mature and must not introduce another planner or bypass MixPlan.
 
@@ -109,6 +121,8 @@ Phases 6+ remain intentionally future work. They broaden source/execution adapte
 Production recovery must never become a bypass around musical or lineage safety. A retry cannot change order, track windows, transition automation, output source identities or the MixPlan hash. If a canonical master changed, the user must build a new verified plan.
 
 Personalization remains bounded and cannot bypass playback-rate, variable-tempo, transition-confidence, vocal/bass collision, mastering, MixPlan validation, canonical-master or final loudness/true-peak safety contracts.
+
+Public media metadata must never contain raw canonical source URLs, source fingerprints, the full MixPlan or private planner/QA/runtime payloads. Full reproducibility lineage remains on the authenticated AutoMix job linked to the output asset.
 
 ## Validation gate
 
