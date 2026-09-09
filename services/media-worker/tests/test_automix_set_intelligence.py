@@ -110,16 +110,31 @@ class AutoMixSetIntelligenceTest(unittest.TestCase):
         self.assertIn("track-7", selected_ids)
         self.assertIn("required by Set Intent", result["selection_reasons"]["track-7"])
 
-    def test_journey_defaults_to_preserving_the_candidate_pool(self) -> None:
+    def test_journey_preserves_every_candidate_even_if_client_requests_omissions(self) -> None:
         tracks = [self._track(index) for index in range(7)]
         result = select_tracks_for_set(
             tracks,
             purpose="journey",
             energy_profile="dynamic",
             target_duration_ms=4 * 60 * 1000,
+            set_intent={"allow_omissions": True, "target_track_count": 2, "must_play_track_ids": ["track-0"]},
         )
         self.assertEqual([track.id for track in result["tracks"]], [track.id for track in tracks])
         self.assertFalse(result["set_intent"]["allow_omissions"])
+        self.assertEqual(result["set_intent"]["target_track_count"], len(tracks))
+        self.assertEqual(result["set_intent"]["must_play_track_ids"], [track.id for track in tracks])
+        self.assertEqual(result["summary"]["must_play_count"], len(tracks))
+
+    def test_journey_hard_filter_conflicts_fail_instead_of_changing_the_story(self) -> None:
+        tracks = [self._track(0, bpm=96), self._track(1, bpm=124), self._track(2, bpm=126)]
+        with self.assertRaisesRegex(ValueError, "below the requested BPM range"):
+            select_tracks_for_set(
+                tracks,
+                purpose="journey",
+                energy_profile="dynamic",
+                target_duration_ms=6 * 60 * 1000,
+                set_intent={"min_bpm": 110},
+            )
 
     def test_conflicting_hard_constraints_fail_instead_of_silently_ignoring_them(self) -> None:
         tracks = [self._track(index) for index in range(4)]
