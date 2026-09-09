@@ -189,8 +189,9 @@ export async function purgeExpiredAutoMixPreviews() {
   const service = createServiceClient();
   const db = asAutoMixClient(service) as SupabaseClient<AutoMixDatabase>;
   const expired = await db.from("automix_transition_previews")
-    .select("id,output_bucket,output_path,result_payload")
+    .select("id,output_bucket,output_path")
     .eq("status", "completed")
+    .is("purged_at", null)
     .lt("expires_at", new Date().toISOString())
     .order("expires_at")
     .limit(PREVIEW_PURGE_BATCH);
@@ -198,19 +199,16 @@ export async function purgeExpiredAutoMixPreviews() {
 
   let purged = 0;
   for (const row of expired.data ?? []) {
-    const preview = row as Pick<AutoMixTransitionPreview, "id" | "output_bucket" | "output_path" | "result_payload">;
+    const preview = row as Pick<AutoMixTransitionPreview, "id" | "output_bucket" | "output_path">;
     const removal = await service.storage
       .from(preview.output_bucket || PREVIEW_BUCKET)
       .remove([preview.output_path]);
     if (removal.error) continue;
-    const resultPayload = {
-      ...record(preview.result_payload),
-      preview_purged_at: new Date().toISOString(),
-    };
     const update = await db.from("automix_transition_previews")
-      .update({ result_payload: json(resultPayload) })
+      .update({ purged_at: new Date().toISOString() })
       .eq("id", preview.id)
-      .eq("status", "completed");
+      .eq("status", "completed")
+      .is("purged_at", null);
     if (!update.error) purged += 1;
   }
   return { inspected: expired.data?.length ?? 0, purged };
