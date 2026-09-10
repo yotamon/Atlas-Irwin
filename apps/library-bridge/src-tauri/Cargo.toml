@@ -11,6 +11,8 @@ name = "ensemblis_library_bridge"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
+ico = "=0.5.0"
+image = { version = "=0.25.10", default-features = false, features = ["png"] }
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
