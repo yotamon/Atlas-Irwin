@@ -31,6 +31,7 @@ const FORBIDDEN_LOCAL_KEYS = new Set([
   "rootpath",
   "root_path",
 ]);
+const LOCAL_LOCATOR_VALUE = /^(?:file:\/\/|[a-z]:[\\/]|\\\\|\/(?:users|home|volumes|mnt|media)\/)/i;
 
 export class DeviceRequestError extends Error {
   constructor(
@@ -136,6 +137,12 @@ export function boundedNumber(
 }
 
 export function assertPathFree(value: unknown, field = "payload") {
+  if (typeof value === "string") {
+    if (LOCAL_LOCATOR_VALUE.test(value.trim())) {
+      throw new DeviceRequestError(`${field} contains a forbidden local locator value.`);
+    }
+    return;
+  }
   if (!value || typeof value !== "object") return;
   if (Array.isArray(value)) {
     for (const item of value) assertPathFree(item, field);
