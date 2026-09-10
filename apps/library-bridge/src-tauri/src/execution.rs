@@ -53,7 +53,7 @@ pub fn prepare_render_request(db: &BridgeDb, payload: &Value) -> anyhow::Result<
     }
     let mix_plan = root
         .get("mixPlan")
-        .filter(Value::is_object)
+        .filter(|value| value.is_object())
         .context("local MixPlan render job is missing the frozen MixPlan")?;
     if mix_plan.get("plan_hash").and_then(Value::as_str) != Some(plan_hash) {
         anyhow::bail!("local render job does not match the frozen MixPlan hash");
@@ -102,7 +102,7 @@ pub fn prepare_render_request(db: &BridgeDb, payload: &Value) -> anyhow::Result<
             .context("local MixPlan candidate descriptor is missing")?;
         let music_map = planning
             .get("musicMap")
-            .filter(Value::is_object)
+            .filter(|value| value.is_object())
             .context("local MixPlan candidate music map is missing")?;
         let plan_item = plan_by_id
             .get(candidate_id)
