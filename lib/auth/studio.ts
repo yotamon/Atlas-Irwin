@@ -108,6 +108,19 @@ async function requireLocalStudioAdmin(): Promise<StudioAuthContext> {
   return { supabase, user: { id: localUser.id, email: preferredEmail } };
 }
 
+async function hasDatabaseAdminAccess(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+) {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("is_admin")
+    .eq("id", userId)
+    .maybeSingle();
+
+  return !error && data?.is_admin === true;
+}
+
 export async function requireStudioAdmin(): Promise<StudioAuthContext> {
   if (!hasSupabaseEnv()) {
     redirect("/studio/setup");
@@ -120,6 +133,13 @@ export async function requireStudioAdmin(): Promise<StudioAuthContext> {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) redirect("/studio/login");
-  if (!isStudioAdmin(data.user.email)) redirect("/studio/access-denied");
+
+  // The database is the canonical authorization source. STUDIO_ADMIN_EMAILS is
+  // still supported for the legacy password bootstrap flow, but Preview and
+  // normal Supabase Auth no longer depend on that environment variable.
+  if (!(await hasDatabaseAdminAccess(supabase, data.user.id))) {
+    redirect("/studio/access-denied");
+  }
+
   return { supabase, user: data.user };
 }

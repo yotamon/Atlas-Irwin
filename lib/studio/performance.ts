@@ -1,3 +1,6 @@
+import { objectivePerformanceScore } from "@/lib/marketing/domain";
+
+// Retained for legacy release-cockpit views that do not yet provide a content goal.
 export const DEFAULT_PERFORMANCE_WEIGHTS = {
   profile_visits: 8,
   follows: 10,
@@ -8,17 +11,6 @@ export const DEFAULT_PERFORMANCE_WEIGHTS = {
   likes: 1,
   views: 0.05,
 } as const;
-
-export const PULSE_METRICS = [
-  ["streams", "Plays"],
-  ["saves", "Saves"],
-  ["follows", "Follows"],
-  ["profile_visits", "Profile visits"],
-  ["link_clicks", "Link clicks"],
-  ["views", "Content views"],
-] as const;
-
-export type PulseMetricKey = (typeof PULSE_METRICS)[number][0];
 
 export function contentPerformanceScore(
   metric: Record<string, number>,
@@ -31,6 +23,22 @@ export function contentPerformanceScore(
     ),
   );
 }
+
+export function goalPerformanceScore(goal: string, metric: Record<string, number>) {
+  return objectivePerformanceScore(goal, metric);
+}
+
+export const PULSE_METRICS = [
+  ["streams", "Plays"],
+  ["saves", "Saves"],
+  ["follows", "Follows"],
+  ["profile_visits", "Profile visits"],
+  ["link_clicks", "Link clicks"],
+  ["views", "Content views"],
+] as const;
+
+export type PulseMetricKey = (typeof PULSE_METRICS)[number][0];
+
 
 export function metricTotal<T extends Record<PulseMetricKey, number>>(
   rows: T[],

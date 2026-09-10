@@ -1,13 +1,39 @@
 "use client";
 
+import { useRef, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
-import type { ReactNode } from "react";
+import { Dialog } from "./dialog";
 
-export function SubmitButton({ children }: { children: ReactNode }) {
+function PendingSignal({ label }: { label: ReactNode }) {
+  return (
+    <span className="ensemblis-button-pending">
+      <span className="ensemblis-button-signal" aria-hidden="true"><i /><i /><i /></span>
+      <span>{label}</span>
+    </span>
+  );
+}
+
+export function SubmitButton({
+  children,
+  pendingLabel = "Saving…",
+  className = "button primary",
+  disabled = false,
+}: {
+  children: ReactNode;
+  pendingLabel?: ReactNode;
+  className?: string;
+  disabled?: boolean;
+}) {
   const { pending } = useFormStatus();
   return (
-    <button className="button primary" type="submit" disabled={pending} aria-disabled={pending}>
-      {pending ? "Saving…" : children}
+    <button
+      className={className}
+      type="submit"
+      disabled={disabled || pending}
+      aria-disabled={disabled || pending}
+      aria-busy={pending}
+    >
+      {pending ? <PendingSignal label={pendingLabel} /> : children}
     </button>
   );
 }
@@ -16,23 +42,56 @@ export function ConfirmButton({
   children,
   message,
   disabled = false,
+  title = "Confirm this action",
+  confirmLabel = "Continue",
+  className = "text-button danger-text",
+  confirmClassName = "button ensemblis-danger-button",
+  pendingLabel = "Working…",
 }: {
   children: ReactNode;
   message: string;
   disabled?: boolean;
+  title?: string;
+  confirmLabel?: string;
+  className?: string;
+  confirmClassName?: string;
+  pendingLabel?: ReactNode;
 }) {
   const { pending } = useFormStatus();
+  const [confirming, setConfirming] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+
+  function submitConfirmedAction() {
+    const form = triggerRef.current?.form;
+    setConfirming(false);
+    window.requestAnimationFrame(() => form?.requestSubmit());
+  }
+
   return (
-    <button
-      className="text-button danger-text"
-      type="submit"
-      disabled={disabled || pending}
-      onClick={(event) => {
-        if (!window.confirm(message)) event.preventDefault();
-      }}
-    >
-      {pending ? "Working…" : children}
-    </button>
+    <>
+      <button
+        ref={triggerRef}
+        className={className}
+        type="button"
+        disabled={disabled || pending}
+        aria-busy={pending}
+        onClick={() => setConfirming(true)}
+      >
+        {pending ? <PendingSignal label={pendingLabel} /> : children}
+      </button>
+      <Dialog
+        open={confirming}
+        onClose={() => setConfirming(false)}
+        title={title}
+        description="This action is intentionally paused until you confirm it."
+        returnFocusRef={triggerRef}
+      >
+        <p className="ensemblis-confirm-copy">{message}</p>
+        <div className="ensemblis-confirm-actions">
+          <button className="button" type="button" onClick={() => setConfirming(false)}>Cancel</button>
+          <button className={confirmClassName} type="button" onClick={submitConfirmedAction}>{confirmLabel}</button>
+        </div>
+      </Dialog>
+    </>
   );
 }
-

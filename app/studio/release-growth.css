@@ -1,0 +1,123 @@
+.release-growth-status {
+  display: grid;
+  grid-template-columns: minmax(11rem, 0.55fr) minmax(12rem, 1.5fr) minmax(11rem, 0.55fr);
+  gap: 1rem;
+  align-items: center;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(201, 244, 90, 0.14);
+  border-radius: 0.9rem;
+  background: linear-gradient(90deg, rgba(201, 244, 90, 0.055), rgba(255, 255, 255, 0.025));
+}
+
+.release-growth-status > div:not(.release-health-meter) {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.release-growth-status > div:last-child {
+  text-align: right;
+}
+
+.release-growth-status strong {
+  font-size: 1.2rem;
+}
+
+.release-growth-status small {
+  color: var(--s-muted);
+  font-size: 0.7rem;
+}
+
+.release-health-meter {
+  overflow: hidden;
+  height: 0.52rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.075);
+}
+
+.release-health-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--s-teal), var(--s-accent));
+}
+
+.release-prepare-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.release-playbook-list {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.release-playbook-list > div {
+  display: grid;
+  grid-template-columns: 6.4rem minmax(0, 1fr) auto;
+  gap: 0.65rem;
+  align-items: center;
+  min-height: 2.8rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.065);
+}
+
+.release-playbook-list > div:last-child {
+  border-bottom: 0;
+}
+
+.release-playbook-list span,
+.release-playbook-list small {
+  color: var(--s-muted);
+  font-size: 0.68rem;
+}
+
+.release-playbook-list strong {
+  font-size: 0.82rem;
+}
+
+.release-stage-intro {
+  margin-bottom: 1rem !important;
+  max-width: 54rem;
+}
+
+.release-day-note {
+  margin-top: 1rem;
+}
+
+.today-growth-pulse .v2-section {
+  min-height: 13rem;
+}
+
+.today-growth-pulse .v2-section > .button,
+.today-growth-pulse .v2-section > a.button {
+  margin-top: 1rem;
+  width: fit-content;
+}
+
+.today-growth-diagnosis {
+  border-color: rgba(201, 244, 90, 0.16);
+}
+
+.growth-analytics-funnel {
+  grid-column: span 12 !important;
+}
+
+@media (max-width: 850px) {
+  .release-growth-status,
+  .release-prepare-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .release-growth-status > div:last-child {
+    text-align: left;
+  }
+}
+
+@media (max-width: 620px) {
+  .release-playbook-list > div {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+  }
+}

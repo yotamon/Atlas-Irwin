@@ -3,6 +3,10 @@ import type { Json, MediaAsset } from "@/types/database";
 export const MEDIA_TYPES = [
   "cover",
   "alternate_artwork",
+  "brand_reference",
+  "brand_negative_reference",
+  "brand_logo",
+  "brand_motion_reference",
   "canvas_video",
   "visualizer",
   "audio_preview",
@@ -12,6 +16,13 @@ export const MEDIA_TYPES = [
   "content_video",
   "master_audio",
   "stem",
+  "video_reference",
+  "storyboard_frame",
+  "shot_preview",
+  "shot_final",
+  "music_video_master",
+  "social_cut",
+  "thumbnail",
 ] as const;
 
 export type MediaType = (typeof MEDIA_TYPES)[number];
@@ -20,6 +31,10 @@ export type MediaKind = "image" | "video" | "audio" | "archive" | "unknown";
 export const MEDIA_TYPE_LABELS: Record<MediaType, string> = {
   cover: "Release artwork / thumbnail",
   alternate_artwork: "Alternate artwork",
+  brand_reference: "Artist visual reference",
+  brand_negative_reference: "Artist negative visual reference",
+  brand_logo: "Artist logo / identity asset",
+  brand_motion_reference: "Artist motion reference",
   canvas_video: "Canvas / cover-art video",
   visualizer: "Visualizer",
   audio_preview: "Audio preview",
@@ -29,11 +44,39 @@ export const MEDIA_TYPE_LABELS: Record<MediaType, string> = {
   content_video: "Content video",
   master_audio: "Master audio",
   stem: "Stem or production file",
+  video_reference: "Video reference",
+  storyboard_frame: "Storyboard frame",
+  shot_preview: "Shot preview",
+  shot_final: "Final shot",
+  music_video_master: "Music video master",
+  social_cut: "Social cut",
+  thumbnail: "Video thumbnail",
 };
 
 const TYPES_BY_KIND: Record<MediaKind, readonly MediaType[]> = {
-  image: ["cover", "alternate_artwork", "social_image", "press_image"],
-  video: ["canvas_video", "visualizer", "lyric_video", "content_video"],
+  image: [
+    "cover",
+    "alternate_artwork",
+    "brand_reference",
+    "brand_negative_reference",
+    "brand_logo",
+    "social_image",
+    "press_image",
+    "storyboard_frame",
+    "thumbnail",
+  ],
+  video: [
+    "brand_motion_reference",
+    "canvas_video",
+    "visualizer",
+    "lyric_video",
+    "content_video",
+    "video_reference",
+    "shot_preview",
+    "shot_final",
+    "music_video_master",
+    "social_cut",
+  ],
   audio: ["audio_preview", "master_audio", "stem"],
   archive: ["stem"],
   unknown: [],
@@ -98,4 +141,3 @@ export function parseTags(value: string) {
 export function defaultMediaType(mimeType?: string | null): MediaType | null {
   return compatibleMediaTypes(mimeType)[0] ?? null;
 }
-

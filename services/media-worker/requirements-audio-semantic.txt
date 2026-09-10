@@ -1,0 +1,8 @@
+# Optional cross-modal semantic-audio profile.
+# Do NOT install in the default Vercel Sandbox: Track Intelligence remains fully
+# functional without this profile and CLAP can require a large model download.
+#
+# Ensemblis loads the model with local_files_only=True by default. A deployment
+# must explicitly set ENSEMBLIS_CLAP_ALLOW_DOWNLOAD=1 to permit model downloads.
+transformers==5.16.1
+torch>=2.4,<3

@@ -1,0 +1,235 @@
+/* Reusable Ensemblis patterns above primitives and below route composition. */
+
+.studio-root :where(
+  .v2-focus-card,
+  .v2-release-card,
+  .v2-section,
+  .v2-create-card,
+  .catalog-card,
+  .kanban-card,
+  .today-v3-section,
+  .today-v3-next,
+  .track-object-primary,
+  .track-object-decision,
+  .library-reusable-strip,
+  .fan-graph-section,
+  .audience-polish-queue,
+  .growth-north-star-main,
+  .video-project-card,
+  .distribution-section,
+  .ai-budget-track,
+  .v2-provider-lock
+) {
+  border-color: var(--en-line);
+  border-radius: var(--en-radius-lg);
+  background: color-mix(in srgb, var(--en-surface) 96%, transparent);
+  box-shadow: none;
+}
+
+.studio-root :where(
+  .v2-focus-card,
+  .v2-release-card,
+  .v2-section,
+  .v2-create-card,
+  .catalog-card,
+  .kanban-card
+) {
+  transition:
+    border-color var(--en-duration-fast) var(--en-ease-standard),
+    background-color var(--en-duration-fast) var(--en-ease-standard),
+    transform var(--en-duration-fast) var(--en-ease-standard);
+}
+
+.studio-root :where(.v2-create-card:hover, a.catalog-card:hover, a.kanban-card:hover) {
+  border-color: var(--en-line-strong);
+}
+
+.studio-root :where(.metric-row, .timeline-row, .list-row) {
+  border-color: var(--en-line);
+}
+
+.studio-root :where(.section-label, .studio-sidebar-section-label, .ensemblis-artist-switcher-heading span) {
+  color: var(--en-muted);
+  font-size: var(--en-text-xs);
+  font-weight: var(--en-weight-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.studio-root :where(.v2-muted-copy, .studio-form-intro p) {
+  color: var(--en-muted);
+}
+
+.studio-root .v2-count {
+  background: var(--en-surface-raised);
+  color: var(--en-muted);
+}
+
+.studio-root .v2-count.has-items {
+  background: var(--en-violet-soft);
+  color: color-mix(in srgb, var(--en-violet) 86%, var(--en-white));
+}
+
+.studio-root :where(.v2-inbox-item, .v2-status-grid article, .v2-calm-state) {
+  border-color: var(--en-line);
+  background: color-mix(in srgb, var(--en-surface-raised) 66%, transparent);
+}
+
+.studio-root .v2-inbox-item:hover {
+  border-color: var(--en-line-strong);
+  background: var(--en-surface-hover);
+}
+
+.studio-root .v2-inbox-item.important {
+  border-color: color-mix(in srgb, var(--en-violet) 38%, var(--en-line));
+  background: var(--en-violet-soft);
+}
+
+.studio-root .v2-inbox-item.warning {
+  border-color: color-mix(in srgb, var(--en-danger) 38%, var(--en-line));
+  background: var(--en-danger-soft);
+}
+
+.studio-root .v2-calm-state {
+  border-style: dashed;
+  color: var(--en-muted);
+}
+
+.studio-root .ensemblis-object-actions > .button:not(.primary) {
+  border-color: transparent;
+  background: transparent;
+  color: var(--en-muted);
+  box-shadow: none;
+}
+
+.studio-root .ensemblis-object-actions > .button:not(.primary):hover,
+.studio-root .ensemblis-object-actions > .button:not(.primary):focus-visible {
+  border-color: var(--en-line);
+  background: var(--en-surface-raised);
+  color: var(--en-ink);
+}
+
+.studio-root .ensemblis-object-header {
+  display: grid;
+  gap: var(--en-space-5);
+  margin-bottom: var(--en-space-8);
+  padding-bottom: var(--en-space-5);
+  border-bottom: 1px solid var(--en-line);
+}
+
+.studio-root .ensemblis-object-topline,
+.studio-root .ensemblis-object-actions,
+.studio-root .ensemblis-object-facts {
+  display: flex;
+  align-items: center;
+  gap: var(--en-space-2);
+  flex-wrap: wrap;
+}
+
+.studio-root .ensemblis-object-topline {
+  justify-content: space-between;
+}
+
+.studio-root .ensemblis-object-back {
+  color: var(--en-muted);
+  font-size: var(--en-text-sm);
+  font-weight: var(--en-weight-semibold);
+}
+
+.studio-root .ensemblis-object-back:hover,
+.studio-root .ensemblis-object-back:focus-visible {
+  color: var(--en-ink);
+}
+
+.studio-root .ensemblis-object-identity {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--en-space-5);
+  align-items: center;
+}
+
+.studio-root .ensemblis-object-artwork {
+  width: clamp(5rem, 10vw, 7.5rem);
+  aspect-ratio: 1;
+  object-fit: cover;
+  overflow: hidden;
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius);
+  background: var(--en-surface-raised);
+}
+
+.studio-root .ensemblis-object-artwork.is-empty {
+  display: grid;
+  place-items: center;
+  color: var(--en-muted);
+  font-size: 2rem;
+  font-weight: var(--en-weight-semibold);
+}
+
+.studio-root .ensemblis-object-copy h1 {
+  margin: var(--en-space-1) 0 0;
+  color: var(--en-ink);
+  font: var(--en-weight-semibold) clamp(2rem, 5vw, 4.4rem) / 0.98 var(--font-body), sans-serif;
+  letter-spacing: -0.055em;
+}
+
+.studio-root .ensemblis-object-copy > p {
+  max-width: 50rem;
+  margin: var(--en-space-2) 0 0;
+  color: var(--en-muted);
+  line-height: var(--en-leading-body);
+}
+
+.studio-root .ensemblis-object-facts {
+  margin: var(--en-space-4) 0 0;
+}
+
+.studio-root .ensemblis-object-facts > div {
+  display: grid;
+  gap: var(--en-space-1);
+  min-width: 6rem;
+  padding-right: var(--en-space-4);
+  border-right: 1px solid var(--en-line);
+}
+
+.studio-root .ensemblis-object-facts > div:last-child { border-right: 0; }
+.studio-root .ensemblis-object-facts dt { color: var(--en-subtle); font-size: var(--en-text-2xs); }
+.studio-root .ensemblis-object-facts dd { margin: 0; color: var(--en-ink); font-size: var(--en-text-sm); }
+
+.studio-root .auth-message {
+  padding: var(--en-space-4);
+  border-left: 2px solid var(--en-accent);
+  border-radius: 0 var(--en-radius-sm) var(--en-radius-sm) 0;
+  background: var(--en-accent-soft);
+}
+
+.studio-root .form-error { color: var(--en-danger) !important; }
+
+.studio-root .upload-progress {
+  display: block;
+  width: min(100%, 28rem);
+  height: 0.28rem;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--en-radius-pill);
+  background: var(--en-line);
+  accent-color: var(--en-accent);
+}
+
+.studio-root .upload-progress::-webkit-progress-bar { background: var(--en-line); }
+.studio-root .upload-progress::-webkit-progress-value,
+.studio-root .upload-progress::-moz-progress-bar { background: var(--en-accent); }
+
+.studio-root .upload-item.error {
+  background: color-mix(in srgb, var(--en-danger) 5%, transparent);
+}
+
+@media (max-width: 680px) {
+  .studio-root .ensemblis-object-identity {
+    grid-template-columns: 1fr;
+  }
+
+  .studio-root .ensemblis-object-artwork {
+    width: 5rem;
+  }
+}

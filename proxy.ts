@@ -4,6 +4,15 @@ import {
   isLocalHost,
   isLocalStudioBypassHost,
 } from "@/lib/auth/local-studio";
+import { ENSEMBLIS_ACTIVE_ARTIST_COOKIE } from "@/lib/ensemblis-product";
+import { getSiteUrl } from "@/lib/site-url";
+import {
+  normalizeRequestHostname,
+  resolveSiteHostForProxy,
+} from "@/lib/sites/proxy-host-resolver";
+
+const INTERNAL_SITE_ID_HEADER = "x-ensemblis-site-id";
+const INTERNAL_SITE_HOST_HEADER = "x-ensemblis-site-host";
 
 function isStudioAdmin(email?: string | null) {
   return Boolean(
@@ -25,31 +34,132 @@ function getRequestHost(request: NextRequest) {
     request.headers.get("host") ||
     request.nextUrl.host;
 
-  if (isLocalHost(host)) {
-    return host;
-  }
-
-  return host.replace(/:\d+$/, "");
+  if (isLocalHost(host)) return host;
+  return normalizeRequestHostname(host);
 }
 
-const CANONICAL_HOST = "atlasirwin.com";
+function selectedArtistFromRequest(request: NextRequest) {
+  const value = request.nextUrl.searchParams.get("artist")?.trim();
+  if (!value) return null;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+    ? value
+    : null;
+}
+
+function persistArtistPreference(response: NextResponse, artistId: string | null) {
+  if (!artistId) return response;
+  response.cookies.set(ENSEMBLIS_ACTIVE_ARTIST_COOKIE, artistId, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/studio",
+    maxAge: 60 * 60 * 24 * 365,
+  });
+  return response;
+}
+
+function sanitizedRequestHeaders(request: NextRequest) {
+  const headers = new Headers(request.headers);
+  headers.delete(INTERNAL_SITE_ID_HEADER);
+  headers.delete(INTERNAL_SITE_HOST_HEADER);
+  return headers;
+}
+
+function nextResponse(request: NextRequest) {
+  return NextResponse.next({ request: { headers: sanitizedRequestHeaders(request) } });
+}
+
+function isGlobalSystemPath(pathname: string) {
+  return [
+    "/studio",
+    "/api",
+    "/site-preview",
+    "/sites",
+    "/go",
+    "/_next",
+  ].some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
+function addHostAndWwwVariant(hosts: Set<string>, input: string) {
+  const hostname = normalizeRequestHostname(input);
+  if (!hostname) return;
+  hosts.add(hostname);
+  hosts.add(hostname.startsWith("www.") ? hostname.slice(4) : `www.${hostname}`);
+}
+
+function legacyPublicHosts() {
+  const hosts = new Set<string>();
+
+  try {
+    addHostAndWwwVariant(hosts, new URL(getSiteUrl()).hostname);
+  } catch {
+    // getSiteUrl is already defensive; keep this boundary fail-closed regardless.
+  }
+
+  const configured = process.env.ENSEMBLIS_SITES_LEGACY_HOSTS
+    ?.split(",")
+    .map((item) => normalizeRequestHostname(item))
+    .filter(Boolean) ?? [];
+  configured.forEach((host) => hosts.add(host));
+
+  for (const candidate of [process.env.VERCEL_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL]) {
+    if (candidate) hosts.add(normalizeRequestHostname(candidate));
+  }
+  return hosts;
+}
+
+function isTrustedNonTenantHost(host: string) {
+  if (isLocalHost(host)) return true;
+  const normalized = normalizeRequestHostname(host);
+  if (normalized.endsWith(".vercel.app")) return true;
+  return legacyPublicHosts().has(normalized);
+}
+
+function publishedSiteRewritePath(siteSlug: string, pathname: string) {
+  const base = `/sites/${encodeURIComponent(siteSlug)}`;
+  return pathname === "/" ? base : `${base}${pathname}`;
+}
+
+async function routeArtistHostname(request: NextRequest, host: string) {
+  const pathname = request.nextUrl.pathname;
+  if (pathname === "/__sites" || pathname.startsWith("/__sites/")) {
+    return new NextResponse(null, { status: 404 });
+  }
+  if (isGlobalSystemPath(pathname)) return null;
+
+  let resolved: Awaited<ReturnType<typeof resolveSiteHostForProxy>> = null;
+  try {
+    resolved = await resolveSiteHostForProxy(host);
+  } catch {
+    if (!isTrustedNonTenantHost(host)) {
+      return new NextResponse("Site temporarily unavailable.", { status: 503 });
+    }
+    return null;
+  }
+
+  if (!resolved) {
+    return isTrustedNonTenantHost(host)
+      ? null
+      : new NextResponse(null, { status: 404 });
+  }
+
+  // Reuse the already-public, published Sites runtime as the rewrite destination.
+  // `/sites/**` is a global system path, so a rewritten request cannot re-enter
+  // hostname routing and trip the direct `/__sites/**` protection. The hostname
+  // was resolved to one published Site before this point and site slugs are
+  // globally unique, so the destination remains deterministic and artist-safe.
+  const rewriteUrl = request.nextUrl.clone();
+  rewriteUrl.pathname = publishedSiteRewritePath(resolved.siteSlug, pathname);
+
+  return NextResponse.rewrite(rewriteUrl, {
+    request: { headers: sanitizedRequestHeaders(request) },
+  });
+}
 
 export async function proxy(request: NextRequest) {
   const host = getRequestHost(request);
   const forwardedProto = getForwardedValue(request, "x-forwarded-proto");
   const protocol = forwardedProto || request.nextUrl.protocol.replace(":", "");
-
-  if (
-    process.env.NODE_ENV === "production" &&
-    !isLocalHost(host) &&
-    (host === `www.${CANONICAL_HOST}` || host.endsWith(".vercel.app"))
-  ) {
-    const canonicalUrl = request.nextUrl.clone();
-    canonicalUrl.protocol = "https:";
-    canonicalUrl.host = CANONICAL_HOST;
-    canonicalUrl.port = "";
-    return NextResponse.redirect(canonicalUrl, 308);
-  }
 
   if (
     process.env.NODE_ENV === "production" &&
@@ -60,41 +170,56 @@ export async function proxy(request: NextRequest) {
     secureUrl.protocol = "https:";
     secureUrl.host = host;
     secureUrl.port = "";
-
     return NextResponse.redirect(secureUrl, 308);
   }
 
-  let response = NextResponse.next({ request });
+  const hostRoute = await routeArtistHostname(request, host);
+  if (hostRoute) return hostRoute;
+
   const isStudio = request.nextUrl.pathname.startsWith("/studio");
   const isOpenStudioRoute = [
     "/studio/login",
     "/studio/auth/callback",
     "/studio/access-denied",
   ].some((path) => request.nextUrl.pathname.startsWith(path));
+  const requestedArtistId = isStudio ? selectedArtistFromRequest(request) : null;
 
-  if (!isStudio) return response;
+  if (requestedArtistId) {
+    request.cookies.set(ENSEMBLIS_ACTIVE_ARTIST_COOKIE, requestedArtistId);
+  }
 
-  if (isLocalStudioBypassHost(host)) {
+  let response = nextResponse(request);
+
+  if (isStudio && isLocalStudioBypassHost(host)) {
     if (request.nextUrl.pathname === "/studio/login") {
-      return NextResponse.redirect(new URL("/studio", request.url));
+      return persistArtistPreference(
+        NextResponse.redirect(new URL("/studio", request.url)),
+        requestedArtistId,
+      );
     }
-
-    if (!isOpenStudioRoute) return response;
+    if (!isOpenStudioRoute) {
+      return persistArtistPreference(response, requestedArtistId);
+    }
   }
 
   if (
     !process.env.NEXT_PUBLIC_SUPABASE_URL ||
     !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   ) {
-    if (!isOpenStudioRoute)
-      return NextResponse.redirect(
-        new URL(
-          "/studio/login?error=Studio%20is%20not%20configured",
-          request.url,
+    if (isStudio && !isOpenStudioRoute) {
+      return persistArtistPreference(
+        NextResponse.redirect(
+          new URL(
+            "/studio/login?error=Ensemblis%20is%20not%20configured",
+            request.url,
+          ),
         ),
+        requestedArtistId,
       );
-    return response;
+    }
+    return persistArtistPreference(response, requestedArtistId);
   }
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
@@ -102,10 +227,8 @@ export async function proxy(request: NextRequest) {
       cookies: {
         getAll: () => request.cookies.getAll(),
         setAll: (cookiesToSet, headersToSet) => {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value),
-          );
-          response = NextResponse.next({ request });
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          response = nextResponse(request);
           cookiesToSet.forEach(({ name, value, options }) =>
             response.cookies.set(name, value, options),
           );
@@ -116,20 +239,41 @@ export async function proxy(request: NextRequest) {
       },
     },
   );
+
   const { data } = await supabase.auth.getUser();
-  if (isStudio && !isOpenStudioRoute && !data.user)
-    return NextResponse.redirect(new URL("/studio/login", request.url));
-  if (isStudio && !isOpenStudioRoute && !isStudioAdmin(data.user?.email))
-    return NextResponse.redirect(new URL("/studio/access-denied", request.url));
+  if (isStudio && !isOpenStudioRoute && !data.user) {
+    return persistArtistPreference(
+      NextResponse.redirect(new URL("/studio/login", request.url)),
+      requestedArtistId,
+    );
+  }
+  if (isStudio && !isOpenStudioRoute && !isStudioAdmin(data.user?.email)) {
+    return persistArtistPreference(
+      NextResponse.redirect(new URL("/studio/access-denied", request.url)),
+      requestedArtistId,
+    );
+  }
   if (
     request.nextUrl.pathname === "/studio/login" &&
     data.user &&
     isStudioAdmin(data.user.email)
-  )
-    return NextResponse.redirect(new URL("/studio", request.url));
-  return response;
+  ) {
+    return persistArtistPreference(
+      NextResponse.redirect(new URL("/studio", request.url)),
+      requestedArtistId,
+    );
+  }
+
+  return persistArtistPreference(response, requestedArtistId);
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\..*).*)"],
+  matcher: [
+    "/__sites/:path*",
+    "/robots.txt",
+    "/sitemap.xml",
+    "/manifest.webmanifest",
+    "/favicon.ico",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.[^/]+$).*)",
+  ],
 };

@@ -1,13 +1,20 @@
 import { NextResponse } from "next/server";
-import nodemailer from "nodemailer";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { emailDeliveryConfigured, sendEmail } from "@/lib/email/provider";
+import {
+  createExecutionContext,
+  EXECUTION_TRACE_HEADER,
+  logExecutionEvent,
+  runWithExecutionContext,
+  traceIdFromRequest,
+} from "@/lib/observability/execution-context";
 
 function contactRecipientEmail() {
-  return (
-    process.env.CONTACT_EMAIL_TO?.trim() ||
-    process.env.CONTACT_SMTP_USER?.trim() ||
-    ""
-  );
+  return process.env.CONTACT_EMAIL_TO?.trim() || "";
+}
+
+function contactSenderEmail() {
+  return process.env.CONTACT_EMAIL_FROM?.trim() || undefined;
 }
 
 type ContactPayload = {
@@ -34,100 +41,103 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#039;");
 }
 
+function contactResponse(
+  traceId: string,
+  body: { message: string },
+  status = 200,
+) {
+  const response = NextResponse.json(body, { status });
+  response.headers.set(EXECUTION_TRACE_HEADER, traceId);
+  return response;
+}
+
 export async function POST(request: Request) {
-  /* ── Rate limiting ──────────────────────────────────────── */
-  const ip = getClientIp(request);
+  const traceId = traceIdFromRequest(request);
+  const context = createExecutionContext({ traceId, operation: "contact.submit" });
 
-  if (!checkRateLimit(ip, { windowMs: 60_000, maxRequests: 5 })) {
-    return NextResponse.json(
-      { message: "Too many requests. Please try again later." },
-      { status: 429 },
-    );
-  }
+  return runWithExecutionContext(context, async () => {
+    const ip = getClientIp(request);
+    if (!checkRateLimit(ip, { windowMs: 60_000, maxRequests: 5 })) {
+      logExecutionEvent("warn", "contact.rate_limited");
+      return contactResponse(
+        traceId,
+        { message: "Too many requests. Please try again later." },
+        429,
+      );
+    }
 
-  let payload: ContactPayload;
+    let payload: ContactPayload;
+    try {
+      payload = (await request.json()) as ContactPayload;
+    } catch {
+      return contactResponse(
+        traceId,
+        { message: "Please send a valid contact message." },
+        400,
+      );
+    }
 
-  try {
-    payload = (await request.json()) as ContactPayload;
-  } catch {
-    return NextResponse.json(
-      { message: "Please send a valid contact message." },
-      { status: 400 },
-    );
-  }
+    const company = cleanText(payload.company, 120);
+    if (company) {
+      logExecutionEvent("info", "contact.honeypot_rejected");
+      return contactResponse(traceId, { message: "Message sent. Thank you." });
+    }
 
-  const company = cleanText(payload.company, 120);
-  if (company) {
-    return NextResponse.json({ message: "Message sent. Thank you." });
-  }
+    const name = cleanText(payload.name, 100);
+    const email = cleanText(payload.email, 180);
+    const message = cleanText(payload.message, 5000);
 
-  const name = cleanText(payload.name, 100);
-  const email = cleanText(payload.email, 180);
-  const message = cleanText(payload.message, 5000);
+    if (!name || !message || !isValidEmail(email)) {
+      return contactResponse(
+        traceId,
+        { message: "Please add your name, a valid email, and a message." },
+        400,
+      );
+    }
 
-  if (!name || !message || !isValidEmail(email)) {
-    return NextResponse.json(
-      { message: "Please add your name, a valid email, and a message." },
-      { status: 400 },
-    );
-  }
+    const to = contactRecipientEmail();
+    if (!to || !emailDeliveryConfigured()) {
+      logExecutionEvent("error", "contact.email_not_configured");
+      return contactResponse(
+        traceId,
+        { message: "Email delivery is not configured yet." },
+        503,
+      );
+    }
 
-  const host = process.env.CONTACT_SMTP_HOST;
-  const port = Number(process.env.CONTACT_SMTP_PORT || "587");
-  const user = process.env.CONTACT_SMTP_USER;
-  const pass = process.env.CONTACT_SMTP_PASS;
-  const from = process.env.CONTACT_EMAIL_FROM || user;
+    const safeName = escapeHtml(name);
+    const safeEmail = escapeHtml(email);
+    const safeMessage = escapeHtml(message).replaceAll("\n", "<br />");
+    const subjectName = name.replace(/[\r\n]+/g, " ").trim();
 
-  const to = contactRecipientEmail();
-
-  if (!host || !Number.isFinite(port) || !user || !pass || !from || !to) {
-    return NextResponse.json(
-      { message: "Email delivery is not configured yet." },
-      { status: 503 },
-    );
-  }
-
-  const secure =
-    process.env.CONTACT_SMTP_SECURE === "true" ||
-    (!process.env.CONTACT_SMTP_SECURE && port === 465);
-
-  const transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure,
-    auth: { user, pass },
+    try {
+      const result = await sendEmail({
+        from: contactSenderEmail(),
+        to,
+        replyTo: email,
+        subject: `New website message from ${subjectName}`,
+        text: [`Name: ${name}`, `Email: ${email}`, "", message].join("\n"),
+        html: `
+          <p><strong>Name:</strong> ${safeName}</p>
+          <p><strong>Email:</strong> ${safeEmail}</p>
+          <p><strong>Message:</strong></p>
+          <p>${safeMessage}</p>
+        `,
+      });
+      logExecutionEvent("info", "contact.email_delivered", {
+        email_provider: result.provider,
+        email_message_id: result.messageId,
+      });
+      return contactResponse(traceId, { message: "Message sent. Thank you." });
+    } catch (error) {
+      logExecutionEvent("error", "contact.email_delivery_failed", {
+        error_message: error instanceof Error ? error.message : String(error),
+      });
+      return contactResponse(
+        traceId,
+        { message: "Message could not be sent right now." },
+        500,
+      );
+    }
   });
-
-  const safeName = escapeHtml(name);
-  const safeEmail = escapeHtml(email);
-  const safeMessage = escapeHtml(message).replaceAll("\n", "<br />");
-
-  try {
-    await transporter.sendMail({
-      from: {
-        name: "Atlas Irwin Website",
-        address: from,
-      },
-      to,
-      replyTo: {
-        name,
-        address: email,
-      },
-      subject: `New website message from ${name}`,
-      text: [`Name: ${name}`, `Email: ${email}`, "", message].join("\n"),
-      html: `
-        <p><strong>Name:</strong> ${safeName}</p>
-        <p><strong>Email:</strong> ${safeEmail}</p>
-        <p><strong>Message:</strong></p>
-        <p>${safeMessage}</p>
-      `,
-    });
-
-    return NextResponse.json({ message: "Message sent. Thank you." });
-  } catch {
-    return NextResponse.json(
-      { message: "Message could not be sent right now." },
-      { status: 500 },
-    );
-  }
 }

@@ -1,0 +1,173 @@
+import "server-only";
+
+import { normalizeGatewayModel, parseGatewayModelList } from "./gateway";
+import type { AiControlSettings, AiRoutingMode } from "@/types/marketing-database";
+
+export type AiTaskType =
+  | "marketing.campaign_plan"
+  | "marketing.caption"
+  | "marketing.strategy"
+  | "marketing.creative_direction"
+  | "marketing.creative_quality"
+  | "community.reply"
+  | "metadata.extraction"
+  | "music.lyrics_analysis"
+  | "video.concepts"
+  | "video.production_plan"
+  | "video.shot_revision";
+
+export type AiTier = "economy" | "balanced" | "premium";
+export type AiModality = "text";
+
+export type AiTaskPolicy = {
+  task: AiTaskType;
+  label: string;
+  modality: AiModality;
+  tier: AiTier;
+  escalationTier: AiTier | null;
+  qualityThreshold: number;
+  models: string[];
+  escalationModels: string[];
+};
+
+/** @deprecated Use AiTaskType. */
+export type AtlasAiTaskType = AiTaskType;
+/** @deprecated Use AiTier. */
+export type AtlasAiTier = AiTier;
+/** @deprecated Use AiModality. */
+export type AtlasAiModality = AiModality;
+/** @deprecated Use AiTaskPolicy. */
+export type AtlasAiTaskPolicy = AiTaskPolicy;
+
+type TaskOverride = {
+  tier?: AiTier;
+  escalationTier?: AiTier | null;
+  qualityThreshold?: number;
+  models?: string[];
+  escalationModels?: string[];
+};
+
+function preferredEnv(primary: string | undefined, legacy: string | undefined) {
+  return primary?.trim() || legacy?.trim() || "";
+}
+
+function premiumModel() {
+  return normalizeGatewayModel(
+    preferredEnv(process.env.ENSEMBLIS_MARKETING_MODEL, process.env.ATLAS_MARKETING_MODEL) || "openai/gpt-5.6-sol",
+    "openai",
+  );
+}
+
+function tierModels(tier: AiTier) {
+  if (tier === "economy") {
+    const configured = parseGatewayModelList(preferredEnv(
+      process.env.ENSEMBLIS_MARKETING_ECONOMY_MODELS,
+      process.env.ATLAS_MARKETING_ECONOMY_MODELS,
+    ));
+    return configured.length ? configured : ["zai/glm-4.7-flash"];
+  }
+  if (tier === "premium") {
+    const configured = parseGatewayModelList(preferredEnv(
+      process.env.ENSEMBLIS_MARKETING_PREMIUM_MODELS,
+      process.env.ATLAS_MARKETING_PREMIUM_MODELS,
+    ));
+    return configured.length ? configured : [premiumModel()];
+  }
+  const configured = parseGatewayModelList(preferredEnv(
+    process.env.ENSEMBLIS_MARKETING_BALANCED_MODELS,
+    process.env.ATLAS_MARKETING_BALANCED_MODELS,
+  ));
+  return configured.length ? configured : ["openai/gpt-5.6-luna"];
+}
+
+function videoModels(tier: AiTier) {
+  if (tier !== "premium") return tierModels(tier);
+  const primary = normalizeGatewayModel(process.env.VIDEO_DIRECTOR_LLM_MODEL?.trim() || premiumModel());
+  const fallbacks = parseGatewayModelList(process.env.VIDEO_DIRECTOR_LLM_FALLBACK_MODELS);
+  return Array.from(new Set([primary, ...fallbacks].filter(Boolean)));
+}
+
+const BASE_TASKS: Record<AiTaskType, Omit<AiTaskPolicy, "models" | "escalationModels">> = {
+  "marketing.campaign_plan": { task: "marketing.campaign_plan", label: "Campaign planning", modality: "text", tier: "balanced", escalationTier: "premium", qualityThreshold: 0.9 },
+  "marketing.caption": { task: "marketing.caption", label: "Caption writing", modality: "text", tier: "economy", escalationTier: "balanced", qualityThreshold: 0.85 },
+  "marketing.strategy": { task: "marketing.strategy", label: "Marketing strategy", modality: "text", tier: "balanced", escalationTier: "premium", qualityThreshold: 0.9 },
+  "marketing.creative_direction": { task: "marketing.creative_direction", label: "Creative direction", modality: "text", tier: "balanced", escalationTier: "premium", qualityThreshold: 0.92 },
+  "marketing.creative_quality": { task: "marketing.creative_quality", label: "Creative quality review", modality: "text", tier: "premium", escalationTier: null, qualityThreshold: 0.94 },
+  "community.reply": { task: "community.reply", label: "Community reply", modality: "text", tier: "economy", escalationTier: "balanced", qualityThreshold: 0.88 },
+  "metadata.extraction": { task: "metadata.extraction", label: "Metadata extraction", modality: "text", tier: "economy", escalationTier: "balanced", qualityThreshold: 1 },
+  "music.lyrics_analysis": { task: "music.lyrics_analysis", label: "Lyrics Intelligence", modality: "text", tier: "balanced", escalationTier: "premium", qualityThreshold: 1 },
+  "video.concepts": { task: "video.concepts", label: "Video concepts", modality: "text", tier: "balanced", escalationTier: "premium", qualityThreshold: 0.9 },
+  "video.production_plan": { task: "video.production_plan", label: "Video production plan", modality: "text", tier: "balanced", escalationTier: "premium", qualityThreshold: 1 },
+  "video.shot_revision": { task: "video.shot_revision", label: "Video shot revision", modality: "text", tier: "balanced", escalationTier: "premium", qualityThreshold: 1 },
+};
+
+function overrideFor(settings: AiControlSettings | null, task: AiTaskType): TaskOverride {
+  const value = settings?.task_overrides;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const candidate = (value as Record<string, unknown>)[task];
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return {};
+  return candidate as TaskOverride;
+}
+
+function tierFromRoutingMode(mode: AiRoutingMode, fallback: AiTier) {
+  return mode === "auto" ? fallback : mode;
+}
+
+function cleanModels(models: unknown) {
+  if (!Array.isArray(models)) return [];
+  return Array.from(new Set(models
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => normalizeGatewayModel(item))
+    .filter(Boolean)));
+}
+
+function semanticEscalationModels(tier: AiTier, escalationTier: AiTier | null, video: boolean) {
+  if (!escalationTier) return [];
+  const target = video ? videoModels(escalationTier) : tierModels(escalationTier);
+  if (tier === "economy" && escalationTier === "balanced") {
+    const premium = video ? videoModels("premium") : tierModels("premium");
+    return [...target, ...premium];
+  }
+  return target;
+}
+
+export function aiTaskPolicy(task: AiTaskType, settings: AiControlSettings | null = null): AiTaskPolicy {
+  const base = BASE_TASKS[task];
+  const override = overrideFor(settings, task);
+  const tier = tierFromRoutingMode(settings?.routing_mode ?? "auto", override.tier ?? base.tier);
+  const forcedMode = Boolean(settings?.routing_mode && settings.routing_mode !== "auto");
+  const escalationTier = forcedMode
+    ? null
+    : override.escalationTier !== undefined ? override.escalationTier : base.escalationTier;
+
+  const isVideoDirector = task.startsWith("video.");
+  const defaultModels = isVideoDirector ? videoModels(tier) : tierModels(tier);
+  const overriddenModels = cleanModels(override.models);
+  const models = overriddenModels.length ? overriddenModels : defaultModels;
+  const explicitEscalation = cleanModels(override.escalationModels);
+  const escalationModels = explicitEscalation.length
+    ? explicitEscalation.filter((model) => !models.includes(model))
+    : semanticEscalationModels(tier, escalationTier, isVideoDirector).filter((model) => !models.includes(model));
+
+  const threshold = typeof override.qualityThreshold === "number" && Number.isFinite(override.qualityThreshold)
+    ? Math.max(0, Math.min(1, override.qualityThreshold))
+    : base.qualityThreshold;
+
+  return {
+    ...base,
+    tier,
+    escalationTier,
+    qualityThreshold: threshold,
+    models,
+    escalationModels: Array.from(new Set(escalationModels)),
+  };
+}
+
+export function aiTaskRegistry(settings: AiControlSettings | null = null) {
+  return (Object.keys(BASE_TASKS) as AiTaskType[]).map((task) => aiTaskPolicy(task, settings));
+}
+
+/** @deprecated Use aiTaskPolicy. */
+export const atlasAiTaskPolicy = aiTaskPolicy;
+/** @deprecated Use aiTaskRegistry. */
+export const atlasAiTaskRegistry = aiTaskRegistry;

@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "note": "Initial review thresholds for Ensemblis product-quality calibration. These are decision gates, not claims about current performance.",
+  "gates": {
+    "moment_top5_usable_recall": { "direction": "min", "threshold": 0.9, "label": "Top-five Musical Moment usable recall" },
+    "creative_acceptance_rate": { "direction": "min", "threshold": 0.6, "label": "Creative accepted without regeneration" },
+    "creative_median_edit_ratio": { "direction": "max", "threshold": 0.35, "label": "Median edit ratio after accepted creative" },
+    "onboarding_median_minutes_to_first_useful_recommendation": { "direction": "max", "threshold": 10, "label": "Median minutes to first useful recommendation" },
+    "onboarding_completion_rate": { "direction": "min", "threshold": 0.7, "label": "First-use loop completion rate" },
+    "release_zero_median_human_interventions": { "direction": "max", "threshold": 8, "label": "Human interventions from empty release to executable Mission" },
+    "mission_blocker_resolution_rate": { "direction": "min", "threshold": 0.8, "label": "Mission blocker resolution rate" },
+    "mobile_critical_path_pass_rate": { "direction": "min", "threshold": 1, "label": "Mobile critical-path pass rate" },
+    "keyboard_critical_path_pass_rate": { "direction": "min", "threshold": 1, "label": "Keyboard critical-path pass rate" },
+    "recovery_critical_path_pass_rate": { "direction": "min", "threshold": 1, "label": "Error-recovery critical-path pass rate" }
+  }
+}

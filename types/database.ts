@@ -1,3 +1,10 @@
+import type {
+  VideoAspectRatio,
+  VideoProjectKind,
+  VideoProjectStatus,
+  VideoResolution,
+} from "@/lib/video-director/domain";
+
 export type Json =
   | string
   | number
@@ -395,6 +402,154 @@ export type HomepagePlacement = {
   updated_at: string;
 };
 
+export type MusicVideoProject = {
+  id: string;
+  owner_id: string;
+  release_id: string;
+  track_id: string;
+  title: string;
+  status: VideoProjectStatus;
+  project_kind: VideoProjectKind;
+  primary_aspect_ratio: VideoAspectRatio;
+  target_resolution: VideoResolution;
+  creative_brief: Json;
+  music_map: Json;
+  visual_bible: Json;
+  hard_budget_credits: number;
+  estimated_credits: number;
+  spent_credits: number;
+  reserved_credits: number;
+  selected_concept_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MusicVideoConcept = {
+  id: string;
+  owner_id: string;
+  project_id: string;
+  round_number: number;
+  display_order: number;
+  title: string;
+  premise: string | null;
+  concept_data: Json;
+  treatment: string | null;
+  status: "draft" | "selected" | "rejected" | "superseded";
+  created_at: string;
+  updated_at: string;
+};
+
+export type MusicVideoScene = {
+  id: string;
+  owner_id: string;
+  project_id: string;
+  display_order: number;
+  start_ms: number;
+  end_ms: number;
+  title: string;
+  description: string | null;
+  visual_intent: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MusicVideoShot = {
+  id: string;
+  owner_id: string;
+  project_id: string;
+  scene_id: string | null;
+  display_order: number;
+  start_ms: number;
+  end_ms: number;
+  description: string;
+  prompt: string | null;
+  negative_prompt: string | null;
+  capability_profile: Json;
+  selected_provider: string | null;
+  selected_model: string | null;
+  generation_params: Json;
+  start_asset_id: string | null;
+  end_asset_id: string | null;
+  selected_asset_id: string | null;
+  continuity_from_shot_id: string | null;
+  status:
+    | "planned"
+    | "ready_for_reference"
+    | "ready_for_generation"
+    | "queued"
+    | "generating"
+    | "review"
+    | "locked"
+    | "rejected"
+    | "failed"
+    | "omitted";
+  locked_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MusicVideoApproval = {
+  id: string;
+  owner_id: string;
+  project_id: string;
+  approval_type: "concept" | "production_plan" | "look" | "generation_batch" | "render";
+  scope: Json;
+  max_credits: number;
+  consumed_credits: number;
+  status: "active" | "consumed" | "revoked" | "expired";
+  approved_at: string;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MusicVideoGeneration = {
+  id: string;
+  owner_id: string;
+  project_id: string;
+  shot_id: string | null;
+  operation_type: "look_image" | "test_video" | "shot_video" | "reframe" | "other";
+  provider: string;
+  model: string;
+  request_payload: Json;
+  provider_request_id: string | null;
+  idempotency_key: string;
+  approval_id: string | null;
+  estimated_credits: number;
+  actual_credits: number | null;
+  billing_status: "unconfirmed" | "reserved" | "charged" | "refunded" | "not_billed";
+  status:
+    | "planned"
+    | "approved"
+    | "submitted"
+    | "queued"
+    | "in_progress"
+    | "completed"
+    | "failed"
+    | "refunded"
+    | "rejected_by_provider";
+  result_asset_id: string | null;
+  provider_metadata: Json;
+  submitted_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MusicVideoRender = {
+  id: string;
+  owner_id: string;
+  project_id: string;
+  render_type: "master_16_9" | "social_9_16" | "promo_30" | "hook_15";
+  render_spec: Json;
+  status: "planned" | "queued" | "rendering" | "completed" | "failed";
+  worker_job_id: string | null;
+  media_asset_id: string | null;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 type Table<Row> = {
   Row: Row;
   Insert: Partial<Row>;
@@ -424,6 +579,13 @@ export type Database = {
       track_external_ids: Table<TrackExternalId>;
       release_external_links: Table<ReleaseExternalLink>;
       homepage_placements: Table<HomepagePlacement>;
+      music_video_projects: Table<MusicVideoProject>;
+      music_video_concepts: Table<MusicVideoConcept>;
+      music_video_scenes: Table<MusicVideoScene>;
+      music_video_shots: Table<MusicVideoShot>;
+      music_video_approvals: Table<MusicVideoApproval>;
+      music_video_generations: Table<MusicVideoGeneration>;
+      music_video_renders: Table<MusicVideoRender>;
       release_learnings: Table<{
         id: string;
         owner_id: string;

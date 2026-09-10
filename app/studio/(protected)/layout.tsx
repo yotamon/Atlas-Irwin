@@ -1,8 +1,18 @@
 import { Suspense } from "react";
-import { requireStudioAdmin } from "@/lib/auth/studio";
-import { StudioSidebar } from "@/components/studio/sidebar";
 import { StudioToast } from "@/components/studio/toast";
-import type { SearchHit } from "@/components/studio/global-search";
+import Link from "next/link";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { dismissOnboardingAction } from "@/app/studio/onboarding/actions";
+import { StudioContextBar } from "@/components/studio/context-bar";
+import { StudioMobileNavigation } from "@/components/studio/mobile-navigation";
+import { StudioMotionStage } from "@/components/studio/studio-motion-stage";
+import { StudioSidebar } from "@/components/studio/sidebar";
+import { requireStudioAdmin } from "@/lib/auth/studio";
+import {
+  listAccessibleArtists,
+  resolveActiveArtistContext,
+} from "@/lib/studio/artist-context";
+import type { OnboardingDatabase } from "@/types/onboarding-database";
 
 export const dynamic = "force-dynamic";
 
@@ -12,64 +22,51 @@ export default async function ProtectedStudioLayout({
   children: React.ReactNode;
 }) {
   const { supabase, user } = await requireStudioAdmin();
-  const [releases, content, contacts, assets, tasks] = await Promise.all([
-    supabase.from("releases").select("id,title,status").eq("owner_id", user.id).order("updated_at", { ascending: false }).limit(40),
-    supabase.from("content_items").select("id,title,platform,status").eq("owner_id", user.id).order("updated_at", { ascending: false }).limit(40),
-    supabase.from("outreach_contacts").select("id,name,contact_type").eq("owner_id", user.id).order("updated_at", { ascending: false }).limit(40),
-    supabase.from("media_assets").select("id,asset_type,metadata").eq("owner_id", user.id).order("updated_at", { ascending: false }).limit(40),
-    supabase.from("tasks").select("id,title,status,priority").eq("owner_id", user.id).neq("status", "Done").order("due_at").limit(40),
+  const [artist, artists] = await Promise.all([
+    resolveActiveArtistContext(supabase, user),
+    listAccessibleArtists(supabase, user),
   ]);
-
-  const searchItems: SearchHit[] = [
-    ...(releases.data ?? []).map((item) => ({
-      id: item.id,
-      kind: "Release" as const,
-      title: item.title,
-      meta: item.status,
-      href: `/studio/releases/${item.id}`,
-    })),
-    ...(content.data ?? []).map((item) => ({
-      id: item.id,
-      kind: "Content" as const,
-      title: item.title,
-      meta: `${item.platform} · ${item.status}`,
-      href: `/studio/content?edit=${item.id}`,
-    })),
-    ...(contacts.data ?? []).map((item) => ({
-      id: item.id,
-      kind: "Contact" as const,
-      title: item.name,
-      meta: item.contact_type,
-      href: `/studio/outreach/${item.id}`,
-    })),
-    ...(assets.data ?? []).map((item) => {
-      const meta = item.metadata as { original_filename?: string; tags?: string[] } | null;
-      return {
-        id: item.id,
-        kind: "Asset" as const,
-        title: meta?.original_filename || item.asset_type,
-        meta: item.asset_type,
-        href: `/studio/media?asset=${item.id}#asset-${item.id}`,
-      };
-    }),
-    ...(tasks.data ?? []).map((item) => ({
-      id: item.id,
-      kind: "Task" as const,
-      title: item.title,
-      meta: `${item.priority} · ${item.status}`,
-      href: `/studio/tasks#task-${item.id}`,
-    })),
-  ];
+  const navigationArtists = artists.map((item) => ({
+    artistId: item.artistId,
+    artistName: item.artistName,
+    workspaceName: item.workspaceName,
+  }));
+  const onboarding = supabase as unknown as SupabaseClient<OnboardingDatabase>;
+  const { data: activation, error: activationError } = await onboarding
+    .from("artist_activation_events")
+    .select("event_type")
+    .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId)
+    .in("event_type", ["first_moment_approved", "onboarding_dismissed"]);
+  const activationEvents = new Set((activation ?? []).map((event) => event.event_type));
+  // A non-essential onboarding lookup must never take down the working Studio.
+  const showFirstUseGuide = !activationError
+    && !activationEvents.has("first_moment_approved")
+    && !activationEvents.has("onboarding_dismissed");
 
   return (
     <div className="studio-shell">
-      <StudioSidebar searchItems={searchItems} />
-      <main className="studio-main">
-        <Suspense fallback={null}>
-          <StudioToast />
-        </Suspense>
-        {children}
-      </main>
+      <StudioSidebar artistId={artist.artistId} artists={navigationArtists} />
+      <div className="ensemblis-workspace-shell">
+        <StudioContextBar artistId={artist.artistId} artistName={artist.artistName} />
+        {showFirstUseGuide ? (
+          <aside className="ensemblis-first-use-nudge" aria-label="First useful Ensemblis loop">
+            <span><strong>Start with the music</strong><small>Finish the first track → intelligence → Moment loop when it is useful.</small></span>
+            <div className="ensemblis-first-use-actions">
+              <Link href={`/studio/onboarding?artist=${encodeURIComponent(artist.artistId)}`}>Continue guide</Link>
+              <form action={dismissOnboardingAction}>
+                <input type="hidden" name="artist_id" value={artist.artistId} />
+                <button className="text-button" type="submit">Dismiss</button>
+              </form>
+            </div>
+          </aside>
+        ) : null}
+        <main className="studio-main">
+          <Suspense fallback={null}><StudioToast /></Suspense>
+          <StudioMotionStage>{children}</StudioMotionStage>
+        </main>
+      </div>
+      <StudioMobileNavigation artistId={artist.artistId} artists={navigationArtists} />
     </div>
   );
 }

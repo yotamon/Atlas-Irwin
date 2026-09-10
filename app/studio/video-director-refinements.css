@@ -1,0 +1,97 @@
+.video-look-grid > article {
+  position: relative;
+  overflow: hidden;
+}
+
+.video-look-grid > article.rejected {
+  opacity: 0.72;
+  border-color: color-mix(in srgb, var(--s-coral) 55%, var(--s-line));
+}
+
+.video-look-grid > article.rejected img {
+  filter: saturate(0.45) contrast(0.92);
+}
+
+.video-look-grid > article.selected {
+  border-color: var(--s-accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--s-accent) 50%, transparent);
+}
+
+.video-look-review-actions {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.75rem;
+  border-top: 1px solid var(--s-line);
+  background: color-mix(in srgb, var(--s-surface-2) 88%, transparent);
+}
+
+.video-look-review-actions form,
+.video-look-revision-form {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.video-look-review-actions input[type="text"],
+.video-look-review-actions input:not([type]),
+.video-look-revision-form input {
+  width: 100%;
+  min-width: 0;
+}
+
+.video-look-review-actions .button {
+  justify-self: start;
+}
+
+.video-selected-banner {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--s-accent) 65%, transparent);
+  background: color-mix(in srgb, var(--s-surface) 88%, transparent);
+  color: var(--s-accent);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  backdrop-filter: blur(10px);
+}
+
+.video-inline-note {
+  margin: 0.8rem 0 0;
+  padding: 0.75rem 0.9rem;
+  border-left: 2px solid var(--s-coral);
+  background: color-mix(in srgb, var(--s-coral) 7%, transparent);
+  color: var(--s-muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.video-render-card > form {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.video-look-grid article form .button {
+  margin: 0.2rem 0.75rem 0.75rem;
+}
+
+@media (max-width: 700px) {
+  .video-render-card {
+    align-items: stretch;
+  }
+
+  .video-render-card > form,
+  .video-render-card > .button {
+    justify-content: stretch;
+    width: 100%;
+  }
+
+  .video-render-card form .button,
+  .video-look-review-actions .button,
+  .video-look-grid article form .button {
+    width: 100%;
+    justify-content: center;
+  }
+}

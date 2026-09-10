@@ -1,36 +1,39 @@
 {
-  "name": "atlas-irwin-website",
+  "name": "ensemblis-platform",
   "version": "0.1.0",
   "private": true,
-  "description": "Atlas Irwin — artist website and Atlas Release Engine studio (Next.js, Supabase, SoundCloud/Spotify OAuth)",
-  "homepage": "https://atlasirwin.com",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/yotamon/Atlas-Irwin.git"
-  },
-  "bugs": {
-    "url": "https://github.com/yotamon/Atlas-Irwin/issues"
-  },
+  "description": "Ensemblis music-aware artist growth platform with the Atlas Irwin public artist site as its production reference artist",
+  "repository": { "type": "git", "url": "https://github.com/yotamon/Atlas-Irwin.git" },
+  "bugs": { "url": "https://github.com/yotamon/Atlas-Irwin/issues" },
   "author": "Yotam Faraggi",
   "license": "MIT",
   "scripts": {
+    "predev": "node scripts/build-studio-css.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/build-studio-css.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "postinstall": "node scripts/ensure-lightningcss-native.mjs",
+    "pretest:studio": "node scripts/build-studio-css.mjs",
+    "test:studio": "node scripts/run-studio-tests.mjs",
+    "test:e2e": "playwright test --config=playwright.config.mjs",
+    "quality:evaluate": "node scripts/evaluate-product-quality.mjs",
+    "postinstall": "node scripts/ensure-lightningcss-native.mjs && node scripts/build-studio-css.mjs",
     "studio:import": "node --env-file=.env.local scripts/import-legacy-releases.mjs",
     "studio:import:dry-run": "node --env-file=.env.local scripts/import-legacy-releases.mjs --dry-run",
     "studio:seed": "node --env-file=.env.local scripts/seed-studio.mjs",
     "studio:media:public": "node --env-file=.env.local scripts/migrate-media-to-public.mjs",
+    "media-worker:check": "node scripts/check-media-worker.mjs --remote",
     "env:restore": "node scripts/restore-vercel-env.mjs"
   },
   "dependencies": {
+    "@base-ui/react": "1.8.0",
     "@supabase/ssr": "0.12.0",
     "@supabase/supabase-js": "^2.110.1",
+    "@vercel/sandbox": "2.9.2",
     "framer-motion": "^12.42.2",
-    "next": "^16.2.10",
+    "next": "^16.3.4",
     "nodemailer": "^9.0.3",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
@@ -44,18 +47,12 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "eslint": "^9",
-    "eslint-config-next": "^16.2.10",
+    "eslint-config-next": "^16.3.4",
     "tailwindcss": "^4.3.2",
     "typescript": "^5"
   },
-  "overrides": {
-    "next": {
-      "postcss": "8.5.16"
-    }
-  },
-  "engines": {
-    "node": ">=20"
-  },
+  "overrides": { "next": { "postcss": "8.5.23" } },
+  "engines": { "node": "22.x" },
   "optionalDependencies": {
     "lightningcss-win32-arm64-msvc": "^1.32.0",
     "lightningcss-win32-x64-msvc": "^1.32.0"

@@ -1,0 +1,163 @@
+/* Ensemblis atmosphere.
+   The persistent shell should disappear behind the artist's work: fewer grids,
+   fewer tinted boxes, quieter chrome, and a more tactile mobile dock. */
+
+.studio-root {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--en-bg-elevated) 48%, var(--en-bg)) 0%, var(--en-bg) 28%, var(--en-bg) 100%);
+}
+
+.studio-root::before {
+  opacity: 0.34;
+  background-image:
+    linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--en-white) 4%, transparent) 48%, color-mix(in srgb, var(--en-white) 8%, transparent) 50%, color-mix(in srgb, var(--en-white) 4%, transparent) 52%, transparent 100%);
+  background-repeat: no-repeat;
+  background-position: center 5.75rem;
+  background-size: 100% 1px;
+  mask-image: none;
+}
+
+.studio-root .studio-sidebar {
+  border-right-color: color-mix(in srgb, var(--en-line) 84%, transparent);
+  background: color-mix(in srgb, var(--en-bg) 96%, transparent);
+  backdrop-filter: blur(28px) saturate(106%);
+  box-shadow: 18px 0 64px color-mix(in srgb, var(--en-black) 9%, transparent);
+}
+
+.studio-mark.ensemblis-product-mark {
+  border-bottom-color: color-mix(in srgb, var(--en-line) 78%, transparent);
+}
+
+.ensemblis-mark-symbol,
+.ensemblis-auth-symbol {
+  border-color: color-mix(in srgb, var(--en-line-strong) 82%, var(--en-accent));
+  border-radius: var(--en-radius-sm);
+  background: var(--en-bg-elevated);
+  box-shadow: inset 0 1px color-mix(in srgb, var(--en-white) 3%, transparent);
+}
+
+.ensemblis-mark-symbol::after,
+.ensemblis-auth-symbol::after {
+  opacity: 0.62;
+}
+
+.ensemblis-wordmark small {
+  color: var(--en-subtle);
+}
+
+.ensemblis-artist-switcher {
+  gap: var(--en-space-2);
+  margin: 0.55rem 1rem 0.45rem;
+  padding: 0.85rem 0.45rem 0.95rem;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--en-line) 76%, transparent);
+  border-radius: 0;
+  background: transparent;
+}
+
+.ensemblis-artist-switcher-heading small {
+  color: var(--en-subtle);
+}
+
+.ensemblis-artist-switcher select {
+  padding-block: 0.2rem 0.45rem;
+  border-bottom-color: color-mix(in srgb, var(--en-line) 74%, transparent);
+  font-size: var(--en-text-lg);
+  letter-spacing: -0.03em;
+}
+
+.studio-root .studio-sidebar nav {
+  padding-top: 0.55rem;
+}
+
+.studio-root .studio-sidebar nav a,
+.studio-root .studio-sidebar-foot a,
+.studio-root .studio-sidebar-foot button {
+  width: calc(100% - 1.2rem);
+  margin-inline: 0.6rem;
+  padding-inline: 0.85rem;
+  border-radius: var(--en-radius-xs);
+}
+
+.studio-root .studio-sidebar nav a:hover,
+.studio-root .studio-sidebar nav a:focus-visible,
+.studio-root .studio-sidebar nav a.is-active {
+  background: color-mix(in srgb, var(--en-white) 2.2%, transparent);
+  box-shadow: none;
+}
+
+.studio-root .studio-sidebar nav a.is-active {
+  color: var(--en-ink);
+}
+
+.studio-root .studio-sidebar nav a::after {
+  left: -0.1rem;
+}
+
+.studio-root .studio-quick {
+  border-color: color-mix(in srgb, var(--en-accent) 32%, var(--en-line)) !important;
+  background: transparent !important;
+}
+
+.studio-root .ensemblis-context-bar {
+  border-bottom-color: color-mix(in srgb, var(--en-line) 76%, transparent);
+  background: color-mix(in srgb, var(--en-bg) 88%, transparent);
+  backdrop-filter: blur(30px) saturate(108%);
+  box-shadow: 0 14px 46px color-mix(in srgb, var(--en-black) 8%, transparent);
+}
+
+.studio-root .ensemblis-context-kicker {
+  color: var(--en-subtle);
+  letter-spacing: 0.08em;
+}
+
+.studio-root .ensemblis-context-identity strong {
+  letter-spacing: -0.035em;
+}
+
+.studio-root .ensemblis-first-use-nudge {
+  border-radius: 0;
+  border-right: 0;
+  border-left: 0;
+  background: color-mix(in srgb, var(--en-accent) 4%, transparent);
+}
+
+@media (max-width: 900px) {
+  .studio-root .studio-main {
+    padding-bottom: calc(7rem + env(safe-area-inset-bottom));
+  }
+
+  .ensemblis-mobile-navigation {
+    right: max(0.65rem, env(safe-area-inset-right));
+    bottom: max(0.65rem, env(safe-area-inset-bottom));
+    left: max(0.65rem, env(safe-area-inset-left));
+    min-height: 4.35rem;
+    padding: 0.35rem;
+    border: 1px solid var(--en-line-strong);
+    border-radius: var(--en-radius-xl);
+    background: color-mix(in srgb, var(--en-bg-elevated) 92%, transparent);
+    backdrop-filter: blur(28px) saturate(112%);
+    box-shadow: 0 24px 70px color-mix(in srgb, var(--en-black) 38%, transparent);
+  }
+
+  .ensemblis-mobile-navigation > a,
+  .ensemblis-mobile-more > summary {
+    border-radius: var(--en-radius);
+  }
+
+  .ensemblis-mobile-navigation > a.is-active,
+  .ensemblis-mobile-more.is-active > summary,
+  .ensemblis-mobile-more[open] > summary {
+    background: color-mix(in srgb, var(--en-white) 4%, transparent);
+    box-shadow: inset 0 -1px color-mix(in srgb, var(--en-accent) 72%, transparent);
+  }
+
+  .ensemblis-mobile-more-sheet {
+    right: max(0.65rem, env(safe-area-inset-right));
+    bottom: calc(5.7rem + env(safe-area-inset-bottom));
+    left: max(0.65rem, env(safe-area-inset-left));
+    border-radius: var(--en-radius-xl);
+    background: color-mix(in srgb, var(--en-bg-elevated) 97%, var(--en-black));
+    backdrop-filter: blur(30px) saturate(108%);
+  }
+}

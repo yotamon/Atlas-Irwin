@@ -1,0 +1,99 @@
+/* Ensemblis Design System tokens.
+   This is the only active Studio stylesheet allowed to define product chrome values. */
+
+:root:has(.studio-root),
+.studio-root,
+.ensemblis-loading {
+  --font-heading: var(--font-body);
+
+  --en-black: #000000;
+  --en-white: #ffffff;
+  --en-bg: #080b09;
+  --en-bg-elevated: #0c110e;
+  --en-surface: #101713;
+  --en-surface-raised: #151e19;
+  --en-surface-hover: #1a251e;
+  --en-ink: #f6f8f4;
+  --en-muted: #aab6af;
+  --en-subtle: #7f8d84;
+  --en-line: #25302a;
+  --en-line-strong: #35443b;
+  --en-accent: #b7f36a;
+  --en-accent-strong: #d3ff99;
+  --en-violet: #8a7cff;
+  --en-mint: #5ce1c6;
+  --en-danger: #ff786c;
+  --en-warning: #eab308;
+
+  --en-accent-soft: color-mix(in srgb, var(--en-accent) 10%, transparent);
+  --en-violet-soft: color-mix(in srgb, var(--en-violet) 11%, transparent);
+  --en-mint-soft: color-mix(in srgb, var(--en-mint) 9%, transparent);
+  --en-danger-soft: color-mix(in srgb, var(--en-danger) 9%, transparent);
+  --en-warning-soft: color-mix(in srgb, var(--en-warning) 10%, transparent);
+  --en-overlay: color-mix(in srgb, var(--en-black) 72%, transparent);
+  --en-surface-glass: color-mix(in srgb, var(--en-bg-elevated) 88%, transparent);
+
+  --en-radius-xs: 0.42rem;
+  --en-radius-sm: 0.62rem;
+  --en-radius: 0.86rem;
+  --en-radius-lg: 1.1rem;
+  --en-radius-xl: 1.5rem;
+  --en-radius-pill: 999px;
+
+  --en-space-1: 0.25rem;
+  --en-space-2: 0.5rem;
+  --en-space-3: 0.75rem;
+  --en-space-4: 1rem;
+  --en-space-5: 1.25rem;
+  --en-space-6: 1.5rem;
+  --en-space-8: 2rem;
+  --en-space-10: 2.5rem;
+  --en-space-12: 3rem;
+
+  /* Product layout contract. Individual routes choose width, never ad-hoc gutters. */
+  --en-page-narrow: 68rem;
+  --en-page-max: 90rem;
+  --en-page-wide: 104rem;
+  --en-page-gutter: clamp(1.25rem, 3vw, 3.25rem);
+  --en-page-gutter-mobile: clamp(1rem, 4.5vw, 1.35rem);
+  --en-page-block: clamp(1.5rem, 3vw, 2.6rem);
+  --en-page-block-mobile: 1.15rem;
+  --en-section-gap: clamp(1.5rem, 3vw, 2.5rem);
+  --en-content-gap: clamp(0.9rem, 1.8vw, 1.35rem);
+
+  /* Minimum readable product typography. 2xs is reserved for tertiary metadata. */
+  --en-text-2xs: 0.68rem;
+  --en-text-xs: 0.75rem;
+  --en-text-sm: 0.82rem;
+  --en-text-md: 0.92rem;
+  --en-text-lg: 1.02rem;
+  --en-text-xl: 1.16rem;
+  --en-text-2xl: 1.45rem;
+  --en-text-3xl: clamp(1.8rem, 3vw, 2.45rem);
+  --en-text-display: clamp(2.15rem, 4vw, 3.75rem);
+  --en-weight-regular: 450;
+  --en-weight-medium: 620;
+  --en-weight-semibold: 680;
+  --en-weight-bold: 760;
+  --en-leading-tight: 1.2;
+  --en-leading-body: 1.55;
+
+  --en-control-xs: 2.25rem;
+  --en-control-sm: 2.5rem;
+  --en-control-md: 2.75rem;
+  --en-control-lg: 3rem;
+  --en-icon-sm: 1rem;
+  --en-icon-md: 1.125rem;
+  --en-icon-lg: 1.35rem;
+
+  --en-duration-fast: 120ms;
+  --en-duration-normal: 170ms;
+  --en-duration-slow: 260ms;
+  --en-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --en-ease-emphasized: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --en-shadow-sm: 0 8px 28px color-mix(in srgb, var(--en-black) 18%, transparent);
+  --en-shadow-md: 0 22px 70px color-mix(in srgb, var(--en-black) 24%, transparent);
+  --en-shadow-lg: 0 32px 90px color-mix(in srgb, var(--en-black) 32%, transparent);
+  --en-focus-ring: 0 0 0 3px color-mix(in srgb, var(--en-accent) 12%, transparent);
+}

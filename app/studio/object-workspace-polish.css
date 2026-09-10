@@ -1,0 +1,256 @@
+/* Shared object identity and the first track-centric workspace. */
+
+.studio-root .ensemblis-object-header {
+  width: 100%;
+  margin-bottom: clamp(1.7rem, 3vw, 2.7rem);
+  border-bottom: 1px solid var(--en-line);
+}
+
+.studio-root .ensemblis-object-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 2.4rem;
+  margin-bottom: 0.85rem;
+}
+
+.studio-root .ensemblis-object-back {
+  color: var(--en-muted);
+  font-size: 0.69rem;
+  font-weight: 680;
+}
+
+.studio-root .ensemblis-object-back:hover,
+.studio-root .ensemblis-object-back:focus-visible {
+  color: var(--en-accent);
+}
+
+.studio-root .ensemblis-object-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.studio-root .ensemblis-object-identity {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
+  gap: clamp(1.1rem, 2.5vw, 1.8rem);
+  align-items: center;
+  padding-bottom: 1.25rem;
+}
+
+.studio-root .ensemblis-object-artwork {
+  display: grid;
+  place-items: center;
+  width: 7.5rem;
+  aspect-ratio: 1;
+  object-fit: cover;
+  overflow: hidden;
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius);
+  background: var(--en-surface-raised);
+}
+
+.studio-root .ensemblis-object-artwork.is-empty {
+  color: var(--en-subtle);
+  font-size: 2.3rem;
+  font-weight: 700;
+}
+
+.studio-root .ensemblis-object-copy {
+  min-width: 0;
+}
+
+.studio-root .ensemblis-object-copy h1 {
+  margin: 0.22rem 0 0.35rem;
+  color: var(--en-ink);
+  font-size: clamp(2.2rem, 5vw, 4.2rem);
+  font-weight: 700;
+  letter-spacing: -0.055em;
+  line-height: 0.98;
+}
+
+.studio-root .ensemblis-object-copy > p {
+  color: var(--en-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.studio-root .ensemblis-object-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 1.35rem;
+  margin-top: 0.9rem;
+}
+
+.studio-root .ensemblis-object-facts div {
+  display: grid;
+  gap: 0.08rem;
+}
+
+.studio-root .ensemblis-object-facts dt {
+  color: var(--en-subtle);
+  font-size: 0.56rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.studio-root .ensemblis-object-facts dd {
+  color: var(--en-ink);
+  font-size: 0.72rem;
+  font-weight: 680;
+}
+
+.studio-root .ensemblis-object-tabs {
+  display: flex;
+  gap: 0.2rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.studio-root .ensemblis-object-tabs::-webkit-scrollbar { display: none; }
+
+.studio-root .ensemblis-object-tabs a {
+  flex: 0 0 auto;
+  padding: 0.7rem 0.8rem;
+  border-bottom: 2px solid transparent;
+  color: var(--en-muted);
+  font-size: 0.69rem;
+  font-weight: 680;
+}
+
+.studio-root .ensemblis-object-tabs a:hover,
+.studio-root .ensemblis-object-tabs a:focus-visible,
+.studio-root .ensemblis-object-tabs a.active {
+  color: var(--en-ink);
+  outline: none;
+}
+
+.studio-root .ensemblis-object-tabs a.active {
+  border-bottom-color: var(--en-accent);
+}
+
+.studio-root .track-object-page {
+  width: min(100%, 90rem);
+  margin: 0 auto;
+}
+
+.studio-root .track-object-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(15rem, 0.65fr);
+  gap: clamp(1.3rem, 3vw, 2.5rem);
+}
+
+.studio-root .track-object-primary,
+.studio-root .track-object-decision,
+.studio-root .track-object-section,
+.studio-root .track-object-linked-context {
+  min-width: 0;
+  padding-top: 1.05rem;
+  border-top: 1px solid var(--en-line);
+}
+
+.studio-root .track-object-primary h2,
+.studio-root .track-object-linked-context h2 {
+  margin: 0.25rem 0 0.55rem;
+  color: var(--en-ink);
+  font-size: clamp(1.35rem, 2.6vw, 2rem);
+  letter-spacing: -0.04em;
+}
+
+.studio-root .track-object-primary p,
+.studio-root .track-object-decision p,
+.studio-root .track-object-linked-context p {
+  color: var(--en-muted);
+  font-size: 0.76rem;
+  line-height: 1.55;
+}
+
+.studio-root .track-object-primary audio {
+  width: 100%;
+  margin-top: 1rem;
+}
+
+.studio-root .track-object-decision {
+  display: grid;
+  align-content: start;
+  gap: 0.4rem;
+}
+
+.studio-root .track-object-decision > strong {
+  color: var(--en-accent);
+  font-size: clamp(2rem, 4vw, 3.4rem);
+  letter-spacing: -0.06em;
+}
+
+.studio-root .track-object-decision > a {
+  margin-top: 0.35rem;
+  color: var(--en-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.studio-root .track-object-decision > a:hover,
+.studio-root .track-object-decision > a:focus-visible { color: var(--en-accent); }
+
+.studio-root .track-object-section {
+  margin-top: clamp(1.9rem, 4vw, 3.2rem);
+}
+
+.studio-root .track-object-advanced {
+  margin-top: 1.2rem;
+  border-top: 1px solid color-mix(in srgb, var(--en-line) 72%, transparent);
+}
+
+.studio-root .track-object-advanced summary {
+  padding: 0.85rem 0;
+  color: var(--en-muted);
+  font-size: 0.69rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.studio-root .track-object-advanced dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  padding-bottom: 0.8rem;
+  border-top: 1px solid var(--en-line);
+}
+
+.studio-root .track-object-advanced dl > div {
+  display: grid;
+  gap: 0.12rem;
+  padding: 0.75rem 0.8rem 0.75rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--en-line) 70%, transparent);
+}
+
+.studio-root .track-object-advanced dt {
+  color: var(--en-subtle);
+  font-size: 0.58rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.studio-root .track-object-advanced dd {
+  color: var(--en-ink);
+  font-size: 0.74rem;
+  font-weight: 650;
+}
+
+@media (max-width: 760px) {
+  .studio-root .ensemblis-object-topline { align-items: flex-start; }
+  .studio-root .ensemblis-object-identity { grid-template-columns: 5.5rem minmax(0, 1fr); }
+  .studio-root .ensemblis-object-artwork { width: 5.5rem; }
+  .studio-root .track-object-overview { grid-template-columns: 1fr; }
+  .studio-root .track-object-advanced dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 520px) {
+  .studio-root .ensemblis-object-topline { display: grid; }
+  .studio-root .ensemblis-object-actions { justify-content: flex-start; }
+  .studio-root .ensemblis-object-identity { grid-template-columns: 1fr; }
+  .studio-root .ensemblis-object-artwork { width: 6rem; }
+  .studio-root .track-object-advanced dl { grid-template-columns: 1fr; }
+}

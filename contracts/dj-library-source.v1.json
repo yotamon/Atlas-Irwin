@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ensemblis.com/contracts/dj-library-source.v1.json",
+  "title": "Ensemblis normalized DJ library source track",
+  "type": "object",
+  "required": ["version", "stableId", "source", "sourceTrackId", "metadata", "playlistIds", "cuePoints", "analysisProvenance"],
+  "properties": {
+    "version": { "const": "ensemblis.dj-library-source.v1" },
+    "stableId": { "type": "string", "minLength": 1 },
+    "sourceTrackId": { "type": "string", "minLength": 1 },
+    "recordingFingerprint": { "type": ["string", "null"] },
+    "canonicalTrackId": { "type": ["string", "null"] },
+    "trackIntelligenceFingerprint": { "type": ["string", "null"] },
+    "source": {
+      "type": "object",
+      "required": ["version", "kind", "trackId", "executionTarget"],
+      "properties": {
+        "version": { "const": "ensemblis.automix-source.v1" },
+        "kind": { "enum": ["artist_catalog", "local_library", "rekordbox", "serato", "traktor"] },
+        "trackId": { "type": "string", "minLength": 1 },
+        "executionTarget": { "enum": ["cloud", "device"] },
+        "librarySourceId": { "type": ["string", "null"] },
+        "recordingFingerprint": { "type": ["string", "null"] },
+        "revision": { "type": ["string", "null"] },
+        "availability": { "enum": ["available", "offline", "missing", "unknown"] }
+      },
+      "additionalProperties": false
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["title", "artist"],
+      "properties": {
+        "title": { "type": "string" },
+        "artist": { "type": ["string", "null"] },
+        "album": { "type": ["string", "null"] },
+        "remix": { "type": ["string", "null"] },
+        "genre": { "type": ["string", "null"] },
+        "comments": { "type": ["string", "null"] },
+        "durationMs": { "type": ["number", "null"], "minimum": 0 },
+        "bpm": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "musicalKey": { "type": ["string", "null"] },
+        "rating": { "type": ["number", "null"] },
+        "color": { "type": ["string", "null"] },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "year": { "type": ["number", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "playlistIds": { "type": "array", "items": { "type": "string" } },
+    "cuePoints": { "type": "array", "items": { "type": "object" } },
+    "beatGrid": { "type": ["object", "null"] },
+    "analysisProvenance": { "type": "array", "items": { "type": "object" } }
+  },
+  "additionalProperties": false
+}

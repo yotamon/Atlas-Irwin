@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FiCheck, FiFile, FiUploadCloud, FiX } from "react-icons/fi";
 import {
@@ -8,7 +8,15 @@ import {
   discardMediaUpload,
   registerMediaUpload,
 } from "@/app/studio/catalog-actions";
+import { attachContentMediaV2 } from "@/app/studio/content-actions-v2";
+import {
+  attachCatalogTrackMasterFromMedia,
+  attachReleaseMasterFromMedia,
+  createVaultTrackFromMedia,
+} from "@/app/studio/growth-media-actions-safe";
+import { reportMediaUploadTransportFailure } from "@/app/studio/media-upload-diagnostics";
 import { createClient } from "@/lib/supabase/client";
+import { ResumableUploadAuthorizationError, uploadResumableMedia } from "@/lib/supabase/resumable-upload";
 import {
   compatibleMediaTypes,
   defaultMediaType,
@@ -17,20 +25,95 @@ import {
   type MediaType,
 } from "@/lib/studio/media";
 
+type UploadTarget = Awaited<ReturnType<typeof createMediaUploadTarget>>;
+
 type UploadItem = {
   file: File;
   role: MediaType;
-  state: "ready" | "uploading" | "done" | "error";
+  state: "ready" | "uploading" | "paused" | "done" | "error";
   message?: string;
+  progress?: number;
+  target?: UploadTarget;
+  recovery?: "resume" | "restart";
 };
 
 const PUBLIC_LIMIT = 100 * 1024 * 1024;
 const HASH_LIMIT = 128 * 1024 * 1024;
+const RESUMABLE_THRESHOLD = 6 * 1024 * 1024;
+const MAX_PARALLEL_UPLOADS = 3;
 
 function humanSize(size: number) {
   return size >= 1024 * 1024
     ? `${(size / 1024 / 1024).toFixed(size >= 10 * 1024 * 1024 ? 0 : 1)} MB`
     : `${Math.max(1, Math.round(size / 1024))} KB`;
+}
+
+function humanFormat(file: File) {
+  const extension = file.name.match(/\.([a-z0-9]{1,8})$/i)?.[1]?.toUpperCase();
+  if (extension) return extension === "JPEG" ? "JPG" : extension;
+  const subtype = file.type.split("/")[1]?.split(";")[0]?.trim().replace(/^x-/, "");
+  if (!subtype) return "Unknown format";
+  const known: Record<string, string> = {
+    "vnd.wave": "WAV",
+    wave: "WAV",
+    wav: "WAV",
+    mpeg: "MP3",
+    jpeg: "JPG",
+    quicktime: "MOV",
+  };
+  return known[subtype] ?? subtype.toUpperCase();
+}
+
+function cleanAudioTitle(name: string) {
+  return name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+async function reportTransportFailure({
+  transport,
+  stage,
+  error,
+  file,
+  progress,
+}: {
+  transport: string;
+  stage: string;
+  error: unknown;
+  file: File;
+  progress: number;
+}) {
+  const form = new FormData();
+  form.set("transport", transport);
+  form.set("stage", stage);
+  form.set("error_name", error instanceof Error ? error.name : typeof error);
+  form.set("error_message", error instanceof Error ? error.message : String(error));
+  form.set("mime_type", file.type || "application/octet-stream");
+  form.set("file_size", String(file.size));
+  form.set("progress", String(progress));
+  form.set("online", navigator.onLine ? "true" : "false");
+  form.set("user_agent", navigator.userAgent);
+  await reportMediaUploadTransportFailure(form).catch(() => undefined);
+}
+
+function uploadFailure(error: unknown, resumable: boolean) {
+  if (error instanceof ResumableUploadAuthorizationError) {
+    return {
+      state: "error" as const,
+      recovery: "restart" as const,
+      message: "Upload session expired. Start over to create a fresh upload.",
+    };
+  }
+  if (resumable) {
+    return {
+      state: "paused" as const,
+      recovery: "resume" as const,
+      message: "Upload paused. Resume to continue from where it stopped.",
+    };
+  }
+  return {
+    state: "error" as const,
+    recovery: "restart" as const,
+    message: "Upload failed after secure upload recovery. Check your connection and try again.",
+  };
 }
 
 async function sha256(file: File) {
@@ -71,24 +154,61 @@ async function mediaDimensions(file: File) {
 
 export function MediaUploader({
   releaseId,
+  trackId,
+  contentItemId,
+  artistId,
   defaultRole = "cover",
+  vaultMode = false,
+  musicIntakeMode = false,
+  releaseMasterMode = false,
 }: {
   releaseId?: string;
+  trackId?: string;
+  contentItemId?: string;
+  artistId?: string;
   defaultRole?: MediaType;
+  vaultMode?: boolean;
+  musicIntakeMode?: boolean;
+  releaseMasterMode?: boolean;
 }) {
   const router = useRouter();
+  const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
+  const dragDepth = useRef(0);
+  const masterIntake = vaultMode || musicIntakeMode;
+  const trackScopedMaster = Boolean(releaseMasterMode && trackId);
   const [items, setItems] = useState<UploadItem[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [selectionError, setSelectionError] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState("");
-  const [primary, setPrimary] = useState(Boolean(releaseId));
+  const [primary, setPrimary] = useState(Boolean(releaseId && !contentItemId && !masterIntake));
   const [busy, setBusy] = useState(false);
 
   function addFiles(files: FileList | File[]) {
-    const next = Array.from(files).filter((file) => file.size > 0);
+    const source = Array.from(files);
+    const rejectedEmpty = source.filter((file) => file.size <= 0);
+    const rejectedSize = source.filter((file) => file.size > PUBLIC_LIMIT);
+    const rejectedType = source.filter((file) => (masterIntake || releaseMasterMode) && !file.type.startsWith("audio/"));
+    const rejected = new Set([...rejectedEmpty, ...rejectedSize, ...rejectedType]);
+    const next = source.filter((file) => !rejected.has(file));
+
+    const messages = [
+      rejectedType.length ? `${rejectedType.length} non-audio file${rejectedType.length === 1 ? " was" : "s were"} skipped. This workflow accepts audio masters only.` : "",
+      rejectedSize.length ? `${rejectedSize.length} file${rejectedSize.length === 1 ? " exceeds" : "s exceed"} the ${humanSize(PUBLIC_LIMIT)} per-file limit.` : "",
+      rejectedEmpty.length ? `${rejectedEmpty.length} empty file${rejectedEmpty.length === 1 ? " was" : "s were"} skipped.` : "",
+    ].filter(Boolean);
+    setSelectionError(messages.join(" "));
     if (!next.length) return;
+
+    if (releaseMasterMode) {
+      const file = next[0];
+      setItems([{ file, role: "master_audio", state: "ready" }]);
+      if (next.length > 1) setSelectionError((current) => `${current ? `${current} ` : ""}Only one track master can be selected at a time.`);
+      return;
+    }
+
     setItems((current) => {
       const signatures = new Set(current.map((item) => `${item.file.name}:${item.file.size}:${item.file.lastModified}`));
       return [...current, ...next.filter((file) => !signatures.has(`${file.name}:${file.size}:${file.lastModified}`)).map((file) => ({
@@ -101,36 +221,140 @@ export function MediaUploader({
 
   async function upload() {
     if (!items.length || busy) return;
+    if (releaseMasterMode && !releaseId) {
+      setItems((current) => current.map((item) => ({ ...item, state: "error", message: "A release is required for a track master." })));
+      return;
+    }
     if (items.some((item) => !isCompatibleMediaType(item.role, item.file.type))) {
       setItems((current) => current.map((item) => !isCompatibleMediaType(item.role, item.file.type) ? { ...item, state: "error", message: "Choose a compatible use for this format." } : item));
       return;
     }
+
     setBusy(true);
+    setSelectionError("");
     const supabase = createClient();
-    const limit = PUBLIC_LIMIT;
-    for (let index = 0; index < items.length; index += 1) {
-      const item = items[index];
-      if (item.state === "done") continue;
-      if (item.file.size > limit) {
-        setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, state: "error", message: `This file exceeds the ${humanSize(limit)} upload limit.` } : entry));
-        continue;
+    const pending = items
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => item.state !== "done");
+    let cursor = 0;
+    let completedThisRun = 0;
+
+    async function processItem(index: number, item: UploadItem) {
+      if (item.file.size > PUBLIC_LIMIT) {
+        setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, state: "error", message: `This file exceeds the ${humanSize(PUBLIC_LIMIT)} upload limit.` } : entry));
+        return;
       }
-      setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, state: "uploading", message: "Uploading securely…" } : entry));
-      let uploadTarget: Awaited<ReturnType<typeof createMediaUploadTarget>> | null = null;
-      try {
-        const [contentHash, dimensions] = await Promise.all([sha256(item.file), mediaDimensions(item.file).catch(() => ({ width: "", height: "", duration_ms: "" }))]);
+
+      const resumable = item.file.size > RESUMABLE_THRESHOLD;
+      setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? {
+        ...entry,
+        state: "uploading",
+        recovery: undefined,
+        progress: resumable ? entry.progress ?? 0 : undefined,
+        message: resumable
+          ? item.state === "paused" ? "Checking saved upload progress…" : "Preparing resumable upload…"
+          : releaseMasterMode
+            ? "Uploading master and preparing Music Intelligence…"
+            : masterIntake
+              ? "Uploading master…"
+              : "Uploading securely…",
+      } : entry));
+      let uploadTarget: UploadTarget | null = item.target ?? null;
+      let registered = false;
+      let transportCompleted = false;
+      let fallbackAttempted = false;
+      let latestProgress = item.progress ?? 0;
+      let releaseMasterResult: { analysisReused?: boolean; analysisQueued?: boolean } | null = null;
+
+      async function prepareTarget() {
         const targetForm = new FormData();
         targetForm.set("asset_type", item.role);
         targetForm.set("mime_type", item.file.type);
         targetForm.set("file_size", String(item.file.size));
         targetForm.set("original_name", item.file.name);
-        uploadTarget = await createMediaUploadTarget(targetForm);
-        const { error } = await supabase.storage.from(uploadTarget.bucketName).uploadToSignedUrl(uploadTarget.storagePath, uploadTarget.token, item.file, {
+        const preparedTarget = await createMediaUploadTarget(targetForm);
+        setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, target: preparedTarget } : entry));
+        return preparedTarget;
+      }
+
+      async function uploadSignedStandard(target: UploadTarget) {
+        const { error } = await supabase.storage.from(target.bucketName).uploadToSignedUrl(target.storagePath, target.token, item.file, {
           cacheControl: "31536000",
           contentType: item.file.type,
         });
         if (error) throw error;
+      }
+
+      try {
+        const [contentHash, dimensions] = await Promise.all([
+          sha256(item.file),
+          mediaDimensions(item.file).catch(() => ({ width: "", height: "", duration_ms: "" })),
+        ]);
+        if (!uploadTarget) uploadTarget = await prepareTarget();
+
+        if (resumable) {
+          try {
+            await uploadResumableMedia({
+              file: item.file,
+              target: uploadTarget,
+              onProgress(progress) {
+                latestProgress = progress;
+                const percent = Math.round(progress * 100);
+                setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? {
+                  ...entry,
+                  progress,
+                  message: `Uploading · ${percent}%`,
+                } : entry));
+              },
+              onRetry() {
+                setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? {
+                  ...entry,
+                  message: "Connection interrupted. Retrying…",
+                } : entry));
+              },
+            });
+          } catch (resumableError) {
+            await reportTransportFailure({
+              transport: "tus",
+              stage: "resumable-exhausted",
+              error: resumableError,
+              file: item.file,
+              progress: latestProgress,
+            });
+            fallbackAttempted = true;
+            const failedResumableTarget = uploadTarget;
+            const discardForm = new FormData();
+            discardForm.set("bucket_name", failedResumableTarget.bucketName);
+            discardForm.set("storage_path", failedResumableTarget.storagePath);
+            await discardMediaUpload(discardForm).catch(() => undefined);
+
+            setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? {
+              ...entry,
+              progress: undefined,
+              message: "Resumable route interrupted. Finishing with secure direct upload…",
+            } : entry));
+
+            uploadTarget = await prepareTarget();
+            try {
+              await uploadSignedStandard(uploadTarget);
+            } catch (fallbackError) {
+              await reportTransportFailure({
+                transport: "signed-standard",
+                stage: "fallback",
+                error: fallbackError,
+                file: item.file,
+                progress: latestProgress,
+              });
+              throw fallbackError;
+            }
+          }
+        } else {
+          await uploadSignedStandard(uploadTarget);
+        }
+        transportCompleted = true;
+
         const form = new FormData();
+        const scopedTags = [tags, artistId ? `artist:${artistId}` : ""].filter(Boolean).join(",");
         Object.entries({
           storage_path: uploadTarget.storagePath,
           bucket_name: uploadTarget.bucketName,
@@ -142,78 +366,223 @@ export function MediaUploader({
           original_name: item.file.name,
           title: items.length === 1 ? title : "",
           description,
-          tags,
-          release_id: releaseId ?? "",
+          tags: releaseMasterMode
+            ? [scopedTags, trackId ? `track:${trackId}` : "release-master"].filter(Boolean).join(",")
+            : musicIntakeMode
+              ? [scopedTags, "unreleased", "music"].filter(Boolean).join(",")
+              : vaultMode
+                ? [scopedTags, "unreleased", "vault"].filter(Boolean).join(",")
+                : scopedTags,
+          release_id: contentItemId || masterIntake ? "" : releaseId ?? "",
           is_primary: primary ? "on" : "",
           ...dimensions,
-        }).forEach(([key, value]) => form.set(key, value));
+        }).forEach(([key, formValue]) => form.set(key, formValue));
         const result = await registerMediaUpload(form);
+        registered = true;
+
+        if (contentItemId) {
+          const attachForm = new FormData();
+          attachForm.set("content_item_id", contentItemId);
+          attachForm.set("media_asset_id", result.id);
+          attachForm.set("role", item.role);
+          await attachContentMediaV2(attachForm);
+        }
+        if (masterIntake) {
+          const vaultForm = new FormData();
+          vaultForm.set("media_asset_id", result.id);
+          vaultForm.set("title", items.length === 1 && title.trim() ? title.trim() : cleanAudioTitle(item.file.name));
+          await createVaultTrackFromMedia(vaultForm);
+        }
+        if (releaseMasterMode && releaseId) {
+          const masterForm = new FormData();
+          masterForm.set("media_asset_id", result.id);
+          masterForm.set("release_id", releaseId);
+          if (trackId) {
+            masterForm.set("track_id", trackId);
+            await attachCatalogTrackMasterFromMedia(masterForm);
+          } else {
+            releaseMasterResult = await attachReleaseMasterFromMedia(masterForm);
+          }
+        }
+
+        completedThisRun += 1;
         setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? {
           ...entry,
           state: "done",
-          message: result.deduplicated ? "Already in the library — existing file reused." : "Added to the library.",
+          progress: 1,
+          target: undefined,
+          recovery: undefined,
+          message: releaseMasterMode
+            ? trackScopedMaster
+              ? "Master attached to this track. Ensemblis is analyzing its structure and strongest moments."
+              : releaseMasterResult?.analysisReused
+                ? "Master attached. Existing Music Intelligence was reused instantly."
+                : releaseMasterResult?.analysisQueued
+                  ? "Master attached. Ensemblis is analyzing its structure and strongest hooks."
+                  : "Master attached. Analysis can be retried from the release when the media worker is available."
+            : musicIntakeMode
+              ? "Master added to Music. Ensemblis is understanding its structure and strongest moments."
+              : vaultMode
+                ? "Master is in the Vault. Free audio analysis was queued when the media worker is available."
+                : result.deduplicated
+                  ? "Already in the library, existing file reused and attached."
+                  : contentItemId
+                    ? "Uploaded and attached to this content item."
+                    : "Added to the library.",
         } : entry));
       } catch (error) {
-        if (uploadTarget) {
+        const authorizationExpired = error instanceof ResumableUploadAuthorizationError;
+        const canResume = resumable && !transportCompleted && !fallbackAttempted && !authorizationExpired;
+        if (uploadTarget && !registered && !canResume) {
           const discardForm = new FormData();
           discardForm.set("bucket_name", uploadTarget.bucketName);
           discardForm.set("storage_path", uploadTarget.storagePath);
           await discardMediaUpload(discardForm).catch(() => undefined);
         }
+        const failure = uploadFailure(error, canResume);
         setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? {
           ...entry,
-          state: "error",
-          message: error instanceof Error ? error.message : "Upload failed. Try again.",
+          state: failure.state,
+          recovery: failure.recovery,
+          progress: canResume ? entry.progress : undefined,
+          target: canResume ? uploadTarget ?? entry.target : undefined,
+          message: failure.message,
         } : entry));
       }
     }
+
+    const workerCount = releaseMasterMode ? 1 : Math.min(MAX_PARALLEL_UPLOADS, pending.length);
+    await Promise.all(Array.from({ length: workerCount }, async () => {
+      while (cursor < pending.length) {
+        const next = pending[cursor];
+        cursor += 1;
+        if (next) await processItem(next.index, next.item);
+      }
+    }));
+
     setBusy(false);
-    router.refresh();
+    if (completedThisRun > 0) router.refresh();
   }
 
   const completed = items.filter((item) => item.state === "done").length;
-  const hasPending = items.some((item) => item.state === "ready" || item.state === "error");
+  const activeUploads = items.filter((item) => item.state === "uploading").length;
+  const pausedUploads = items.filter((item) => item.state === "paused").length;
+  const failedUploads = items.filter((item) => item.state === "error").length;
+  const hasPending = items.some((item) => item.state === "ready" || item.state === "paused" || item.state === "error");
+  const pendingItems = items.filter((item) => item.state !== "done");
+  const allPendingResume = pendingItems.length > 0 && pendingItems.every((item) => item.recovery === "resume");
+  const allPendingRestart = pendingItems.length > 0 && pendingItems.every((item) => item.recovery === "restart");
+  const contextualAttach = Boolean(releaseId || contentItemId || masterIntake || releaseMasterMode);
+  const pickerLabel = releaseMasterMode ? "Choose master" : musicIntakeMode ? "Choose mastered tracks" : vaultMode ? "Choose masters" : "Choose files";
+  const actionLabel = busy
+    ? `Uploading ${activeUploads || 1} file${activeUploads === 1 ? "" : "s"}…`
+    : completed === items.length && items.length
+      ? "Upload complete"
+      : allPendingResume
+        ? pausedUploads === 1 ? "Resume upload" : `Resume ${pausedUploads} uploads`
+        : allPendingRestart
+          ? pendingItems.length === 1 ? "Start over" : `Start over ${pendingItems.length} uploads`
+          : pausedUploads || failedUploads
+            ? "Continue uploads"
+            : releaseMasterMode
+              ? "Upload & analyze master"
+              : musicIntakeMode
+                ? `Add ${items.length || ""} mastered track${items.length === 1 ? "" : "s"}`
+                : vaultMode
+                  ? `Import ${items.length || ""} to Vault`
+                  : contextualAttach
+                    ? "Upload and attach"
+                    : `Add ${items.length || ""} to library`;
 
   return (
-    <div className="media-uploader">
-      <div
+    <div className={`media-uploader${vaultMode ? " vault-media-uploader" : ""}${musicIntakeMode ? " music-intake-uploader" : ""}${releaseMasterMode ? " release-master-uploader" : ""}`}>
+      <label
         className={`media-dropzone${dragging ? " dragging" : ""}`}
-        onDragEnter={(event) => { event.preventDefault(); setDragging(true); }}
+        htmlFor={inputId}
+        onDragEnter={(event) => {
+          event.preventDefault();
+          dragDepth.current += 1;
+          setDragging(true);
+        }}
         onDragOver={(event) => event.preventDefault()}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(event) => { event.preventDefault(); setDragging(false); addFiles(event.dataTransfer.files); }}
+        onDragLeave={(event) => {
+          event.preventDefault();
+          dragDepth.current = Math.max(0, dragDepth.current - 1);
+          if (dragDepth.current === 0) setDragging(false);
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          dragDepth.current = 0;
+          setDragging(false);
+          addFiles(event.dataTransfer.files);
+        }}
       >
         <FiUploadCloud aria-hidden />
-        <strong>Drop media here</strong>
-        <span>Images, video, audio, masters, stems, or ZIP files</span>
-        <button type="button" className="button" onClick={() => inputRef.current?.click()}>Choose files</button>
-        <input ref={inputRef} hidden multiple type="file" accept="image/*,video/*,audio/*,.zip" onChange={(event) => event.target.files && addFiles(event.target.files)} />
-      </div>
+        <strong>{releaseMasterMode ? trackScopedMaster ? "Drop this track's master here" : "Drop the release master here" : musicIntakeMode ? "Drop mastered tracks here" : vaultMode ? "Drop unreleased masters here" : "Drop media here"}</strong>
+        <span>{releaseMasterMode ? trackScopedMaster ? "WAV, MP3 or another audio master. It stays attached to this exact song and receives its own Music Intelligence." : "WAV, MP3 or another audio master. Ensemblis will attach it to this release and analyze its structure and strongest hooks." : musicIntakeMode ? "Audio only. Title is optional; Ensemblis starts understanding structure and strongest moments automatically." : vaultMode ? "Audio masters only. Each file becomes an independent Vault track." : "Images, video, audio, masters, stems, or ZIP files"}</span>
+        <small>Maximum {humanSize(PUBLIC_LIMIT)} per file. Large files resume safely and automatically switch to a secure direct upload if the resumable route cannot complete.</small>
+        <span className="button media-dropzone-cta" aria-hidden="true">{pickerLabel}</span>
+      </label>
+      <input
+        id={inputId}
+        ref={inputRef}
+        className="sr-only"
+        multiple={!releaseMasterMode}
+        type="file"
+        accept={masterIntake || releaseMasterMode ? "audio/*" : "image/*,video/*,audio/*,.zip"}
+        onChange={(event) => {
+          if (event.target.files) addFiles(event.target.files);
+          event.target.value = "";
+        }}
+      />
+      {selectionError ? <p className="media-selection-error" role="alert">{selectionError}</p> : null}
+
+      <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {busy
+          ? `${activeUploads || 1} upload${activeUploads === 1 ? "" : "s"} in progress. ${completed} complete.`
+          : pausedUploads
+            ? `${pausedUploads} upload${pausedUploads === 1 ? " is" : "s are"} paused and can be resumed.`
+            : failedUploads
+              ? `${failedUploads} upload${failedUploads === 1 ? " needs" : "s need"} attention.`
+              : completed
+                ? `${completed} of ${items.length} uploads complete.`
+                : ""}
+      </span>
 
       {items.length ? (
-        <div className="upload-queue" aria-live="polite">
+        <div className="upload-queue">
           {items.map((item, index) => (
             <div className={`upload-item ${item.state}`} key={`${item.file.name}-${item.file.lastModified}`}>
               <span className="upload-file-icon">{item.state === "done" ? <FiCheck /> : <FiFile />}</span>
-              <span><strong>{item.file.name}</strong><small>{humanSize(item.file.size)} · {item.file.type || "Unknown format"}{item.message ? ` · ${item.message}` : ""}</small></span>
-              <select aria-label={`Use for ${item.file.name}`} value={item.role} disabled={busy || item.state === "done"} onChange={(event) => setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, role: event.target.value as MediaType, state: entry.state === "error" ? "ready" : entry.state, message: undefined } : entry))}>{compatibleMediaTypes(item.file.type).map((type) => <option value={type} key={type}>{MEDIA_TYPE_LABELS[type]}</option>)}</select>
-              {!busy && item.state !== "done" ? <button type="button" aria-label={`Remove ${item.file.name}`} onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}><FiX /></button> : null}
+              <span className="upload-item-copy">
+                <strong>{item.file.name}</strong>
+                <small>{humanSize(item.file.size)} · {humanFormat(item.file)}{item.message ? ` · ${item.message}` : ""}</small>
+                {item.state === "uploading" ? (
+                  typeof item.progress === "number"
+                    ? <progress className="upload-progress" max={100} value={Math.round(item.progress * 100)} aria-label={`Upload progress for ${item.file.name}`} />
+                    : <progress className="upload-progress" aria-label={`Uploading ${item.file.name}`} />
+                ) : null}
+              </span>
+              <select aria-label={`Use for ${item.file.name}`} value={item.role} disabled={masterIntake || releaseMasterMode || busy || item.state === "done"} onChange={(event) => setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, role: event.target.value as MediaType, state: entry.state === "error" || entry.state === "paused" ? "ready" : entry.state, message: undefined, target: undefined, progress: undefined, recovery: undefined } : entry))}>{compatibleMediaTypes(item.file.type).map((type) => <option value={type} key={type}>{MEDIA_TYPE_LABELS[type]}</option>)}</select>
+              {!busy && item.state !== "done" ? <button type="button" aria-label={`Remove ${item.file.name}`} data-tooltip={`Remove ${item.file.name}`} onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}><FiX /></button> : null}
             </div>
           ))}
         </div>
       ) : null}
 
-      <div className="form-grid media-upload-fields">
-        <label className="field"><span>Display name {items.length > 1 ? "(single uploads only)" : ""}</span><input value={title} onChange={(event) => setTitle(event.target.value)} disabled={items.length > 1} placeholder={items[0]?.file.name || "Shown in the library"} /></label>
-        <label className="field"><span>Tags</span><input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="release, artwork, blue-hour" /></label>
-        <label className="field wide"><span>Notes</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={2} placeholder="Creative context, rights, source, or intended use" /></label>
-        {releaseId ? <label className="checkbox-field"><input type="checkbox" checked={primary} onChange={(event) => setPrimary(event.target.checked)} /> Make primary for this role</label> : null}
-      </div>
+      {!releaseMasterMode ? <div className="form-grid media-upload-fields">
+        <label className="field"><span>{musicIntakeMode ? `Title ${items.length > 1 ? "(file names are used for bulk uploads)" : "(optional)"}` : `Display name ${items.length > 1 ? "(file names are used for bulk imports)" : ""}`}</span><input value={title} onChange={(event) => setTitle(event.target.value)} disabled={items.length > 1} placeholder={items[0] ? cleanAudioTitle(items[0].file.name) : musicIntakeMode ? "Uses the file name when empty" : "Shown in the library"} /></label>
+        {!musicIntakeMode ? <>
+          <label className="field"><span>Tags</span><input value={tags} onChange={(event) => setTags(event.target.value)} placeholder={vaultMode ? "mastered, nu-disco, priority" : "release, artwork, blue-hour"} /></label>
+          <label className="field wide"><span>Notes</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={2} placeholder={vaultMode ? "Optional source/rights notes. Track-specific creative notes can be refined in the Vault." : "Creative context, rights, source, or intended use"} /></label>
+        </> : null}
+        {releaseId && !contentItemId && !masterIntake ? <label className="checkbox-field"><input type="checkbox" checked={primary} onChange={(event) => setPrimary(event.target.checked)} /> Make primary for this role</label> : null}
+      </div> : null}
       <div className="media-upload-actions">
         <button className="button primary" type="button" disabled={!items.length || busy || !hasPending} onClick={upload}>
-          {busy ? `Uploading ${completed + 1} of ${items.length}…` : completed === items.length && items.length ? "Upload complete" : releaseId ? "Upload and attach" : `Add ${items.length || ""} to library`}
+          {actionLabel}
         </button>
-        {completed ? <span>{completed} of {items.length} ready</span> : <span>Media is published to the public asset library.</span>}
+        {completed ? <span>{completed} of {items.length} ready</span> : <span>{releaseMasterMode ? trackScopedMaster ? "This upload changes only this song. Other tracks in the release keep their own masters and analysis." : "The previous master stays in Media Library history when you replace it." : musicIntakeMode ? "Each master stays reusable in Media Library. Track Intelligence starts automatically after upload." : vaultMode ? "Upload is reusable in Media Library; audio analysis does not spend an AI call." : contentItemId ? "Media will be attached to this content item." : "Media is published to the public asset library."}</span>}
       </div>
     </div>
   );

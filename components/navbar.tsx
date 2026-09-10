@@ -6,21 +6,32 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { HiBars3, HiXMark } from "react-icons/hi2";
 import { ThemeToggle } from "@/components/theme-toggle";
 
-const links = [
+type NavLink = { href: string; id: string; label: string };
+
+type NavbarProps = {
+  artistName?: string;
+  logoUrl?: string | null;
+  links?: NavLink[];
+};
+
+const defaultLinks: NavLink[] = [
   { href: "#music", id: "music", label: "Music" },
   { href: "#platforms", id: "platforms", label: "Listen" },
   { href: "#about", id: "about", label: "About" },
   { href: "#contact", id: "contact", label: "Contact" },
-] as const;
+];
 
-export function Navbar() {
+export function Navbar({
+  artistName = "Atlas Irwin",
+  logoUrl = "/atlas-irwin-logo-sign.svg",
+  links = defaultLinks,
+}: NavbarProps = {}) {
   const prefersReducedMotion = useReducedMotion();
   const [isScrolled, setIsScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
 
-  /* ── Scroll listener ─────────────────────────────────────── */
   useEffect(() => {
     const onScroll = () => setIsScrolled(window.scrollY > 24);
     onScroll();
@@ -28,9 +39,8 @@ export function Navbar() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  /* ── IntersectionObserver for active section ─────────────── */
   useEffect(() => {
-    const ids = links.map((l) => l.id);
+    const ids = links.map((link) => link.id);
 
     const handleIntersect = (entries: IntersectionObserverEntry[]) => {
       for (const entry of entries) {
@@ -45,22 +55,21 @@ export function Navbar() {
     });
 
     ids.forEach((id) => {
-      const el = document.getElementById(id);
-      if (el) observerRef.current!.observe(el);
+      const element = document.getElementById(id);
+      if (element) observerRef.current!.observe(element);
     });
 
     return () => observerRef.current?.disconnect();
-  }, []);
+  }, [links]);
 
-  /* ── Body scroll lock + Escape key ───────────────────────── */
   useEffect(() => {
     if (!menuOpen) return;
 
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMenuOpen(false);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuOpen(false);
     };
     window.addEventListener("keydown", onKey);
 
@@ -70,15 +79,11 @@ export function Navbar() {
     };
   }, [menuOpen]);
 
-  /* ── Helpers ─────────────────────────────────────────────── */
   const closeMenu = useCallback(() => setMenuOpen(false), []);
-
   const isActive = (id: string) => activeId === id;
-
   const focusVisible =
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/25";
 
-  /* ── Shared link data with active props ──────────────────── */
   const renderLink = (
     href: string,
     id: string,
@@ -127,7 +132,6 @@ export function Navbar() {
     );
   };
 
-  /* ── Render ──────────────────────────────────────────────── */
   return (
     <header
       className={`fixed inset-x-0 top-0 z-50 border-b transition-[background-color,border-color,box-shadow,backdrop-filter] duration-200 ${
@@ -136,7 +140,6 @@ export function Navbar() {
           : "border-transparent bg-transparent"
       }`}
     >
-      {/* Skip-to-content */}
       <a
         href="#main-content"
         className={`sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-60 focus:inline-flex focus:items-center focus:rounded-full focus:border-2 focus:border-teal focus:bg-paper focus:px-4 focus:py-2 focus:text-[0.85rem] focus:font-bold focus:uppercase focus:text-teal focus:shadow-lg ${focusVisible}`}
@@ -145,25 +148,29 @@ export function Navbar() {
       </a>
 
       <div className="relative mx-auto flex min-h-[5.4rem] w-full items-center gap-4 px-5 sm:min-h-[6.8rem] sm:px-9 lg:px-9">
-        {/* Logo */}
         <a
           href="#music"
-          aria-label="Atlas Irwin — Home"
+          aria-label={`${artistName} — Home`}
           className={`inline-flex items-center rounded-full text-ink ${focusVisible}`}
         >
-          <Image
-            src="/atlas-irwin-logo-sign.svg"
-            alt=""
-            aria-hidden="true"
-            width={88}
-            height={48}
-            priority
-            loading="eager"
-            className="theme-logo h-[2.65rem] w-auto sm:h-[2.85rem]"
-          />
+          {logoUrl ? (
+            <Image
+              src={logoUrl}
+              alt=""
+              aria-hidden="true"
+              width={88}
+              height={48}
+              priority
+              loading="eager"
+              className="theme-logo h-[2.65rem] w-auto sm:h-[2.85rem]"
+            />
+          ) : (
+            <span className="font-display text-[1.25rem] uppercase tracking-[0.12em]">
+              {artistName}
+            </span>
+          )}
         </a>
 
-        {/* Desktop nav */}
         <nav
           aria-label="Main navigation"
           className="ml-4 hidden items-center gap-10 justify-self-start font-sans text-[1.12rem] font-extrabold uppercase leading-none text-ink md:flex lg:ml-5 lg:gap-11 lg:text-[1.18rem]"
@@ -175,7 +182,6 @@ export function Navbar() {
           ))}
         </nav>
 
-        {/* Desktop ThemeToggle & Mobile menu controls */}
         <div className="ml-auto flex items-center gap-4 sm:gap-6">
           <AnimatePresence>
             {isScrolled && (
@@ -191,12 +197,11 @@ export function Navbar() {
             )}
           </AnimatePresence>
 
-          {/* Hamburger toggle — mobile only */}
           <button
             type="button"
             aria-expanded={menuOpen}
             aria-label={menuOpen ? "Close menu" : "Open menu"}
-            onClick={() => setMenuOpen((v) => !v)}
+            onClick={() => setMenuOpen((value) => !value)}
             className={`flex items-center justify-center rounded-md p-2 text-ink md:hidden ${focusVisible}`}
           >
             {menuOpen ? (
@@ -208,7 +213,6 @@ export function Navbar() {
         </div>
       </div>
 
-      {/* Mobile slide-down menu */}
       <AnimatePresence>
         {menuOpen && (
           <motion.div
@@ -228,7 +232,7 @@ export function Navbar() {
                   {renderLink(link.href, link.id, link.label, "mobile")}
                 </div>
               ))}
-              <div className="mt-4 pt-6 border-t border-line flex justify-start">
+              <div className="mt-4 flex justify-start border-t border-line pt-6">
                 <ThemeToggle />
               </div>
             </nav>

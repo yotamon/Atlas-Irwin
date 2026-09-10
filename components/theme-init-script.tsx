@@ -4,8 +4,18 @@ import { useSyncExternalStore } from "react";
 
 const themeInitScript = `
 (() => {
+  const isStudio =
+    window.location.pathname === "/studio" ||
+    window.location.pathname.startsWith("/studio/");
+
+  if (isStudio) {
+    document.documentElement.dataset.theme = "dark";
+    document.documentElement.style.colorScheme = "dark";
+    return;
+  }
+
   try {
-    const storedTheme = localStorage.getItem("atlas-theme");
+    const storedTheme = localStorage.getItem("site-theme");
     const resolvedTheme =
       storedTheme === "light" || storedTheme === "dark"
         ? storedTheme
@@ -37,7 +47,7 @@ export function ThemeInitScript() {
 
   return (
     <script
-      id="atlas-theme-init"
+      id="site-theme-init"
       dangerouslySetInnerHTML={{ __html: themeInitScript }}
     />
   );

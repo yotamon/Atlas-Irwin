@@ -1,97 +1,84 @@
-"use client";
-
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { signOut } from "@/app/studio/actions";
-import { GlobalSearch, type SearchHit } from "./global-search";
+import { EnsemblisMark } from "@/components/ensemblis-logo";
+import { ArtistSwitcher } from "./artist-switcher";
 import { studioIcons } from "./icons";
+import { StudioAdvancedNavigation, StudioPrimaryNavigation } from "./sidebar-navigation";
+import { signOut } from "@/app/studio/actions";
+import {
+  ENSEMBLIS_MANAGE_NAV,
+  ENSEMBLIS_PRODUCT,
+  ENSEMBLIS_SETTINGS_NAV,
+  ENSEMBLIS_WORK_NAV,
+  ensemblisArtistHref,
+} from "@/lib/ensemblis-product";
 
-const groups = [
-  {
-    label: "Operate",
-    links: [
-      ["/studio", "Command", "dashboard"],
-      ["/studio/releases", "Releases", "releases"],
-      ["/studio/campaigns", "Campaigns", "campaigns"],
-      ["/studio/tasks", "Tasks", "tasks"],
-    ],
-  },
-  {
-    label: "Create",
-    links: [
-      ["/studio/content", "Content", "content"],
-      ["/studio/media", "Media", "media"],
-      ["/studio/brand", "Brand", "brand"],
-    ],
-  },
-  {
-    label: "Connect",
-    links: [
-      ["/studio/outreach", "Outreach", "outreach"],
-      ["/studio/spotify", "Spotify", "spotify"],
-      ["/studio/soundcloud", "SoundCloud", "soundcloud"],
-    ],
-  },
-  {
-    label: "Measure",
-    links: [
-      ["/studio/analytics", "Analytics", "analytics"],
-      ["/studio/data-health", "Data Health", "dataHealth"],
-    ],
-  },
-] as const;
+type StudioSidebarProps = {
+  artistId: string;
+  artists: Array<{
+    artistId: string;
+    artistName: string;
+    workspaceName: string;
+  }>;
+};
 
-function isActive(pathname: string, href: string) {
-  if (href === "/studio") return pathname === "/studio";
-  return pathname === href || pathname.startsWith(`${href}/`);
+function navigationItems(
+  items: ReadonlyArray<{ href: string; label: string; icon: keyof typeof studioIcons }>,
+  artistId: string,
+) {
+  return items.map(({ href, label, icon }) => ({
+    route: href,
+    href: ensemblisArtistHref(href, artistId),
+    label,
+    icon,
+  }));
 }
 
-export function StudioSidebar({ searchItems }: { searchItems: SearchHit[] }) {
-  const pathname = usePathname();
-  const Plus = studioIcons.plus;
+export function StudioSidebar({ artistId, artists }: StudioSidebarProps) {
   const Logout = studioIcons.logout;
+  const workNavigation = navigationItems(ENSEMBLIS_WORK_NAV, artistId);
+  const moreNavigation = navigationItems(ENSEMBLIS_MANAGE_NAV, artistId);
+  const settingsNavigation = {
+    route: ENSEMBLIS_SETTINGS_NAV.href,
+    href: ensemblisArtistHref(ENSEMBLIS_SETTINGS_NAV.href, artistId),
+    label: ENSEMBLIS_SETTINGS_NAV.label,
+    icon: ENSEMBLIS_SETTINGS_NAV.icon,
+  };
 
   return (
-    <aside className="studio-sidebar">
-      <Link href="/studio" className="studio-mark">
-        <span>
-          ATLAS<small>STUDIO</small>
+    <aside className="studio-sidebar studio-sidebar-v2">
+      <Link
+        href={ensemblisArtistHref("/studio", artistId)}
+        className="studio-mark ensemblis-product-mark"
+        aria-label={`${ENSEMBLIS_PRODUCT.name} home`}
+      >
+        <span className="ensemblis-mark-symbol" aria-hidden>
+          <EnsemblisMark />
+        </span>
+        <span className="ensemblis-wordmark">
+          <strong>{ENSEMBLIS_PRODUCT.name}</strong>
+          <small>{ENSEMBLIS_PRODUCT.descriptor}</small>
         </span>
       </Link>
-      <div className="studio-sidebar-search">
-        <GlobalSearch items={searchItems} />
+
+      <ArtistSwitcher activeArtistId={artistId} artists={artists} />
+
+      <div className="ensemblis-sidebar-group">
+        <span className="studio-sidebar-section-label">Work</span>
+        <StudioPrimaryNavigation items={workNavigation} />
       </div>
-      <nav aria-label="Studio">
-        {groups.map((group) => (
-          <div className="studio-nav-group" key={group.label}>
-            <span className="studio-nav-label">{group.label}</span>
-            {group.links.map(([href, label, key]) => {
-              const Icon = studioIcons[key];
-              const active = isActive(pathname, href);
-              return (
-                <Link
-                  href={href}
-                  key={key}
-                  className={active ? "active" : undefined}
-                  aria-current={active ? "page" : undefined}
-                  title={label}
-                >
-                  <Icon aria-hidden />
-                  <span className="studio-nav-text">{label}</span>
-                </Link>
-              );
-            })}
-          </div>
-        ))}
-      </nav>
+
+      <div className="ensemblis-sidebar-group ensemblis-sidebar-more">
+        <span className="studio-sidebar-section-label">More</span>
+        <StudioPrimaryNavigation items={moreNavigation} />
+      </div>
+
       <div className="studio-sidebar-foot">
-        <Link href="/studio/releases/new" className="studio-quick" title="Quick create">
-          <Plus />
-          <span className="studio-nav-text">Quick create</span>
-        </Link>
+        <div className="ensemblis-sidebar-settings">
+          <StudioAdvancedNavigation item={settingsNavigation} />
+        </div>
         <form action={signOut}>
-          <button type="submit" title="Sign out">
-            <Logout />
+          <button aria-label="Sign out" data-tooltip="Sign out">
+            <Logout aria-hidden />
             <span className="studio-nav-text">Sign out</span>
           </button>
         </form>

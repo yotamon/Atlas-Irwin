@@ -1,0 +1,41 @@
+name: Database PR
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/tests/**"
+      - ".github/workflows/database-pr.yml"
+
+concurrency:
+  group: database-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  database:
+    name: migration replay and behavior
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v2
+        with:
+          version: 2.111.0
+          github-token: ${{ github.token }}
+
+      - name: Initialize local Supabase config
+        run: test -f supabase/config.toml || supabase init
+
+      - name: Replay every migration on a clean database
+        run: supabase db start
+
+      - name: Lint Postgres functions
+        run: supabase db lint --local --level error --fail-on error
+
+      - name: Verify database behavior
+        run: supabase test db --local
