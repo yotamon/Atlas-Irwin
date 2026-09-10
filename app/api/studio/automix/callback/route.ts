@@ -337,7 +337,7 @@ export async function POST(request: Request) {
         bucket_name: bucket,
         storage_path: path,
         public_url: publicUrl,
-        asset_type: "audio_master",
+        asset_type: "master_audio",
         mime_type: mimeType,
         file_size: typeof result.file_size === "number" ? result.file_size : null,
         content_hash: typeof result.sha256 === "string" ? result.sha256 : null,
