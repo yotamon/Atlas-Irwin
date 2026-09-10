@@ -1,3 +1,4 @@
+import { kickAutoMixQueue } from "@/lib/automix/jobs";
 import { kickMediaWorkerQueue } from "@/lib/media-worker/queue";
 import { authorizeMarketingCron } from "@/lib/marketing/cron-auth";
 
@@ -15,8 +16,11 @@ export async function GET(request: Request) {
   }
 
   try {
-    const queue = await kickMediaWorkerQueue();
-    return Response.json({ ok: true, authSource: auth.source, queue });
+    const mediaWorker = await kickMediaWorkerQueue();
+    const automix = mediaWorker.dispatched || mediaWorker.reason === "busy"
+      ? { dispatched: false, busy: true, deferred: true }
+      : await kickAutoMixQueue();
+    return Response.json({ ok: true, authSource: auth.source, queue: { mediaWorker, automix } });
   } catch (error) {
     console.error("[media-worker-cron] queue kick failed", error);
     return Response.json({
