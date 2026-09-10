@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import { StudioToast } from "@/components/studio/toast";
 import Link from "next/link";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { dismissOnboardingAction } from "@/app/studio/onboarding/actions";
@@ -60,6 +62,7 @@ export default async function ProtectedStudioLayout({
           </aside>
         ) : null}
         <main className="studio-main">
+          <Suspense fallback={null}><StudioToast /></Suspense>
           <StudioMotionStage>{children}</StudioMotionStage>
         </main>
       </div>

@@ -20,6 +20,8 @@ import {
 } from "@/lib/studio/spotify";
 import type { MetricSnapshot, SoundCloudTrack } from "@/types/database";
 import { resolveMetricReleaseId } from "@/lib/studio/reconciliation";
+import { redirectWithNotice } from "@/lib/studio/flash";
+import { TASK_PRIORITIES, TASK_STATUSES } from "@/lib/studio/constants";
 
 const text = z.string().trim().max(10000);
 const required = z.string().trim().min(1).max(300);
@@ -230,6 +232,7 @@ export async function generateContentPack(form: FormData) {
     );
   if (insertError) throw new Error(insertError.message);
   revalidatePath("/studio/content");
+  revalidatePath("/studio/campaigns");
   redirect(`/studio/content?release=${id}&generated=1`);
 }
 
@@ -265,7 +268,12 @@ export async function saveContent(form: FormData) {
     : await supabase.from("content_items").insert(row);
   if (error) throw new Error(error.message);
   revalidatePath("/studio/content");
-  revalidatePath("/studio/calendar");
+  revalidatePath("/studio/campaigns");
+  revalidatePath("/studio");
+  redirectWithNotice(
+    id ? `/studio/content?edit=${id}` : "/studio/content",
+    id ? "Content updated." : "Content created.",
+  );
 }
 
 export async function updateContentStatus(form: FormData) {
@@ -278,7 +286,8 @@ export async function updateContentStatus(form: FormData) {
     .eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath("/studio/content");
-  revalidatePath("/studio/calendar");
+  revalidatePath("/studio/campaigns");
+  revalidatePath("/studio");
 }
 
 export async function duplicateContent(form: FormData) {
@@ -294,14 +303,52 @@ export async function duplicateContent(form: FormData) {
   void _id;
   void _c;
   void _u;
-  await supabase.from("content_items").insert({
-    ...copy,
-    owner_id: user.id,
-    title: `${copy.title} (copy)`,
-    status: "Draft",
-    published_at: null,
-  });
+  const { data: created, error: insertError } = await supabase
+    .from("content_items")
+    .insert({
+      ...copy,
+      owner_id: user.id,
+      title: `${copy.title} (copy)`,
+      status: "Draft",
+      published_at: null,
+    })
+    .select("id")
+    .single();
+  if (insertError) throw new Error(insertError.message);
   revalidatePath("/studio/content");
+  redirectWithNotice(`/studio/content?edit=${created.id}`, "Content duplicated.");
+}
+
+export async function saveTask(form: FormData) {
+  const { supabase, user } = await requireStudioAdmin();
+  const id = value(form, "id");
+  const row = {
+    owner_id: user.id,
+    release_id: nullable(form, "release_id"),
+    title: required.parse(value(form, "title")),
+    status: z.enum(TASK_STATUSES).parse(value(form, "status") || "Open"),
+    priority: z.enum(TASK_PRIORITIES).parse(value(form, "priority") || "Medium"),
+    due_at: nullable(form, "due_at"),
+  };
+  const { error } = id
+    ? await supabase.from("tasks").update(row).eq("id", id)
+    : await supabase.from("tasks").insert(row);
+  if (error) throw new Error(error.message);
+  revalidatePath("/studio/tasks");
+  revalidatePath("/studio");
+  redirectWithNotice("/studio/tasks", id ? "Task updated." : "Task created.");
+}
+
+export async function completeTask(form: FormData) {
+  const { supabase } = await requireStudioAdmin();
+  const id = z.uuid().parse(value(form, "id"));
+  const { error } = await supabase
+    .from("tasks")
+    .update({ status: "Done" })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/studio/tasks");
+  revalidatePath("/studio");
 }
 
 export async function saveContact(form: FormData) {
@@ -399,6 +446,8 @@ export async function saveMetric(form: FormData) {
     : await supabase.from("metric_snapshots").insert(row);
   if (error) throw new Error(error.message);
   revalidatePath("/studio/analytics");
+  revalidatePath("/studio");
+  redirectWithNotice("/studio/analytics", "Snapshot saved.");
 }
 
 export async function saveLearning(form: FormData) {
@@ -410,6 +459,7 @@ export async function saveLearning(form: FormData) {
     .insert({ owner_id: user.id, release_id, learning });
   if (error) throw new Error(error.message);
   revalidatePath("/studio/analytics");
+  redirectWithNotice("/studio/analytics", "Learning saved.");
 }
 
 export async function deleteStudioRecord(form: FormData) {
@@ -424,6 +474,7 @@ export async function deleteStudioRecord(form: FormData) {
       "metric_snapshots",
       "release_learnings",
       "brand_settings",
+      "tasks",
     ])
     .parse(value(form, "table"));
   let error: { message: string } | null = null;
@@ -450,8 +501,14 @@ export async function deleteStudioRecord(form: FormData) {
       .eq("id", id));
   if (table === "brand_settings")
     ({ error } = await supabase.from("brand_settings").delete().eq("id", id));
+  if (table === "tasks")
+    ({ error } = await supabase.from("tasks").delete().eq("id", id));
   if (error) throw new Error(error.message);
   revalidatePath("/studio");
+  revalidatePath("/studio/tasks");
+  revalidatePath("/studio/content");
+  revalidatePath("/studio/analytics");
+  revalidatePath("/studio/brand");
 }
 
 export async function syncSoundCloud(form: FormData) {
@@ -769,4 +826,5 @@ export async function saveBrandSetting(form: FormData) {
     );
   if (error) throw new Error(error.message);
   revalidatePath("/studio/brand");
+  redirectWithNotice("/studio/brand", `${section} saved.`);
 }

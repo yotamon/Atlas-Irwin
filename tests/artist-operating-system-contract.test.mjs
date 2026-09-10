@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const root = process.cwd();
-const read = (path) => readFile(`${root}/${path}`, "utf8");
+const read = async (path) => (await readFile(`${root}/${path}`, "utf8")).replace(/\r\n/g, "\n");
 
 test("artist operating profile keeps AI optional and human projects conservative", async () => {
   const [migration, aiMigration, domain, settings] = await Promise.all([

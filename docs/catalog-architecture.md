@@ -68,17 +68,24 @@ expose the current artwork, CTA, default track, and placement order.
 
 ## Artist operating system routes
 
-- `/studio` — Command Center for the active release, prioritized attention queue,
-  live catalog preview, seven-day runway, and real-metric pulse
+- `/studio` — artist-specific Today view with operating snapshot, current mission,
+  decision queue, and upcoming work
 - `/studio/releases/[id]` — release workspace with Overview, Music, Media, Website,
   Campaign, and Performance surfaces
-- `/studio/campaigns` — release-centered content and outreach workload in list or
-  calendar form; it composes existing content and outreach records rather than
-  duplicating campaign state
+- `/studio/campaigns` — artist-specific campaigns, experiments, content variants,
+  and publication jobs
+- `/studio/content` — artist-specific Content Lab with kanban/list views
+- `/studio/tasks` — legacy owner-scoped task CRUD
 - `/studio/media` — global asset inventory, usage map, deduplicated upload, and
   attach-to-release workflow
+- `/studio/outreach` — relationship CRM and follow-up timeline
+- `/studio/spotify` / `/studio/soundcloud` — platform sync and reconciliation hubs
+- `/studio/analytics` — artist-specific growth funnel, goal-weighted content,
+  campaign metrics, and learnings
+- `/studio/brand` — artist-specific creative guardrails and visual references
 - `/studio/data-health` — auditable reconciliation, metadata, media, platform-link,
   placement, legacy-import, and stale-sync checks
+- `/studio/calendar` — artist-specific content calendar with month, week, and list views
 
 ## Deterministic readiness
 

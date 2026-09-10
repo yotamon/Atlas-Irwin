@@ -2,6 +2,7 @@ import {
   FiActivity,
   FiBarChart2,
   FiCalendar,
+  FiCheckSquare,
   FiDisc,
   FiFeather,
   FiGlobe,
@@ -14,6 +15,7 @@ import {
   FiMail,
   FiPlus,
   FiRadio,
+  FiSliders,
   FiUsers,
 } from "react-icons/fi";
 export const studioIcons = {
@@ -28,10 +30,11 @@ export const studioIcons = {
   analytics: FiBarChart2,
   soundcloud: FiMusic,
   spotify: FiRadio,
-  brand: FiActivity,
+  brand: FiSliders,
   campaigns: FiLayers,
   media: FiImage,
   dataHealth: FiActivity,
+  tasks: FiCheckSquare,
   plus: FiPlus,
   logout: FiLogOut,
   mail: FiMail,
