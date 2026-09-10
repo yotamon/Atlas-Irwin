@@ -193,7 +193,7 @@ Rekordbox data is evidence, not authority over the planner. Imported BPM/grid/cu
 
 ## 6. Phase 8: Native Library Bridge
 
-**Status:** implementation and final validation in PR #217.
+**Status:** implementation complete in PR #217; merge remains gated by the Phase 8 exit criteria below.
 
 Phase 8 makes a local DJ/music library usable without creating a cloud music locker.
 
