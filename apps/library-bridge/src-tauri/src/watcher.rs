@@ -214,10 +214,12 @@ fn spawn_periodic_reconciler(
 ) {
     thread::Builder::new()
         .name("ensemblis-library-reconcile".to_string())
-        .spawn(move || loop {
-            thread::sleep(PERIODIC_RECONCILIATION);
-            ensure_watches(&watcher, &sources);
-            reconcile(&db, &sources, &intelligence);
+        .spawn(move || {
+            loop {
+                thread::sleep(PERIODIC_RECONCILIATION);
+                ensure_watches(&watcher, &sources);
+                reconcile(&db, &sources, &intelligence);
+            }
         })
         .expect("could not start Library Bridge periodic reconciliation thread");
 }
