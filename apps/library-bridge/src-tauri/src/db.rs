@@ -69,6 +69,15 @@ impl BridgeDb {
               last_seen_at text not null default current_timestamp
             );
 
+            -- Expensive musical analysis is keyed by content identity, not location. A move/rename
+            -- therefore reuses the evidence while changed bytes naturally create a new cache key.
+            create table if not exists analysis_cache (
+              recording_fingerprint text primary key,
+              payload_json text not null,
+              analyzer_version text not null,
+              updated_at text not null default current_timestamp
+            );
+
             -- Raw filesystem paths live only in this device-local table.
             create table if not exists file_bindings (
               source_id text not null references sources(source_id) on delete cascade,
@@ -186,6 +195,41 @@ impl BridgeDb {
                 |row| row.get(0),
             )
             .optional()?)
+    }
+
+    pub fn cached_analysis(&self, recording_fingerprint: &str) -> anyhow::Result<Option<Value>> {
+        let payload: Option<String> = self
+            .open()?
+            .query_row(
+                "select payload_json from analysis_cache where recording_fingerprint=?1",
+                params![recording_fingerprint],
+                |row| row.get(0),
+            )
+            .optional()?;
+        payload
+            .map(|value| serde_json::from_str(&value).map_err(anyhow::Error::from))
+            .transpose()
+    }
+
+    pub fn store_analysis(
+        &self,
+        recording_fingerprint: &str,
+        analyzer_version: &str,
+        payload: &Value,
+    ) -> anyhow::Result<()> {
+        if !payload.is_object() {
+            anyhow::bail!("local planning evidence must be an object");
+        }
+        self.open()?.execute(
+            "insert into analysis_cache(recording_fingerprint,payload_json,analyzer_version,updated_at)
+             values (?1,?2,?3,current_timestamp)
+             on conflict(recording_fingerprint) do update set
+               payload_json=excluded.payload_json,
+               analyzer_version=excluded.analyzer_version,
+               updated_at=current_timestamp",
+            params![recording_fingerprint, payload.to_string(), analyzer_version],
+        )?;
+        Ok(())
     }
 
     pub fn persist_scan(
