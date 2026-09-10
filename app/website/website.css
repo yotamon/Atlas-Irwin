@@ -1,0 +1,21 @@
+/* Route-scoped reset: the reference artist site's paper textures and typography
+   must not leak into the Ensemblis marketing canvas. */
+html:has(.marketing-root) {
+  background: #080b09;
+  scroll-padding-top: 90px;
+}
+body:has(.marketing-root) {
+  background: #080b09;
+}
+.marketing-root {
+  color-scheme: dark;
+}
+body:has(.marketing-root)::before,
+body:has(.marketing-root)::after {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  html:has(.marketing-root) {
+    scroll-behavior: auto;
+  }
+}

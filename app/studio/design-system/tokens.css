@@ -2,6 +2,7 @@
    This is the only active Studio stylesheet allowed to define product chrome values. */
 
 :root:has(.studio-root),
+.marketing-root,
 .studio-root,
 .ensemblis-loading {
   --font-heading: var(--font-body);

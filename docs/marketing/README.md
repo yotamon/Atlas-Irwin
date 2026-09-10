@@ -1,6 +1,7 @@
 # Ensemblis Marketing Website — Source of Truth
 
-**Status:** Pre-development specification  
+**Status:** Website v1 implemented at `/website`; production-proof assets remain to be approved (see `website-implementation.md`)
+
 **Target domain:** `ensemblis.com`  
 **Current repository:** `yotamon/Atlas-Irwin`  
 **Primary CTA:** `Analyze a track`  
@@ -8,6 +9,8 @@
 **Brand thesis:** `Your music. Understood.`
 
 This folder is the canonical specification for the future Ensemblis marketing website.
+
+Implementation, demo provenance, verification and the future root migration are documented in [`website-implementation.md`](./website-implementation.md).
 
 ## North Star
 

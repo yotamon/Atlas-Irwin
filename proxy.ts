@@ -6,6 +6,7 @@ import {
 } from "@/lib/auth/local-studio";
 import { ENSEMBLIS_ACTIVE_ARTIST_COOKIE } from "@/lib/ensemblis-product";
 import { getSiteUrl } from "@/lib/site-url";
+import { studioReturnPath } from "@/lib/auth/studio-return-path";
 import {
   normalizeRequestHostname,
   resolveSiteHostForProxy,
@@ -193,7 +194,7 @@ export async function proxy(request: NextRequest) {
   if (isStudio && isLocalStudioBypassHost(host)) {
     if (request.nextUrl.pathname === "/studio/login") {
       return persistArtistPreference(
-        NextResponse.redirect(new URL("/studio", request.url)),
+        NextResponse.redirect(new URL(studioReturnPath(request.nextUrl.searchParams.get("next")), request.url)),
         requestedArtistId,
       );
     }
@@ -259,7 +260,7 @@ export async function proxy(request: NextRequest) {
     isStudioAdmin(data.user.email)
   ) {
     return persistArtistPreference(
-      NextResponse.redirect(new URL("/studio", request.url)),
+      NextResponse.redirect(new URL(studioReturnPath(request.nextUrl.searchParams.get("next")), request.url)),
       requestedArtistId,
     );
   }
