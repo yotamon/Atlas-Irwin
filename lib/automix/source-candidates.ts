@@ -204,6 +204,14 @@ export function candidateIdsFromSnapshot(snapshot: DeviceCandidateSnapshot) {
   return snapshot.candidates.map((candidate) => candidate.candidateId);
 }
 
+export function singleDeviceId(snapshot: DeviceCandidateSnapshot) {
+  const ids = [...new Set(snapshot.candidates.map((candidate) => candidate.deviceId))];
+  if (ids.length !== 1) {
+    throw new Error("Phase 8 local sets must use tracks available on one paired computer.");
+  }
+  return ids[0];
+}
+
 export function workerTracksFromSnapshot(snapshot: DeviceCandidateSnapshot) {
   return snapshot.candidates.map((candidate) => ({
     id: candidate.candidateId,
@@ -229,6 +237,53 @@ export function snapshotFingerprints(snapshot: DeviceCandidateSnapshot) {
     recording_fingerprint: candidate.source.recordingFingerprint,
     revision: candidate.source.revision,
   }));
+}
+
+export async function assertDeviceSnapshotStillAvailable({
+  ownerId,
+  artistId,
+  snapshot,
+}: {
+  ownerId: string;
+  artistId: string;
+  snapshot: DeviceCandidateSnapshot;
+}) {
+  const deviceId = singleDeviceId(snapshot);
+  const client = createDjLibraryServiceClient();
+  const [{ data: device, error: deviceError }, { data: tracks, error: trackError }] = await Promise.all([
+    client
+      .from("dj_library_devices")
+      .select("id")
+      .eq("id", deviceId)
+      .eq("owner_id", ownerId)
+      .eq("artist_id", artistId)
+      .is("revoked_at", null)
+      .maybeSingle(),
+    client
+      .from("dj_library_source_tracks")
+      .select("id,device_id,source_id,source_track_id,recording_fingerprint,availability")
+      .eq("owner_id", ownerId)
+      .eq("artist_id", artistId)
+      .in("id", snapshot.candidates.map((candidate) => candidate.libraryTrackId)),
+  ]);
+  if (deviceError || trackError || !device) {
+    throw new Error("The paired computer for this local set is no longer available.");
+  }
+  const byId = new Map(((tracks ?? []) as Array<Record<string, unknown>>).map((row) => [String(row.id), row]));
+  for (const candidate of snapshot.candidates) {
+    const row = byId.get(candidate.libraryTrackId);
+    if (
+      !row
+      || row.device_id !== candidate.deviceId
+      || row.source_id !== candidate.source.librarySourceId
+      || row.source_track_id !== candidate.source.trackId
+      || row.recording_fingerprint !== candidate.source.recordingFingerprint
+      || row.availability !== "available"
+    ) {
+      throw new Error("A local recording changed or became unavailable after this Set Plan was frozen.");
+    }
+  }
+  return deviceId;
 }
 
 export async function resolveDeviceCandidateSnapshot({
@@ -286,9 +341,6 @@ export async function resolveDeviceCandidateSnapshot({
     if (!activeDevices.has(deviceId) || !source) throw new Error("A selected Library Bridge device is no longer active.");
     const sourceKind = String(source.source_kind ?? "") as AutoMixSourceKind;
     if (!DEVICE_SOURCE_KINDS.has(sourceKind)) throw new Error("Unsupported Library Bridge source kind.");
-    if (String(source.revision ?? "") !== String(row.revision ?? "")) {
-      throw new Error("A selected Library Bridge track is from a stale source revision.");
-    }
     const readiness = planningReadiness(row, sourceKind);
     if (!readiness.ready) {
       throw new Error(`Library Bridge track is not planning-ready: ${readiness.reasons.join(", ")}.`);
@@ -317,5 +369,7 @@ export async function resolveDeviceCandidateSnapshot({
       planningEvidence: record(row.planning_evidence),
     });
   }
-  return { version: AUTOMIX_CANDIDATE_SNAPSHOT_VERSION, executionTarget: "device", candidates };
+  const snapshot = { version: AUTOMIX_CANDIDATE_SNAPSHOT_VERSION, executionTarget: "device", candidates } as const;
+  singleDeviceId(snapshot);
+  return snapshot;
 }
