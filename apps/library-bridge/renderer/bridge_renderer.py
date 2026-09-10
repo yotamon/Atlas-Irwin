@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import math
+import re
 import shutil
 import subprocess
 import sys
@@ -18,10 +19,15 @@ from app.automix_model import MusicalKey, TrackDescriptor
 
 PROTOCOL_VERSION = "ensemblis.library-bridge.renderer.v1"
 MAX_REQUEST_BYTES = 16 * 1024 * 1024
+FINGERPRINT_RE = re.compile(r"^sha256:[0-9a-f]{64}$", re.IGNORECASE)
 
 
 def _record(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _records(value: Any) -> list[dict[str, Any]]:
+    return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
 
 
 def _finite(value: Any, default: float = 0.0) -> float:
@@ -40,10 +46,33 @@ def _sha256(path: Path) -> str:
     return f"sha256:{digest.hexdigest()}"
 
 
-def _track(raw: dict[str, Any]) -> TrackDescriptor:
+def _expected_fingerprints(mixplan: dict[str, Any]) -> dict[str, str]:
+    rows = _records(_record(mixplan.get("provenance")).get("source_fingerprints"))
+    expected: dict[str, str] = {}
+    for row in rows:
+        track_id = str(row.get("track_id") or "")
+        fingerprint = str(row.get("recording_fingerprint") or "")
+        if not track_id or not FINGERPRINT_RE.fullmatch(fingerprint) or track_id in expected:
+            raise ValueError("local renderer MixPlan contains invalid source provenance")
+        expected[track_id] = fingerprint
+    if not expected:
+        raise ValueError("local renderer MixPlan is missing source provenance")
+    return expected
+
+
+def _track(raw: dict[str, Any], expected_fingerprint: str) -> TrackDescriptor:
+    track_id = str(raw.get("trackId") or "")
+    if not track_id:
+        raise ValueError("local renderer track identity is missing")
     path = Path(str(raw.get("path") or ""))
     if not path.is_file():
         raise ValueError("local renderer source is unavailable")
+    fingerprint = str(raw.get("recordingFingerprint") or "")
+    if fingerprint != expected_fingerprint or not FINGERPRINT_RE.fullmatch(fingerprint):
+        raise ValueError("local renderer source does not match frozen MixPlan provenance")
+    if _sha256(path) != fingerprint:
+        raise ValueError("local renderer source changed after verification")
+
     key_raw = _record(raw.get("key"))
     mode = str(key_raw.get("mode") or "major")
     if mode not in {"major", "minor"}:
@@ -56,7 +85,7 @@ def _track(raw: dict[str, Any]) -> TrackDescriptor:
         label=str(key_raw.get("label") or "C major"),
     )
     return TrackDescriptor(
-        id=str(raw.get("trackId") or ""),
+        id=track_id,
         title=str(raw.get("title") or "Untitled"),
         url="device-local://verified",
         path=path,
@@ -120,9 +149,19 @@ def execute(request_path: Path, result_path: Path) -> None:
     raw_tracks = request.get("tracks")
     if not isinstance(raw_tracks, list) or len(raw_tracks) < 2 or len(raw_tracks) > 20:
         raise ValueError("local renderer requires 2-20 source tracks")
-    tracks = [_track(item) for item in raw_tracks if isinstance(item, dict)]
-    if len(tracks) != len(raw_tracks):
+    if any(not isinstance(item, dict) for item in raw_tracks):
         raise ValueError("local renderer track descriptor is invalid")
+
+    expected = _expected_fingerprints(mixplan)
+    raw_by_id: dict[str, dict[str, Any]] = {}
+    for item in raw_tracks:
+        track_id = str(item.get("trackId") or "")
+        if not track_id or track_id in raw_by_id:
+            raise ValueError("local renderer source track identities must be unique")
+        raw_by_id[track_id] = item
+    if set(raw_by_id) != set(expected):
+        raise ValueError("local renderer sources do not match the frozen MixPlan candidate set")
+    tracks = [_track(raw_by_id[track_id], expected[track_id]) for track_id in expected]
 
     workdir = result_path.parent / "work"
     workdir.mkdir(parents=True, exist_ok=True)
