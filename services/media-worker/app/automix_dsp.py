@@ -1,16 +1,88 @@
 from __future__ import annotations
 
+import json
 import math
+import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
+import imageio_ffmpeg
 import numpy as np
 import pyloudnorm as pyln
 import soundfile as sf
 
 from .automix_intelligence import mastering_profile
 from .automix_model import MAX_BEATMATCH_STRETCH, SAMPLE_RATE, TrackDescriptor, _list_records
-from .mastering_processor import _measure_loudnorm, _render_loudnorm
+
+FFMPEG_BINARY = imageio_ffmpeg.get_ffmpeg_exe()
+
+
+def _number(value: Any) -> float | None:
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return None
+    return result if math.isfinite(result) else None
+
+
+def _run_ffmpeg(args: list[str], timeout: int = 300) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [FFMPEG_BINARY, "-hide_banner", "-nostdin", *args],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+
+
+def _parse_loudnorm_json(stderr: str) -> dict[str, Any]:
+    matches = re.findall(r"\{\s*\"input_i\".*?\}", stderr, flags=re.DOTALL)
+    if not matches:
+        raise RuntimeError("FFmpeg loudnorm did not return measurement JSON.")
+    return json.loads(matches[-1])
+
+
+def _measure_loudnorm(path: Path, target: dict[str, Any]) -> dict[str, Any]:
+    value = (
+        f"loudnorm=I={float(target['integrated_lufs']):.2f}:"
+        f"TP={float(target['true_peak_dbtp']):.2f}:"
+        f"LRA={float(target['max_lra_lu']):.2f}:print_format=json"
+    )
+    process = _run_ffmpeg([
+        "-loglevel", "info", "-i", str(path), "-vn", "-af", value, "-f", "null", "-"
+    ])
+    if process.returncode != 0:
+        raise RuntimeError(f"Loudness measurement failed: {process.stderr[-1200:]}")
+    return _parse_loudnorm_json(process.stderr)
+
+
+def _render_loudnorm(path: Path, output: Path, target: dict[str, Any], measured: dict[str, Any]) -> None:
+    def required(key: str) -> float:
+        value = _number(measured.get(key))
+        if value is None:
+            raise RuntimeError(f"FFmpeg loudnorm measurement missing {key}.")
+        return value
+
+    loudnorm = (
+        f"loudnorm=I={float(target['integrated_lufs']):.2f}:"
+        f"TP={float(target['true_peak_dbtp']):.2f}:"
+        f"LRA={float(target['max_lra_lu']):.2f}:"
+        f"measured_I={required('input_i'):.3f}:"
+        f"measured_TP={required('input_tp'):.3f}:"
+        f"measured_LRA={required('input_lra'):.3f}:"
+        f"measured_thresh={required('input_thresh'):.3f}:"
+        f"offset={required('target_offset'):.3f}:"
+        "linear=true:print_format=summary"
+    )
+    process = _run_ffmpeg([
+        "-loglevel", "error", "-y", "-i", str(path), "-vn",
+        "-af", loudnorm,
+        "-ar", "48000", "-ac", "2", "-c:a", "pcm_s24le", str(output),
+    ])
+    if process.returncode != 0:
+        raise RuntimeError(f"Final loudness render failed: {process.stderr[-1200:]}")
 
 
 def _load_segment(path: Path, start_ms: int, end_ms: int) -> np.ndarray:
