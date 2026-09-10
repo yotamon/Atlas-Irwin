@@ -9,6 +9,7 @@ type Table<Row> = {
 
 export type DjLibrarySourceKind = "local_library" | "rekordbox" | "serato" | "traktor";
 export type DjLibraryDeviceJobStatus = "queued" | "claimed" | "completed" | "failed" | "cancelled";
+export type DjLibraryDeviceJobType = "resolve_media" | "render_mixplan";
 
 export type DjLibraryDeviceRow = {
   id: string;
@@ -93,8 +94,9 @@ export type DjLibraryDeviceJobRow = {
   device_id: string;
   owner_id: string;
   artist_id: string;
+  automix_job_id: string | null;
   idempotency_key: string;
-  job_type: "resolve_media";
+  job_type: DjLibraryDeviceJobType;
   source_revision: string | null;
   payload: Json;
   status: DjLibraryDeviceJobStatus;
@@ -149,7 +151,7 @@ export type DjLibraryBridgeDatabase = Omit<Database, "public"> & {
         Returns: {
           id: string;
           idempotency_key: string;
-          job_type: string;
+          job_type: DjLibraryDeviceJobType;
           source_revision: string | null;
           payload: Json;
         }[];
