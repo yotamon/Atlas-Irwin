@@ -2,6 +2,10 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  hybridDeviceSnapshot,
+  normalizeHybridCandidateSnapshot,
+} from "@/lib/automix/hybrid-candidates";
+import {
   asDjIntelligenceClient,
   plannerDjProfile,
 } from "@/lib/automix/personalization";
@@ -211,7 +215,7 @@ async function prepareDevicePlanningPayload(job: AutoMixJob): Promise<PreparedPa
     throw new Error("Device AutoMix rendering must execute through the paired Library Bridge.");
   }
   if (job.track_ids.length > 0) {
-    throw new Error("Device AutoMix jobs cannot contain catalog track IDs before hybrid mode is enabled.");
+    throw new Error("Device AutoMix jobs cannot contain catalog track IDs unless a hybrid snapshot is present.");
   }
 
   const service = createServiceClient();
@@ -249,17 +253,66 @@ async function prepareDevicePlanningPayload(job: AutoMixJob): Promise<PreparedPa
     },
     outputPath: job.output_path || autoMixOutputPath(job),
     publicUrl: "",
-    // The frozen content identities live in candidate_snapshot and in the MixPlan provenance. Keep
-    // this legacy catalog-only column empty so the existing callback does not query catalog masters.
     fingerprints: [],
+  };
+}
+
+async function prepareHybridPlanningPayload(job: AutoMixJob): Promise<PreparedPayload> {
+  const request = record(job.request_payload);
+  const snapshot = normalizeHybridCandidateSnapshot(request.candidate_snapshot);
+  if (!snapshot) throw new Error("Hybrid AutoMix candidate snapshot is invalid or incomplete.");
+  if (executionMode(job) !== "plan_only") {
+    throw new Error("Hybrid MixPlans must render through the paired Library Bridge.");
+  }
+  if (
+    job.track_ids.length !== snapshot.catalogTrackIds.length
+    || job.track_ids.some((id) => !snapshot.catalogTrackIds.includes(id))
+  ) throw new Error("Hybrid catalog identities no longer match the durable candidate snapshot.");
+
+  const catalog = await prepareCatalogPayload(job);
+  const catalogTracks = Array.isArray(catalog.payload.tracks)
+    ? catalog.payload.tracks.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+    : [];
+  const deviceTracks = workerTracksFromSnapshot(hybridDeviceSnapshot(snapshot));
+  const byId = new Map<string, Record<string, unknown>>();
+  for (const track of catalogTracks) {
+    const id = typeof track.id === "string" ? track.id : "";
+    if (id) byId.set(id, { ...track, execution_target: "cloud" });
+  }
+  for (const track of deviceTracks) byId.set(String(track.id), track);
+  const tracks = snapshot.candidateOrder.map((id) => byId.get(id));
+  if (tracks.some((track) => !track)) throw new Error("Hybrid candidate evidence is incomplete.");
+
+  const base = { ...catalog.payload };
+  delete base.upload_url;
+  delete base.upload_bucket;
+  delete base.upload_path;
+  delete base.public_url;
+  const baseIntent = record(base.set_intent);
+  const journey = job.purpose === "journey";
+  return {
+    payload: {
+      ...base,
+      execution_target: "hybrid_device",
+      tracks: tracks as Record<string, unknown>[],
+      set_intent: {
+        ...baseIntent,
+        version: "ensemblis.set-intent.v1",
+        allow_omissions: journey ? false : baseIntent.allow_omissions !== false,
+        must_play_track_ids: journey ? [...snapshot.candidateOrder] : baseIntent.must_play_track_ids,
+        target_track_count: journey ? snapshot.candidateOrder.length : baseIntent.target_track_count,
+      },
+    },
+    outputPath: job.output_path || autoMixOutputPath(job),
+    publicUrl: "",
+    fingerprints: catalog.fingerprints,
   };
 }
 
 async function prepareJobPayload(job: AutoMixJob): Promise<PreparedPayload> {
   const request = record(job.request_payload);
-  if (request.candidate_snapshot !== undefined) {
-    return prepareDevicePlanningPayload(job);
-  }
+  if (normalizeHybridCandidateSnapshot(request.candidate_snapshot)) return prepareHybridPlanningPayload(job);
+  if (request.candidate_snapshot !== undefined) return prepareDevicePlanningPayload(job);
   return prepareCatalogPayload(job);
 }
 
