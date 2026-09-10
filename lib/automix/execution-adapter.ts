@@ -80,6 +80,69 @@ export class CloudCatalogExecutionAdapter<TContext = unknown> implements AutoMix
   }
 }
 
+export type DeviceLibraryExecutionContext = {
+  deviceId: string;
+  /**
+   * The gateway verifies the exact content identity on the paired device. It never returns a local
+   * path. A false result means the frozen MixPlan must not execute on that device.
+   */
+  verifySource(source: AutoMixSourceTrackRef): Promise<boolean>;
+};
+
+const DEVICE_SOURCE_KINDS = new Set<AutoMixSourceKind>([
+  "local_library",
+  "rekordbox",
+  "traktor",
+]);
+
+function opaqueDeviceUri(deviceId: string, source: AutoMixSourceTrackRef) {
+  const librarySourceId = source.librarySourceId ?? "";
+  return `device://${encodeURIComponent(deviceId)}/${encodeURIComponent(librarySourceId)}/${encodeURIComponent(source.trackId)}`;
+}
+
+export class DeviceLibraryExecutionAdapter implements AutoMixExecutionAdapter<DeviceLibraryExecutionContext> {
+  readonly version = AUTOMIX_EXECUTION_CONTRACT_VERSION;
+  readonly descriptor: AutoMixExecutionDescriptor = {
+    id: "native-library-bridge",
+    displayName: "Ensemblis Native Library Bridge",
+    target: "device",
+    supportedSourceKinds: ["local_library", "rekordbox", "traktor"],
+    supportsPreview: true,
+    supportsFullRender: true,
+  };
+
+  canExecute(manifest: AutoMixExecutionManifest) {
+    return manifest.sourceRefs.length > 0 && manifest.sourceRefs.every((source) => (
+      source.executionTarget === "device"
+      && DEVICE_SOURCE_KINDS.has(source.kind)
+      && source.availability !== "missing"
+      && source.availability !== "offline"
+      && Boolean(source.librarySourceId)
+      && Boolean(source.recordingFingerprint?.startsWith("sha256:"))
+      && Boolean(source.revision)
+    ));
+  }
+
+  async resolveSources(request: AutoMixExecutionRequest<DeviceLibraryExecutionContext>) {
+    if (!this.canExecute(request.manifest)) {
+      throw new Error("DeviceLibraryExecutionAdapter cannot execute this manifest.");
+    }
+    const resolved: ResolvedExecutionSource[] = [];
+    for (const source of request.manifest.sourceRefs) {
+      if (!(await request.context.verifySource(source))) {
+        throw new Error(`Device source ${source.trackId} no longer matches the frozen recording identity.`);
+      }
+      resolved.push({
+        trackId: source.trackId,
+        source,
+        uri: opaqueDeviceUri(request.context.deviceId, source),
+        fingerprint: source.recordingFingerprint,
+      });
+    }
+    return resolved;
+  }
+}
+
 export class AutoMixExecutionAdapterRegistry<TContext = unknown> {
   private readonly adapters = new Map<string, AutoMixExecutionAdapter<TContext>>();
 

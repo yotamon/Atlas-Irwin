@@ -5,7 +5,7 @@ import { Sandbox } from "@vercel/sandbox";
 
 export const MEDIA_WORKER_CALLBACK_HASH_KEY = "__atlas_callback_token_sha256";
 const MEDIA_WORKER_RUNTIME_VERSION = 12;
-const MEDIA_WORKER_BOOTSTRAP_VERSION = 9;
+const MEDIA_WORKER_BOOTSTRAP_VERSION = 10;
 const MEDIA_WORKER_PYTHON_VERSION = "3.13.14";
 const MEDIA_WORKER_SANDBOX_IMAGE = "vercel/sandbox/universal@sha256:0e3e3617e824397f170fc7c43ccaa565dd7ac36518e83ead3d41e077cd9f6ec7";
 const HOBBY_MAX_SANDBOX_MS = 45 * 60 * 1000;
@@ -232,6 +232,7 @@ files = {
     "app/automix_dsp.py": f"{base}/app/automix_dsp.py",
     "app/automix_transition_dsp_v2.py": f"{base}/app/automix_transition_dsp_v2.py",
     "app/automix_mixplan_renderer.py": f"{base}/app/automix_mixplan_renderer.py",
+    "app/automix_device_sources.py": f"{base}/app/automix_device_sources.py",
     "app/automix.py": f"{base}/app/automix.py",
     "app/automix_preview.py": f"{base}/app/automix_preview.py",
     "app/runner.py": f"{base}/app/runner.py",

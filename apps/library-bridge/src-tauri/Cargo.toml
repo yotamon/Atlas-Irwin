@@ -1,0 +1,36 @@
+[package]
+name = "ensemblis-library-bridge"
+version = "0.1.0"
+description = "Local-first DJ library and execution bridge for Ensemblis"
+authors = ["Yotam Faraggi"]
+edition = "2024"
+rust-version = "1.88"
+
+[lib]
+name = "ensemblis_library_bridge"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+ico = "=0.5.0"
+image = { version = "=0.25.10", default-features = false, features = ["png"] }
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+anyhow = "1"
+hex = "0.4"
+keyring = "4.2"
+notify = "8.2.0"
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "rustls"] }
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+thiserror = "2"
+url = "2"
+uuid = { version = "1", features = ["v4", "serde"] }
+walkdir = "2"
+
+[dev-dependencies]
+tempfile = "3"

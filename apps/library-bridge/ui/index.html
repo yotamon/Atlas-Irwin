@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Ensemblis Library Bridge</title>
+  <link rel="stylesheet" href="./app.css" />
+</head>
+<body>
+<main>
+  <header>
+    <span class="eyebrow">Ensemblis / Native bridge</span>
+    <h1>Your DJ library stays on this computer.</h1>
+    <p>The bridge sends path-free musical/library evidence to Ensemblis and resolves media locally only when a frozen job needs it.</p>
+  </header>
+
+  <section>
+    <div>
+      <span class="eyebrow">Pair this device</span>
+      <p>Create a pairing code in Ensemblis Studio, then claim it here. The resulting device credential is stored in your operating system credential vault.</p>
+    </div>
+    <div class="row">
+      <input id="api" value="https://atlasirwin.com" aria-label="Ensemblis API base URL" />
+      <input id="code" placeholder="Pairing code" aria-label="Pairing code" autocomplete="off" />
+      <button id="pair" class="primary">Pair</button>
+      <button id="unpair">Unpair</button>
+    </div>
+  </section>
+
+  <section>
+    <div class="stats">
+      <div class="stat"><small>Connection</small><strong id="paired">Checking…</strong></div>
+      <div class="stat"><small>Local sources</small><strong id="sources">0</strong></div>
+      <div class="stat"><small>Pending sync</small><strong id="pending">0</strong></div>
+      <div class="stat"><small>Local intelligence</small><strong id="intelligence">Checking…</strong></div>
+    </div>
+    <div class="row">
+      <button id="add" class="primary">Choose music folder</button>
+      <button id="sync">Sync changes</button>
+      <button id="jobs">Check device jobs</button>
+      <button id="export">Export latest mix</button>
+      <button id="refresh">Refresh status</button>
+    </div>
+  </section>
+
+  <section>
+    <span class="eyebrow">Activity</span>
+    <div id="log" role="status">Ready.</div>
+  </section>
+</main>
+<script src="./app.js" defer></script>
+</body>
+</html>

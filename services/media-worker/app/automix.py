@@ -12,6 +12,7 @@ import numpy as np
 from pydantic import BaseModel, Field
 
 from . import main as worker_main
+from .automix_device_sources import device_source_fingerprints, prepare_device_tracks
 from .automix_evaluation import evaluate_mixplan
 from .automix_manifest import (
     AUTOMATION_VERSION,
@@ -289,14 +290,28 @@ async def automix_job(
     output_format = str(payload.get("output_format") or "mp3").lower()
     if output_format not in {"wav", "mp3"}:
         raise ValueError("AutoMix output_format must be wav or mp3")
+
+    execution_targets = {str(raw.get("execution_target") or "cloud") for raw in raw_tracks}
+    if not execution_targets or not execution_targets.issubset({"cloud", "device"}):
+        raise ValueError("AutoMix track execution target is invalid")
+    if len(execution_targets) > 1:
+        raise ValueError("Hybrid cloud/device sets are not enabled until the Phase 9 execution contract")
+    device_planning = execution_targets == {"device"}
+    if device_planning and execution_mode != "plan_only":
+        raise ValueError("Device-backed MixPlans must render through the paired Library Bridge")
+
     upload_url = str(payload.get("upload_url") or "")
     if execution_mode != "plan_only":
         if not upload_url:
             raise ValueError("AutoMix upload_url is required for rendering")
         worker_main.validate_remote_url(upload_url)
 
-    tracks = await prepare_tracks(raw_tracks, workdir, purpose, target_duration_ms)  # type: ignore[arg-type]
-    source_fingerprints = _source_fingerprints(raw_tracks)
+    if device_planning:
+        tracks = prepare_device_tracks(raw_tracks, purpose, target_duration_ms)  # type: ignore[arg-type]
+        source_fingerprints = device_source_fingerprints(raw_tracks)
+    else:
+        tracks = await prepare_tracks(raw_tracks, workdir, purpose, target_duration_ms)  # type: ignore[arg-type]
+        source_fingerprints = _source_fingerprints(raw_tracks)
 
     if execution_mode == "approved_render":
         mixplan = _record(payload.get("approved_mixplan"))

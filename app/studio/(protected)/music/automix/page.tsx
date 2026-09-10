@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { AutoMixRenderRecovery } from "@/components/studio/automix-render-recovery";
 import { DjIntelligencePanel } from "@/components/studio/dj-intelligence-panel";
+import { LibraryBridgePanel } from "@/components/studio/library-bridge-panel";
+import { LocalSetBuilderWorkspace } from "@/components/studio/local-set-builder-workspace";
 import { RekordboxImportPanel } from "@/components/studio/rekordbox-import-panel";
 import { SetBuilderWorkspace } from "@/components/studio/set-builder-workspace";
 import { PageHeader } from "@/components/studio/ui";
@@ -25,11 +27,13 @@ export default async function AutoMixPage() {
     <div className="studio-v2-page automix-workspace-page">
       <PageHeader
         title="DJ & Mixes"
-        description={`Plan, audition, revise and render professional sets from ${artist.artistName}'s mastered catalog.`}
+        description={`Plan, audition, revise and render professional sets from ${artist.artistName}'s catalog or a paired local DJ library.`}
         action={<Link className="button" href={href("/studio/music")}>Back to music</Link>}
       />
       <DjIntelligencePanel artistId={artist.artistId} />
+      <LibraryBridgePanel artistId={artist.artistId} />
       <RekordboxImportPanel artistId={artist.artistId} />
+      <LocalSetBuilderWorkspace artistId={artist.artistId} artistName={artist.artistName} />
       <SetBuilderWorkspace
         artistId={artist.artistId}
         artistName={artist.artistName}
