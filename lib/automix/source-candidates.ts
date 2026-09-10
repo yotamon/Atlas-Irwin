@@ -14,7 +14,7 @@ export const AUTOMIX_CANDIDATE_SNAPSHOT_VERSION = "ensemblis.automix-candidates.
 export const PLANNING_EVIDENCE_VERSION = "ensemblis.dj-library-planning-evidence.v1" as const;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const FINGERPRINT_RE = /^sha256:[0-9a-f]{64}$/i;
-const DEVICE_SOURCE_KINDS = new Set<AutoMixSourceKind>(["local_library", "rekordbox", "serato", "traktor"]);
+const DEVICE_SOURCE_KINDS = new Set<AutoMixSourceKind>(["local_library", "rekordbox", "traktor"]);
 
 export type PlanningReadiness = {
   ready: boolean;
