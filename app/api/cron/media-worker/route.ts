@@ -17,7 +17,7 @@ export async function GET(request: Request) {
 
   try {
     const mediaWorker = await kickMediaWorkerQueue();
-    const automix = mediaWorker.dispatched || mediaWorker.busy
+    const automix = mediaWorker.dispatched || mediaWorker.reason === "busy"
       ? { dispatched: false, busy: true, deferred: true }
       : await kickAutoMixQueue();
     return Response.json({ ok: true, authSource: auth.source, queue: { mediaWorker, automix } });
