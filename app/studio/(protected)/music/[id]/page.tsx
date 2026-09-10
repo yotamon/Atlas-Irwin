@@ -266,7 +266,7 @@ export default async function TrackWorkspacePage({
           ) : analysis.isActive ? (
             <>
               <strong>{analysis.isRefreshing ? "Fresh pass in progress" : "Analysis is already moving"}</strong>
-              <p>{analysis.isRefreshing ? "Keep using the verified intelligence already on this track while Ensemblis refreshes it in the background." : "Ensemblis is processing the master automatically. You do not need to start or babysit anything."}</p>
+              <p>{analysis.isRefreshing ? "Keep using the verified intelligence already on this track while Ensemblis refreshes it in the background." : "Nothing to fill in manually. Ensemblis is processing the master automatically. You do not need to start or babysit anything."}</p>
               <Link href="#intelligence">View Track Intelligence →</Link>
             </>
           ) : vaultTrack.audio_url ? (
