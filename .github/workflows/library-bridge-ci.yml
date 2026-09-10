@@ -5,25 +5,60 @@ on:
     paths:
       - "apps/library-bridge/**"
       - "app/api/dj-library/device/**"
+      - "app/api/studio/automix/device-plans/**"
       - "app/api/studio/dj-library/**"
+      - "components/studio/library-bridge-panel*"
+      - "components/studio/local-set-builder-workspace*"
+      - "lib/automix/source-candidates.ts"
+      - "lib/automix/source-contract.ts"
       - "lib/dj-library/**"
       - "types/dj-library-bridge-database.ts"
       - "supabase/migrations/*dj_library*"
       - "tests/dj-library-phase-8-bridge.test.mjs"
+      - "docs/dj-library-set-intelligence-development-plan.md"
       - ".github/workflows/library-bridge-ci.yml"
   push:
     branches: [main]
     paths:
       - "apps/library-bridge/**"
       - "app/api/dj-library/device/**"
+      - "app/api/studio/automix/device-plans/**"
+      - "app/api/studio/dj-library/**"
+      - "components/studio/library-bridge-panel*"
+      - "components/studio/local-set-builder-workspace*"
+      - "lib/automix/source-candidates.ts"
+      - "lib/automix/source-contract.ts"
       - "lib/dj-library/**"
       - "supabase/migrations/*dj_library*"
+      - "tests/dj-library-phase-8-bridge.test.mjs"
       - ".github/workflows/library-bridge-ci.yml"
 
 permissions:
   contents: read
 
 jobs:
+  bridge-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Library Bridge product/privacy contracts
+        run: node --test tests/dj-library-phase-8-bridge.test.mjs
+      - name: Validate local sidecar Python
+        run: >-
+          python -m py_compile
+          apps/library-bridge/renderer/bridge_analyzer.py
+          apps/library-bridge/renderer/bridge_renderer.py
+          apps/library-bridge/renderer/bridge_sidecar.py
+          apps/library-bridge/renderer/build_sidecar.py
+          services/media-worker/app/automix_device_sources.py
+
   native-contract:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
