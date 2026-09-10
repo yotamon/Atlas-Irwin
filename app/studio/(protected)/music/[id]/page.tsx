@@ -9,8 +9,8 @@ import { LyricsIntelligencePanel } from "@/components/studio/lyrics-intelligence
 import { MasteringInspectorPanel } from "@/components/studio/mastering-inspector-panel";
 import { MusicIntelligencePreview } from "@/components/studio/music-intelligence-preview";
 import { ObjectHeader } from "@/components/studio/object-header";
+import { ProcessingState } from "@/components/studio/processing-state";
 import { StemIntelligencePanel } from "@/components/studio/stem-intelligence-panel";
-import { TrackAnalysisProgress } from "@/components/studio/track-analysis-progress";
 import { TrackPreview } from "@/components/studio/track-preview";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
@@ -40,6 +40,38 @@ function masteringStatus(value: unknown) {
   if (status === "ready_review_suggested") return "Review suggested";
   if (status === "ready") return "Ready";
   return null;
+}
+
+function describeAnalysisProcessing(status: string, isRefreshing: boolean) {
+  const isListening = status === "dispatched" || status === "running";
+
+  if (isListening) {
+    return {
+      stage: "analyzing" as const,
+      title: isRefreshing ? "Refreshing what Ensemblis hears." : "Ensemblis is understanding your track.",
+      copy: isRefreshing
+        ? "Current verified intelligence stays available while Ensemblis listens again for structure, tempo, strongest Moments and mastering signals."
+        : "Ensemblis is listening for structure, tempo, strongest Moments and mastering signals. Deep audio passes can take several minutes.",
+    };
+  }
+
+  if (status === "queued") {
+    return {
+      stage: "preparing" as const,
+      title: isRefreshing ? "Your fresh intelligence pass is queued." : "Track Intelligence is queued.",
+      copy: isRefreshing
+        ? "Current verified intelligence stays live while the Media Worker waits for capacity to start the fresh pass."
+        : "The master is safe and waiting for the Media Worker. Analysis starts automatically when the worker is available.",
+    };
+  }
+
+  return {
+    stage: "preparing" as const,
+    title: isRefreshing ? "Preparing a fresh intelligence pass." : "Preparing Track Intelligence.",
+    copy: isRefreshing
+      ? "Nothing is being replaced yet. Current verified intelligence remains live while Ensemblis prepares the new pass."
+      : "The master is attached. Ensemblis is preparing the analysis job automatically.",
+  };
 }
 
 export default async function TrackWorkspacePage({
@@ -145,6 +177,7 @@ export default async function TrackWorkspacePage({
 
   const analysis = describeTrackAnalysis(vaultTrack.analysis, vaultTrack.audio_profile);
   const analysisNeedsRecovery = analysis.needsRecovery;
+  const processing = describeAnalysisProcessing(analysis.status, analysis.isRefreshing);
   const musicMap = asRecord(vaultTrack.audio_profile);
   const sections = Array.isArray(musicMap.sections) ? musicMap.sections.length : 0;
   const hooks = Array.isArray(musicMap.hook_candidates) ? musicMap.hook_candidates.length : 0;
@@ -194,14 +227,12 @@ export default async function TrackWorkspacePage({
         tabs={tabs}
       />
 
-      {vaultTrack.audio_url ? (
-        <TrackAnalysisProgress
-          status={analysis.status}
-          isActive={analysis.isActive}
-          isRefreshing={analysis.isRefreshing}
-          isPartial={analysis.isPartial}
-          needsRecovery={analysisNeedsRecovery}
-          failureCopy={analysis.failureCopy}
+      {vaultTrack.audio_url && analysis.isActive ? (
+        <ProcessingState
+          stage={processing.stage}
+          title={processing.title}
+          copy={processing.copy}
+          aside={analysis.isRefreshing ? <span className="growth-active-label">Current intelligence stays live</span> : undefined}
         />
       ) : null}
 
