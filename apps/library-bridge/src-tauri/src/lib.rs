@@ -213,7 +213,9 @@ async fn export_latest_render(
         .file()
         .set_title("Choose where to export the latest Ensemblis mix")
         .blocking_pick_folder();
-    let Some(destination) = destination else { return Ok(None) };
+    let Some(destination) = destination else {
+        return Ok(None);
+    };
     let destination = destination.into_path().map_err(command_error)?;
     tauri::async_runtime::spawn_blocking(move || export::export_render(&asset, &destination))
         .await
