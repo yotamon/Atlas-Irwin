@@ -65,14 +65,9 @@ fn scan_with_available_intelligence(
     work_root: &std::path::Path,
 ) -> anyhow::Result<ScanSummary> {
     match sidecar_binary.filter(|binary| binary.is_file()) {
-        Some(binary) => scanner::scan_source_with_sidecar(
-            db,
-            source_id,
-            source_kind,
-            path,
-            binary,
-            work_root,
-        ),
+        Some(binary) => {
+            scanner::scan_source_with_sidecar(db, source_id, source_kind, path, binary, work_root)
+        }
         None => scanner::scan_source(db, source_id, source_kind, path),
     }
 }
@@ -126,12 +121,9 @@ async fn rescan_source(
     let sidecar_binary = state.sidecar_binary.clone();
     let work_root = state.sidecar_work_root.clone();
     tauri::async_runtime::spawn_blocking(move || match sidecar_binary.as_deref() {
-        Some(binary) if binary.is_file() => scanner::rescan_registered_source_with_sidecar(
-            &db,
-            &source_id,
-            binary,
-            &work_root,
-        ),
+        Some(binary) if binary.is_file() => {
+            scanner::rescan_registered_source_with_sidecar(&db, &source_id, binary, &work_root)
+        }
         _ => scanner::rescan_registered_source(&db, &source_id),
     })
     .await
@@ -194,10 +186,14 @@ async fn sync_pending(state: State<'_, BridgeState>) -> Result<usize, String> {
 #[tauri::command]
 async fn poll_device_jobs(state: State<'_, BridgeState>) -> Result<usize, String> {
     let db = Arc::clone(&state.db);
-    tauri::async_runtime::spawn_blocking(move || network::poll_and_execute_jobs(&db))
-        .await
-        .map_err(command_error)?
-        .map_err(command_error)
+    let sidecar_binary = state.sidecar_binary.clone();
+    let work_root = state.sidecar_work_root.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        network::poll_and_execute_jobs(&db, sidecar_binary.as_deref(), &work_root)
+    })
+    .await
+    .map_err(command_error)?
+    .map_err(command_error)
 }
 
 #[tauri::command]
