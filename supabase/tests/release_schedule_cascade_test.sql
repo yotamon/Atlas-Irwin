@@ -15,13 +15,15 @@ values (
 update public.profiles set is_admin = true
 where id = '11000000-0000-0000-0000-000000000001';
 
+-- Keep the schedule fixtures relative to current_date so the "moves into the future"
+-- assertion remains valid regardless of when the test suite runs.
 insert into public.releases (id, owner_id, title, slug, release_date)
 values (
   '21000000-0000-0000-0000-000000000001',
   '11000000-0000-0000-0000-000000000001',
   'Schedule Cascade Release',
   'schedule-cascade-release',
-  date '2026-09-01'
+  current_date - 7
 );
 
 insert into public.campaigns (
@@ -35,9 +37,9 @@ insert into public.campaigns (
   'active',
   'Streams',
   'link_click_rate',
-  date '2026-09-01',
-  date '2026-08-31',
-  date '2026-09-03'
+  current_date - 7,
+  current_date - 8,
+  current_date - 5
 );
 
 insert into public.campaign_phases (
@@ -52,8 +54,8 @@ insert into public.campaign_phases (
   'Streams',
   -1,
   2,
-  timestamptz '2026-08-30 22:00:00+00',
-  timestamptz '2026-09-03 22:00:00+00',
+  ((current_date - 8)::date + time '00:00') at time zone 'Europe/Berlin',
+  ((current_date - 4)::date + time '00:00') at time zone 'Europe/Berlin',
   0
 );
 
@@ -76,7 +78,7 @@ insert into public.content_items (
   false,
   time '18:00',
   'Europe/Berlin',
-  timestamptz '2026-09-03 16:00:00+00'
+  ((current_date - 5)::date + time '18:00') at time zone 'Europe/Berlin'
 );
 
 insert into public.content_variants (
@@ -90,7 +92,7 @@ insert into public.content_variants (
   'approved',
   'approved',
   true,
-  timestamptz '2026-09-03 16:00:00+00'
+  ((current_date - 5)::date + time '18:00') at time zone 'Europe/Berlin'
 );
 
 insert into public.publication_jobs (
@@ -107,34 +109,34 @@ insert into public.publication_jobs (
   'manual_ready',
   true,
   'approved',
-  timestamptz '2026-09-03 16:00:00+00'
+  ((current_date - 5)::date + time '18:00') at time zone 'Europe/Berlin'
 );
 
 update public.releases
-set release_date = date '2026-09-08'
+set release_date = current_date + 14
 where id = '21000000-0000-0000-0000-000000000001';
 
 select is(
   (select start_date from public.campaigns where id = '31000000-0000-0000-0000-000000000001'),
-  date '2026-09-07',
+  current_date + 13,
   'campaign start window follows the earliest relative phase day'
 );
 
 select is(
   (select end_date from public.campaigns where id = '31000000-0000-0000-0000-000000000001'),
-  date '2026-09-10',
+  current_date + 16,
   'campaign end window follows the latest relative phase day'
 );
 
 select is(
   (select to_char(scheduled_at at time zone 'Europe/Berlin', 'YYYY-MM-DD HH24:MI') from public.content_variants where id = '71000000-0000-0000-0000-000000000001'),
-  '2026-09-10 18:00',
+  to_char(current_date + 16, 'YYYY-MM-DD') || ' 18:00',
   'approved creative variant follows its release-relative content schedule'
 );
 
 select is(
   (select to_char(scheduled_at at time zone 'Europe/Berlin', 'YYYY-MM-DD HH24:MI') from public.publication_jobs where id = '81000000-0000-0000-0000-000000000001'),
-  '2026-09-10 18:00',
+  to_char(current_date + 16, 'YYYY-MM-DD') || ' 18:00',
   'queued publication follows the shifted content schedule'
 );
 
