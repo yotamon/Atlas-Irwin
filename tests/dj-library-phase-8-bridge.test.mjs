@@ -62,7 +62,7 @@ test("native bridge keeps filesystem authority in Rust and cloud DTOs path-free"
 
   assert.ok(database.includes("Raw filesystem paths live only in this device-local table"));
   assert.ok(database.includes("file_bindings"));
-  assert.ok(scanner.includes("let source_track_id = fingerprint.clone()"));
+  assert.ok(scanner.includes("let source_track_id = seed.fingerprint.clone()"));
   assert.ok(network.includes("SYNC_TRACKS_PER_CHUNK: usize = 200"));
   assert.ok(network.includes("cloud did not commit the complete DJ-library revision"));
   assert.ok(network.includes("Do not forward arbitrary anyhow/IO context"));
@@ -138,8 +138,11 @@ test("local Set Builder uses the canonical planner while keeping audio on one pa
   assert.ok(route.includes('execution_mode: "plan_only"'));
   assert.ok(route.includes('job_type: "render_mixplan"'));
   assert.ok(route.includes("assertDeviceSnapshotStillAvailable"));
+  assert.ok(route.includes("singleDeviceId(snapshot)"));
+  assert.ok(route.includes("recording_fingerprint !== candidate.source.recordingFingerprint"));
   assert.ok(queue.includes("workerTracksFromSnapshot"));
-  assert.ok(queue.includes("snapshotFingerprints"));
+  assert.ok(queue.includes("normalizeDeviceCandidateSnapshot"));
+  assert.ok(queue.includes("fingerprints: []"));
   assert.ok(worker.includes("device_track_descriptors"));
   assert.ok(deviceSources.includes("TrackDescriptor("));
   assert.ok(component.includes("Approve & render locally"));
