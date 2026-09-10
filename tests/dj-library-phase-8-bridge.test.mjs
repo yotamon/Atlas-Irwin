@@ -153,6 +153,7 @@ test("local Set Builder uses the canonical planner while keeping audio on one pa
 
 test("local renderer reuses canonical MixPlan DSP and double-checks frozen recording fingerprints", async () => {
   const renderer = await source("apps/library-bridge/renderer/bridge_renderer.py");
+  const canonicalRenderer = await source("services/media-worker/app/automix_mixplan_renderer.py");
   const execution = await source("apps/library-bridge/src-tauri/src/execution.rs");
 
   assert.ok(renderer.includes("from app.automix_manifest import mixplan_hash, validate_mixplan"));
@@ -161,6 +162,9 @@ test("local renderer reuses canonical MixPlan DSP and double-checks frozen recor
   assert.ok(renderer.includes("mixplan_hash(mixplan)"));
   assert.ok(renderer.includes("_expected_fingerprints(mixplan)"));
   assert.ok(renderer.includes("_sha256(path) != fingerprint"));
+  assert.ok(canonicalRenderer.includes("_measure_loudnorm"));
+  assert.ok(canonicalRenderer.includes("_render_loudnorm"));
+  assert.equal(canonicalRenderer.includes("mastering_processor"), false, "local MixPlan DSP must not pull cloud mastering/network dependencies into the sidecar");
   assert.ok(execution.includes("resolve_verified_media"));
   assert.ok(execution.includes("fingerprint_file(&binding.path)"));
   assert.ok(renderer.includes("MAX_REQUEST_BYTES = 16 * 1024 * 1024"));
