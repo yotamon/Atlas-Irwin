@@ -57,7 +57,6 @@ function relativeTime(value: string | null) {
 function sourceLabel(kind: string) {
   if (kind === "local_library") return "Local library";
   if (kind === "rekordbox") return "Rekordbox";
-  if (kind === "serato") return "Serato";
   if (kind === "traktor") return "Traktor";
   return kind;
 }
