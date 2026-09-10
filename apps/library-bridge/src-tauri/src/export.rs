@@ -1,3 +1,4 @@
+use crate::identity::fingerprint_file;
 use anyhow::Context;
 use serde::Serialize;
 use serde_json::Value;
@@ -60,6 +61,9 @@ fn render_result(directory: &Path) -> anyhow::Result<Option<(SystemTime, LocalRe
     if !output.starts_with(&trusted_directory) || !output.is_file() {
         anyhow::bail!("completed local render points outside the trusted render workspace");
     }
+    if fingerprint_file(&output)? != sha256 {
+        anyhow::bail!("completed local render changed after verification");
+    }
     Ok(Some((
         modified,
         LocalRenderAsset {
@@ -102,6 +106,9 @@ pub fn export_render(
     if !destination_directory.is_dir() {
         anyhow::bail!("export destination is unavailable");
     }
+    if fingerprint_file(&asset.source_path)? != asset.sha256 {
+        anyhow::bail!("completed local render changed before export");
+    }
     let hash_suffix = asset
         .sha256
         .strip_prefix("sha256:")
@@ -138,7 +145,7 @@ mod tests {
                 "status": "completed",
                 "outputFormat": "wav",
                 "outputPath": outside,
-                "sha256": format!("sha256:{}", "a".repeat(64))
+                "sha256": fingerprint_file(&outside).unwrap()
             }))
             .unwrap(),
         )
@@ -155,6 +162,7 @@ mod tests {
         fs::create_dir(&export).unwrap();
         let mix = render.join("mix.wav");
         fs::write(&mix, b"mix-bytes").unwrap();
+        let fingerprint = fingerprint_file(&mix).unwrap();
         fs::write(
             render.join("result.json"),
             serde_json::to_vec(&serde_json::json!({
@@ -162,7 +170,7 @@ mod tests {
                 "status": "completed",
                 "outputFormat": "wav",
                 "outputPath": mix,
-                "sha256": format!("sha256:{}", "b".repeat(64))
+                "sha256": fingerprint
             }))
             .unwrap(),
         )
@@ -174,5 +182,29 @@ mod tests {
             b"mix-bytes"
         );
         assert_eq!(fs::read(mix).unwrap(), b"mix-bytes");
+    }
+
+    #[test]
+    fn render_changed_after_completion_is_rejected() {
+        let directory = tempdir().unwrap();
+        let render = directory.path().join("render-one");
+        fs::create_dir(&render).unwrap();
+        let mix = render.join("mix.wav");
+        fs::write(&mix, b"original-mix").unwrap();
+        let fingerprint = fingerprint_file(&mix).unwrap();
+        fs::write(
+            render.join("result.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "version": RENDERER_VERSION,
+                "status": "completed",
+                "outputFormat": "wav",
+                "outputPath": mix,
+                "sha256": fingerprint
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        fs::write(&mix, b"changed-mix").unwrap();
+        assert!(latest_completed_render(directory.path()).is_err());
     }
 }
