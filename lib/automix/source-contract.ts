@@ -6,7 +6,6 @@ export type AutoMixSourceKind =
   | "artist_catalog"
   | "local_library"
   | "rekordbox"
-  | "serato"
   | "traktor";
 
 export type AutoMixExecutionTarget = "cloud" | "device";
@@ -161,7 +160,6 @@ const SOURCE_KINDS = new Set<AutoMixSourceKind>([
   "artist_catalog",
   "local_library",
   "rekordbox",
-  "serato",
   "traktor",
 ]);
 
