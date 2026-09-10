@@ -12,14 +12,15 @@ from .automix_dsp import (
     _channel_gain_db,
     _integrated_loudness,
     _load_segment,
+    _measure_loudnorm,
     _mix_loudness_target,
+    _render_loudnorm,
     _stretch_audio,
 )
 from .automix_intelligence import mastering_profile
 from .automix_manifest import MIXPLAN_VERSION, mixplan_hash, validate_mixplan
 from .automix_model import SAMPLE_RATE, TrackDescriptor
 from .automix_transition_dsp_v2 import mix_transition_v2
-from .mastering_processor import _measure_loudnorm, _render_loudnorm
 
 
 def _record(value: Any) -> dict[str, Any]:
