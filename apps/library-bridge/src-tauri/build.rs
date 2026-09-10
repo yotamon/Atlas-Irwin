@@ -2,13 +2,19 @@ use std::{fs::File, path::PathBuf};
 
 fn generated_windows_icon() -> PathBuf {
     let manifest_dir = PathBuf::from(
-        std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR is required during Tauri build"),
+        std::env::var("CARGO_MANIFEST_DIR")
+            .expect("CARGO_MANIFEST_DIR is required during Tauri build"),
     );
     let source = manifest_dir.join("../../../public/android-chrome-512x512.png");
     println!("cargo:rerun-if-changed={}", source.display());
 
     let source_image = image::open(&source)
-        .unwrap_or_else(|error| panic!("failed to decode canonical Ensemblis app icon {}: {error}", source.display()))
+        .unwrap_or_else(|error| {
+            panic!(
+                "failed to decode canonical Ensemblis app icon {}: {error}",
+                source.display()
+            )
+        })
         .into_rgba8();
 
     let mut icon = ico::IconDir::new(ico::ResourceType::Icon);
@@ -20,18 +26,26 @@ fn generated_windows_icon() -> PathBuf {
             image::imageops::FilterType::Lanczos3,
         );
         let layer = ico::IconImage::from_rgba_data(size, size, resized.into_raw());
-        icon.add_entry(
-            ico::IconDirEntry::encode(&layer)
-                .unwrap_or_else(|error| panic!("failed to encode {size}px Windows icon layer: {error}")),
-        );
+        icon.add_entry(ico::IconDirEntry::encode(&layer).unwrap_or_else(|error| {
+            panic!("failed to encode {size}px Windows icon layer: {error}")
+        }));
     }
 
-    let out_dir = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR is required during Tauri build"));
+    let out_dir =
+        PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR is required during Tauri build"));
     let output = out_dir.join("ensemblis-library-bridge.ico");
-    let file = File::create(&output)
-        .unwrap_or_else(|error| panic!("failed to create generated Windows icon {}: {error}", output.display()));
-    icon.write(file)
-        .unwrap_or_else(|error| panic!("failed to write generated Windows icon {}: {error}", output.display()));
+    let file = File::create(&output).unwrap_or_else(|error| {
+        panic!(
+            "failed to create generated Windows icon {}: {error}",
+            output.display()
+        )
+    });
+    icon.write(file).unwrap_or_else(|error| {
+        panic!(
+            "failed to write generated Windows icon {}: {error}",
+            output.display()
+        )
+    });
     output
 }
 
