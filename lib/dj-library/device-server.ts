@@ -16,7 +16,6 @@ export const DEVICE_CREDENTIAL_PREFIX = "enlb_";
 export const SOURCE_KINDS = new Set<DjLibrarySourceKind>([
   "local_library",
   "rekordbox",
-  "serato",
   "traktor",
 ]);
 
@@ -91,9 +90,9 @@ export function sanitizeCapabilities(value: unknown) {
   const allowed = [
     "scanLocalLibrary",
     "resolveLocalMedia",
+    "renderMixPlan",
     "deltaSync",
     "rekordboxXml",
-    "seratoCrates",
     "traktorNml",
   ] as const;
   return Object.fromEntries(
