@@ -1,7 +1,11 @@
 use anyhow::Context;
 use serde::Serialize;
 use serde_json::Value;
-use std::{fs, path::{Path, PathBuf}, time::SystemTime};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    time::SystemTime,
+};
 
 const RENDERER_VERSION: &str = "ensemblis.library-bridge.renderer.v1";
 
@@ -25,7 +29,10 @@ fn render_result(directory: &Path) -> anyhow::Result<Option<(SystemTime, LocalRe
     if !result_path.is_file() {
         return Ok(None);
     }
-    let modified = result_path.metadata()?.modified().unwrap_or(SystemTime::UNIX_EPOCH);
+    let modified = result_path
+        .metadata()?
+        .modified()
+        .unwrap_or(SystemTime::UNIX_EPOCH);
     let value: Value = serde_json::from_slice(&fs::read(&result_path)?)?;
     if value.get("version").and_then(Value::as_str) != Some(RENDERER_VERSION)
         || value.get("status").and_then(Value::as_str) != Some("completed")
@@ -53,7 +60,14 @@ fn render_result(directory: &Path) -> anyhow::Result<Option<(SystemTime, LocalRe
     if !output.starts_with(&trusted_directory) || !output.is_file() {
         anyhow::bail!("completed local render points outside the trusted render workspace");
     }
-    Ok(Some((modified, LocalRenderAsset { source_path: output, output_format, sha256 })))
+    Ok(Some((
+        modified,
+        LocalRenderAsset {
+            source_path: output,
+            output_format,
+            sha256,
+        },
+    )))
 }
 
 pub fn latest_completed_render(work_root: &Path) -> anyhow::Result<Option<LocalRenderAsset>> {
@@ -63,18 +77,28 @@ pub fn latest_completed_render(work_root: &Path) -> anyhow::Result<Option<LocalR
     let mut latest: Option<(SystemTime, LocalRenderAsset)> = None;
     for entry in fs::read_dir(work_root)? {
         let entry = entry?;
-        if !entry.file_type()?.is_dir() || !entry.file_name().to_string_lossy().starts_with("render-") {
+        if !entry.file_type()?.is_dir()
+            || !entry.file_name().to_string_lossy().starts_with("render-")
+        {
             continue;
         }
-        let Some(candidate) = render_result(&entry.path())? else { continue };
-        if latest.as_ref().is_none_or(|current| candidate.0 > current.0) {
+        let Some(candidate) = render_result(&entry.path())? else {
+            continue;
+        };
+        if latest
+            .as_ref()
+            .is_none_or(|current| candidate.0 > current.0)
+        {
             latest = Some(candidate);
         }
     }
     Ok(latest.map(|(_, asset)| asset))
 }
 
-pub fn export_render(asset: &LocalRenderAsset, destination_directory: &Path) -> anyhow::Result<ExportedRender> {
+pub fn export_render(
+    asset: &LocalRenderAsset,
+    destination_directory: &Path,
+) -> anyhow::Result<ExportedRender> {
     if !destination_directory.is_dir() {
         anyhow::bail!("export destination is unavailable");
     }
@@ -115,8 +139,10 @@ mod tests {
                 "outputFormat": "wav",
                 "outputPath": outside,
                 "sha256": format!("sha256:{}", "a".repeat(64))
-            })).unwrap(),
-        ).unwrap();
+            }))
+            .unwrap(),
+        )
+        .unwrap();
         assert!(latest_completed_render(directory.path()).is_err());
     }
 
@@ -137,11 +163,16 @@ mod tests {
                 "outputFormat": "wav",
                 "outputPath": mix,
                 "sha256": format!("sha256:{}", "b".repeat(64))
-            })).unwrap(),
-        ).unwrap();
+            }))
+            .unwrap(),
+        )
+        .unwrap();
         let asset = latest_completed_render(directory.path()).unwrap().unwrap();
         let result = export_render(&asset, &export).unwrap();
-        assert_eq!(fs::read(export.join(result.file_name)).unwrap(), b"mix-bytes");
+        assert_eq!(
+            fs::read(export.join(result.file_name)).unwrap(),
+            b"mix-bytes"
+        );
         assert_eq!(fs::read(mix).unwrap(), b"mix-bytes");
     }
 }
