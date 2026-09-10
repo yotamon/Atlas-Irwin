@@ -92,7 +92,6 @@ export type DeviceLibraryExecutionContext = {
 const DEVICE_SOURCE_KINDS = new Set<AutoMixSourceKind>([
   "local_library",
   "rekordbox",
-  "serato",
   "traktor",
 ]);
 
@@ -107,7 +106,7 @@ export class DeviceLibraryExecutionAdapter implements AutoMixExecutionAdapter<De
     id: "native-library-bridge",
     displayName: "Ensemblis Native Library Bridge",
     target: "device",
-    supportedSourceKinds: ["local_library", "rekordbox", "serato", "traktor"],
+    supportedSourceKinds: ["local_library", "rekordbox", "traktor"],
     supportsPreview: true,
     supportsFullRender: true,
   };
