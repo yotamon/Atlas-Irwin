@@ -7,7 +7,7 @@ type Table<Row> = {
   Relationships: [];
 };
 
-export type DjLibrarySourceKind = "local_library" | "rekordbox" | "serato" | "traktor";
+export type DjLibrarySourceKind = "local_library" | "rekordbox" | "traktor";
 export type DjLibraryDeviceJobStatus = "queued" | "claimed" | "completed" | "failed" | "cancelled";
 export type DjLibraryDeviceJobType = "resolve_media" | "render_mixplan";
 
