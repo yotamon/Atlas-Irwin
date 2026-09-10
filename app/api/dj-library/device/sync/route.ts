@@ -21,6 +21,7 @@ const FINGERPRINT_RE = /^sha256:[0-9a-f]{64}$/;
 const AVAILABILITY = new Set(["available", "missing", "offline", "unknown"]);
 const MAX_TRACKS_PER_CHUNK = 250;
 const MAX_REMOVALS_PER_CHUNK = 5000;
+const PLANNING_EVIDENCE_VERSION = "ensemblis.dj-library-planning-evidence.v1";
 
 function optionalText(value: unknown, max: number, field: string) {
   if (value === null || value === undefined || value === "") return null;
@@ -62,6 +63,23 @@ function sanitizeMetadata(value: unknown) {
   };
 }
 
+function sanitizePlanningEvidence(value: unknown) {
+  if (value === null || value === undefined) return null;
+  const evidence = record(value);
+  if (evidence.version !== PLANNING_EVIDENCE_VERSION) {
+    throw new DeviceRequestError("planningEvidence uses an unsupported contract version.");
+  }
+  const safe = safeJson(evidence, 64 * 1024, "planningEvidence", null);
+  const descriptor = record(evidence.descriptor);
+  const durationMs = boundedNumber(descriptor.durationMs, 1, 24 * 60 * 60 * 1000, "planningEvidence.descriptor.durationMs");
+  const bpm = boundedNumber(descriptor.bpm, 20, 400, "planningEvidence.descriptor.bpm");
+  const key = record(descriptor.key);
+  if (!durationMs || !bpm || !boundedString(key.camelot, 8, "planningEvidence.descriptor.key.camelot", { required: true })) {
+    throw new DeviceRequestError("planningEvidence is missing required planner descriptor evidence.");
+  }
+  return safe;
+}
+
 function sanitizeTrack(value: unknown) {
   const source = record(value);
   const sourceTrackId = boundedString(source.sourceTrackId, 512, "sourceTrackId", { required: true });
@@ -82,10 +100,11 @@ function sanitizeTrack(value: unknown) {
       ? null
       : safeJson(source.beatGrid, 96 * 1024, "beatGrid", null),
     analysisProvenance: safeJson(source.analysisProvenance, 48 * 1024, "analysisProvenance", []),
+    planningEvidence: sanitizePlanningEvidence(source.planningEvidence),
     availability,
   };
   assertPathFree(track, "track");
-  if (jsonByteLength(track) > 192 * 1024) {
+  if (jsonByteLength(track) > 256 * 1024) {
     throw new DeviceRequestError("A synchronized track record is too large.");
   }
   return track;
@@ -133,9 +152,6 @@ export async function POST(request: Request) {
     const batchCount = Number.isInteger(batch.count) ? Number(batch.count) : 1;
     if (batchIndex < 0 || batchCount < 1 || batchCount > 1000 || batchIndex >= batchCount) {
       throw new DeviceRequestError("Sync batch coordinates are invalid.");
-    }
-    if (batchIndex < batchCount - 1 && removedSourceTrackIds.length > 0) {
-      throw new DeviceRequestError("Track removals are allowed only in the final sync chunk.");
     }
 
     const { data: currentSource, error: currentError } = await client
