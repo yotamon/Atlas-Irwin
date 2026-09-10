@@ -125,8 +125,10 @@ pub fn analyze_batch(
             .get("tracks")
             .and_then(Value::as_array)
             .context("local analysis sidecar returned invalid results")?;
-        let expected: std::collections::HashSet<&str> =
-            inputs.iter().map(|input| input.fingerprint.as_str()).collect();
+        let expected: std::collections::HashSet<&str> = inputs
+            .iter()
+            .map(|input| input.fingerprint.as_str())
+            .collect();
         let mut results = Vec::new();
         for row in rows {
             let fingerprint = row
@@ -156,11 +158,7 @@ pub fn analyze_batch(
     operation
 }
 
-pub fn render(
-    binary: &Path,
-    work_root: &Path,
-    request: &Value,
-) -> anyhow::Result<Value> {
+pub fn render(binary: &Path, work_root: &Path, request: &Value) -> anyhow::Result<Value> {
     if request.get("version").and_then(Value::as_str) != Some(RENDERER_VERSION) {
         anyhow::bail!("local render request uses an unsupported contract");
     }
