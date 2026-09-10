@@ -18,6 +18,8 @@ export async function GET() {
       music_intelligence_v2: true,
       semantic_analyzer_available: false,
       zero_idle_compute: true,
+      sandbox_generation: readiness.sandboxGeneration,
+      snapshot_retention: readiness.snapshotRetention,
     }, { status: 503 });
   }
 
@@ -34,5 +36,7 @@ export async function GET() {
     zero_idle_compute: true,
     sandbox_name: readiness.sandboxName,
     sandbox_image: readiness.sandboxImage,
+    sandbox_generation: readiness.sandboxGeneration,
+    snapshot_retention: readiness.snapshotRetention,
   });
 }
