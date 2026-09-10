@@ -3,6 +3,7 @@ use serde_json::Value;
 
 pub const DEVICE_SYNC_VERSION: &str = "ensemblis.dj-library-device-sync.v1";
 pub const DEVICE_JOB_VERSION: &str = "ensemblis.dj-library-device-job.v1";
+pub const PLANNING_EVIDENCE_VERSION: &str = "ensemblis.dj-library-planning-evidence.v1";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -32,6 +33,8 @@ pub struct CloudTrackDelta {
     pub cue_points: Value,
     pub beat_grid: Value,
     pub analysis_provenance: Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub planning_evidence: Option<Value>,
     pub availability: String,
 }
 
