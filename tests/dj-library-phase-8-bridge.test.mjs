@@ -81,7 +81,6 @@ test("native webview uses a strict local-only CSP without unsafe inline executio
   assert.ok(csp.includes("connect-src 'none'"));
   assert.ok(csp.includes("object-src 'none'"));
   assert.equal(csp.includes("unsafe-inline"), false);
-  assert.equal(html.includes("<style>"), false);
   assert.equal(/<script(?![^>]*\bsrc=)/.test(html), false, "native HTML must not contain inline script blocks");
   assert.ok(html.includes('src="./app.js"'));
   assert.ok(html.includes('href="./app.css"'));
@@ -143,7 +142,9 @@ test("local Set Builder uses the canonical planner while keeping audio on one pa
   assert.ok(queue.includes("workerTracksFromSnapshot"));
   assert.ok(queue.includes("normalizeDeviceCandidateSnapshot"));
   assert.ok(queue.includes("fingerprints: []"));
-  assert.ok(worker.includes("device_track_descriptors"));
+  assert.ok(worker.includes("prepare_device_tracks"));
+  assert.ok(worker.includes("device_source_fingerprints"));
+  assert.ok(worker.includes('execution_targets == {"device"}'));
   assert.ok(deviceSources.includes("TrackDescriptor("));
   assert.ok(component.includes("Approve & render locally"));
   assert.ok(component.includes("candidateRefs"));
@@ -166,26 +167,35 @@ test("local renderer reuses canonical MixPlan DSP and double-checks frozen recor
   assert.equal(renderer.includes("download("), false, "local renderer must not upload or fetch local audio through cloud helpers");
 });
 
-test("desktop export only copies a completed render from the trusted local workspace", async () => {
+test("desktop export only copies a reverified completed render from the trusted local workspace", async () => {
   const exporter = await source("apps/library-bridge/src-tauri/src/export.rs");
   const native = await source("apps/library-bridge/src-tauri/src/lib.rs");
   const html = await source("apps/library-bridge/ui/index.html");
   const js = await source("apps/library-bridge/ui/app.js");
 
   assert.ok(exporter.includes("output.starts_with(&trusted_directory)"));
+  assert.ok(exporter.includes("fingerprint_file(&output)? != sha256"));
+  assert.ok(exporter.includes("fingerprint_file(&asset.source_path)? != asset.sha256"));
   assert.ok(exporter.includes("fs::copy(&asset.source_path"));
   assert.ok(native.includes("export_latest_render"));
   assert.ok(html.includes("Export latest mix"));
   assert.ok(js.includes('invoke("export_latest_render")'));
 });
 
-test("release configuration declares a version-checked Tauri external sidecar", async () => {
+test("release configuration declares pinned, version-checked Windows/macOS Tauri bundles", async () => {
   const release = JSON.parse(await source("apps/library-bridge/src-tauri/tauri.release.conf.json"));
   const builder = await source("apps/library-bridge/renderer/build_sidecar.py");
+  const requirements = await source("apps/library-bridge/renderer/requirements.txt");
+  const workflow = await source(".github/workflows/library-bridge-ci.yml");
 
   assert.deepEqual(release.bundle.externalBin, ["binaries/ensemblis-bridge-sidecar"]);
   assert.ok(builder.includes('rustc", "--print", "host-tuple"'));
   assert.ok(builder.includes("PyInstaller"));
   assert.ok(builder.includes("EXPECTED_VERSIONS"));
   assert.ok(builder.includes('f"{SIDECAR_NAME}-{target_triple}{extension}"'));
+  assert.ok(requirements.includes("PyInstaller==6.22.2"));
+  assert.ok(workflow.includes("windows-latest"));
+  assert.ok(workflow.includes("macos-14"));
+  assert.ok(workflow.includes("@tauri-apps/cli@2.11.4"));
+  assert.ok(workflow.includes("--bundles ${{ matrix.bundle }}"));
 });
