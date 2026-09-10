@@ -4,11 +4,62 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 from bridge_analyzer import ANALYZER_VERSION, analyze
 from bridge_renderer import PROTOCOL_VERSION as RENDERER_VERSION, execute as render
 
 SIDECAR_VERSION = "ensemblis.library-bridge.sidecar.v1"
+ANALYSIS_BATCH_VERSION = "ensemblis.library-bridge.analysis-batch.v1"
+MAX_ANALYSIS_BATCH = 8
+MAX_BATCH_REQUEST_BYTES = 512 * 1024
+
+
+def _record(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _analyze_batch(request_path: Path, result_path: Path) -> None:
+    if request_path.stat().st_size > MAX_BATCH_REQUEST_BYTES:
+        raise ValueError("local analysis batch request is too large")
+    request = json.loads(request_path.read_text(encoding="utf-8"))
+    if not isinstance(request, dict) or request.get("version") != ANALYSIS_BATCH_VERSION:
+        raise ValueError("unsupported local analysis batch protocol")
+    raw_tracks = request.get("tracks")
+    if not isinstance(raw_tracks, list) or not raw_tracks or len(raw_tracks) > MAX_ANALYSIS_BATCH:
+        raise ValueError("local analysis batch requires 1-8 tracks")
+
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for raw in raw_tracks:
+        item = _record(raw)
+        fingerprint = str(item.get("fingerprint") or "")
+        source = str(item.get("source") or "")
+        if not fingerprint.startswith("sha256:") or fingerprint in seen:
+            raise ValueError("local analysis batch contains an invalid recording identity")
+        seen.add(fingerprint)
+        try:
+            result = analyze(Path(source), fingerprint)
+            rows.append({
+                "fingerprint": fingerprint,
+                "status": "completed",
+                "result": result,
+            })
+        except Exception:
+            # Batch output crosses back into Rust and may later inform UI state. Never copy exception
+            # text because decoder/IO exceptions can contain the private filesystem path.
+            rows.append({
+                "fingerprint": fingerprint,
+                "status": "failed",
+                "error": "analysis_failed",
+            })
+
+    output = {
+        "version": ANALYSIS_BATCH_VERSION,
+        "analyzerVersion": ANALYZER_VERSION,
+        "tracks": rows,
+    }
+    result_path.write_text(json.dumps(output, separators=(",", ":")), encoding="utf-8")
 
 
 def main() -> int:
@@ -19,6 +70,10 @@ def main() -> int:
     analyzer.add_argument("--source", required=True)
     analyzer.add_argument("--fingerprint", required=True)
     analyzer.add_argument("--result", required=True)
+
+    batch = subparsers.add_parser("analyze-batch")
+    batch.add_argument("--request", required=True)
+    batch.add_argument("--result", required=True)
 
     renderer = subparsers.add_parser("render")
     renderer.add_argument("--request", required=True)
@@ -33,12 +88,16 @@ def main() -> int:
             output = analyze(Path(args.source), args.fingerprint)
             Path(args.result).write_text(json.dumps(output, separators=(",", ":")), encoding="utf-8")
             return 0
+        if args.command == "analyze-batch":
+            _analyze_batch(Path(args.request), Path(args.result))
+            return 0
         if args.command == "render":
             render(Path(args.request), Path(args.result))
             return 0
         if args.command == "version":
             payload = {
                 "version": SIDECAR_VERSION,
+                "analysisBatchVersion": ANALYSIS_BATCH_VERSION,
                 "analyzerVersion": ANALYZER_VERSION,
                 "rendererVersion": RENDERER_VERSION,
             }
