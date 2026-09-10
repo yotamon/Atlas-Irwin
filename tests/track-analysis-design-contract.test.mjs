@@ -8,9 +8,11 @@ test("track workspace reuses canonical Ensemblis processing language", async () 
   const source = await readFile(trackPagePath, "utf8");
 
   assert.match(source, /ProcessingState/);
-  assert.match(source, /stage: "analyzing" as const/);
-  assert.match(source, /stage: "preparing" as const/);
+  assert.match(source, /Track Intelligence · Listening/);
+  assert.match(source, /Listening to master/);
+  assert.match(source, /Analysis queued/);
   assert.doesNotMatch(source, /TrackAnalysisProgress/);
+  assert.doesNotMatch(source, /progress=\{/);
   assert.doesNotMatch(source, /role="progressbar"/);
 });
 
@@ -31,6 +33,7 @@ test("active analysis is automatic and recovery remains explicit", async () => {
   assert.match(source, /AnalysisAutoRefresh active=\{analysis\.isActive\}/);
   assert.match(source, /analysisNeedsRecovery\s*\? <Link className="button primary" href="#analysis-recovery">Retry intelligence<\/Link>/);
   assert.match(source, /analysis\.isActive \? \(/);
+  assert.match(source, /Nothing to fill in manually/);
   assert.match(source, /You do not need to start or babysit anything/);
   assert.match(source, /canonical master and any verified results remain untouched/);
 });
