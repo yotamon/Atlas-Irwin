@@ -1,6 +1,7 @@
 mod credentials;
 mod db;
 mod execution;
+mod export;
 mod identity;
 mod model;
 mod network;
@@ -11,6 +12,7 @@ mod watcher;
 use crate::{
     credentials::{clear_device_credential, device_credential},
     db::BridgeDb,
+    export::ExportedRender,
     identity::hash_text,
     model::{BridgeStatus, PairResponse, ScanSummary},
     watcher::LibraryWatcher,
@@ -78,6 +80,9 @@ async fn choose_and_scan_source(
     state: State<'_, BridgeState>,
     source_kind: String,
 ) -> Result<Option<ScanSummary>, String> {
+    if source_kind != "local_library" {
+        return Err("The folder scanner only accepts the local_library source kind.".to_string());
+    }
     let path = app
         .dialog()
         .file()
@@ -197,6 +202,27 @@ async fn poll_device_jobs(state: State<'_, BridgeState>) -> Result<usize, String
 }
 
 #[tauri::command]
+async fn export_latest_render(
+    app: tauri::AppHandle,
+    state: State<'_, BridgeState>,
+) -> Result<Option<ExportedRender>, String> {
+    let asset = export::latest_completed_render(&state.sidecar_work_root).map_err(command_error)?;
+    let Some(asset) = asset else { return Ok(None) };
+    let destination = app
+        .dialog()
+        .file()
+        .set_title("Choose where to export the latest Ensemblis mix")
+        .blocking_pick_folder();
+    let Some(destination) = destination else { return Ok(None) };
+    let destination = destination.into_path().map_err(command_error)?;
+    tauri::async_runtime::spawn_blocking(move || export::export_render(&asset, &destination))
+        .await
+        .map_err(command_error)?
+        .map(Some)
+        .map_err(command_error)
+}
+
+#[tauri::command]
 fn unpair_device(state: State<'_, BridgeState>) -> Result<(), String> {
     clear_device_credential().map_err(command_error)?;
     state
@@ -258,6 +284,7 @@ pub fn run() {
             pair_device,
             sync_pending,
             poll_device_jobs,
+            export_latest_render,
             unpair_device,
             privacy_contract_probe,
         ])
