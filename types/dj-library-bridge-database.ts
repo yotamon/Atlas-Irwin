@@ -66,6 +66,7 @@ export type DjLibrarySourceTrackRow = {
   cue_points: Json;
   beat_grid: Json | null;
   analysis_provenance: Json;
+  planning_evidence: Json | null;
   availability: "available" | "missing" | "offline" | "unknown";
   revision: string;
   created_at: string;
