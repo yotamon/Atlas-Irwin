@@ -1,3 +1,5 @@
+import { pathToFileURL } from "node:url";
+
 const API_BASE = "https://api.vercel.com";
 
 function argumentValue(name) {
@@ -120,7 +122,7 @@ async function run() {
   }
 }
 
-if (import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   run().catch((error) => {
     console.error(error instanceof Error ? error.message : String(error));
     process.exit(1);
