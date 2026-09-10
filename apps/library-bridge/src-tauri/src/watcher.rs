@@ -19,6 +19,12 @@ struct WatchedSource {
     root_path: PathBuf,
 }
 
+#[derive(Debug, Clone)]
+struct LocalIntelligence {
+    sidecar_binary: Option<PathBuf>,
+    work_root: PathBuf,
+}
+
 pub struct LibraryWatcher {
     watcher: Arc<Mutex<RecommendedWatcher>>,
     sources: Arc<Mutex<Vec<WatchedSource>>>,
@@ -26,8 +32,16 @@ pub struct LibraryWatcher {
 }
 
 impl LibraryWatcher {
-    pub fn start(db: Arc<BridgeDb>) -> anyhow::Result<Self> {
+    pub fn start(
+        db: Arc<BridgeDb>,
+        sidecar_binary: Option<PathBuf>,
+        work_root: PathBuf,
+    ) -> anyhow::Result<Self> {
         let sources = Arc::new(Mutex::new(load_sources(&db)?));
+        let intelligence = LocalIntelligence {
+            sidecar_binary,
+            work_root,
+        };
         let (event_tx, event_rx) = mpsc::channel::<()>();
         let watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
             if event.is_ok() {
@@ -41,9 +55,15 @@ impl LibraryWatcher {
             Arc::clone(&db),
             Arc::clone(&watcher),
             Arc::clone(&sources),
+            intelligence.clone(),
             event_rx,
         );
-        spawn_periodic_reconciler(Arc::clone(&db), Arc::clone(&watcher), Arc::clone(&sources));
+        spawn_periodic_reconciler(
+            Arc::clone(&db),
+            Arc::clone(&watcher),
+            Arc::clone(&sources),
+            intelligence,
+        );
 
         Ok(Self {
             watcher,
@@ -123,19 +143,46 @@ fn ensure_watches(
     }
 }
 
-fn reconcile(db: &BridgeDb, sources: &Arc<Mutex<Vec<WatchedSource>>>) {
+fn scan_with_available_intelligence(
+    db: &BridgeDb,
+    source: &WatchedSource,
+    intelligence: &LocalIntelligence,
+) {
+    let result = match intelligence
+        .sidecar_binary
+        .as_deref()
+        .filter(|binary| binary.is_file())
+    {
+        Some(binary) => scanner::scan_source_with_sidecar(
+            db,
+            &source.source_id,
+            &source.source_kind,
+            &source.root_path,
+            binary,
+            &intelligence.work_root,
+        ),
+        None => scanner::scan_source(
+            db,
+            &source.source_id,
+            &source.source_kind,
+            &source.root_path,
+        ),
+    };
+    let _ = result;
+}
+
+fn reconcile(
+    db: &BridgeDb,
+    sources: &Arc<Mutex<Vec<WatchedSource>>>,
+    intelligence: &LocalIntelligence,
+) {
     for source in snapshot_sources(sources) {
         // A missing/unmounted drive is not interpreted as track deletion. The last synchronized
         // cloud evidence remains intact until the root becomes available and reconciliation succeeds.
         if !source.root_path.is_dir() {
             continue;
         }
-        let _ = scanner::scan_source(
-            db,
-            &source.source_id,
-            &source.source_kind,
-            &source.root_path,
-        );
+        scan_with_available_intelligence(db, &source, intelligence);
     }
 }
 
@@ -143,6 +190,7 @@ fn spawn_event_reconciler(
     db: Arc<BridgeDb>,
     watcher: Arc<Mutex<RecommendedWatcher>>,
     sources: Arc<Mutex<Vec<WatchedSource>>>,
+    intelligence: LocalIntelligence,
     event_rx: mpsc::Receiver<()>,
 ) {
     thread::Builder::new()
@@ -152,7 +200,7 @@ fn spawn_event_reconciler(
                 // Coalesce bursts from copies, tag writes and rename sequences before hashing again.
                 while event_rx.recv_timeout(EVENT_DEBOUNCE).is_ok() {}
                 ensure_watches(&watcher, &sources);
-                reconcile(&db, &sources);
+                reconcile(&db, &sources, &intelligence);
             }
         })
         .expect("could not start Library Bridge filesystem reconciliation thread");
@@ -162,15 +210,14 @@ fn spawn_periodic_reconciler(
     db: Arc<BridgeDb>,
     watcher: Arc<Mutex<RecommendedWatcher>>,
     sources: Arc<Mutex<Vec<WatchedSource>>>,
+    intelligence: LocalIntelligence,
 ) {
     thread::Builder::new()
         .name("ensemblis-library-reconcile".to_string())
-        .spawn(move || {
-            loop {
-                thread::sleep(PERIODIC_RECONCILIATION);
-                ensure_watches(&watcher, &sources);
-                reconcile(&db, &sources);
-            }
+        .spawn(move || loop {
+            thread::sleep(PERIODIC_RECONCILIATION);
+            ensure_watches(&watcher, &sources);
+            reconcile(&db, &sources, &intelligence);
         })
         .expect("could not start Library Bridge periodic reconciliation thread");
 }
