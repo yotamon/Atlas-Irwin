@@ -2,6 +2,7 @@ name: Library Bridge CI
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - "apps/library-bridge/**"
       - "app/api/dj-library/device/**"
