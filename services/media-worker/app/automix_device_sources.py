@@ -75,8 +75,6 @@ def _device_track(raw: dict[str, Any], desired_ms: int, purpose: Purpose) -> Tra
         id=track_id,
         title=title,
         url="",
-        # Path is intentionally unusable in the cloud planner. Device rendering resolves the frozen
-        # content identity back to a private path only on the paired computer.
         path=Path(),
         music_map=music_map,
         duration_ms=duration_ms,
@@ -95,10 +93,14 @@ def prepare_device_tracks(
     raw_tracks: list[dict[str, Any]],
     purpose: Purpose,
     target_duration_ms: int,
+    total_track_count: int | None = None,
 ) -> list[TrackDescriptor]:
-    if not 2 <= len(raw_tracks) <= MAX_TRACKS:
-        raise ValueError(f"AutoMix requires 2-{MAX_TRACKS} tracks")
-    desired = max(MIN_TRACK_WINDOW_MS, int(target_duration_ms / len(raw_tracks)) + 16_000)
+    if not 1 <= len(raw_tracks) <= MAX_TRACKS:
+        raise ValueError(f"AutoMix device evidence requires 1-{MAX_TRACKS} tracks")
+    divisor = total_track_count if total_track_count is not None else len(raw_tracks)
+    if divisor < len(raw_tracks) or divisor > MAX_TRACKS:
+        raise ValueError("AutoMix hybrid track count is invalid")
+    desired = max(MIN_TRACK_WINDOW_MS, int(target_duration_ms / divisor) + 16_000)
     return [_device_track(raw, desired, purpose) for raw in raw_tracks]
 
 
