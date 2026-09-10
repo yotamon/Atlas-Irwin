@@ -9,6 +9,7 @@ async function refresh() {
   document.getElementById("paired").textContent = status.paired ? "Paired" : "Not paired";
   document.getElementById("sources").textContent = String(status.sources);
   document.getElementById("pending").textContent = String(status.pendingSyncBatches);
+  document.getElementById("intelligence").textContent = status.localIntelligenceAvailable ? "Ready" : "Unavailable";
   if (status.apiBaseUrl) document.getElementById("api").value = status.apiBaseUrl;
 }
 
@@ -47,6 +48,13 @@ document.getElementById("sync").addEventListener("click", () => {
 
 document.getElementById("jobs").addEventListener("click", () => {
   void run("Checking device jobs", () => invoke("poll_device_jobs"));
+});
+
+document.getElementById("export").addEventListener("click", () => {
+  void run("Exporting latest local mix", async () => {
+    const result = await invoke("export_latest_render");
+    return result ?? "No completed local mix is available yet.";
+  });
 });
 
 document.getElementById("refresh").addEventListener("click", () => {
