@@ -4,7 +4,7 @@ use crate::{
     model::{CloudTrackDelta, ScanSummary, ScannedTrack, TrackMetadata},
 };
 use anyhow::Context;
-use serde_json::json;
+use serde_json::{Value, json};
 use std::{
     path::Path,
     time::{SystemTime, UNIX_EPOCH},
@@ -38,6 +38,57 @@ fn title_for(path: &Path) -> String {
         .to_string()
 }
 
+fn generic_metadata(path: &Path) -> TrackMetadata {
+    TrackMetadata {
+        title: title_for(path),
+        artist: None,
+        album: None,
+        remix: None,
+        genre: None,
+        comments: None,
+        duration_ms: None,
+        bpm: None,
+        musical_key: None,
+        rating: None,
+        color: None,
+        tags: Vec::new(),
+        year: None,
+    }
+}
+
+fn cached_cloud_evidence(
+    db: &BridgeDb,
+    fingerprint: &str,
+    path: &Path,
+) -> anyhow::Result<(TrackMetadata, Value, Value, Option<Value>)> {
+    let fallback = generic_metadata(path);
+    let Some(cached) = db.cached_analysis(fingerprint)? else {
+        return Ok((fallback, Value::Null, json!([]), None));
+    };
+    let metadata = cached
+        .get("metadata")
+        .cloned()
+        .and_then(|value| serde_json::from_value::<TrackMetadata>(value).ok())
+        .map(|mut value| {
+            if value.title.trim().is_empty() {
+                value.title = title_for(path);
+            }
+            value
+        })
+        .unwrap_or(fallback);
+    let beat_grid = cached.get("beatGrid").cloned().unwrap_or(Value::Null);
+    let provenance = cached
+        .get("analysisProvenance")
+        .cloned()
+        .filter(Value::is_array)
+        .unwrap_or_else(|| json!([]));
+    let planning_evidence = cached
+        .get("planningEvidence")
+        .cloned()
+        .filter(Value::is_object);
+    Ok((metadata, beat_grid, provenance, planning_evidence))
+}
+
 pub fn scan_source(
     db: &BridgeDb,
     source_id: &str,
@@ -69,32 +120,25 @@ pub fn scan_source(
         // Local generic sources use content identity as source-track identity. Moving a file therefore
         // changes only the private binding, never the normalized track identity used by the planner.
         let source_track_id = fingerprint.clone();
+        let (track_metadata, beat_grid, cached_provenance, planning_evidence) =
+            cached_cloud_evidence(db, &fingerprint, path)?;
+        let mut analysis_provenance = vec![json!({
+            "field": "identity",
+            "source": "ensemblis.library-bridge.sha256.v1",
+            "confidence": 1.0
+        })];
+        if let Some(items) = cached_provenance.as_array() {
+            analysis_provenance.extend(items.iter().cloned());
+        }
         let cloud = CloudTrackDelta {
             source_track_id,
             recording_fingerprint: fingerprint,
-            metadata: TrackMetadata {
-                title: title_for(path),
-                artist: None,
-                album: None,
-                remix: None,
-                genre: None,
-                comments: None,
-                duration_ms: None,
-                bpm: None,
-                musical_key: None,
-                rating: None,
-                color: None,
-                tags: Vec::new(),
-                year: None,
-            },
+            metadata: track_metadata,
             playlist_ids: Vec::new(),
             cue_points: json!([]),
-            beat_grid: serde_json::Value::Null,
-            analysis_provenance: json!([{
-                "field": "identity",
-                "source": "ensemblis.library-bridge.sha256.v1",
-                "confidence": 1.0
-            }]),
+            beat_grid,
+            analysis_provenance: Value::Array(analysis_provenance),
+            planning_evidence,
             availability: "available".to_string(),
         };
         let cloud_json = serde_json::to_string(&cloud)?;
@@ -157,5 +201,48 @@ mod tests {
         let binding = db.resolve_binding("local", &identity).unwrap().unwrap();
         assert_eq!(binding.path, moved);
         assert_eq!(binding.recording_fingerprint, identity);
+    }
+
+    #[test]
+    fn analysis_cache_follows_recording_identity_across_moves() {
+        let directory = tempdir().unwrap();
+        let library = directory.path().join("library");
+        fs::create_dir_all(&library).unwrap();
+        let original = library.join("Original.wav");
+        fs::write(&original, b"stable-recording").unwrap();
+        let db = BridgeDb::new(directory.path().join("bridge.sqlite3")).unwrap();
+        scan_source(&db, "local", "local_library", &library).unwrap();
+        let fingerprint = fingerprint_file(&original).unwrap();
+        db.store_analysis(
+            &fingerprint,
+            "test-analyzer",
+            &json!({
+                "metadata": {
+                    "title": "Analyzed title", "artist": null, "album": null, "remix": null,
+                    "genre": null, "comments": null, "durationMs": 123000, "bpm": 124.0,
+                    "musicalKey": "8A", "rating": null, "color": null, "tags": [], "year": null
+                },
+                "beatGrid": {"bpm": 124.0, "firstBeatMs": 0, "beatsPerBar": 4, "confidence": 0.9},
+                "analysisProvenance": [{"field": "bpm", "source": "test-analyzer", "confidence": 1.0}],
+                "planningEvidence": {"version": "ensemblis.dj-library-planning-evidence.v1"}
+            }),
+        )
+        .unwrap();
+        let moved = library.join("Moved.wav");
+        fs::rename(&original, &moved).unwrap();
+        let summary = scan_source(&db, "local", "local_library", &library).unwrap();
+        assert!(summary.queued_for_sync);
+        let outbox = db.next_outbox().unwrap().unwrap();
+        let track = outbox
+            .envelope
+            .delta
+            .changed_tracks
+            .iter()
+            .find(|track| track.recording_fingerprint == fingerprint)
+            .unwrap();
+        assert_eq!(track.metadata.bpm, Some(124.0));
+        assert!(track.planning_evidence.is_some());
+        let serialized = serde_json::to_string(track).unwrap();
+        assert!(!serialized.contains(library.to_string_lossy().as_ref()));
     }
 }
