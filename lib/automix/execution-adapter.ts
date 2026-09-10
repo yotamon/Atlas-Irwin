@@ -143,6 +143,74 @@ export class DeviceLibraryExecutionAdapter implements AutoMixExecutionAdapter<De
   }
 }
 
+export type HybridDeviceExecutionContext = {
+  deviceId: string;
+  verifyDeviceSource(source: AutoMixSourceTrackRef): Promise<boolean>;
+  /** Resolves a catalog master to a short-lived remote URI. Local paths are never returned here. */
+  resolveCatalogSource(source: AutoMixSourceTrackRef): Promise<ResolvedExecutionSource | null>;
+};
+
+export class HybridDeviceExecutionAdapter implements AutoMixExecutionAdapter<HybridDeviceExecutionContext> {
+  readonly version = AUTOMIX_EXECUTION_CONTRACT_VERSION;
+  readonly descriptor: AutoMixExecutionDescriptor = {
+    id: "hybrid-library-bridge",
+    displayName: "Ensemblis Hybrid Library Bridge",
+    target: "device",
+    supportedSourceKinds: ["artist_catalog", "local_library", "rekordbox", "traktor"],
+    supportsPreview: true,
+    supportsFullRender: true,
+  };
+
+  canExecute(manifest: AutoMixExecutionManifest) {
+    let hasCloud = false;
+    let hasDevice = false;
+    if (manifest.sourceRefs.length < 2) return false;
+    for (const source of manifest.sourceRefs) {
+      if (source.availability === "missing" || source.availability === "offline") return false;
+      if (source.executionTarget === "cloud") {
+        if (source.kind !== "artist_catalog") return false;
+        hasCloud = true;
+      } else if (source.executionTarget === "device") {
+        if (
+          !DEVICE_SOURCE_KINDS.has(source.kind)
+          || !source.librarySourceId
+          || !source.recordingFingerprint?.startsWith("sha256:")
+          || !source.revision
+        ) return false;
+        hasDevice = true;
+      } else {
+        return false;
+      }
+    }
+    return hasCloud && hasDevice;
+  }
+
+  async resolveSources(request: AutoMixExecutionRequest<HybridDeviceExecutionContext>) {
+    if (!this.canExecute(request.manifest)) {
+      throw new Error("HybridDeviceExecutionAdapter cannot execute this manifest.");
+    }
+    const resolved: ResolvedExecutionSource[] = [];
+    for (const source of request.manifest.sourceRefs) {
+      if (source.executionTarget === "device") {
+        if (!(await request.context.verifyDeviceSource(source))) {
+          throw new Error(`Device source ${source.trackId} no longer matches the frozen recording identity.`);
+        }
+        resolved.push({
+          trackId: source.trackId,
+          source,
+          uri: opaqueDeviceUri(request.context.deviceId, source),
+          fingerprint: source.recordingFingerprint,
+        });
+        continue;
+      }
+      const catalog = await request.context.resolveCatalogSource(source);
+      if (!catalog) throw new Error(`Catalog source ${source.trackId} could not be resolved for hybrid execution.`);
+      resolved.push(catalog);
+    }
+    return resolved;
+  }
+}
+
 export class AutoMixExecutionAdapterRegistry<TContext = unknown> {
   private readonly adapters = new Map<string, AutoMixExecutionAdapter<TContext>>();
 
@@ -163,9 +231,7 @@ export class AutoMixExecutionAdapterRegistry<TContext = unknown> {
       && adapter.canExecute(manifest)
     ));
     if (candidates.length === 0) return null;
-    if (candidates.length > 1) {
-      candidates.sort((a, b) => a.descriptor.id.localeCompare(b.descriptor.id));
-    }
+    if (candidates.length > 1) candidates.sort((a, b) => a.descriptor.id.localeCompare(b.descriptor.id));
     return candidates[0] ?? null;
   }
 }
