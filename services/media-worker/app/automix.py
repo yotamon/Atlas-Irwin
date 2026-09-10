@@ -43,13 +43,15 @@ class AutomixWorkerRequest(BaseModel):
     callback_token: str
 
 
-async def _standardize(url: str, target: Path, workdir: Path, index: int) -> None:
+async def _standardize(url: str, target: Path, workdir: Path, index: int) -> str:
     source = workdir / f"automix-{index:02d}.source"
     await worker_main.download(url, source)
+    source_sha256 = await asyncio.to_thread(worker_main.sha256_file, source)
     await worker_main.ffmpeg(
         "-i", str(source), "-vn", "-ac", "2", "-ar", str(SAMPLE_RATE),
         "-c:a", "pcm_f32le", str(target),
     )
+    return f"sha256:{source_sha256}"
 
 
 async def _upload_streaming(upload_url: str, path: Path, content_type: str) -> None:
@@ -100,7 +102,10 @@ def _source_fingerprints(raw_tracks: list[dict[str, Any]]) -> list[dict[str, Any
         source_audio = _record(music_map.get("source_audio"))
         fingerprints.append({
             "track_id": str(raw.get("id") or ""),
+            "execution_target": "cloud",
+            "source_kind": "artist_catalog",
             "audio_url": str(raw.get("audio_url") or ""),
+            "recording_fingerprint": raw.get("recording_fingerprint"),
             "media_asset_id": raw.get("media_asset_id"),
             "analysis_version": music_map.get("analysis_version") or music_map.get("version"),
             "source_audio_url": source_audio.get("url"),
@@ -125,10 +130,19 @@ def _validate_approved_mixplan_sources(manifest: dict[str, Any], raw_tracks: lis
         raise ValueError("Approved MixPlan source fingerprints no longer match the canonical candidate pool")
 
 
-async def prepare_tracks(payload_tracks: list[dict[str, Any]], workdir: Path, purpose: Purpose, target_duration_ms: int) -> list[TrackDescriptor]:
-    if not 2 <= len(payload_tracks) <= MAX_TRACKS:
-        raise ValueError(f"AutoMix requires 2-{MAX_TRACKS} tracks")
-    desired = max(MIN_TRACK_WINDOW_MS, int(target_duration_ms / len(payload_tracks)) + 16_000)
+async def prepare_tracks(
+    payload_tracks: list[dict[str, Any]],
+    workdir: Path,
+    purpose: Purpose,
+    target_duration_ms: int,
+    total_track_count: int | None = None,
+) -> list[TrackDescriptor]:
+    if not 1 <= len(payload_tracks) <= MAX_TRACKS:
+        raise ValueError(f"AutoMix catalog evidence requires 1-{MAX_TRACKS} tracks")
+    divisor = total_track_count if total_track_count is not None else len(payload_tracks)
+    if divisor < len(payload_tracks) or divisor > MAX_TRACKS:
+        raise ValueError("AutoMix hybrid track count is invalid")
+    desired = max(MIN_TRACK_WINDOW_MS, int(target_duration_ms / divisor) + 16_000)
     tracks: list[TrackDescriptor] = []
     for index, raw in enumerate(payload_tracks):
         url = str(raw.get("audio_url") or "")
@@ -137,10 +151,16 @@ async def prepare_tracks(payload_tracks: list[dict[str, Any]], workdir: Path, pu
         if not url:
             raise ValueError(f"AutoMix track {track_id} is missing audio_url")
         target = workdir / f"automix-{index:02d}.wav"
-        await _standardize(url, target, workdir, index)
+        source_fingerprint = await _standardize(url, target, workdir, index)
+        raw["recording_fingerprint"] = source_fingerprint
         music_map = _record(raw.get("music_map"))
         if not music_map or int(music_map.get("duration_ms") or 0) <= 0:
-            source_audio = {"url": url, "media_asset_id": raw.get("media_asset_id")}
+            source_audio = {
+                "url": url,
+                "media_asset_id": raw.get("media_asset_id"),
+                "recording_fingerprint": source_fingerprint,
+                "audio_sha256": source_fingerprint.removeprefix("sha256:"),
+            }
             music_map = await asyncio.to_thread(analyze_music_v4, target, source_audio)
         music_map = _attach_transition_evidence(music_map, raw)
         if not _record(music_map.get("mastering_inspector")) or not _record(music_map.get("beat_stability")):
@@ -266,6 +286,37 @@ def _qa_diagnostics(
     }
 
 
+def _ordered_hybrid_tracks(
+    raw_tracks: list[dict[str, Any]],
+    catalog_tracks: list[TrackDescriptor],
+    device_tracks: list[TrackDescriptor],
+) -> list[TrackDescriptor]:
+    by_id = {track.id: track for track in [*catalog_tracks, *device_tracks]}
+    ordered: list[TrackDescriptor] = []
+    for raw in raw_tracks:
+        track_id = str(raw.get("id") or "")
+        track = by_id.get(track_id)
+        if track is None:
+            raise ValueError("Hybrid planning lost a candidate identity during source preparation")
+        ordered.append(track)
+    if len(by_id) != len(raw_tracks):
+        raise ValueError("Hybrid planning contains duplicate candidate identities")
+    return ordered
+
+
+def _ordered_hybrid_fingerprints(
+    raw_tracks: list[dict[str, Any]],
+    catalog_raw: list[dict[str, Any]],
+    device_raw: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    rows = [*_source_fingerprints(catalog_raw), *device_source_fingerprints(device_raw)]
+    by_id = {str(row.get("track_id") or ""): row for row in rows}
+    ordered = [by_id.get(str(raw.get("id") or "")) for raw in raw_tracks]
+    if any(row is None for row in ordered) or len(by_id) != len(raw_tracks):
+        raise ValueError("Hybrid source provenance is incomplete")
+    return [row for row in ordered if row is not None]
+
+
 async def automix_job(
     payload: dict[str, Any],
     workdir: Path,
@@ -273,6 +324,8 @@ async def automix_job(
 ) -> dict[str, Any]:
     started_at = time.perf_counter()
     raw_tracks = _list_records(payload.get("tracks"))
+    if not 2 <= len(raw_tracks) <= MAX_TRACKS:
+        raise ValueError(f"AutoMix requires 2-{MAX_TRACKS} tracks")
     purpose = str(payload.get("purpose") or "booking")
     profile = str(payload.get("energy_profile") or "dynamic")
     style = str(payload.get("transition_style") or "dj")
@@ -294,11 +347,11 @@ async def automix_job(
     execution_targets = {str(raw.get("execution_target") or "cloud") for raw in raw_tracks}
     if not execution_targets or not execution_targets.issubset({"cloud", "device"}):
         raise ValueError("AutoMix track execution target is invalid")
-    if len(execution_targets) > 1:
-        raise ValueError("Hybrid cloud/device sets are not enabled until the Phase 9 execution contract")
+    device_backed = "device" in execution_targets
+    hybrid_planning = execution_targets == {"cloud", "device"}
     device_planning = execution_targets == {"device"}
-    if device_planning and execution_mode != "plan_only":
-        raise ValueError("Device-backed MixPlans must render through the paired Library Bridge")
+    if device_backed and execution_mode != "plan_only":
+        raise ValueError("Device-backed and hybrid MixPlans must render through the paired Library Bridge")
 
     upload_url = str(payload.get("upload_url") or "")
     if execution_mode != "plan_only":
@@ -306,11 +359,22 @@ async def automix_job(
             raise ValueError("AutoMix upload_url is required for rendering")
         worker_main.validate_remote_url(upload_url)
 
-    if device_planning:
-        tracks = prepare_device_tracks(raw_tracks, purpose, target_duration_ms)  # type: ignore[arg-type]
+    if hybrid_planning:
+        catalog_raw = [raw for raw in raw_tracks if str(raw.get("execution_target") or "cloud") == "cloud"]
+        device_raw = [raw for raw in raw_tracks if str(raw.get("execution_target") or "cloud") == "device"]
+        catalog_tracks = await prepare_tracks(
+            catalog_raw, workdir, purpose, target_duration_ms, total_track_count=len(raw_tracks)  # type: ignore[arg-type]
+        )
+        device_tracks = prepare_device_tracks(
+            device_raw, purpose, target_duration_ms, total_track_count=len(raw_tracks)  # type: ignore[arg-type]
+        )
+        tracks = _ordered_hybrid_tracks(raw_tracks, catalog_tracks, device_tracks)
+        source_fingerprints = _ordered_hybrid_fingerprints(raw_tracks, catalog_raw, device_raw)
+    elif device_planning:
+        tracks = prepare_device_tracks(raw_tracks, purpose, target_duration_ms, total_track_count=len(raw_tracks))  # type: ignore[arg-type]
         source_fingerprints = device_source_fingerprints(raw_tracks)
     else:
-        tracks = await prepare_tracks(raw_tracks, workdir, purpose, target_duration_ms)  # type: ignore[arg-type]
+        tracks = await prepare_tracks(raw_tracks, workdir, purpose, target_duration_ms, total_track_count=len(raw_tracks))  # type: ignore[arg-type]
         source_fingerprints = _source_fingerprints(raw_tracks)
 
     if execution_mode == "approved_render":
