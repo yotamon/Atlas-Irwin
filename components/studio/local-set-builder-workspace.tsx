@@ -215,7 +215,10 @@ export function LocalSetBuilderWorkspace({ artistId, artistName }: { artistId: s
     }
   }, [artistId]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void load(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
   const active = jobs.some((job) => ACTIVE.has(job.status));
   useEffect(() => {
     if (!active) return;
@@ -245,7 +248,6 @@ export function LocalSetBuilderWorkspace({ artistId, artistName }: { artistId: s
   const snapshot = snapshotFromJob(currentJob);
   const snapshotLibraryIds = (snapshot.candidates ?? []).map((item) => item.libraryTrackId).filter((id): id is string => Boolean(id));
   const snapshotByCandidate = new Map((snapshot.candidates ?? []).flatMap((item) => item.candidateId && item.libraryTrackId ? [[item.candidateId, item.libraryTrackId] as const] : []));
-  const planLibraryIds = currentOrder.map((id) => snapshotByCandidate.get(id)).filter((id): id is string => Boolean(id));
   const planDeviceId = snapshot.candidates?.[0]?.deviceId ?? "";
   const replacements = readyTracks.filter((track) => track.deviceId === planDeviceId && !snapshotLibraryIds.includes(track.id));
   const latestRender = renderJobs[0] ?? null;
