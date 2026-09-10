@@ -2,7 +2,7 @@ use crate::{
     credentials::{device_credential, store_device_credential},
     db::BridgeDb,
     execution::resolve_verified_media,
-    model::{DeviceJob, DeviceJobResult, PairResponse, SyncEnvelope},
+    model::{CloudTrackDelta, DeviceJob, DeviceJobResult, PairResponse, SyncEnvelope},
 };
 use anyhow::Context;
 use reqwest::blocking::{Client, Response};
@@ -11,6 +11,8 @@ use std::time::Duration;
 use url::Url;
 
 const SYNC_TRACKS_PER_CHUNK: usize = 200;
+const SYNC_MAX_BODY_BYTES: usize = 1_750_000;
+const SYNC_MAX_CHUNKS: usize = 1000;
 
 fn api_url(base: &str, path: &str) -> anyhow::Result<String> {
     let base = Url::parse(base).context("invalid Ensemblis API URL")?;
@@ -79,24 +81,73 @@ pub fn claim_pairing(
     Ok(paired)
 }
 
-fn sync_chunk_bodies(envelope: &SyncEnvelope) -> Vec<Value> {
-    let changed = &envelope.delta.changed_tracks;
-    let count = changed.len().div_ceil(SYNC_TRACKS_PER_CHUNK).max(1);
-    (0..count)
-        .map(|index| {
-            let start = index * SYNC_TRACKS_PER_CHUNK;
-            let end = ((index + 1) * SYNC_TRACKS_PER_CHUNK).min(changed.len());
-            let changed_tracks = if start < end {
-                changed[start..end].to_vec()
-            } else {
-                Vec::new()
-            };
-            let removals = if index + 1 == count {
-                envelope.delta.removed_source_track_ids.clone()
-            } else {
-                Vec::new()
-            };
-            json!({
+fn chunk_payload_size(changed: &[CloudTrackDelta], removed: &[String]) -> anyhow::Result<usize> {
+    Ok(serde_json::to_vec(&json!({
+        "changedTracks": changed,
+        "removedSourceTrackIds": removed,
+    }))?
+    .len())
+}
+
+fn sync_chunk_bodies(envelope: &SyncEnvelope) -> anyhow::Result<Vec<Value>> {
+    let mut chunks: Vec<(Vec<CloudTrackDelta>, Vec<String>)> = Vec::new();
+    let mut changed_chunk: Vec<CloudTrackDelta> = Vec::new();
+    let mut removed_chunk: Vec<String> = Vec::new();
+
+    let flush = |chunks: &mut Vec<(Vec<CloudTrackDelta>, Vec<String>)>,
+                 changed: &mut Vec<CloudTrackDelta>,
+                 removed: &mut Vec<String>| {
+        if !changed.is_empty() || !removed.is_empty() {
+            chunks.push((std::mem::take(changed), std::mem::take(removed)));
+        }
+    };
+
+    for track in &envelope.delta.changed_tracks {
+        let mut candidate = changed_chunk.clone();
+        candidate.push(track.clone());
+        let exceeds_count = candidate.len() > SYNC_TRACKS_PER_CHUNK;
+        let exceeds_bytes = chunk_payload_size(&candidate, &removed_chunk)? > SYNC_MAX_BODY_BYTES;
+        if (exceeds_count || exceeds_bytes) && !changed_chunk.is_empty() {
+            flush(&mut chunks, &mut changed_chunk, &mut removed_chunk);
+            if chunks.len() >= SYNC_MAX_CHUNKS {
+                anyhow::bail!("DJ-library revision requires too many sync chunks");
+            }
+        }
+        if chunk_payload_size(std::slice::from_ref(track), &[])? > SYNC_MAX_BODY_BYTES {
+            anyhow::bail!("a single DJ-library track exceeds the sync payload safety budget");
+        }
+        changed_chunk.push(track.clone());
+    }
+
+    for removed in &envelope.delta.removed_source_track_ids {
+        let mut candidate = removed_chunk.clone();
+        candidate.push(removed.clone());
+        let exceeds_bytes = chunk_payload_size(&changed_chunk, &candidate)? > SYNC_MAX_BODY_BYTES;
+        if exceeds_bytes && (!changed_chunk.is_empty() || !removed_chunk.is_empty()) {
+            flush(&mut chunks, &mut changed_chunk, &mut removed_chunk);
+            if chunks.len() >= SYNC_MAX_CHUNKS {
+                anyhow::bail!("DJ-library revision requires too many sync chunks");
+            }
+        }
+        if chunk_payload_size(&[], std::slice::from_ref(removed))? > SYNC_MAX_BODY_BYTES {
+            anyhow::bail!("a single DJ-library removal exceeds the sync payload safety budget");
+        }
+        removed_chunk.push(removed.clone());
+    }
+    flush(&mut chunks, &mut changed_chunk, &mut removed_chunk);
+    if chunks.is_empty() {
+        chunks.push((Vec::new(), Vec::new()));
+    }
+    if chunks.len() > SYNC_MAX_CHUNKS {
+        anyhow::bail!("DJ-library revision requires too many sync chunks");
+    }
+
+    let count = chunks.len();
+    chunks
+        .into_iter()
+        .enumerate()
+        .map(|(index, (changed_tracks, removed_source_track_ids))| {
+            let body = json!({
                 "version": envelope.version,
                 "batch": { "index": index, "count": count },
                 "delta": {
@@ -105,9 +156,13 @@ fn sync_chunk_bodies(envelope: &SyncEnvelope) -> Vec<Value> {
                     "baseRevision": envelope.delta.base_revision,
                     "targetRevision": envelope.delta.target_revision,
                     "changedTracks": changed_tracks,
-                    "removedSourceTrackIds": removals
+                    "removedSourceTrackIds": removed_source_track_ids
                 }
-            })
+            });
+            if serde_json::to_vec(&body)?.len() > SYNC_MAX_BODY_BYTES + 4096 {
+                anyhow::bail!("DJ-library sync body exceeds the transport safety budget");
+            }
+            Ok(body)
         })
         .collect()
 }
@@ -122,7 +177,7 @@ pub fn sync_next_batch(db: &BridgeDb) -> anyhow::Result<bool> {
         .context("Bridge API is not configured")?;
     let credential = auth_header()?;
     let expected_revision = pending.envelope.delta.target_revision.clone();
-    let bodies = sync_chunk_bodies(&pending.envelope);
+    let bodies = sync_chunk_bodies(&pending.envelope)?;
 
     for (index, body) in bodies.iter().enumerate() {
         let response = require_success(
@@ -273,7 +328,7 @@ pub fn poll_and_execute_jobs(db: &BridgeDb) -> anyhow::Result<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{DEVICE_SYNC_VERSION, SourceDelta, SyncEnvelope};
+    use crate::model::{DEVICE_SYNC_VERSION, SourceDelta, SyncEnvelope, TrackMetadata};
 
     #[test]
     fn production_transport_rejects_plain_http() {
@@ -295,9 +350,53 @@ mod tests {
                 removed_source_track_ids: vec!["old".to_string()],
             },
         };
-        let chunks = sync_chunk_bodies(&envelope);
+        let chunks = sync_chunk_bodies(&envelope).unwrap();
         assert_eq!(chunks.len(), 1);
         assert_eq!(chunks[0]["batch"]["count"], 1);
         assert_eq!(chunks[0]["delta"]["removedSourceTrackIds"][0], "old");
+    }
+
+    #[test]
+    fn musical_evidence_chunks_are_bounded_by_serialized_bytes() {
+        let evidence = "x".repeat(44 * 1024);
+        let track = |index: usize| CloudTrackDelta {
+            source_track_id: format!("track-{index}"),
+            recording_fingerprint: format!("sha256:{:064x}", index + 1),
+            metadata: TrackMetadata {
+                title: format!("Track {index}"),
+                artist: None,
+                album: None,
+                remix: None,
+                genre: None,
+                comments: None,
+                duration_ms: Some(180_000),
+                bpm: Some(124.0),
+                musical_key: Some("8A".to_string()),
+                rating: None,
+                color: None,
+                tags: vec![],
+                year: None,
+            },
+            playlist_ids: vec![],
+            cue_points: json!([]),
+            beat_grid: json!({"bpm": 124.0}),
+            analysis_provenance: json!([]),
+            planning_evidence: Some(json!({"version": "v1", "blob": evidence})),
+            availability: "available".to_string(),
+        };
+        let envelope = SyncEnvelope {
+            version: DEVICE_SYNC_VERSION.to_string(),
+            delta: SourceDelta {
+                source_id: "local".to_string(),
+                source_kind: "local_library".to_string(),
+                base_revision: None,
+                target_revision: "bridge1:large".to_string(),
+                changed_tracks: (0..80).map(track).collect(),
+                removed_source_track_ids: vec![],
+            },
+        };
+        let chunks = sync_chunk_bodies(&envelope).unwrap();
+        assert!(chunks.len() > 1);
+        assert!(chunks.iter().all(|chunk| serde_json::to_vec(chunk).unwrap().len() <= SYNC_MAX_BODY_BYTES + 4096));
     }
 }
