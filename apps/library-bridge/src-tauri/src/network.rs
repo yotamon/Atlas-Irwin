@@ -75,7 +75,6 @@ pub fn claim_pairing(
                     "renderMixPlan": true,
                     "deltaSync": true,
                     "rekordboxXml": false,
-                    "seratoCrates": false,
                     "traktorNml": false
                 }
             }))
