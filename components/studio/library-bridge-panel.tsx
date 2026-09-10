@@ -45,9 +45,9 @@ function record(value: unknown): Record<string, unknown> {
     : {};
 }
 
-function relativeTime(value: string | null) {
+function relativeTime(value: string | null, referenceMs: number) {
   if (!value) return "Never";
-  const seconds = Math.round((Date.now() - new Date(value).getTime()) / 1000);
+  const seconds = Math.max(0, Math.round((referenceMs - new Date(value).getTime()) / 1000));
   if (seconds < 45) return "Just now";
   if (seconds < 3600) return `${Math.max(1, Math.round(seconds / 60))}m ago`;
   if (seconds < 86_400) return `${Math.round(seconds / 3600)}h ago`;
@@ -68,6 +68,7 @@ export function LibraryBridgePanel({ artistId }: { artistId: string }) {
   const [busy, setBusy] = useState("");
   const [status, setStatus] = useState("");
   const [copied, setCopied] = useState(false);
+  const [observedAtMs, setObservedAtMs] = useState(0);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     const response = await fetch(`/api/studio/dj-library/devices?artistId=${encodeURIComponent(artistId)}`, {
@@ -80,19 +81,25 @@ export function LibraryBridgePanel({ artistId }: { artistId: string }) {
       devices: Array.isArray(record(body).devices) ? record(body).devices as Device[] : [],
       sources: Array.isArray(record(body).sources) ? record(body).sources as Source[] : [],
     });
+    setObservedAtMs(Date.now());
   }, [artistId]);
 
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
-    void load(controller.signal)
-      .catch((error) => {
-        if (!controller.signal.aborted) setStatus(error instanceof Error ? error.message : "Could not load Library Bridge devices.");
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
+    const timer = window.setTimeout(() => {
+      setLoading(true);
+      void load(controller.signal)
+        .catch((error) => {
+          if (!controller.signal.aborted) setStatus(error instanceof Error ? error.message : "Could not load Library Bridge devices.");
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setLoading(false);
+        });
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
   }, [load]);
 
   useEffect(() => {
@@ -216,7 +223,7 @@ export function LibraryBridgePanel({ artistId }: { artistId: string }) {
         {activeDevices.map((device) => {
           const sources = snapshot.sources.filter((source) => source.device_id === device.id);
           const recent = device.last_seen_at
-            ? Date.now() - new Date(device.last_seen_at).getTime() < 2 * 60 * 1000
+            ? observedAtMs - new Date(device.last_seen_at).getTime() < 2 * 60 * 1000
             : false;
           return (
             <article className={styles.device} key={device.id}>
@@ -226,7 +233,7 @@ export function LibraryBridgePanel({ artistId }: { artistId: string }) {
                     <strong>{device.name}</strong>
                     <span className={recent ? styles.online : styles.offline}>{recent ? "Online" : "Offline"}</span>
                   </div>
-                  <span className={styles.meta}>{device.platform} · bridge {device.app_version} · last seen {relativeTime(device.last_seen_at)}</span>
+                  <span className={styles.meta}>{device.platform} · bridge {device.app_version} · last seen {relativeTime(device.last_seen_at, observedAtMs)}</span>
                 </div>
                 <button
                   className={styles.dangerButton}
@@ -245,7 +252,7 @@ export function LibraryBridgePanel({ artistId }: { artistId: string }) {
                   <div className={styles.source} key={source.id}>
                     <span>{sourceLabel(source.source_kind)}</span>
                     <strong>{source.track_count.toLocaleString()} tracks</strong>
-                    <small>{source.last_synced_at ? `Synced ${relativeTime(source.last_synced_at)}` : "Not synced yet"}</small>
+                    <small>{source.last_synced_at ? `Synced ${relativeTime(source.last_synced_at, observedAtMs)}` : "Not synced yet"}</small>
                   </div>
                 ))}
               </div>
