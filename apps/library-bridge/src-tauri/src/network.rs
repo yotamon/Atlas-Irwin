@@ -1,18 +1,25 @@
 use crate::{
     credentials::{device_credential, store_device_credential},
     db::BridgeDb,
-    execution::resolve_verified_media,
+    execution::{prepare_render_request, public_render_result, resolve_verified_media},
     model::{CloudTrackDelta, DeviceJob, DeviceJobResult, PairResponse, SyncEnvelope},
+    sidecar,
 };
 use anyhow::Context;
 use reqwest::blocking::{Client, Response};
 use serde_json::{Value, json};
-use std::time::Duration;
+use std::{path::Path, time::Duration};
 use url::Url;
 
 const SYNC_TRACKS_PER_CHUNK: usize = 200;
 const SYNC_MAX_BODY_BYTES: usize = 1_750_000;
 const SYNC_MAX_CHUNKS: usize = 1000;
+
+#[derive(Debug)]
+struct ExecutedJob {
+    public: DeviceJobResult,
+    local_result: Option<Value>,
+}
 
 fn api_url(base: &str, path: &str) -> anyhow::Result<String> {
     let base = Url::parse(base).context("invalid Ensemblis API URL")?;
@@ -65,6 +72,7 @@ pub fn claim_pairing(
                 "capabilities": {
                     "scanLocalLibrary": true,
                     "resolveLocalMedia": true,
+                    "renderMixPlan": true,
                     "deltaSync": true,
                     "rekordboxXml": false,
                     "seratoCrates": false,
@@ -200,8 +208,6 @@ pub fn sync_next_batch(db: &BridgeDb) -> anyhow::Result<bool> {
             .and_then(Value::as_bool)
             .unwrap_or(false);
         if complete {
-            // A retry can discover that the target revision was already committed by a prior
-            // attempt. In that case no further chunks are necessary and the local outbox can ack.
             db.acknowledge_outbox(pending.id)?;
             return Ok(true);
         }
@@ -238,29 +244,29 @@ fn public_job_error(error: &anyhow::Error) -> String {
         "local media file is missing".to_string()
     } else if message.contains("changed after") {
         "local media changed after the library was scanned".to_string()
+    } else if message.contains("sidecar") {
+        "local audio renderer is unavailable or failed".to_string()
+    } else if message.contains("MixPlan") || message.contains("render") {
+        "approved local MixPlan validation failed".to_string()
     } else {
         // Do not forward arbitrary anyhow/IO context because it can contain a filesystem path.
-        "local media verification failed".to_string()
+        "local device execution failed".to_string()
     }
 }
 
-fn execute_job(db: &BridgeDb, job: &DeviceJob) -> DeviceJobResult {
-    if job.version != crate::model::DEVICE_JOB_VERSION {
-        return DeviceJobResult {
+fn failed(job: &DeviceJob, message: String) -> ExecutedJob {
+    ExecutedJob {
+        public: DeviceJobResult {
             job_id: job.id.clone(),
             status: "failed".to_string(),
             result: None,
-            error: Some("unsupported device job contract".to_string()),
-        };
+            error: Some(message),
+        },
+        local_result: None,
     }
-    if job.job_type != "resolve_media" {
-        return DeviceJobResult {
-            job_id: job.id.clone(),
-            status: "failed".to_string(),
-            result: None,
-            error: Some(format!("unsupported device job type: {}", job.job_type)),
-        };
-    }
+}
+
+fn execute_resolve_media(db: &BridgeDb, job: &DeviceJob) -> ExecutedJob {
     let source_id = job
         .payload
         .get("sourceId")
@@ -277,23 +283,74 @@ fn execute_job(db: &BridgeDb, job: &DeviceJob) -> DeviceJobResult {
         .and_then(Value::as_str)
         .unwrap_or_default();
     match resolve_verified_media(db, source_id, source_track_id, fingerprint) {
-        Ok(_) => DeviceJobResult {
-            job_id: job.id.clone(),
-            status: "completed".to_string(),
-            // Never return the local path to the cloud. Availability and exact identity are enough.
-            result: Some(json!({ "available": true, "verifiedFingerprint": fingerprint })),
-            error: None,
-        },
-        Err(error) => DeviceJobResult {
-            job_id: job.id.clone(),
-            status: "failed".to_string(),
-            result: None,
-            error: Some(public_job_error(&error)),
-        },
+        Ok(_) => {
+            let result = json!({ "available": true, "verifiedFingerprint": fingerprint });
+            ExecutedJob {
+                public: DeviceJobResult {
+                    job_id: job.id.clone(),
+                    status: "completed".to_string(),
+                    result: Some(result.clone()),
+                    error: None,
+                },
+                local_result: Some(result),
+            }
+        }
+        Err(error) => failed(job, public_job_error(&error)),
     }
 }
 
-pub fn poll_and_execute_jobs(db: &BridgeDb) -> anyhow::Result<usize> {
+fn execute_render_mixplan(
+    db: &BridgeDb,
+    job: &DeviceJob,
+    sidecar_binary: Option<&Path>,
+    work_root: &Path,
+) -> ExecutedJob {
+    let Some(binary) = sidecar_binary.filter(|path| path.is_file()) else {
+        return failed(job, "local audio renderer is unavailable".to_string());
+    };
+    let operation = (|| -> anyhow::Result<(Value, Value)> {
+        // prepare_render_request resolves every source binding and hashes the actual bytes again
+        // before any DSP begins. Paths enter only the local sidecar request and never the cloud job.
+        let request = prepare_render_request(db, &job.payload)?;
+        let local = sidecar::render(binary, work_root, &request)?;
+        let public = public_render_result(&local)?;
+        Ok((local, public))
+    })();
+    match operation {
+        Ok((local, public)) => ExecutedJob {
+            public: DeviceJobResult {
+                job_id: job.id.clone(),
+                status: "completed".to_string(),
+                result: Some(public),
+                error: None,
+            },
+            local_result: Some(local),
+        },
+        Err(error) => failed(job, public_job_error(&error)),
+    }
+}
+
+fn execute_job(
+    db: &BridgeDb,
+    job: &DeviceJob,
+    sidecar_binary: Option<&Path>,
+    work_root: &Path,
+) -> ExecutedJob {
+    if job.version != crate::model::DEVICE_JOB_VERSION {
+        return failed(job, "unsupported device job contract".to_string());
+    }
+    match job.job_type.as_str() {
+        "resolve_media" => execute_resolve_media(db, job),
+        "render_mixplan" => execute_render_mixplan(db, job, sidecar_binary, work_root),
+        _ => failed(job, "unsupported device job type".to_string()),
+    }
+}
+
+pub fn poll_and_execute_jobs(
+    db: &BridgeDb,
+    sidecar_binary: Option<&Path>,
+    work_root: &Path,
+) -> anyhow::Result<usize> {
     let api_base = db
         .get_setting("api_base_url")?
         .context("Bridge API is not configured")?;
@@ -309,17 +366,17 @@ pub fn poll_and_execute_jobs(db: &BridgeDb) -> anyhow::Result<usize> {
         serde_json::from_value(body.get("jobs").cloned().unwrap_or_else(|| json!([])))?;
     let mut completed = 0;
     for job in jobs {
-        // resolve_media is deliberately read-only and idempotent. Re-executing a stale cloud claim
-        // after a crash is safer than suppressing it and orphaning the job forever.
+        // Device jobs are idempotent by cloud identity. A stale claim after a crash is allowed to
+        // execute again; exact source hashing and MixPlan hashing keep retries deterministic.
         db.remember_job(&job.id, &job.idempotency_key, &job.job_type, &job.payload)?;
-        let result = execute_job(db, &job);
-        let local_status = if result.status == "completed" {
+        let executed = execute_job(db, &job, sidecar_binary, work_root);
+        let local_status = if executed.public.status == "completed" {
             "completed"
         } else {
             "failed"
         };
-        db.complete_job(&job.id, local_status, result.result.as_ref())?;
-        post_job_result(db, &result)?;
+        db.complete_job(&job.id, local_status, executed.local_result.as_ref())?;
+        post_job_result(db, &executed.public)?;
         completed += 1;
     }
     Ok(completed)
