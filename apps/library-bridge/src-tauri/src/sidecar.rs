@@ -41,12 +41,6 @@ pub fn bundled_sidecar_path() -> anyhow::Result<PathBuf> {
     sidecar_path_from_executable(&std::env::current_exe()?)
 }
 
-pub fn bundled_sidecar_available() -> bool {
-    bundled_sidecar_path()
-        .map(|path| path.is_file())
-        .unwrap_or(false)
-}
-
 fn run(binary: &Path, args: &[&str]) -> anyhow::Result<()> {
     if !binary.is_file() {
         anyhow::bail!("local intelligence sidecar is unavailable");
