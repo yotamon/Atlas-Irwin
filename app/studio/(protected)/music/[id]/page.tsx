@@ -10,6 +10,7 @@ import { MasteringInspectorPanel } from "@/components/studio/mastering-inspector
 import { MusicIntelligencePreview } from "@/components/studio/music-intelligence-preview";
 import { ObjectHeader } from "@/components/studio/object-header";
 import { StemIntelligencePanel } from "@/components/studio/stem-intelligence-panel";
+import { TrackAnalysisProgress } from "@/components/studio/track-analysis-progress";
 import { TrackPreview } from "@/components/studio/track-preview";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
@@ -159,13 +160,6 @@ export default async function TrackWorkspacePage({
   const catalogProfiles = (catalogTracks ?? [])
     .filter((track) => hasMusicIntelligenceMap(track.audio_profile))
     .map((track) => ({ title: track.title, musicMap: track.audio_profile as Json }));
-  const intelligenceFact = analysis.isPartial
-    ? "Partial"
-    : analysis.hasMusicMap
-      ? analysis.isRefreshing ? "Refreshing" : "Ready"
-      : analysis.isActive
-        ? "Listening"
-        : analysisNeedsRecovery ? "Needs attention" : "Pending";
 
   return (
     <div className="studio-v2-page track-object-page">
@@ -175,24 +169,41 @@ export default async function TrackWorkspacePage({
         backLabel={release?.title ?? "Music"}
         eyebrow="Track"
         title={vaultTrack.title}
-        subtitle={`${titleCase(vaultTrack.status)} · ${duration(vaultTrack.duration_seconds)} · ${vaultTrack.audio_url ? analysis.label : "Needs master"}`}
+        subtitle={`${duration(vaultTrack.duration_seconds)} · ${vaultTrack.audio_url ? "Master attached" : "Master required"}`}
         imageUrl={release?.artwork_url}
         imageAlt={release?.cover_alt || (release ? `${release.title} artwork` : "")}
         facts={[
-          { label: "Master", value: vaultTrack.audio_url ? "Ready" : "Missing" },
-          { label: "Mastering", value: mastering ?? (analysis.hasMusicMap ? "Available" : "Pending") },
-          { label: "Intelligence", value: intelligenceFact },
-          { label: "Structure", value: analysis.hasMusicMap ? `${sections} section${sections === 1 ? "" : "s"}` : "Pending" },
-          { label: "Strong moments", value: analysis.hasMusicMap ? `${Math.min(hooks, 5)} surfaced` : "Pending" },
+          ...(analysis.hasMusicMap ? [
+            { label: "Structure", value: `${sections} section${sections === 1 ? "" : "s"}` },
+            { label: "Strong moments", value: `${Math.min(hooks, 5)} surfaced` },
+          ] : []),
           ...(bpm ? [{ label: "Tempo", value: `${bpm} BPM` }] : []),
+          ...(mastering ? [{ label: "Mastering", value: mastering }] : []),
         ]}
         actions={release
           ? <Link className="button primary" href={href(`/studio/releases/${release.id}`)}>Open release</Link>
-          : analysis.hasMusicMap && !analysisNeedsRecovery
-            ? <Link className="button primary" href={createHref}>Create from this track</Link>
-            : <Link className="button" href="#intelligence">Track Intelligence</Link>}
+          : !vaultTrack.audio_url
+            ? <Link className="button primary" href={href("/studio/music/import")}>Add master</Link>
+            : analysisNeedsRecovery
+              ? <Link className="button primary" href="#analysis-recovery">Retry intelligence</Link>
+              : analysis.hasMusicMap && !analysis.isActive
+                ? <Link className="button primary" href={createHref}>Create from this track</Link>
+                : !analysis.isActive
+                  ? <Link className="button" href="#analysis-recovery">Run Track Intelligence</Link>
+                  : undefined}
         tabs={tabs}
       />
+
+      {vaultTrack.audio_url ? (
+        <TrackAnalysisProgress
+          status={analysis.status}
+          isActive={analysis.isActive}
+          isRefreshing={analysis.isRefreshing}
+          isPartial={analysis.isPartial}
+          needsRecovery={analysisNeedsRecovery}
+          failureCopy={analysis.failureCopy}
+        />
+      ) : null}
 
       <section className="track-object-overview" id="overview">
         <div className="track-object-primary">
@@ -221,11 +232,17 @@ export default async function TrackWorkspacePage({
               <p>Track Intelligence and mastering checks are ready. Start creative work from the musical evidence.</p>
               <Link href={createHref}>Create with this track →</Link>
             </>
+          ) : analysis.isActive ? (
+            <>
+              <strong>{analysis.isRefreshing ? "Fresh pass in progress" : "Analysis is already moving"}</strong>
+              <p>{analysis.isRefreshing ? "Keep using the verified intelligence already on this track while Ensemblis refreshes it in the background." : "Ensemblis is processing the master automatically. You do not need to start or babysit anything."}</p>
+              <Link href="#intelligence">View Track Intelligence →</Link>
+            </>
           ) : vaultTrack.audio_url ? (
             <>
-              <strong>No action needed</strong>
-              <p>{analysis.hasMusicMap ? "Ensemblis is refreshing the full pass while keeping the current verified intelligence available." : "Ensemblis is preparing musical understanding, mastering checks and beat stability automatically."}</p>
-              <Link href={href("/studio/music")}>Back to Music →</Link>
+              <strong>Ready when you are</strong>
+              <p>The master is attached. Run Track Intelligence when you want structure, strong Moments and mastering checks.</p>
+              <Link href="#analysis-recovery">Open analysis controls →</Link>
             </>
           ) : (
             <>
@@ -241,29 +258,18 @@ export default async function TrackWorkspacePage({
         <div className="v2-section-heading">
           <div>
             <span className="section-label">Track Intelligence</span>
-            <h2>{analysis.isPartial ? "Verified intelligence, full pass needs recovery" : analysis.isRefreshing ? "Current intelligence while Ensemblis refreshes" : analysis.hasMusicMap ? "What Ensemblis hears" : analysisNeedsRecovery ? "Understanding needs recovery" : "Ensemblis is understanding the track"}</h2>
+            <h2>{analysis.isPartial ? "Verified intelligence remains available" : analysis.isRefreshing ? "Current intelligence while Ensemblis refreshes" : analysis.hasMusicMap ? "What Ensemblis hears" : analysisNeedsRecovery ? "Understanding needs recovery" : analysis.isActive ? "Analysis in progress" : "Understand this track"}</h2>
           </div>
-          {vaultTrack.audio_url ? <span className="growth-active-label">{analysis.label}</span> : null}
         </div>
 
         {analysis.hasMusicMap ? (
           <MusicIntelligencePreview audioUrl={vaultTrack.audio_url} musicMap={vaultTrack.audio_profile} />
         ) : null}
 
-        {analysis.isRefreshing ? (
+        {!analysis.hasMusicMap && !analysis.isActive && !analysisNeedsRecovery ? (
           <div className="v2-calm-state compact">
-            <strong>Refreshing full intelligence.</strong>
-            <p>The current verified results stay available while the free Media Worker runs. They are replaced only after a complete result returns.</p>
-          </div>
-        ) : analysis.isPartial ? (
-          <div className="v2-calm-state compact">
-            <strong>Partial does not mean lost.</strong>
-            <p>{analysis.failureCopy}</p>
-          </div>
-        ) : !analysis.hasMusicMap ? (
-          <div className="v2-calm-state compact">
-            <strong>{analysisNeedsRecovery ? "The source master is safe." : analysis.isActive ? "Nothing to fill in manually." : vaultTrack.audio_url ? "Master ready for analysis." : "No source audio yet."}</strong>
-            <p>{analysisNeedsRecovery ? analysis.failureCopy : analysis.isActive ? "Structure and strongest Moments appear here automatically when analysis completes." : vaultTrack.audio_url ? "Run Track Intelligence to generate music-aware structure, Moments and mastering checks." : "Add a master first."}</p>
+            <strong>{vaultTrack.audio_url ? "Master ready for analysis." : "No source audio yet."}</strong>
+            <p>{vaultTrack.audio_url ? "Run Track Intelligence to generate music-aware structure, Moments and mastering checks." : "Add a master first."}</p>
           </div>
         ) : null}
 
