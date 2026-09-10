@@ -2,11 +2,12 @@ use crate::{
     db::BridgeDb,
     identity::{fingerprint_file, hash_text},
     model::{CloudTrackDelta, ScanSummary, ScannedTrack, TrackMetadata},
+    sidecar::{self, AnalysisInput},
 };
 use anyhow::Context;
 use serde_json::{Value, json};
 use std::{
-    path::Path,
+    path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 use walkdir::WalkDir;
@@ -14,6 +15,15 @@ use walkdir::WalkDir;
 const AUDIO_EXTENSIONS: &[&str] = &[
     "wav", "aif", "aiff", "flac", "mp3", "m4a", "aac", "ogg", "opus",
 ];
+const ANALYSIS_BATCH_SIZE: usize = 8;
+
+#[derive(Debug, Clone)]
+struct ScanSeed {
+    path: PathBuf,
+    file_size: u64,
+    modified_unix_ms: i64,
+    fingerprint: String,
+}
 
 fn supported_audio(path: &Path) -> bool {
     path.extension()
@@ -70,9 +80,9 @@ fn cached_cloud_evidence(
         .cloned()
         .and_then(|value| serde_json::from_value::<TrackMetadata>(value).ok())
         .map(|mut value| {
-            if value.title.trim().is_empty() {
-                value.title = title_for(path);
-            }
+            // Generic-folder title is location-derived metadata, not recording identity. Keep musical
+            // analysis cached across moves while reflecting the current filename after a rename.
+            value.title = title_for(path);
             value
         })
         .unwrap_or(fallback);
@@ -89,17 +99,8 @@ fn cached_cloud_evidence(
     Ok((metadata, beat_grid, provenance, planning_evidence))
 }
 
-pub fn scan_source(
-    db: &BridgeDb,
-    source_id: &str,
-    source_kind: &str,
-    root: &Path,
-) -> anyhow::Result<ScanSummary> {
-    if !root.is_dir() {
-        anyhow::bail!("selected DJ library source is not a directory");
-    }
-
-    let mut tracks = Vec::<ScannedTrack>::new();
+fn collect_seeds(db: &BridgeDb, source_id: &str, root: &Path) -> anyhow::Result<Vec<ScanSeed>> {
+    let mut seeds = Vec::new();
     for entry in WalkDir::new(root)
         .follow_links(false)
         .into_iter()
@@ -117,11 +118,54 @@ pub fn scan_source(
                 Some(value) => value,
                 None => fingerprint_file(path)?,
             };
+        seeds.push(ScanSeed {
+            path: path.to_path_buf(),
+            file_size,
+            modified_unix_ms,
+            fingerprint,
+        });
+    }
+    seeds.sort_by(|a, b| a.fingerprint.cmp(&b.fingerprint));
+    Ok(seeds)
+}
+
+fn analyze_uncached(
+    db: &BridgeDb,
+    seeds: &[ScanSeed],
+    sidecar_binary: &Path,
+    work_root: &Path,
+) -> anyhow::Result<()> {
+    let mut missing = Vec::new();
+    for seed in seeds {
+        if db.cached_analysis(&seed.fingerprint)?.is_none() {
+            missing.push(AnalysisInput {
+                path: seed.path.clone(),
+                fingerprint: seed.fingerprint.clone(),
+            });
+        }
+    }
+    for batch in missing.chunks(ANALYSIS_BATCH_SIZE) {
+        // Per-track decoder/analysis failures are represented as omitted completed rows by the
+        // sidecar. A broken source never prevents the rest of the library revision from scanning.
+        for result in sidecar::analyze_batch(sidecar_binary, work_root, batch)? {
+            db.store_analysis(
+                &result.fingerprint,
+                &result.analyzer_version,
+                &result.payload,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn build_tracks(db: &BridgeDb, seeds: Vec<ScanSeed>) -> anyhow::Result<Vec<ScannedTrack>> {
+    let mut tracks = Vec::with_capacity(seeds.len());
+    for seed in seeds {
         // Local generic sources use content identity as source-track identity. Moving a file therefore
         // changes only the private binding, never the normalized track identity used by the planner.
-        let source_track_id = fingerprint.clone();
+        let source_track_id = seed.fingerprint.clone();
         let (track_metadata, beat_grid, cached_provenance, planning_evidence) =
-            cached_cloud_evidence(db, &fingerprint, path)?;
+            cached_cloud_evidence(db, &seed.fingerprint, &seed.path)?;
         let mut analysis_provenance = vec![json!({
             "field": "identity",
             "source": "ensemblis.library-bridge.sha256.v1",
@@ -132,7 +176,7 @@ pub fn scan_source(
         }
         let cloud = CloudTrackDelta {
             source_track_id,
-            recording_fingerprint: fingerprint,
+            recording_fingerprint: seed.fingerprint,
             metadata: track_metadata,
             playlist_ids: Vec::new(),
             cue_points: json!([]),
@@ -143,15 +187,23 @@ pub fn scan_source(
         };
         let cloud_json = serde_json::to_string(&cloud)?;
         tracks.push(ScannedTrack {
-            path: path.to_path_buf(),
-            file_size,
-            modified_unix_ms,
+            path: seed.path,
+            file_size: seed.file_size,
+            modified_unix_ms: seed.modified_unix_ms,
             payload_hash: hash_text(&cloud_json),
             cloud,
         });
     }
+    Ok(tracks)
+}
 
-    tracks.sort_by(|a, b| a.cloud.source_track_id.cmp(&b.cloud.source_track_id));
+fn persist_tracks(
+    db: &BridgeDb,
+    source_id: &str,
+    source_kind: &str,
+    root: &Path,
+    tracks: Vec<ScannedTrack>,
+) -> anyhow::Result<ScanSummary> {
     let revision_input = tracks
         .iter()
         .map(|track| format!("{}:{}", track.cloud.source_track_id, track.payload_hash))
@@ -162,11 +214,52 @@ pub fn scan_source(
         .with_context(|| format!("could not persist scan for {source_id}"))
 }
 
+pub fn scan_source(
+    db: &BridgeDb,
+    source_id: &str,
+    source_kind: &str,
+    root: &Path,
+) -> anyhow::Result<ScanSummary> {
+    if !root.is_dir() {
+        anyhow::bail!("selected DJ library source is not a directory");
+    }
+    let seeds = collect_seeds(db, source_id, root)?;
+    persist_tracks(db, source_id, source_kind, root, build_tracks(db, seeds)?)
+}
+
+pub fn scan_source_with_sidecar(
+    db: &BridgeDb,
+    source_id: &str,
+    source_kind: &str,
+    root: &Path,
+    sidecar_binary: &Path,
+    work_root: &Path,
+) -> anyhow::Result<ScanSummary> {
+    if !root.is_dir() {
+        anyhow::bail!("selected DJ library source is not a directory");
+    }
+    let seeds = collect_seeds(db, source_id, root)?;
+    analyze_uncached(db, &seeds, sidecar_binary, work_root)?;
+    persist_tracks(db, source_id, source_kind, root, build_tracks(db, seeds)?)
+}
+
 pub fn rescan_registered_source(db: &BridgeDb, source_id: &str) -> anyhow::Result<ScanSummary> {
     let (kind, root) = db
         .source_root(source_id)?
         .context("DJ library source is not registered on this device")?;
     scan_source(db, source_id, &kind, &root)
+}
+
+pub fn rescan_registered_source_with_sidecar(
+    db: &BridgeDb,
+    source_id: &str,
+    sidecar_binary: &Path,
+    work_root: &Path,
+) -> anyhow::Result<ScanSummary> {
+    let (kind, root) = db
+        .source_root(source_id)?
+        .context("DJ library source is not registered on this device")?;
+    scan_source_with_sidecar(db, source_id, &kind, &root, sidecar_binary, work_root)
 }
 
 #[cfg(test)]
@@ -218,7 +311,7 @@ mod tests {
             "test-analyzer",
             &json!({
                 "metadata": {
-                    "title": "Analyzed title", "artist": null, "album": null, "remix": null,
+                    "title": "Original", "artist": null, "album": null, "remix": null,
                     "genre": null, "comments": null, "durationMs": 123000, "bpm": 124.0,
                     "musicalKey": "8A", "rating": null, "color": null, "tags": [], "year": null
                 },
@@ -241,6 +334,7 @@ mod tests {
             .find(|track| track.recording_fingerprint == fingerprint)
             .unwrap();
         assert_eq!(track.metadata.bpm, Some(124.0));
+        assert_eq!(track.metadata.title, "Moved");
         assert!(track.planning_evidence.is_some());
         let serialized = serde_json::to_string(track).unwrap();
         assert!(!serialized.contains(library.to_string_lossy().as_ref()));
