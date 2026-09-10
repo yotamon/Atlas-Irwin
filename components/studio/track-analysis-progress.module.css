@@ -1,0 +1,260 @@
+.surface {
+  position: relative;
+  display: grid;
+  gap: 1.15rem;
+  margin: -0.75rem 0 clamp(1.8rem, 4vw, 3rem);
+  padding: clamp(1.05rem, 2.5vw, 1.45rem);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--en-accent) 22%, var(--en-line));
+  border-radius: calc(var(--en-radius) + 0.2rem);
+  background:
+    radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--en-accent) 10%, transparent), transparent 42%),
+    var(--en-surface-raised);
+  box-shadow: 0 1.1rem 3rem color-mix(in srgb, var(--en-ink) 5%, transparent);
+}
+
+.surface::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  background: var(--en-accent);
+  opacity: 0.72;
+}
+
+.progressHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.copy {
+  min-width: 0;
+  max-width: 52rem;
+}
+
+.eyebrow {
+  display: inline-block;
+  margin-bottom: 0.32rem;
+  color: var(--en-accent);
+  font-size: 0.59rem;
+  font-weight: 760;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+}
+
+.copy h2 {
+  margin: 0;
+  color: var(--en-ink);
+  font-size: clamp(1.15rem, 2.4vw, 1.65rem);
+  font-weight: 720;
+  letter-spacing: -0.035em;
+  line-height: 1.08;
+}
+
+.copy p {
+  max-width: 48rem;
+  margin: 0.45rem 0 0;
+  color: var(--en-muted);
+  font-size: 0.73rem;
+  line-height: 1.55;
+}
+
+.activity {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 1.5rem;
+  padding-top: 0.22rem;
+}
+
+.activity span {
+  width: 0.38rem;
+  height: 0.38rem;
+  border-radius: 999px;
+  background: var(--en-accent);
+  opacity: 0.22;
+  animation: analysisPulse 1.35s ease-in-out infinite;
+}
+
+.activity span:nth-child(2) { animation-delay: 0.16s; }
+.activity span:nth-child(3) { animation-delay: 0.32s; }
+
+.progressTrack {
+  position: relative;
+  height: 0.24rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--en-line) 84%, transparent);
+}
+
+.progressFill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--en-accent);
+  transition: width 420ms ease;
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(0.65rem, 2vw, 1.25rem);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.stepMarker {
+  display: grid;
+  flex: 0 0 1.45rem;
+  place-items: center;
+  width: 1.45rem;
+  height: 1.45rem;
+  border: 1px solid var(--en-line);
+  border-radius: 999px;
+  color: var(--en-subtle);
+  font-size: 0.58rem;
+  font-weight: 760;
+  line-height: 1;
+}
+
+.stepCopy {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+  padding-top: 0.08rem;
+}
+
+.stepCopy strong {
+  color: var(--en-muted);
+  font-size: 0.65rem;
+  font-weight: 720;
+}
+
+.stepCopy span {
+  color: var(--en-subtle);
+  font-size: 0.58rem;
+  line-height: 1.35;
+}
+
+.complete .stepMarker,
+.current .stepMarker {
+  border-color: color-mix(in srgb, var(--en-accent) 55%, var(--en-line));
+  color: var(--en-accent);
+  background: color-mix(in srgb, var(--en-accent) 9%, transparent);
+}
+
+.complete .stepCopy strong,
+.current .stepCopy strong {
+  color: var(--en-ink);
+}
+
+.current .stepMarker {
+  box-shadow: 0 0 0 0.24rem color-mix(in srgb, var(--en-accent) 8%, transparent);
+}
+
+.upcoming {
+  opacity: 0.58;
+}
+
+.recovery {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  border-color: color-mix(in srgb, var(--en-accent) 18%, var(--en-line));
+  background: var(--en-surface-raised);
+}
+
+.recoveryMarker {
+  display: grid;
+  place-items: center;
+  width: 2.15rem;
+  height: 2.15rem;
+  border: 1px solid color-mix(in srgb, var(--en-accent) 40%, var(--en-line));
+  border-radius: 999px;
+  color: var(--en-accent);
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.action {
+  align-self: center;
+  padding: 0.55rem 0;
+  color: var(--en-ink);
+  font-size: 0.68rem;
+  font-weight: 760;
+  white-space: nowrap;
+}
+
+.action:hover,
+.action:focus-visible {
+  color: var(--en-accent);
+}
+
+@keyframes analysisPulse {
+  0%, 100% { opacity: 0.2; transform: translateY(0); }
+  50% { opacity: 0.9; transform: translateY(-0.12rem); }
+}
+
+@media (max-width: 760px) {
+  .surface {
+    margin-top: -0.55rem;
+  }
+
+  .steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .recovery {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .recovery .action {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
+@media (max-width: 520px) {
+  .surface {
+    gap: 0.95rem;
+    padding: 1rem;
+  }
+
+  .progressHeader {
+    gap: 0.8rem;
+  }
+
+  .activity {
+    padding-top: 0.05rem;
+  }
+
+  .steps {
+    grid-template-columns: 1fr;
+    gap: 0.55rem;
+  }
+
+  .upcoming .stepCopy span {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activity span {
+    animation: none;
+    opacity: 0.55;
+  }
+
+  .progressFill {
+    transition: none;
+  }
+}
