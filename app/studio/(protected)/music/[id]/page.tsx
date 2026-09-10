@@ -20,6 +20,18 @@ import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { describeTrackAnalysis, hasMusicIntelligenceMap } from "@/lib/studio/track-analysis-state";
 import type { Json, Track } from "@/types/database";
 
+type AnalysisProcessingStep = {
+  label: string;
+  state: "waiting" | "active" | "complete";
+};
+
+type AnalysisProcessingCopy = {
+  eyebrow: string;
+  title: string;
+  detail: string;
+  steps: AnalysisProcessingStep[];
+};
+
 function titleCase(value: string) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
@@ -42,35 +54,54 @@ function masteringStatus(value: unknown) {
   return null;
 }
 
-function describeAnalysisProcessing(status: string, isRefreshing: boolean) {
-  const isListening = status === "dispatched" || status === "running";
+function describeAnalysisProcessing(status: string, isRefreshing: boolean): AnalysisProcessingCopy {
+  const masterStep: AnalysisProcessingStep = { label: "Master attached", state: "complete" };
+  const readyStep: AnalysisProcessingStep = { label: "Intelligence ready", state: "waiting" };
 
-  if (isListening) {
+  if (status === "dispatched" || status === "running") {
     return {
-      stage: "analyzing" as const,
+      eyebrow: "Track Intelligence · Listening",
       title: isRefreshing ? "Refreshing what Ensemblis hears." : "Ensemblis is understanding your track.",
-      copy: isRefreshing
+      detail: isRefreshing
         ? "Current verified intelligence stays available while Ensemblis listens again for structure, tempo, strongest Moments and mastering signals."
         : "Ensemblis is listening for structure, tempo, strongest Moments and mastering signals. Deep audio passes can take several minutes.",
+      steps: [
+        masterStep,
+        { label: "Analysis queued", state: "complete" },
+        { label: "Listening to master", state: "active" },
+        readyStep,
+      ],
     };
   }
 
   if (status === "queued") {
     return {
-      stage: "preparing" as const,
+      eyebrow: "Track Intelligence · Queued",
       title: isRefreshing ? "Your fresh intelligence pass is queued." : "Track Intelligence is queued.",
-      copy: isRefreshing
+      detail: isRefreshing
         ? "Current verified intelligence stays live while the Media Worker waits for capacity to start the fresh pass."
         : "The master is safe and waiting for the Media Worker. Analysis starts automatically when the worker is available.",
+      steps: [
+        masterStep,
+        { label: "Analysis queued", state: "active" },
+        { label: "Listening to master", state: "waiting" },
+        readyStep,
+      ],
     };
   }
 
   return {
-    stage: "preparing" as const,
+    eyebrow: "Track Intelligence · Preparing",
     title: isRefreshing ? "Preparing a fresh intelligence pass." : "Preparing Track Intelligence.",
-    copy: isRefreshing
+    detail: isRefreshing
       ? "Nothing is being replaced yet. Current verified intelligence remains live while Ensemblis prepares the new pass."
       : "The master is attached. Ensemblis is preparing the analysis job automatically.",
+    steps: [
+      masterStep,
+      { label: "Preparing analysis", state: "active" },
+      { label: "Listening to master", state: "waiting" },
+      readyStep,
+    ],
   };
 }
 
@@ -229,10 +260,11 @@ export default async function TrackWorkspacePage({
 
       {vaultTrack.audio_url && analysis.isActive ? (
         <ProcessingState
-          stage={processing.stage}
+          eyebrow={processing.eyebrow}
           title={processing.title}
-          copy={processing.copy}
-          aside={analysis.isRefreshing ? <span className="growth-active-label">Current intelligence stays live</span> : undefined}
+          detail={processing.detail}
+          steps={processing.steps}
+          ariaLabel={`Track Intelligence. ${processing.title}`}
         />
       ) : null}
 
