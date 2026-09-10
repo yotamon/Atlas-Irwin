@@ -5,6 +5,11 @@ import {
   asDjIntelligenceClient,
   plannerDjProfile,
 } from "@/lib/automix/personalization";
+import {
+  candidateIdsFromSnapshot,
+  normalizeDeviceCandidateSnapshot,
+  workerTracksFromSnapshot,
+} from "@/lib/automix/source-candidates";
 import { dispatchMediaWorkerJob } from "@/lib/media-worker/dispatcher";
 import {
   createMediaWorkerCallbackCredential,
@@ -21,6 +26,13 @@ import type { StemDatabase, TrackStem } from "@/types/stem-database";
 const AUTOMIX_BUCKET = "public-media";
 const STALE_JOB_MS = 50 * 60 * 1000;
 const MAX_PREPARATION_SKIPS = 8;
+
+type PreparedPayload = {
+  payload: Record<string, unknown>;
+  outputPath: string;
+  publicUrl: string;
+  fingerprints: Record<string, unknown>[];
+};
 
 export function asAutoMixClient(client: SupabaseClient<Database> | SupabaseClient<AutoMixDatabase>) {
   return client as unknown as SupabaseClient<AutoMixDatabase>;
@@ -75,7 +87,12 @@ function bestStemByCategory(stems: TrackStem[], category: "vocals" | "bass") {
     .sort((a, b) => Number(b.alignment_confidence ?? 0) - Number(a.alignment_confidence ?? 0))[0] ?? null;
 }
 
-async function prepareCatalogPayload(job: AutoMixJob) {
+function executionMode(job: AutoMixJob) {
+  const value = record(job.request_payload).execution_mode;
+  return typeof value === "string" ? value : "render";
+}
+
+async function prepareCatalogPayload(job: AutoMixJob): Promise<PreparedPayload> {
   const service = createServiceClient();
   const musicDb = asArtistScopedMusicClient(service);
   const stemDb = asStemClient(service) as SupabaseClient<StemDatabase>;
@@ -147,44 +164,103 @@ async function prepareCatalogPayload(job: AutoMixJob) {
   }
 
   const outputPath = job.output_path || autoMixOutputPath(job);
-  const upload = await service.storage.from(job.output_bucket || AUTOMIX_BUCKET).createSignedUploadUrl(outputPath);
-  if (upload.error || !upload.data?.signedUrl) {
-    throw new Error(upload.error?.message || "Could not create AutoMix upload credential.");
-  }
-  const publicUrl = service.storage.from(job.output_bucket || AUTOMIX_BUCKET).getPublicUrl(outputPath).data.publicUrl;
   const base = withoutCredential(record(job.request_payload));
   const baseIntent = record(base.set_intent);
   const journey = job.purpose === "journey";
   const setIntent = {
     ...baseIntent,
     version: "ensemblis.set-intent.v1",
-    // Journey is a hard preservation contract at every boundary. Persisted payloads from older
-    // clients cannot re-enable omissions or make only part of the supplied narrative optional.
     allow_omissions: journey ? false : baseIntent.allow_omissions !== false,
     must_play_track_ids: journey ? [...job.track_ids] : baseIntent.must_play_track_ids,
     target_track_count: journey ? job.track_ids.length : baseIntent.target_track_count,
   };
+  const payload: Record<string, unknown> = {
+    ...base,
+    tracks,
+    purpose: job.purpose,
+    energy_profile: job.energy_profile,
+    transition_style: job.transition_style,
+    duration_ms: job.target_duration_ms,
+    output_format: job.output_format,
+    set_intent: setIntent,
+    dj_profile: plannerDjProfile(djProfileResult.data),
+  };
+
+  let publicUrl = "";
+  if (executionMode(job) !== "plan_only") {
+    const upload = await service.storage.from(job.output_bucket || AUTOMIX_BUCKET).createSignedUploadUrl(outputPath);
+    if (upload.error || !upload.data?.signedUrl) {
+      throw new Error(upload.error?.message || "Could not create AutoMix upload credential.");
+    }
+    publicUrl = service.storage.from(job.output_bucket || AUTOMIX_BUCKET).getPublicUrl(outputPath).data.publicUrl;
+    payload.upload_url = upload.data.signedUrl;
+    payload.upload_bucket = job.output_bucket || AUTOMIX_BUCKET;
+    payload.upload_path = outputPath;
+    payload.public_url = publicUrl;
+  }
+
+  return { payload, outputPath, publicUrl, fingerprints };
+}
+
+async function prepareDevicePlanningPayload(job: AutoMixJob): Promise<PreparedPayload> {
+  const request = record(job.request_payload);
+  const snapshotValue = request.candidate_snapshot;
+  const snapshot = normalizeDeviceCandidateSnapshot(snapshotValue);
+  if (!snapshot) throw new Error("Device AutoMix candidate snapshot is invalid or incomplete.");
+  if (executionMode(job) !== "plan_only") {
+    throw new Error("Device AutoMix rendering must execute through the paired Library Bridge.");
+  }
+  if (job.track_ids.length > 0) {
+    throw new Error("Device AutoMix jobs cannot contain catalog track IDs before hybrid mode is enabled.");
+  }
+
+  const service = createServiceClient();
+  const djDb = asDjIntelligenceClient(service);
+  const djProfileResult = await djDb.from("dj_profiles")
+    .select("*")
+    .eq("owner_id", job.owner_id)
+    .eq("artist_id", job.artist_id)
+    .maybeSingle();
+  if (djProfileResult.error) throw new Error(djProfileResult.error.message);
+
+  const ids = candidateIdsFromSnapshot(snapshot);
+  const base = withoutCredential(request);
+  const baseIntent = record(base.set_intent);
+  const journey = job.purpose === "journey";
+  const setIntent = {
+    ...baseIntent,
+    version: "ensemblis.set-intent.v1",
+    allow_omissions: journey ? false : baseIntent.allow_omissions !== false,
+    must_play_track_ids: journey ? ids : baseIntent.must_play_track_ids,
+    target_track_count: journey ? ids.length : baseIntent.target_track_count,
+  };
+
   return {
     payload: {
       ...base,
-      tracks,
+      tracks: workerTracksFromSnapshot(snapshot),
       purpose: job.purpose,
       energy_profile: job.energy_profile,
       transition_style: job.transition_style,
       duration_ms: job.target_duration_ms,
       output_format: job.output_format,
       set_intent: setIntent,
-      // Snapshot the effective profile only when the durable session is actually queued.
       dj_profile: plannerDjProfile(djProfileResult.data),
-      upload_url: upload.data.signedUrl,
-      upload_bucket: job.output_bucket || AUTOMIX_BUCKET,
-      upload_path: outputPath,
-      public_url: publicUrl,
     },
-    outputPath,
-    publicUrl,
-    fingerprints,
+    outputPath: job.output_path || autoMixOutputPath(job),
+    publicUrl: "",
+    // The frozen content identities live in candidate_snapshot and in the MixPlan provenance. Keep
+    // this legacy catalog-only column empty so the existing callback does not query catalog masters.
+    fingerprints: [],
   };
+}
+
+async function prepareJobPayload(job: AutoMixJob): Promise<PreparedPayload> {
+  const request = record(job.request_payload);
+  if (request.candidate_snapshot !== undefined) {
+    return prepareDevicePlanningPayload(job);
+  }
+  return prepareCatalogPayload(job);
 }
 
 async function recoverStaleJobs(db: SupabaseClient<AutoMixDatabase>) {
@@ -236,8 +312,6 @@ export async function kickAutoMixQueue() {
   const db = asAutoMixClient(service);
   if (await recoverStaleJobs(db)) return { dispatched: false, busy: true };
 
-  // Preparation can fail because a master was removed, lineage changed, or storage is unavailable.
-  // Mark that durable job terminal and keep walking so one poisoned planned row cannot block the queue.
   for (let attempt = 0; attempt < MAX_PREPARATION_SKIPS; attempt += 1) {
     const planned = await db.from("automix_jobs")
       .select("*")
@@ -249,9 +323,9 @@ export async function kickAutoMixQueue() {
     if (!planned.data) return { dispatched: false, busy: false };
     const job = planned.data as AutoMixJob;
 
-    let prepared: Awaited<ReturnType<typeof prepareCatalogPayload>>;
+    let prepared: PreparedPayload;
     try {
-      prepared = await prepareCatalogPayload(job);
+      prepared = await prepareJobPayload(job);
     } catch (error) {
       const failed = await failPlannedPreparation(db, job, error);
       if (!failed) continue;
