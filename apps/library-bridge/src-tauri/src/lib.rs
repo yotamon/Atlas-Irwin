@@ -5,6 +5,7 @@ mod identity;
 mod model;
 mod network;
 mod scanner;
+mod sidecar;
 mod watcher;
 
 use crate::{
@@ -14,7 +15,7 @@ use crate::{
     model::{BridgeStatus, PairResponse, ScanSummary},
     watcher::LibraryWatcher,
 };
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 use tauri::{Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use uuid::Uuid;
@@ -23,6 +24,8 @@ use uuid::Uuid;
 struct BridgeState {
     db: Arc<BridgeDb>,
     watcher: Arc<LibraryWatcher>,
+    sidecar_binary: Option<PathBuf>,
+    sidecar_work_root: PathBuf,
 }
 
 fn command_error(error: impl std::fmt::Display) -> String {
@@ -46,7 +49,32 @@ fn bridge_status(state: State<'_, BridgeState>) -> Result<BridgeStatus, String> 
             .filter(|value| !value.is_empty()),
         sources: state.db.source_count().map_err(command_error)?,
         pending_sync_batches: state.db.pending_outbox_count().map_err(command_error)?,
+        local_intelligence_available: state
+            .sidecar_binary
+            .as_deref()
+            .is_some_and(|binary| binary.is_file()),
     })
+}
+
+fn scan_with_available_intelligence(
+    db: &BridgeDb,
+    source_id: &str,
+    source_kind: &str,
+    path: &std::path::Path,
+    sidecar_binary: Option<&std::path::Path>,
+    work_root: &std::path::Path,
+) -> anyhow::Result<ScanSummary> {
+    match sidecar_binary.filter(|binary| binary.is_file()) {
+        Some(binary) => scanner::scan_source_with_sidecar(
+            db,
+            source_id,
+            source_kind,
+            path,
+            binary,
+            work_root,
+        ),
+        None => scanner::scan_source(db, source_id, source_kind, path),
+    }
 }
 
 #[tauri::command]
@@ -67,8 +95,17 @@ async fn choose_and_scan_source(
     let scan_path = path.clone();
     let scan_source_id = source_id.clone();
     let scan_source_kind = source_kind.clone();
+    let sidecar_binary = state.sidecar_binary.clone();
+    let work_root = state.sidecar_work_root.clone();
     let summary = tauri::async_runtime::spawn_blocking(move || {
-        scanner::scan_source(&db, &scan_source_id, &scan_source_kind, &scan_path)
+        scan_with_available_intelligence(
+            &db,
+            &scan_source_id,
+            &scan_source_kind,
+            &scan_path,
+            sidecar_binary.as_deref(),
+            &work_root,
+        )
     })
     .await
     .map_err(command_error)?
@@ -86,10 +123,20 @@ async fn rescan_source(
     source_id: String,
 ) -> Result<ScanSummary, String> {
     let db = Arc::clone(&state.db);
-    tauri::async_runtime::spawn_blocking(move || scanner::rescan_registered_source(&db, &source_id))
-        .await
-        .map_err(command_error)?
-        .map_err(command_error)
+    let sidecar_binary = state.sidecar_binary.clone();
+    let work_root = state.sidecar_work_root.clone();
+    tauri::async_runtime::spawn_blocking(move || match sidecar_binary.as_deref() {
+        Some(binary) if binary.is_file() => scanner::rescan_registered_source_with_sidecar(
+            &db,
+            &source_id,
+            binary,
+            &work_root,
+        ),
+        _ => scanner::rescan_registered_source(&db, &source_id),
+    })
+    .await
+    .map_err(command_error)?
+    .map_err(command_error)
 }
 
 #[tauri::command]
@@ -172,9 +219,9 @@ fn privacy_contract_probe() -> serde_json::Value {
     // Kept deliberately path-free so integration tests can assert the command boundary itself.
     serde_json::json!({
         "recordingIdentity": "content-sha256",
-        "cloudFields": ["sourceTrackId", "recordingFingerprint", "metadata", "playlistIds", "cuePoints", "beatGrid", "analysisProvenance", "availability"],
+        "cloudFields": ["sourceTrackId", "recordingFingerprint", "metadata", "playlistIds", "cuePoints", "beatGrid", "analysisProvenance", "planningEvidence", "availability"],
         "forbiddenCloudFields": ["path", "filePath", "location", "fileUri"],
-        "contractHash": hash_text("ensemblis.library-bridge.privacy.v1")
+        "contractHash": hash_text("ensemblis.library-bridge.privacy.v2")
     })
 }
 
@@ -188,11 +235,24 @@ pub fn run() {
                 BridgeDb::new(app_data.join("library-bridge.sqlite3"))
                     .map_err(|error| std::io::Error::other(error.to_string()))?,
             );
+            let sidecar_binary = sidecar::bundled_sidecar_path()
+                .ok()
+                .filter(|path| path.is_file());
+            let sidecar_work_root = app_data.join("sidecar-work");
             let watcher = Arc::new(
-                LibraryWatcher::start(Arc::clone(&db))
-                    .map_err(|error| std::io::Error::other(error.to_string()))?,
+                LibraryWatcher::start(
+                    Arc::clone(&db),
+                    sidecar_binary.clone(),
+                    sidecar_work_root.clone(),
+                )
+                .map_err(|error| std::io::Error::other(error.to_string()))?,
             );
-            app.manage(BridgeState { db, watcher });
+            app.manage(BridgeState {
+                db,
+                watcher,
+                sidecar_binary,
+                sidecar_work_root,
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
