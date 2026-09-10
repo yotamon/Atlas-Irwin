@@ -21,6 +21,20 @@ test("Phase 8 cloud schema applies pairing, sync revisions and job claims atomic
   assert.equal(migration.includes("grant select on public.dj_library_pairing_codes to authenticated"), false);
 });
 
+test("active DJ source scope excludes Serato from contracts and final database constraints", async () => {
+  const contract = await source("lib/automix/source-contract.ts");
+  const server = await source("lib/dj-library/device-server.ts");
+  const types = await source("types/dj-library-bridge-database.ts");
+  const finalScope = await source("supabase/migrations/20260910013000_remove_serato_from_dj_library_sources.sql");
+  const roadmap = await source("docs/dj-library-set-intelligence-development-plan.md");
+
+  for (const text of [contract, server, types, roadmap]) {
+    assert.equal(/serato/i.test(text), false, "active source contracts and roadmap must not advertise Serato");
+  }
+  assert.ok(finalScope.includes("'local_library', 'rekordbox', 'traktor'"));
+  assert.equal(finalScope.includes("'serato'"), false);
+});
+
 test("device API accepts only hashed credentials and path-free bounded sync evidence", async () => {
   const server = await source("lib/dj-library/device-server.ts");
   const pair = await source("app/api/dj-library/device/pair/route.ts");
@@ -30,6 +44,7 @@ test("device API accepts only hashed credentials and path-free bounded sync evid
   assert.ok(server.includes('DEVICE_CREDENTIAL_PREFIX = "enlb_"'));
   assert.ok(server.includes("deviceCredentialHash(credential)"));
   assert.ok(server.includes('.eq("credential_hash", credentialHash)'));
+  assert.ok(server.includes('"renderMixPlan"'));
   assert.ok(pair.includes("generateDeviceCredential()"));
   assert.ok(pair.includes("deviceCredentialHash(credential)"));
   assert.ok(sync.includes("assertPathFree(track"));
@@ -83,17 +98,20 @@ test("Studio exposes explicit pairing and revocation without exposing credential
   assert.ok(component.includes("Pair a computer"));
   assert.ok(component.includes("Raw filesystem paths stay inside the native bridge"));
   assert.ok(page.includes("<LibraryBridgePanel"));
+  assert.ok(page.includes("<LocalSetBuilderWorkspace"));
 });
 
-test("Studio track discovery is path-free, bounded and fails closed on incomplete musical evidence", async () => {
+test("Studio track discovery shares strict planning-readiness validation with the local planner", async () => {
   const route = await source("app/api/studio/dj-library/tracks/route.ts");
+  const candidates = await source("lib/automix/source-candidates.ts");
 
   assert.ok(route.includes("MAX_PAGE_SIZE = 200"));
-  assert.ok(route.includes("planningReady"));
-  assert.ok(route.includes('"duration_missing"'));
-  assert.ok(route.includes('"bpm_missing"'));
-  assert.ok(route.includes('"key_missing"'));
-  assert.ok(route.includes("recordingFingerprint"));
+  assert.ok(route.includes("planningReadiness(row, sourceKind)"));
+  assert.ok(route.includes("planningEvidence: row.planning_evidence"));
+  assert.ok(candidates.includes('"duration_missing"'));
+  assert.ok(candidates.includes('"bpm_missing"'));
+  assert.ok(candidates.includes('"key_missing"'));
+  assert.ok(candidates.includes("evidence.recordingFingerprint === fingerprint"));
   assert.equal(route.includes("root_path"), false);
   assert.equal(route.includes("credential_hash"), false);
   assert.equal(route.includes("filePath"), false);
@@ -109,13 +127,62 @@ test("cloud can queue exact content-identity media verification without learning
   assert.equal(route.includes("filePath"), false);
 });
 
-test("local renderer sidecar reuses canonical MixPlan validation and DSP instead of forking the engine", async () => {
+test("local Set Builder uses the canonical planner while keeping audio on one paired device", async () => {
+  const route = await source("app/api/studio/automix/device-plans/route.ts");
+  const queue = await source("lib/automix/jobs.ts");
+  const worker = await source("services/media-worker/app/automix.py");
+  const deviceSources = await source("services/media-worker/app/automix_device_sources.py");
+  const component = await source("components/studio/local-set-builder-workspace.tsx");
+
+  assert.ok(route.includes('execution_target: "device"'));
+  assert.ok(route.includes('execution_mode: "plan_only"'));
+  assert.ok(route.includes('job_type: "render_mixplan"'));
+  assert.ok(route.includes("assertDeviceSnapshotStillAvailable"));
+  assert.ok(queue.includes("workerTracksFromSnapshot"));
+  assert.ok(queue.includes("snapshotFingerprints"));
+  assert.ok(worker.includes("device_track_descriptors"));
+  assert.ok(deviceSources.includes("TrackDescriptor("));
+  assert.ok(component.includes("Approve & render locally"));
+  assert.ok(component.includes("candidateRefs"));
+  assert.ok(component.includes("Replan edits"));
+});
+
+test("local renderer reuses canonical MixPlan DSP and double-checks frozen recording fingerprints", async () => {
   const renderer = await source("apps/library-bridge/renderer/bridge_renderer.py");
+  const execution = await source("apps/library-bridge/src-tauri/src/execution.rs");
 
   assert.ok(renderer.includes("from app.automix_manifest import mixplan_hash, validate_mixplan"));
   assert.ok(renderer.includes("from app.automix_mixplan_renderer import render_mixplan"));
   assert.ok(renderer.includes("validate_mixplan(mixplan)"));
   assert.ok(renderer.includes("mixplan_hash(mixplan)"));
+  assert.ok(renderer.includes("_expected_fingerprints(mixplan)"));
+  assert.ok(renderer.includes("_sha256(path) != fingerprint"));
+  assert.ok(execution.includes("resolve_verified_media"));
+  assert.ok(execution.includes("fingerprint_file(&binding.path)"));
   assert.ok(renderer.includes("MAX_REQUEST_BYTES = 16 * 1024 * 1024"));
   assert.equal(renderer.includes("download("), false, "local renderer must not upload or fetch local audio through cloud helpers");
+});
+
+test("desktop export only copies a completed render from the trusted local workspace", async () => {
+  const exporter = await source("apps/library-bridge/src-tauri/src/export.rs");
+  const native = await source("apps/library-bridge/src-tauri/src/lib.rs");
+  const html = await source("apps/library-bridge/ui/index.html");
+  const js = await source("apps/library-bridge/ui/app.js");
+
+  assert.ok(exporter.includes("output.starts_with(&trusted_directory)"));
+  assert.ok(exporter.includes("fs::copy(&asset.source_path"));
+  assert.ok(native.includes("export_latest_render"));
+  assert.ok(html.includes("Export latest mix"));
+  assert.ok(js.includes('invoke("export_latest_render")'));
+});
+
+test("release configuration declares a version-checked Tauri external sidecar", async () => {
+  const release = JSON.parse(await source("apps/library-bridge/src-tauri/tauri.release.conf.json"));
+  const builder = await source("apps/library-bridge/renderer/build_sidecar.py");
+
+  assert.deepEqual(release.bundle.externalBin, ["binaries/ensemblis-bridge-sidecar"]);
+  assert.ok(builder.includes('rustc", "--print", "host-tuple"'));
+  assert.ok(builder.includes("PyInstaller"));
+  assert.ok(builder.includes("EXPECTED_VERSIONS"));
+  assert.ok(builder.includes('f"{SIDECAR_NAME}-{target_triple}{extension}"'));
 });
