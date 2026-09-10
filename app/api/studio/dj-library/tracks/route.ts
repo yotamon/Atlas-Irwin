@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
+import { planningReadiness } from "@/lib/automix/source-candidates";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { DeviceRequestError, createDjLibraryServiceClient, record } from "@/lib/dj-library/device-server";
+import { DeviceRequestError, createDjLibraryServiceClient } from "@/lib/dj-library/device-server";
 import { resolveArtistContext } from "@/lib/studio/artist-context";
 
 export const runtime = "nodejs";
@@ -12,43 +13,6 @@ const MAX_PAGE_SIZE = 200;
 function safeInt(value: string | null, fallback: number, min: number, max: number) {
   const parsed = Number.parseInt(value ?? "", 10);
   return Number.isFinite(parsed) ? Math.max(min, Math.min(max, parsed)) : fallback;
-}
-
-function finitePositive(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) && value > 0;
-}
-
-function planningReadiness(row: Record<string, unknown>, sourceKind: string) {
-  const metadata = record(row.metadata);
-  const beatGrid = record(row.beat_grid);
-  const durationReady = finitePositive(metadata.durationMs);
-  const bpmReady = finitePositive(metadata.bpm) || finitePositive(beatGrid.bpm);
-  const keyReady = typeof metadata.musicalKey === "string" && metadata.musicalKey.trim().length > 0;
-  const identityReady = typeof row.recording_fingerprint === "string"
-    && /^sha256:[0-9a-f]{64}$/i.test(row.recording_fingerprint);
-  const available = row.availability === "available";
-  const revisionReady = typeof row.revision === "string" && row.revision.length > 0;
-  const reasons = [
-    !available ? "source_offline" : null,
-    !identityReady ? "recording_identity_missing" : null,
-    !revisionReady ? "source_revision_missing" : null,
-    !durationReady ? "duration_missing" : null,
-    !bpmReady ? "bpm_missing" : null,
-    !keyReady ? "key_missing" : null,
-  ].filter((value): value is string => Boolean(value));
-
-  return {
-    ready: reasons.length === 0,
-    reasons,
-    evidence: {
-      duration: durationReady,
-      bpm: bpmReady,
-      key: keyReady,
-      beatGrid: finitePositive(beatGrid.bpm),
-      cues: Array.isArray(row.cue_points) && row.cue_points.length > 0,
-      sourceKind,
-    },
-  };
 }
 
 async function scope(artistId: string) {
@@ -100,7 +64,7 @@ export async function GET(request: Request) {
     const { data: tracks, error: tracksError, count } = await client
       .from("dj_library_source_tracks")
       .select(
-        "id,device_id,device_source_id,source_id,source_track_id,recording_fingerprint,metadata,playlist_ids,cue_points,beat_grid,analysis_provenance,availability,revision,updated_at",
+        "id,device_id,device_source_id,source_id,source_track_id,recording_fingerprint,metadata,playlist_ids,cue_points,beat_grid,analysis_provenance,planning_evidence,availability,revision,updated_at",
         { count: "exact" },
       )
       .eq("owner_id", auth.ownerId)
@@ -126,6 +90,7 @@ export async function GET(request: Request) {
         cuePoints: row.cue_points,
         beatGrid: row.beat_grid,
         analysisProvenance: row.analysis_provenance,
+        planningEvidence: row.planning_evidence,
         availability: row.availability,
         revision: row.revision,
         lastSyncedAt: source.last_synced_at ?? null,
