@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from . import main as worker_main
 from .automix import AutomixWorkerRequest, execute_automix
 from .automix_preview import AutomixPreviewWorkerRequest, execute_automix_preview
 from .mastering_processor import MasteringWorkerRequest, execute_mastering
-from .media_cache import cached_download
 from .music_intelligence_v4_runtime import analyze_music as analyze_music_v4
 from .social_finishing import SocialWorkerRequest, execute_social
 from .stem_intelligence_v3 import analyze_stem as analyze_stem_v3
@@ -21,17 +23,112 @@ from .stem_intelligence_v3 import analyze_stem as analyze_stem_v3
 worker_main.analyze_music = analyze_music_v4
 worker_main.analyze_stem = analyze_stem_v3
 
+_MEDIA_CACHE_MAX_BYTES = 512 * 1024 * 1024
+_CACHEABLE_AUDIO_SUFFIXES = frozenset({".aac", ".flac", ".m4a", ".mp3", ".ogg", ".opus", ".wav"})
 _uncached_download = worker_main.download
 
 
-async def _cached_worker_download(url: str, target: Path, limit_bytes: int = 600 * 1024 * 1024) -> None:
-    await cached_download(url, target, limit_bytes, downloader=_uncached_download)
+def _media_cache_root() -> Path | None:
+    configured = os.environ.get("ENSEMBLIS_MEDIA_CACHE_DIR", "").strip()
+    if configured:
+        return Path(configured)
+
+    # Vercel Sandbox dispatches jobs from the persistent worker directory. Keep
+    # local/test executions ephemeral unless a cache directory is explicitly set.
+    cwd = Path.cwd()
+    if cwd.name == "atlas-media-worker":
+        return cwd / ".media-cache"
+    return None
+
+
+def _cacheable_supabase_audio(url: str) -> bool:
+    parsed = urlparse(url)
+    hostname = (parsed.hostname or "").lower()
+    if parsed.scheme not in {"http", "https"} or not hostname.endswith(".supabase.co"):
+        return False
+    if "/storage/v1/object/public/public-media/" not in parsed.path:
+        return False
+    return Path(parsed.path).suffix.lower() in _CACHEABLE_AUDIO_SUFFIXES
+
+
+def _cache_path(root: Path, url: str) -> Path:
+    digest = hashlib.sha256(url.encode("utf-8")).hexdigest()
+    suffix = Path(urlparse(url).path).suffix.lower()
+    return root / f"{digest}{suffix}"
+
+
+def _valid_cached_file(path: Path, limit_bytes: int) -> bool:
+    try:
+        size = path.stat().st_size
+    except FileNotFoundError:
+        return False
+    if size <= 0 or size > limit_bytes:
+        path.unlink(missing_ok=True)
+        return False
+    return True
+
+
+def _prune_media_cache(root: Path, protected: Path, max_bytes: int = _MEDIA_CACHE_MAX_BYTES) -> None:
+    files: list[tuple[float, int, Path]] = []
+    total = 0
+    for path in root.iterdir():
+        if not path.is_file() or path.name.endswith(".part"):
+            continue
+        try:
+            stat = path.stat()
+        except FileNotFoundError:
+            continue
+        total += stat.st_size
+        files.append((stat.st_mtime, stat.st_size, path))
+
+    if total <= max_bytes:
+        return
+
+    for _, size, path in sorted(files, key=lambda item: item[0]):
+        if total <= max_bytes:
+            break
+        if path == protected:
+            continue
+        path.unlink(missing_ok=True)
+        total -= size
+
+    # A single unusually large source should never make the persistent cache
+    # exceed its budget. The current job already has its working copy.
+    if total > max_bytes and protected.exists():
+        protected.unlink(missing_ok=True)
+
+
+async def _cached_download(url: str, target: Path, limit_bytes: int = 600 * 1024 * 1024) -> None:
+    root = _media_cache_root()
+    if root is None or not _cacheable_supabase_audio(url):
+        await _uncached_download(url, target, limit_bytes)
+        return
+
+    root.mkdir(parents=True, exist_ok=True)
+    cached = _cache_path(root, url)
+    if _valid_cached_file(cached, limit_bytes):
+        await asyncio.to_thread(shutil.copyfile, cached, target)
+        cached.touch()
+        return
+
+    staging = cached.with_name(f"{cached.name}.part")
+    staging.unlink(missing_ok=True)
+    try:
+        await _uncached_download(url, staging, limit_bytes)
+        if not _valid_cached_file(staging, limit_bytes):
+            raise RuntimeError("Media Worker downloaded an empty cache entry")
+        staging.replace(cached)
+        await asyncio.to_thread(shutil.copyfile, cached, target)
+        cached.touch()
+        await asyncio.to_thread(_prune_media_cache, root, cached)
+    finally:
+        staging.unlink(missing_ok=True)
 
 
 # All download calls inside worker_main resolve this global at execution time.
 # Reusing immutable UUID-based public-media objects prevents every stem-analysis
 # and Audio Scene job from re-downloading the same heavy WAVs from Supabase.
-worker_main.download = _cached_worker_download
+worker_main.download = _cached_download
 
 WorkerRequest = worker_main.WorkerRequest
 execute = worker_main.execute
