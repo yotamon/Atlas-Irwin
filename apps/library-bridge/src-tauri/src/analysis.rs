@@ -43,7 +43,9 @@ impl AnalysisArtifactKey {
     }
 }
 
-pub fn track_planning_artifact_key(recording_fingerprint: &str) -> anyhow::Result<AnalysisArtifactKey> {
+pub fn track_planning_artifact_key(
+    recording_fingerprint: &str,
+) -> anyhow::Result<AnalysisArtifactKey> {
     assert_recording_fingerprint(recording_fingerprint, "recordingFingerprint")?;
     Ok(AnalysisArtifactKey {
         recording_fingerprint: recording_fingerprint.to_string(),
@@ -56,13 +58,19 @@ pub fn track_planning_artifact_key(recording_fingerprint: &str) -> anyhow::Resul
     })
 }
 
-fn required_object<'a>(root: &'a serde_json::Map<String, Value>, key: &str) -> anyhow::Result<&'a serde_json::Map<String, Value>> {
+fn required_object<'a>(
+    root: &'a serde_json::Map<String, Value>,
+    key: &str,
+) -> anyhow::Result<&'a serde_json::Map<String, Value>> {
     root.get(key)
         .and_then(Value::as_object)
         .ok_or_else(|| anyhow::anyhow!("local analysis payload is missing {key}"))
 }
 
-pub fn validate_track_planning_payload(expected_fingerprint: &str, payload: &Value) -> anyhow::Result<()> {
+pub fn validate_track_planning_payload(
+    expected_fingerprint: &str,
+    payload: &Value,
+) -> anyhow::Result<()> {
     assert_recording_fingerprint(expected_fingerprint, "recordingFingerprint")?;
     if serde_json::to_vec(payload)?.len() > MAX_ANALYSIS_PAYLOAD_BYTES {
         anyhow::bail!("local analysis payload exceeds the safety budget");
@@ -73,14 +81,19 @@ pub fn validate_track_planning_payload(expected_fingerprint: &str, payload: &Val
     if root.get("version").and_then(Value::as_str) != Some(TRACK_PLANNING_SCHEMA_VERSION) {
         anyhow::bail!("local analysis payload uses an unsupported schema");
     }
-    if root.get("analyzerVersion").and_then(Value::as_str) != Some(TRACK_PLANNING_PROCESSOR_VERSION) {
+    if root.get("analyzerVersion").and_then(Value::as_str)
+        != Some(TRACK_PLANNING_PROCESSOR_VERSION)
+    {
         anyhow::bail!("local analysis payload uses an unexpected processor version");
     }
     if root.get("recordingFingerprint").and_then(Value::as_str) != Some(expected_fingerprint) {
         anyhow::bail!("local analysis payload does not match the recording identity");
     }
     let metadata = required_object(root, "metadata")?;
-    let title = metadata.get("title").and_then(Value::as_str).unwrap_or_default();
+    let title = metadata
+        .get("title")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
     if title.trim().is_empty() || title.chars().count() > 512 {
         anyhow::bail!("local analysis metadata title is invalid");
     }
@@ -90,8 +103,10 @@ pub fn validate_track_planning_payload(expected_fingerprint: &str, payload: &Val
     }
     let planning = required_object(root, "planningEvidence")?;
     if planning.get("version").and_then(Value::as_str) != Some(TRACK_PLANNING_EVIDENCE_VERSION)
-        || planning.get("analyzerVersion").and_then(Value::as_str) != Some(TRACK_PLANNING_PROCESSOR_VERSION)
-        || planning.get("recordingFingerprint").and_then(Value::as_str) != Some(expected_fingerprint)
+        || planning.get("analyzerVersion").and_then(Value::as_str)
+            != Some(TRACK_PLANNING_PROCESSOR_VERSION)
+        || planning.get("recordingFingerprint").and_then(Value::as_str)
+            != Some(expected_fingerprint)
     {
         anyhow::bail!("local planning evidence identity is invalid");
     }
@@ -141,7 +156,8 @@ mod tests {
         wrong["recordingFingerprint"] = Value::String(format!("sha256:{}", "b".repeat(64)));
         assert!(validate_track_planning_payload(&fingerprint, &wrong).is_err());
         let mut leaked = valid_payload(&fingerprint);
-        leaked["metadata"]["filePath"] = Value::String("C:\\Users\\Example\\track.wav".to_string());
+        leaked["metadata"]["filePath"] =
+            Value::String("C:\\Users\\Example\\track.wav".to_string());
         assert!(validate_track_planning_payload(&fingerprint, &leaked).is_err());
     }
 }
