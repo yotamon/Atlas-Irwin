@@ -81,8 +81,7 @@ pub fn validate_track_planning_payload(
     if root.get("version").and_then(Value::as_str) != Some(TRACK_PLANNING_SCHEMA_VERSION) {
         anyhow::bail!("local analysis payload uses an unsupported schema");
     }
-    if root.get("analyzerVersion").and_then(Value::as_str)
-        != Some(TRACK_PLANNING_PROCESSOR_VERSION)
+    if root.get("analyzerVersion").and_then(Value::as_str) != Some(TRACK_PLANNING_PROCESSOR_VERSION)
     {
         anyhow::bail!("local analysis payload uses an unexpected processor version");
     }
@@ -156,8 +155,7 @@ mod tests {
         wrong["recordingFingerprint"] = Value::String(format!("sha256:{}", "b".repeat(64)));
         assert!(validate_track_planning_payload(&fingerprint, &wrong).is_err());
         let mut leaked = valid_payload(&fingerprint);
-        leaked["metadata"]["filePath"] =
-            Value::String("C:\\Users\\Example\\track.wav".to_string());
+        leaked["metadata"]["filePath"] = Value::String("C:\\Users\\Example\\track.wav".to_string());
         assert!(validate_track_planning_payload(&fingerprint, &leaked).is_err());
     }
 }
