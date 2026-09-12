@@ -1,5 +1,8 @@
-use crate::model::{
-    CloudTrackDelta, DEVICE_SYNC_VERSION, ScanSummary, ScannedTrack, SourceDelta, SyncEnvelope,
+use crate::{
+    analysis::AnalysisArtifactKey,
+    model::{
+        CloudTrackDelta, DEVICE_SYNC_VERSION, ScanSummary, ScannedTrack, SourceDelta, SyncEnvelope,
+    },
 };
 use anyhow::Context;
 use rusqlite::{Connection, OptionalExtension, params};
@@ -69,13 +72,36 @@ impl BridgeDb {
               last_seen_at text not null default current_timestamp
             );
 
-            -- Expensive musical analysis is keyed by content identity, not location. A move/rename
-            -- therefore reuses the evidence while changed bytes naturally create a new cache key.
+            -- Legacy fingerprint-only analysis remains physically readable for diagnostics/migration,
+            -- but the current scanner never trusts it for automatic reuse.
             create table if not exists analysis_cache (
               recording_fingerprint text primary key,
               payload_json text not null,
               analyzer_version text not null,
               updated_at text not null default current_timestamp
+            );
+
+            -- Correctness-sensitive evidence is keyed by every dimension that can change meaning.
+            -- Processor/model/schema/parameter upgrades can coexist and never masquerade as old data.
+            create table if not exists analysis_artifacts (
+              recording_fingerprint text not null,
+              processor_id text not null,
+              processor_version text not null,
+              model_id text not null,
+              model_version text not null,
+              schema_version text not null,
+              parameters_hash text not null,
+              payload_json text not null,
+              updated_at text not null default current_timestamp,
+              primary key (
+                recording_fingerprint,
+                processor_id,
+                processor_version,
+                model_id,
+                model_version,
+                schema_version,
+                parameters_hash
+              )
             );
 
             -- Raw filesystem paths live only in this device-local table.
@@ -92,6 +118,25 @@ impl BridgeDb {
             );
             create unique index if not exists file_bindings_path_idx
               on file_bindings(source_id, path);
+
+            -- Portable projects keep semantics in .ensemble/project.json. SQLite stores only the
+            -- device-local package locator and bindings required to resolve local media.
+            create table if not exists projects (
+              project_id text primary key,
+              package_path text not null unique,
+              format_version text not null,
+              last_revision integer not null,
+              updated_at text not null default current_timestamp
+            );
+
+            create table if not exists project_recording_bindings (
+              project_id text not null references projects(project_id) on delete cascade,
+              recording_id text not null,
+              recording_fingerprint text not null,
+              path text not null,
+              updated_at text not null default current_timestamp,
+              primary key (project_id, recording_id)
+            );
 
             -- The last cloud-acknowledged path-free state, used for delta calculation.
             create table if not exists sync_state (
@@ -228,6 +273,120 @@ impl BridgeDb {
                analyzer_version=excluded.analyzer_version,
                updated_at=current_timestamp",
             params![recording_fingerprint, payload.to_string(), analyzer_version],
+        )?;
+        Ok(())
+    }
+
+    pub fn cached_analysis_artifact(
+        &self,
+        key: &AnalysisArtifactKey,
+    ) -> anyhow::Result<Option<Value>> {
+        key.validate()?;
+        let payload: Option<String> = self
+            .open()?
+            .query_row(
+                "select payload_json from analysis_artifacts
+                 where recording_fingerprint=?1 and processor_id=?2 and processor_version=?3
+                   and model_id=?4 and model_version=?5 and schema_version=?6 and parameters_hash=?7",
+                params![
+                    key.recording_fingerprint,
+                    key.processor_id,
+                    key.processor_version,
+                    key.model_id,
+                    key.model_version,
+                    key.schema_version,
+                    key.parameters_hash,
+                ],
+                |row| row.get(0),
+            )
+            .optional()?;
+        payload
+            .map(|value| serde_json::from_str(&value).map_err(anyhow::Error::from))
+            .transpose()
+    }
+
+    pub fn store_analysis_artifact(
+        &self,
+        key: &AnalysisArtifactKey,
+        payload: &Value,
+    ) -> anyhow::Result<()> {
+        key.validate()?;
+        if !payload.is_object() {
+            anyhow::bail!("analysis artifact payload must be an object");
+        }
+        self.open()?.execute(
+            "insert into analysis_artifacts(
+               recording_fingerprint,processor_id,processor_version,model_id,model_version,
+               schema_version,parameters_hash,payload_json,updated_at
+             ) values (?1,?2,?3,?4,?5,?6,?7,?8,current_timestamp)
+             on conflict(recording_fingerprint,processor_id,processor_version,model_id,model_version,schema_version,parameters_hash)
+             do update set payload_json=excluded.payload_json,updated_at=current_timestamp",
+            params![
+                key.recording_fingerprint,
+                key.processor_id,
+                key.processor_version,
+                key.model_id,
+                key.model_version,
+                key.schema_version,
+                key.parameters_hash,
+                payload.to_string(),
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn register_project(
+        &self,
+        project_id: &str,
+        package_path: &Path,
+        format_version: &str,
+        revision: u64,
+    ) -> anyhow::Result<()> {
+        let revision = i64::try_from(revision).context("project revision exceeds SQLite range")?;
+        self.open()?.execute(
+            "insert into projects(project_id,package_path,format_version,last_revision,updated_at)
+             values (?1,?2,?3,?4,current_timestamp)
+             on conflict(project_id) do update set
+               package_path=excluded.package_path,
+               format_version=excluded.format_version,
+               last_revision=excluded.last_revision,
+               updated_at=current_timestamp",
+            params![
+                project_id,
+                package_path.to_string_lossy().as_ref(),
+                format_version,
+                revision
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn project_package_path(&self, project_id: &str) -> anyhow::Result<Option<PathBuf>> {
+        Ok(self
+            .open()?
+            .query_row(
+                "select package_path from projects where project_id=?1",
+                params![project_id],
+                |row| Ok(PathBuf::from(row.get::<_, String>(0)?)),
+            )
+            .optional()?)
+    }
+
+    pub fn bind_project_recording(
+        &self,
+        project_id: &str,
+        recording_id: &str,
+        recording_fingerprint: &str,
+        path: &Path,
+    ) -> anyhow::Result<()> {
+        self.open()?.execute(
+            "insert into project_recording_bindings(project_id,recording_id,recording_fingerprint,path,updated_at)
+             values (?1,?2,?3,?4,current_timestamp)
+             on conflict(project_id,recording_id) do update set
+               recording_fingerprint=excluded.recording_fingerprint,
+               path=excluded.path,
+               updated_at=current_timestamp",
+            params![project_id, recording_id, recording_fingerprint, path.to_string_lossy().as_ref()],
         )?;
         Ok(())
     }
@@ -470,5 +629,34 @@ impl BridgeDb {
             params![id, status, result.map(Value::to_string)],
         )?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::analysis::track_planning_artifact_key;
+    use tempfile::tempdir;
+
+    #[test]
+    fn analysis_artifact_versions_coexist_for_one_recording() {
+        let directory = tempdir().unwrap();
+        let db = BridgeDb::new(directory.path().join("bridge.sqlite3")).unwrap();
+        let fingerprint = format!("sha256:{}", "a".repeat(64));
+        let first = track_planning_artifact_key(&fingerprint).unwrap();
+        let mut second = first.clone();
+        second.model_version = "atlas-ti-vNext".to_string();
+        db.store_analysis_artifact(&first, &serde_json::json!({"version": "first"}))
+            .unwrap();
+        db.store_analysis_artifact(&second, &serde_json::json!({"version": "second"}))
+            .unwrap();
+        assert_eq!(
+            db.cached_analysis_artifact(&first).unwrap().unwrap()["version"],
+            "first"
+        );
+        assert_eq!(
+            db.cached_analysis_artifact(&second).unwrap().unwrap()["version"],
+            "second"
+        );
     }
 }

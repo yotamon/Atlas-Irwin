@@ -2,17 +2,19 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
 
-from bridge_analyzer import ANALYZER_VERSION, analyze
+from bridge_analyzer import ANALYSIS_PAYLOAD_VERSION, ANALYZER_VERSION, analyze
 from bridge_renderer import PROTOCOL_VERSION as RENDERER_VERSION, execute as render
 
 SIDECAR_VERSION = "ensemblis.library-bridge.sidecar.v1"
 ANALYSIS_BATCH_VERSION = "ensemblis.library-bridge.analysis-batch.v1"
 MAX_ANALYSIS_BATCH = 8
 MAX_BATCH_REQUEST_BYTES = 512 * 1024
+_FINGERPRINT_RE = re.compile(r"^sha256:[a-f0-9]{64}$")
 
 
 def _record(value: Any) -> dict[str, Any]:
@@ -35,11 +37,13 @@ def _analyze_batch(request_path: Path, result_path: Path) -> None:
         item = _record(raw)
         fingerprint = str(item.get("fingerprint") or "")
         source = str(item.get("source") or "")
-        if not fingerprint.startswith("sha256:") or fingerprint in seen:
+        if not _FINGERPRINT_RE.fullmatch(fingerprint) or fingerprint in seen:
             raise ValueError("local analysis batch contains an invalid recording identity")
         seen.add(fingerprint)
         try:
             result = analyze(Path(source), fingerprint)
+            if result.get("version") != ANALYSIS_PAYLOAD_VERSION or result.get("recordingFingerprint") != fingerprint:
+                raise ValueError("local analyzer returned an invalid payload identity")
             rows.append({
                 "fingerprint": fingerprint,
                 "status": "completed",
@@ -57,6 +61,7 @@ def _analyze_batch(request_path: Path, result_path: Path) -> None:
     output = {
         "version": ANALYSIS_BATCH_VERSION,
         "analyzerVersion": ANALYZER_VERSION,
+        "analysisPayloadVersion": ANALYSIS_PAYLOAD_VERSION,
         "tracks": rows,
     }
     result_path.write_text(json.dumps(output, separators=(",", ":")), encoding="utf-8")
@@ -98,6 +103,7 @@ def main() -> int:
             payload = {
                 "version": SIDECAR_VERSION,
                 "analysisBatchVersion": ANALYSIS_BATCH_VERSION,
+                "analysisPayloadVersion": ANALYSIS_PAYLOAD_VERSION,
                 "analyzerVersion": ANALYZER_VERSION,
                 "rendererVersion": RENDERER_VERSION,
             }

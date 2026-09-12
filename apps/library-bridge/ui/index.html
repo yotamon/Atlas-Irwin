@@ -10,8 +10,8 @@
 <main>
   <header>
     <span class="eyebrow">Ensemblis / Native bridge</span>
-    <h1>Your DJ library stays on this computer.</h1>
-    <p>The bridge sends path-free musical/library evidence to Ensemblis and resolves media locally only when a frozen job needs it.</p>
+    <h1>Your music can stay on this computer.</h1>
+    <p>The bridge keeps local filesystem authority on-device, runs compatible intelligence locally, and sends only path-free semantic evidence when cloud features are used.</p>
   </header>
 
   <section>
@@ -41,6 +41,22 @@
       <button id="export">Export latest mix</button>
       <button id="refresh">Refresh status</button>
     </div>
+  </section>
+
+  <section>
+    <div>
+      <span class="eyebrow">Portable project</span>
+      <h2>.ensemble lives with you, not with one database.</h2>
+      <p>Create or open a portable project package. Its semantic state is path-free; the package location and local media bindings stay inside the trusted Rust runtime.</p>
+    </div>
+    <div class="row">
+      <input id="project-title" placeholder="Project title" aria-label="Project title" />
+      <button id="project-create" class="primary">Create project</button>
+      <button id="project-open">Open project</button>
+      <button id="project-save" disabled>Save project</button>
+      <button id="project-add-recording" disabled>Add recording</button>
+    </div>
+    <div id="project-summary" class="project-summary" aria-live="polite">No project open.</div>
   </section>
 
   <section>

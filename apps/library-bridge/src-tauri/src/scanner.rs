@@ -1,4 +1,5 @@
 use crate::{
+    analysis::{track_planning_artifact_key, validate_track_planning_payload},
     db::BridgeDb,
     identity::{fingerprint_file, hash_text},
     model::{CloudTrackDelta, ScanSummary, ScannedTrack, TrackMetadata},
@@ -72,16 +73,18 @@ fn cached_cloud_evidence(
     path: &Path,
 ) -> anyhow::Result<(TrackMetadata, Value, Value, Option<Value>)> {
     let fallback = generic_metadata(path);
-    let Some(cached) = db.cached_analysis(fingerprint)? else {
+    let key = track_planning_artifact_key(fingerprint)?;
+    let Some(cached) = db.cached_analysis_artifact(&key)? else {
         return Ok((fallback, Value::Null, json!([]), None));
     };
+    validate_track_planning_payload(fingerprint, &cached)?;
     let metadata = cached
         .get("metadata")
         .cloned()
         .and_then(|value| serde_json::from_value::<TrackMetadata>(value).ok())
         .map(|mut value| {
             // Generic-folder title is location-derived metadata, not recording identity. Keep musical
-            // analysis cached across moves while reflecting the current filename after a rename.
+            // evidence cached across moves while reflecting the current filename after a rename.
             value.title = title_for(path);
             value
         })
@@ -137,7 +140,8 @@ fn analyze_uncached(
 ) -> anyhow::Result<()> {
     let mut missing = Vec::new();
     for seed in seeds {
-        if db.cached_analysis(&seed.fingerprint)?.is_none() {
+        let key = track_planning_artifact_key(&seed.fingerprint)?;
+        if db.cached_analysis_artifact(&key)?.is_none() {
             missing.push(AnalysisInput {
                 path: seed.path.clone(),
                 fingerprint: seed.fingerprint.clone(),
@@ -148,11 +152,8 @@ fn analyze_uncached(
         // Per-track decoder/analysis failures are represented as omitted completed rows by the
         // sidecar. A broken source never prevents the rest of the library revision from scanning.
         for result in sidecar::analyze_batch(sidecar_binary, work_root, batch)? {
-            db.store_analysis(
-                &result.fingerprint,
-                &result.analyzer_version,
-                &result.payload,
-            )?;
+            validate_track_planning_payload(&result.fingerprint, &result.payload)?;
+            db.store_analysis_artifact(&result.artifact_key, &result.payload)?;
         }
     }
     Ok(())
@@ -265,8 +266,34 @@ pub fn rescan_registered_source_with_sidecar(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::analysis::{
+        TRACK_PLANNING_EVIDENCE_VERSION, TRACK_PLANNING_PROCESSOR_VERSION,
+        TRACK_PLANNING_SCHEMA_VERSION,
+    };
     use std::fs;
     use tempfile::tempdir;
+
+    fn payload(fingerprint: &str, title: &str, bpm: f64) -> Value {
+        json!({
+            "version": TRACK_PLANNING_SCHEMA_VERSION,
+            "analyzerVersion": TRACK_PLANNING_PROCESSOR_VERSION,
+            "recordingFingerprint": fingerprint,
+            "metadata": {
+                "title": title, "artist": null, "album": null, "remix": null,
+                "genre": null, "comments": null, "durationMs": 123000, "bpm": bpm,
+                "musicalKey": "8A", "rating": null, "color": null, "tags": [], "year": null
+            },
+            "beatGrid": {"bpm": bpm, "firstBeatMs": 0, "beatsPerBar": 4, "confidence": 0.9},
+            "analysisProvenance": [{"field": "bpm", "source": TRACK_PLANNING_PROCESSOR_VERSION, "confidence": 1.0}],
+            "planningEvidence": {
+                "version": TRACK_PLANNING_EVIDENCE_VERSION,
+                "analyzerVersion": TRACK_PLANNING_PROCESSOR_VERSION,
+                "recordingFingerprint": fingerprint,
+                "descriptor": {},
+                "musicMap": {}
+            }
+        })
+    }
 
     #[test]
     fn scan_delta_is_path_free_and_move_keeps_track_identity() {
@@ -297,7 +324,7 @@ mod tests {
     }
 
     #[test]
-    fn analysis_cache_follows_recording_identity_across_moves() {
+    fn versioned_analysis_artifact_follows_recording_identity_across_moves() {
         let directory = tempdir().unwrap();
         let library = directory.path().join("library");
         fs::create_dir_all(&library).unwrap();
@@ -306,21 +333,10 @@ mod tests {
         let db = BridgeDb::new(directory.path().join("bridge.sqlite3")).unwrap();
         scan_source(&db, "local", "local_library", &library).unwrap();
         let fingerprint = fingerprint_file(&original).unwrap();
-        db.store_analysis(
-            &fingerprint,
-            "test-analyzer",
-            &json!({
-                "metadata": {
-                    "title": "Original", "artist": null, "album": null, "remix": null,
-                    "genre": null, "comments": null, "durationMs": 123000, "bpm": 124.0,
-                    "musicalKey": "8A", "rating": null, "color": null, "tags": [], "year": null
-                },
-                "beatGrid": {"bpm": 124.0, "firstBeatMs": 0, "beatsPerBar": 4, "confidence": 0.9},
-                "analysisProvenance": [{"field": "bpm", "source": "test-analyzer", "confidence": 1.0}],
-                "planningEvidence": {"version": "ensemblis.dj-library-planning-evidence.v1"}
-            }),
-        )
-        .unwrap();
+        let key = track_planning_artifact_key(&fingerprint).unwrap();
+        db.store_analysis_artifact(&key, &payload(&fingerprint, "Original", 124.0))
+            .unwrap();
+
         let moved = library.join("Moved.wav");
         fs::rename(&original, &moved).unwrap();
         let summary = scan_source(&db, "local", "local_library", &library).unwrap();
@@ -338,5 +354,28 @@ mod tests {
         assert!(track.planning_evidence.is_some());
         let serialized = serde_json::to_string(track).unwrap();
         assert!(!serialized.contains(library.to_string_lossy().as_ref()));
+    }
+
+    #[test]
+    fn legacy_fingerprint_only_cache_is_never_reused_automatically() {
+        let directory = tempdir().unwrap();
+        let library = directory.path().join("library");
+        fs::create_dir_all(&library).unwrap();
+        let source = library.join("Track.wav");
+        fs::write(&source, b"legacy-cache-recording").unwrap();
+        let db = BridgeDb::new(directory.path().join("bridge.sqlite3")).unwrap();
+        let fingerprint = fingerprint_file(&source).unwrap();
+        db.store_analysis(
+            &fingerprint,
+            "legacy",
+            &payload(&fingerprint, "Legacy", 99.0),
+        )
+        .unwrap();
+
+        scan_source(&db, "local", "local_library", &library).unwrap();
+        let outbox = db.next_outbox().unwrap().unwrap();
+        let track = &outbox.envelope.delta.changed_tracks[0];
+        assert_eq!(track.metadata.bpm, None);
+        assert!(track.planning_evidence.is_none());
     }
 }
