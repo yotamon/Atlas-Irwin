@@ -60,6 +60,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Install pinned TypeScript test runtime
+        run: npm install --ignore-scripts --no-save --package-lock=false typescript@5.9.3
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
