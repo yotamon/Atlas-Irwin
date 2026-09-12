@@ -309,7 +309,9 @@ mod tests {
         let outbox = db.next_outbox().unwrap().unwrap();
         let serialized = serde_json::to_string(&outbox.envelope).unwrap();
         assert!(!serialized.contains(library.to_string_lossy().as_ref()));
-        let identity = outbox.envelope.delta.changed_tracks[0].source_track_id.clone();
+        let identity = outbox.envelope.delta.changed_tracks[0]
+            .source_track_id
+            .clone();
         db.acknowledge_outbox(outbox.id).unwrap();
 
         let moved = library.join("Moved.wav");
@@ -332,7 +334,8 @@ mod tests {
         scan_source(&db, "local", "local_library", &library).unwrap();
         let fingerprint = fingerprint_file(&original).unwrap();
         let key = track_planning_artifact_key(&fingerprint).unwrap();
-        db.store_analysis_artifact(&key, &payload(&fingerprint, "Original", 124.0)).unwrap();
+        db.store_analysis_artifact(&key, &payload(&fingerprint, "Original", 124.0))
+            .unwrap();
 
         let moved = library.join("Moved.wav");
         fs::rename(&original, &moved).unwrap();
@@ -362,7 +365,12 @@ mod tests {
         fs::write(&source, b"legacy-cache-recording").unwrap();
         let db = BridgeDb::new(directory.path().join("bridge.sqlite3")).unwrap();
         let fingerprint = fingerprint_file(&source).unwrap();
-        db.store_analysis(&fingerprint, "legacy", &payload(&fingerprint, "Legacy", 99.0)).unwrap();
+        db.store_analysis(
+            &fingerprint,
+            "legacy",
+            &payload(&fingerprint, "Legacy", 99.0),
+        )
+        .unwrap();
 
         scan_source(&db, "local", "local_library", &library).unwrap();
         let outbox = db.next_outbox().unwrap().unwrap();

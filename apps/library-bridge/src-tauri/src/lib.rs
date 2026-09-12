@@ -155,7 +155,9 @@ async fn create_local_project(
         .file()
         .set_title("Choose where to create the Ensemblis project")
         .blocking_pick_folder();
-    let Some(parent) = parent else { return Ok(None) };
+    let Some(parent) = parent else {
+        return Ok(None);
+    };
     let parent = parent.into_path().map_err(command_error)?;
     let package = parent.join(project::package_name(&title));
     let db = Arc::clone(&state.db);
@@ -180,7 +182,9 @@ async fn open_local_project(
         .file()
         .set_title("Choose an .ensemble project package")
         .blocking_pick_folder();
-    let Some(package) = package else { return Ok(None) };
+    let Some(package) = package else {
+        return Ok(None);
+    };
     let package = package.into_path().map_err(command_error)?;
     let db = Arc::clone(&state.db);
     tauri::async_runtime::spawn_blocking(move || -> anyhow::Result<ProjectManifest> {
@@ -222,7 +226,9 @@ async fn choose_and_bind_project_recording(
         .file()
         .set_title("Choose audio to reference from this project")
         .blocking_pick_file();
-    let Some(source) = source else { return Ok(None) };
+    let Some(source) = source else {
+        return Ok(None);
+    };
     let source = source.into_path().map_err(command_error)?;
     let db = Arc::clone(&state.db);
     let recording_id = format!("rec_{}", Uuid::new_v4());

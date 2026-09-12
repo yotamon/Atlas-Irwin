@@ -277,7 +277,10 @@ impl BridgeDb {
         Ok(())
     }
 
-    pub fn cached_analysis_artifact(&self, key: &AnalysisArtifactKey) -> anyhow::Result<Option<Value>> {
+    pub fn cached_analysis_artifact(
+        &self,
+        key: &AnalysisArtifactKey,
+    ) -> anyhow::Result<Option<Value>> {
         key.validate()?;
         let payload: Option<String> = self
             .open()?
@@ -348,7 +351,12 @@ impl BridgeDb {
                format_version=excluded.format_version,
                last_revision=excluded.last_revision,
                updated_at=current_timestamp",
-            params![project_id, package_path.to_string_lossy().as_ref(), format_version, revision],
+            params![
+                project_id,
+                package_path.to_string_lossy().as_ref(),
+                format_version,
+                revision
+            ],
         )?;
         Ok(())
     }
@@ -638,9 +646,17 @@ mod tests {
         let first = track_planning_artifact_key(&fingerprint).unwrap();
         let mut second = first.clone();
         second.model_version = "atlas-ti-vNext".to_string();
-        db.store_analysis_artifact(&first, &serde_json::json!({"version": "first"})).unwrap();
-        db.store_analysis_artifact(&second, &serde_json::json!({"version": "second"})).unwrap();
-        assert_eq!(db.cached_analysis_artifact(&first).unwrap().unwrap()["version"], "first");
-        assert_eq!(db.cached_analysis_artifact(&second).unwrap().unwrap()["version"], "second");
+        db.store_analysis_artifact(&first, &serde_json::json!({"version": "first"}))
+            .unwrap();
+        db.store_analysis_artifact(&second, &serde_json::json!({"version": "second"}))
+            .unwrap();
+        assert_eq!(
+            db.cached_analysis_artifact(&first).unwrap().unwrap()["version"],
+            "first"
+        );
+        assert_eq!(
+            db.cached_analysis_artifact(&second).unwrap().unwrap()["version"],
+            "second"
+        );
     }
 }

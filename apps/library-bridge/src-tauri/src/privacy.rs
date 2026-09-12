@@ -80,14 +80,25 @@ mod tests {
     #[test]
     fn path_firewall_blocks_keys_and_locator_strings() {
         assert!(assert_path_free_value(&json!({"filePath": "/tmp/private.wav"}), "value").is_err());
-        assert!(assert_path_free_value(&json!({"note": "C:\\Users\\Example\\track.wav"}), "value").is_err());
-        assert!(assert_path_free_value(&json!({"note": "portable semantic value"}), "value").is_ok());
+        assert!(
+            assert_path_free_value(&json!({"note": "C:\\Users\\Example\\track.wav"}), "value")
+                .is_err()
+        );
+        assert!(
+            assert_path_free_value(&json!({"note": "portable semantic value"}), "value").is_ok()
+        );
     }
 
     #[test]
     fn recording_fingerprint_is_strict_lowercase_sha256() {
-        assert!(is_recording_fingerprint(&format!("sha256:{}", "a".repeat(64))));
-        assert!(!is_recording_fingerprint(&format!("sha256:{}", "A".repeat(64))));
+        assert!(is_recording_fingerprint(&format!(
+            "sha256:{}",
+            "a".repeat(64)
+        )));
+        assert!(!is_recording_fingerprint(&format!(
+            "sha256:{}",
+            "A".repeat(64)
+        )));
         assert!(!is_recording_fingerprint("sha256:abc"));
     }
 }

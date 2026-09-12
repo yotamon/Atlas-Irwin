@@ -1,7 +1,6 @@
 use crate::analysis::{
     AnalysisArtifactKey, TRACK_PLANNING_PROCESSOR_VERSION, TRACK_PLANNING_SCHEMA_VERSION,
-    track_planning_artifact_key,
-    validate_track_planning_payload,
+    track_planning_artifact_key, validate_track_planning_payload,
 };
 use anyhow::Context;
 use serde_json::{Value, json};
@@ -113,17 +112,24 @@ pub fn analyze_batch(
         if output.get("version").and_then(Value::as_str) != Some(ANALYSIS_BATCH_VERSION) {
             anyhow::bail!("local analysis sidecar returned an unsupported contract");
         }
-        if output.get("analyzerVersion").and_then(Value::as_str) != Some(TRACK_PLANNING_PROCESSOR_VERSION) {
+        if output.get("analyzerVersion").and_then(Value::as_str)
+            != Some(TRACK_PLANNING_PROCESSOR_VERSION)
+        {
             anyhow::bail!("local analysis sidecar processor version does not match the registry");
         }
-        if output.get("analysisPayloadVersion").and_then(Value::as_str) != Some(TRACK_PLANNING_SCHEMA_VERSION) {
+        if output.get("analysisPayloadVersion").and_then(Value::as_str)
+            != Some(TRACK_PLANNING_SCHEMA_VERSION)
+        {
             anyhow::bail!("local analysis sidecar payload schema does not match the registry");
         }
         let rows = output
             .get("tracks")
             .and_then(Value::as_array)
             .context("local analysis sidecar returned invalid results")?;
-        let expected: HashSet<&str> = inputs.iter().map(|input| input.fingerprint.as_str()).collect();
+        let expected: HashSet<&str> = inputs
+            .iter()
+            .map(|input| input.fingerprint.as_str())
+            .collect();
         let mut returned = HashSet::new();
         let mut results = Vec::new();
         for row in rows {
