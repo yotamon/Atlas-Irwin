@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
+import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -16,8 +19,10 @@ from app.mastering_inspector import enrich_music_map_with_mastering
 from app.music_intelligence_v4_runtime import analyze_music as analyze_music_v4
 
 ANALYZER_VERSION = "ensemblis.library-bridge.analyzer.v1"
+ANALYSIS_PAYLOAD_VERSION = "ensemblis.library-bridge.analysis-payload.v1"
 PLANNING_EVIDENCE_VERSION = "ensemblis.dj-library-planning-evidence.v1"
 MAX_PLANNING_EVIDENCE_BYTES = 48 * 1024
+_FINGERPRINT_RE = re.compile(r"^sha256:[a-f0-9]{64}$")
 
 
 def _record(value: Any) -> dict[str, Any]:
@@ -43,7 +48,7 @@ def _sample(items: Any, limit: int) -> list[dict[str, Any]]:
 
 
 def _scrub(value: Any, source_path: str) -> Any:
-    forbidden = {"path", "filepath", "file_path", "location", "fileuri", "file_uri", "rootpath", "root_path"}
+    forbidden = {"path", "filepath", "file_path", "localpath", "local_path", "location", "fileuri", "file_uri", "rootpath", "root_path"}
     if isinstance(value, dict):
         return {
             key: _scrub(nested, source_path)
@@ -119,6 +124,23 @@ def _compact_music_map(music_map: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _verified_snapshot(source: Path, target: Path, fingerprint: str) -> None:
+    digest = hashlib.sha256()
+    with source.open("rb") as reader, target.open("xb") as writer:
+        while True:
+            chunk = reader.read(1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+            writer.write(chunk)
+        writer.flush()
+        os.fsync(writer.fileno())
+    actual = f"sha256:{digest.hexdigest()}"
+    if actual != fingerprint:
+        target.unlink(missing_ok=True)
+        raise ValueError("local analysis source changed after the library was scanned")
+
+
 def _standardize(source: Path, target: Path) -> None:
     subprocess.run(
         [
@@ -147,16 +169,23 @@ def _standardize(source: Path, target: Path) -> None:
 def analyze(source: Path, fingerprint: str) -> dict[str, Any]:
     if not source.is_file():
         raise ValueError("local analysis source is unavailable")
-    if not fingerprint.startswith("sha256:"):
-        raise ValueError("local analysis requires a content fingerprint")
+    if not _FINGERPRINT_RE.fullmatch(fingerprint):
+        raise ValueError("local analysis requires a content SHA-256 fingerprint")
 
+    display_title = (source.stem or "Untitled")[:512]
     with tempfile.TemporaryDirectory(prefix="ensemblis-bridge-analysis-") as directory:
-        wav = Path(directory) / "source.wav"
-        _standardize(source, wav)
+        work = Path(directory)
+        suffix = source.suffix.lower() if source.suffix else ".bin"
+        snapshot = work / f"verified-source{suffix}"
+        wav = work / "source.wav"
+        _verified_snapshot(source, snapshot, fingerprint)
+        _standardize(snapshot, wav)
         music_map = analyze_music_v4(
             wav,
             {"url": f"device-local://{fingerprint}", "recording_fingerprint": fingerprint},
         )
+        # Keep compatibility with the existing bridge output until the canonical runtime owns this
+        # enrichment exclusively. The snapshot, never the mutable source path, is the DSP input.
         music_map = enrich_music_map_with_mastering(music_map, wav)
         bpm = _finite(music_map.get("bpm"), 0.0)
         if bpm <= 0:
@@ -190,9 +219,11 @@ def analyze(source: Path, fingerprint: str) -> dict[str, Any]:
             raise ValueError("compacted local planning evidence exceeds the per-track safety budget")
         stability = _record(compact.get("beat_stability"))
         result = {
-            "version": ANALYZER_VERSION,
+            "version": ANALYSIS_PAYLOAD_VERSION,
+            "analyzerVersion": ANALYZER_VERSION,
+            "recordingFingerprint": fingerprint,
             "metadata": {
-                "title": source.stem or "Untitled",
+                "title": display_title,
                 "artist": None,
                 "album": None,
                 "remix": None,

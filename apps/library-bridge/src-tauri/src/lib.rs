@@ -1,3 +1,4 @@
+mod analysis;
 mod credentials;
 mod db;
 mod execution;
@@ -5,6 +6,8 @@ mod export;
 mod identity;
 mod model;
 mod network;
+mod privacy;
+mod project;
 mod scanner;
 mod sidecar;
 mod watcher;
@@ -15,6 +18,7 @@ use crate::{
     export::ExportedRender,
     identity::hash_text,
     model::{BridgeStatus, PairResponse, ScanSummary},
+    project::ProjectManifest,
     watcher::LibraryWatcher,
 };
 use std::{path::PathBuf, sync::Arc};
@@ -137,6 +141,102 @@ async fn rescan_source(
 }
 
 #[tauri::command]
+async fn create_local_project(
+    app: tauri::AppHandle,
+    state: State<'_, BridgeState>,
+    title: String,
+) -> Result<Option<ProjectManifest>, String> {
+    let title = title.trim().to_string();
+    if title.is_empty() {
+        return Err("Project title is required.".to_string());
+    }
+    let parent = app
+        .dialog()
+        .file()
+        .set_title("Choose where to create the Ensemblis project")
+        .blocking_pick_folder();
+    let Some(parent) = parent else { return Ok(None) };
+    let parent = parent.into_path().map_err(command_error)?;
+    let package = parent.join(project::package_name(&title));
+    let db = Arc::clone(&state.db);
+    tauri::async_runtime::spawn_blocking(move || -> anyhow::Result<ProjectManifest> {
+        let manifest = project::create_project(&package, &title)?;
+        project::register_project(&db, &package, &manifest)?;
+        Ok(manifest)
+    })
+    .await
+    .map_err(command_error)?
+    .map(Some)
+    .map_err(command_error)
+}
+
+#[tauri::command]
+async fn open_local_project(
+    app: tauri::AppHandle,
+    state: State<'_, BridgeState>,
+) -> Result<Option<ProjectManifest>, String> {
+    let package = app
+        .dialog()
+        .file()
+        .set_title("Choose an .ensemble project package")
+        .blocking_pick_folder();
+    let Some(package) = package else { return Ok(None) };
+    let package = package.into_path().map_err(command_error)?;
+    let db = Arc::clone(&state.db);
+    tauri::async_runtime::spawn_blocking(move || -> anyhow::Result<ProjectManifest> {
+        let manifest = project::read_manifest(&package)?;
+        project::register_project(&db, &package, &manifest)?;
+        Ok(manifest)
+    })
+    .await
+    .map_err(command_error)?
+    .map(Some)
+    .map_err(command_error)
+}
+
+#[tauri::command]
+async fn save_local_project(
+    state: State<'_, BridgeState>,
+    manifest: ProjectManifest,
+) -> Result<ProjectManifest, String> {
+    let db = Arc::clone(&state.db);
+    tauri::async_runtime::spawn_blocking(move || project::save_registered_project(&db, manifest))
+        .await
+        .map_err(command_error)?
+        .map_err(command_error)
+}
+
+#[tauri::command]
+async fn choose_and_bind_project_recording(
+    app: tauri::AppHandle,
+    state: State<'_, BridgeState>,
+    project_id: String,
+) -> Result<Option<ProjectManifest>, String> {
+    let package = state
+        .db
+        .project_package_path(&project_id)
+        .map_err(command_error)?
+        .ok_or_else(|| "Project is not registered on this device.".to_string())?;
+    let source = app
+        .dialog()
+        .file()
+        .set_title("Choose audio to reference from this project")
+        .blocking_pick_file();
+    let Some(source) = source else { return Ok(None) };
+    let source = source.into_path().map_err(command_error)?;
+    let db = Arc::clone(&state.db);
+    let recording_id = format!("rec_{}", Uuid::new_v4());
+    tauri::async_runtime::spawn_blocking(move || -> anyhow::Result<ProjectManifest> {
+        project::bind_recording(&db, &package, &recording_id, &source)?;
+        project::read_manifest(&package)
+    })
+    .await
+    .map_err(command_error)?
+    .map(Some)
+    .map_err(command_error)
+}
+
+#[tauri::command]
 async fn pair_device(
     state: State<'_, BridgeState>,
     api_base_url: String,
@@ -243,9 +343,11 @@ fn privacy_contract_probe() -> serde_json::Value {
     // Kept deliberately path-free so integration tests can assert the command boundary itself.
     serde_json::json!({
         "recordingIdentity": "content-sha256",
+        "portableProject": project::PROJECT_FORMAT_VERSION,
+        "analysisIdentity": "recording+processor+model+schema+parameters",
         "cloudFields": ["sourceTrackId", "recordingFingerprint", "metadata", "playlistIds", "cuePoints", "beatGrid", "analysisProvenance", "planningEvidence", "availability"],
         "forbiddenCloudFields": ["path", "filePath", "location", "fileUri"],
-        "contractHash": hash_text("ensemblis.library-bridge.privacy.v2")
+        "contractHash": hash_text("ensemblis.library-bridge.privacy.v3")
     })
 }
 
@@ -283,6 +385,10 @@ pub fn run() {
             bridge_status,
             choose_and_scan_source,
             rescan_source,
+            create_local_project,
+            open_local_project,
+            save_local_project,
+            choose_and_bind_project_recording,
             pair_device,
             sync_pending,
             poll_device_jobs,

@@ -10,12 +10,16 @@ on:
       - "app/api/studio/dj-library/**"
       - "components/studio/library-bridge-panel*"
       - "components/studio/local-set-builder-workspace*"
+      - "contracts/library-bridge-analysis-payload.v1.json"
+      - "docs/architecture/local-first-*.md"
       - "lib/automix/source-candidates.ts"
       - "lib/automix/source-contract.ts"
       - "lib/dj-library/**"
+      - "lib/platform/**"
       - "types/dj-library-bridge-database.ts"
       - "supabase/migrations/*dj_library*"
       - "tests/dj-library-phase-8-bridge.test.mjs"
+      - "tests/local-first-native-contract.test.mjs"
       - "docs/dj-library-set-intelligence-development-plan.md"
       - ".github/workflows/library-bridge-ci.yml"
   push:
@@ -27,11 +31,15 @@ on:
       - "app/api/studio/dj-library/**"
       - "components/studio/library-bridge-panel*"
       - "components/studio/local-set-builder-workspace*"
+      - "contracts/library-bridge-analysis-payload.v1.json"
+      - "docs/architecture/local-first-*.md"
       - "lib/automix/source-candidates.ts"
       - "lib/automix/source-contract.ts"
       - "lib/dj-library/**"
+      - "lib/platform/**"
       - "supabase/migrations/*dj_library*"
       - "tests/dj-library-phase-8-bridge.test.mjs"
+      - "tests/local-first-native-contract.test.mjs"
       - ".github/workflows/library-bridge-ci.yml"
 
 permissions:
@@ -50,7 +58,10 @@ jobs:
         with:
           python-version: "3.11"
       - name: Library Bridge product/privacy contracts
-        run: node --test tests/dj-library-phase-8-bridge.test.mjs
+        run: >-
+          node --test
+          tests/dj-library-phase-8-bridge.test.mjs
+          tests/local-first-native-contract.test.mjs
       - name: Validate local sidecar Python
         run: >-
           python -m py_compile

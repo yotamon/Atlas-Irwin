@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ensemblis.com/contracts/library-bridge-analysis-payload.v1.json",
+  "title": "Ensemblis Library Bridge analysis payload v1",
+  "type": "object",
+  "required": [
+    "version",
+    "analyzerVersion",
+    "recordingFingerprint",
+    "metadata",
+    "beatGrid",
+    "analysisProvenance",
+    "planningEvidence"
+  ],
+  "properties": {
+    "version": { "const": "ensemblis.library-bridge.analysis-payload.v1" },
+    "analyzerVersion": { "const": "ensemblis.library-bridge.analyzer.v1" },
+    "recordingFingerprint": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "metadata": {
+      "type": "object",
+      "required": ["title", "artist", "album", "remix", "genre", "comments", "durationMs", "bpm", "musicalKey", "rating", "color", "tags", "year"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "artist": { "type": ["string", "null"], "maxLength": 512 },
+        "album": { "type": ["string", "null"], "maxLength": 512 },
+        "remix": { "type": ["string", "null"], "maxLength": 512 },
+        "genre": { "type": ["string", "null"], "maxLength": 256 },
+        "comments": { "type": ["string", "null"], "maxLength": 4096 },
+        "durationMs": { "type": ["integer", "null"], "minimum": 0 },
+        "bpm": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "musicalKey": { "type": ["string", "null"], "maxLength": 32 },
+        "rating": { "type": ["integer", "null"], "minimum": 0, "maximum": 255 },
+        "color": { "type": ["string", "null"], "maxLength": 64 },
+        "tags": { "type": "array", "items": { "type": "string", "maxLength": 128 }, "maxItems": 256 },
+        "year": { "type": ["integer", "null"], "minimum": 0, "maximum": 9999 }
+      },
+      "additionalProperties": false
+    },
+    "beatGrid": {
+      "type": "object",
+      "required": ["bpm", "firstBeatMs", "beatsPerBar", "confidence", "variableTempo"],
+      "properties": {
+        "bpm": { "type": "number", "exclusiveMinimum": 0 },
+        "firstBeatMs": { "type": "integer", "minimum": 0 },
+        "beatsPerBar": { "type": "integer", "minimum": 1, "maximum": 32 },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "variableTempo": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "analysisProvenance": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {
+        "type": "object",
+        "required": ["field", "source", "confidence"],
+        "properties": {
+          "field": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "source": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "planningEvidence": {
+      "type": "object",
+      "required": ["version", "analyzerVersion", "recordingFingerprint", "descriptor", "musicMap"],
+      "properties": {
+        "version": { "const": "ensemblis.dj-library-planning-evidence.v1" },
+        "analyzerVersion": { "const": "ensemblis.library-bridge.analyzer.v1" },
+        "recordingFingerprint": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "descriptor": { "type": "object" },
+        "musicMap": { "type": "object" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

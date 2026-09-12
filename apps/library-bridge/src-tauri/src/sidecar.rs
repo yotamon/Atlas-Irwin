@@ -1,6 +1,12 @@
+use crate::analysis::{
+    AnalysisArtifactKey, TRACK_PLANNING_PROCESSOR_VERSION, TRACK_PLANNING_SCHEMA_VERSION,
+    track_planning_artifact_key,
+    validate_track_planning_payload,
+};
 use anyhow::Context;
 use serde_json::{Value, json};
 use std::{
+    collections::HashSet,
     fs,
     path::{Path, PathBuf},
     process::Command,
@@ -21,7 +27,7 @@ pub struct AnalysisInput {
 #[derive(Debug, Clone)]
 pub struct AnalysisResult {
     pub fingerprint: String,
-    pub analyzer_version: String,
+    pub artifact_key: AnalysisArtifactKey,
     pub payload: Value,
 }
 
@@ -70,12 +76,10 @@ pub fn analyze_batch(
     if inputs.is_empty() || inputs.len() > MAX_ANALYSIS_BATCH {
         anyhow::bail!("local analysis batch must contain 1-8 tracks");
     }
-    let mut seen = std::collections::HashSet::new();
+    let mut seen = HashSet::new();
     for input in inputs {
-        if !input.path.is_file()
-            || !input.fingerprint.starts_with("sha256:")
-            || !seen.insert(input.fingerprint.as_str())
-        {
+        track_planning_artifact_key(&input.fingerprint)?;
+        if !input.path.is_file() || !seen.insert(input.fingerprint.as_str()) {
             anyhow::bail!("local analysis batch contains an invalid recording");
         }
     }
@@ -109,27 +113,25 @@ pub fn analyze_batch(
         if output.get("version").and_then(Value::as_str) != Some(ANALYSIS_BATCH_VERSION) {
             anyhow::bail!("local analysis sidecar returned an unsupported contract");
         }
-        let analyzer_version = output
-            .get("analyzerVersion")
-            .and_then(Value::as_str)
-            .filter(|value| !value.is_empty())
-            .context("local analysis sidecar omitted analyzer version")?
-            .to_string();
+        if output.get("analyzerVersion").and_then(Value::as_str) != Some(TRACK_PLANNING_PROCESSOR_VERSION) {
+            anyhow::bail!("local analysis sidecar processor version does not match the registry");
+        }
+        if output.get("analysisPayloadVersion").and_then(Value::as_str) != Some(TRACK_PLANNING_SCHEMA_VERSION) {
+            anyhow::bail!("local analysis sidecar payload schema does not match the registry");
+        }
         let rows = output
             .get("tracks")
             .and_then(Value::as_array)
             .context("local analysis sidecar returned invalid results")?;
-        let expected: std::collections::HashSet<&str> = inputs
-            .iter()
-            .map(|input| input.fingerprint.as_str())
-            .collect();
+        let expected: HashSet<&str> = inputs.iter().map(|input| input.fingerprint.as_str()).collect();
+        let mut returned = HashSet::new();
         let mut results = Vec::new();
         for row in rows {
             let fingerprint = row
                 .get("fingerprint")
                 .and_then(Value::as_str)
                 .unwrap_or_default();
-            if !expected.contains(fingerprint) {
+            if !expected.contains(fingerprint) || !returned.insert(fingerprint) {
                 anyhow::bail!("local analysis sidecar returned an unexpected recording identity");
             }
             if row.get("status").and_then(Value::as_str) != Some("completed") {
@@ -140,9 +142,10 @@ pub fn analyze_batch(
                 .cloned()
                 .filter(Value::is_object)
                 .context("local analysis sidecar returned an invalid completed payload")?;
+            validate_track_planning_payload(fingerprint, &payload)?;
             results.push(AnalysisResult {
                 fingerprint: fingerprint.to_string(),
-                analyzer_version: analyzer_version.clone(),
+                artifact_key: track_planning_artifact_key(fingerprint)?,
                 payload,
             });
         }
