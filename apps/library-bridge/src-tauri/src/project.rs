@@ -320,43 +320,6 @@ pub fn register_project(
     )
 }
 
-pub fn save_registered_project(
-    db: &BridgeDb,
-    proposed: ProjectManifest,
-) -> anyhow::Result<ProjectManifest> {
-    validate_manifest(&proposed)?;
-    let package = db
-        .project_package_path(&proposed.project_id)?
-        .context("project is not registered on this device")?;
-    let current = read_manifest(&package)?;
-    if current.project_id != proposed.project_id || current.version != proposed.version {
-        anyhow::bail!("project identity does not match the registered package");
-    }
-    if proposed.revision != current.revision {
-        anyhow::bail!("project revision is stale; reopen the project before saving");
-    }
-
-    let mut normalized = proposed.clone();
-    normalized.updated_at = current.updated_at.clone();
-    if normalized == current {
-        return Ok(current);
-    }
-    normalized.revision = current
-        .revision
-        .checked_add(1)
-        .context("project revision overflow")?;
-    normalized.updated_at = current_timestamp()?;
-    validate_manifest(&normalized)?;
-    write_manifest(&package, &normalized)?;
-    db.register_project(
-        &normalized.project_id,
-        &package,
-        &normalized.version,
-        normalized.revision,
-    )?;
-    Ok(normalized)
-}
-
 pub fn bind_recording(
     db: &BridgeDb,
     package: &Path,
