@@ -1,16 +1,26 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import vm from "node:vm";
-import test from "node:test";
+import test, { after } from "node:test";
 
 const repoRoot = process.cwd();
 const buildScript = join(repoRoot, "apps", "library-bridge", "build-platform-core.mjs");
-const bundlePath = join(repoRoot, "apps", "library-bridge", "ui", "platform-core.js");
+const tempRoot = mkdtempSync(join(tmpdir(), "ensemblis-platform-core-"));
+const bundlePath = join(tempRoot, "platform-core.js");
+
+after(() => {
+  rmSync(tempRoot, { recursive: true, force: true });
+});
 
 execFileSync(process.execPath, [buildScript], {
   cwd: repoRoot,
+  env: {
+    ...process.env,
+    ENSEMBLIS_PLATFORM_CORE_OUTPUT: bundlePath,
+  },
   stdio: "pipe",
 });
 

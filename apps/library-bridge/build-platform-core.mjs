@@ -1,11 +1,14 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
 const bridgeRoot = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(bridgeRoot, "../..");
-const outputPath = join(bridgeRoot, "ui", "platform-core.js");
+const defaultOutputPath = join(bridgeRoot, "ui", "platform-core.js");
+const outputPath = process.env.ENSEMBLIS_PLATFORM_CORE_OUTPUT
+  ? resolve(process.env.ENSEMBLIS_PLATFORM_CORE_OUTPUT)
+  : defaultOutputPath;
 
 const modules = [
   ["./recordings", "lib/platform/recordings.ts"],
@@ -81,5 +84,6 @@ output.push(
   "",
 );
 
+mkdirSync(dirname(outputPath), { recursive: true });
 writeFileSync(outputPath, output.join("\n"), "utf8");
 console.log(`Generated ${outputPath}`);
