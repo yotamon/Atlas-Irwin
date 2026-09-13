@@ -42,7 +42,11 @@ pub struct ProjectAnalysisArtifact {
     pub artifact_id: String,
     pub recording_fingerprint: String,
     pub processor_id: String,
+    pub processor_version: String,
+    pub model_id: String,
+    pub model_version: String,
     pub schema_version: String,
+    pub parameters_hash: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -56,6 +60,14 @@ pub struct ProjectAsset {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProjectNote {
+    pub id: String,
+    pub text: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProjectManifest {
     pub version: String,
     pub project_id: String,
@@ -64,6 +76,8 @@ pub struct ProjectManifest {
     pub recordings: Vec<ProjectRecording>,
     pub analysis_artifacts: Vec<ProjectAnalysisArtifact>,
     pub assets: Vec<ProjectAsset>,
+    #[serde(default)]
+    pub notes: Vec<ProjectNote>,
     pub updated_at: String,
 }
 
@@ -90,6 +104,9 @@ pub fn validate_manifest(manifest: &ProjectManifest) -> anyhow::Result<()> {
     }
     validate_non_empty(&manifest.project_id, "projectId")?;
     validate_non_empty(&manifest.title, "title")?;
+    if manifest.title.chars().count() > 240 {
+        anyhow::bail!("portable project title is too long");
+    }
     OffsetDateTime::parse(&manifest.updated_at, &Rfc3339)
         .context("portable project updatedAt is not valid RFC 3339")?;
 
@@ -98,6 +115,13 @@ pub fn validate_manifest(manifest: &ProjectManifest) -> anyhow::Result<()> {
         validate_non_empty(&recording.id, "recording id")?;
         if !recording_ids.insert(recording.id.as_str()) {
             anyhow::bail!("portable project contains duplicate recording ids");
+        }
+        if recording
+            .display_name
+            .as_ref()
+            .is_some_and(|value| value.chars().count() > 240)
+        {
+            anyhow::bail!("portable project recording display name is too long");
         }
         assert_recording_fingerprint(&recording.fingerprint, "recording fingerprint")?;
     }
@@ -109,11 +133,15 @@ pub fn validate_manifest(manifest: &ProjectManifest) -> anyhow::Result<()> {
             anyhow::bail!("portable project contains duplicate analysis artifact ids");
         }
         validate_non_empty(&artifact.processor_id, "analysis processor id")?;
+        validate_non_empty(&artifact.processor_version, "analysis processor version")?;
+        validate_non_empty(&artifact.model_id, "analysis model id")?;
+        validate_non_empty(&artifact.model_version, "analysis model version")?;
         validate_non_empty(&artifact.schema_version, "analysis schema version")?;
         assert_recording_fingerprint(
             &artifact.recording_fingerprint,
             "analysis recording fingerprint",
         )?;
+        assert_recording_fingerprint(&artifact.parameters_hash, "analysis parameters hash")?;
     }
 
     let mut asset_ids = HashSet::new();
@@ -126,6 +154,19 @@ pub fn validate_manifest(manifest: &ProjectManifest) -> anyhow::Result<()> {
         if let Some(fingerprint) = &asset.recording_fingerprint {
             assert_recording_fingerprint(fingerprint, "asset recording fingerprint")?;
         }
+    }
+
+    let mut note_ids = HashSet::new();
+    for note in &manifest.notes {
+        validate_non_empty(&note.id, "note id")?;
+        if !note_ids.insert(note.id.as_str()) {
+            anyhow::bail!("portable project contains duplicate note ids");
+        }
+        if note.text.chars().count() > 20_000 {
+            anyhow::bail!("portable project note is too long");
+        }
+        OffsetDateTime::parse(&note.updated_at, &Rfc3339)
+            .context("portable project note updatedAt is not valid RFC 3339")?;
     }
 
     assert_path_free_value(&serde_json::to_value(manifest)?, "project")?;
@@ -258,6 +299,7 @@ pub fn create_project(package: &Path, title: &str) -> anyhow::Result<ProjectMani
         recordings: Vec::new(),
         analysis_artifacts: Vec::new(),
         assets: Vec::new(),
+        notes: Vec::new(),
         updated_at: current_timestamp()?,
     };
     write_manifest(package, &manifest)?;
@@ -389,6 +431,23 @@ mod tests {
             "updatedAt": "2026-09-12T01:00:00Z"
         }));
         assert!(invalid.is_err());
+    }
+
+    #[test]
+    fn portable_manifest_accepts_legacy_v1_without_notes() {
+        let manifest: ProjectManifest = serde_json::from_value(serde_json::json!({
+            "version": PROJECT_FORMAT_VERSION,
+            "projectId": "prj_test",
+            "title": "Test",
+            "revision": 0,
+            "recordings": [],
+            "analysisArtifacts": [],
+            "assets": [],
+            "updatedAt": "2026-09-12T01:00:00Z"
+        }))
+        .unwrap();
+        assert!(manifest.notes.is_empty());
+        validate_manifest(&manifest).unwrap();
     }
 
     #[test]
