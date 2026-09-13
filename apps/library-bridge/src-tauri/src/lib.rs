@@ -19,7 +19,7 @@ use crate::{
     export::ExportedRender,
     identity::hash_text,
     model::{BridgeStatus, PairResponse, ScanSummary},
-    project::ProjectManifest,
+    project::{ProjectManifest, ProjectRecording},
     project_mutation::PortableProjectMutation,
     watcher::LibraryWatcher,
 };
@@ -216,12 +216,12 @@ async fn save_local_project_mutation(
 }
 
 #[tauri::command]
-async fn choose_and_bind_project_recording(
+async fn choose_and_prepare_project_recording(
     app: tauri::AppHandle,
     state: State<'_, BridgeState>,
     project_id: String,
-) -> Result<Option<ProjectManifest>, String> {
-    let package = state
+) -> Result<Option<ProjectRecording>, String> {
+    state
         .db
         .project_package_path(&project_id)
         .map_err(command_error)?
@@ -237,9 +237,8 @@ async fn choose_and_bind_project_recording(
     let source = source.into_path().map_err(command_error)?;
     let db = Arc::clone(&state.db);
     let recording_id = format!("rec_{}", Uuid::new_v4());
-    tauri::async_runtime::spawn_blocking(move || -> anyhow::Result<ProjectManifest> {
-        project::bind_recording(&db, &package, &recording_id, &source)?;
-        project::read_manifest(&package)
+    tauri::async_runtime::spawn_blocking(move || {
+        project::prepare_recording_binding(&db, &project_id, &recording_id, &source)
     })
     .await
     .map_err(command_error)?
@@ -399,7 +398,7 @@ pub fn run() {
             create_local_project,
             open_local_project,
             save_local_project_mutation,
-            choose_and_bind_project_recording,
+            choose_and_prepare_project_recording,
             pair_device,
             sync_pending,
             poll_device_jobs,

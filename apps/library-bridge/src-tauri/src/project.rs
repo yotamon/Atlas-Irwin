@@ -320,42 +320,48 @@ pub fn register_project(
     )
 }
 
-pub fn bind_recording(
+pub fn prepare_recording_binding(
     db: &BridgeDb,
-    package: &Path,
+    project_id: &str,
     recording_id: &str,
     path: &Path,
 ) -> anyhow::Result<ProjectRecording> {
+    validate_non_empty(project_id, "projectId")?;
     validate_non_empty(recording_id, "recording id")?;
     if !path.is_file() {
         anyhow::bail!("selected recording is unavailable");
     }
-    let mut manifest = read_manifest(package)?;
+
+    let package = db
+        .project_package_path(project_id)?
+        .context("project is not registered on this device")?;
+    let manifest = read_manifest(&package)?;
+    if manifest.project_id != project_id {
+        anyhow::bail!("project identity does not match the registered package");
+    }
+    if manifest.recordings.iter().any(|item| item.id == recording_id) {
+        anyhow::bail!("project recording id already exists");
+    }
+
     let fingerprint = fingerprint_file(path)?;
+    let display_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .map(ToOwned::to_owned);
+    if display_name
+        .as_ref()
+        .is_some_and(|value| value.chars().count() > 240)
+    {
+        anyhow::bail!("portable project recording display name is too long");
+    }
     let recording = ProjectRecording {
         id: recording_id.to_string(),
         fingerprint: fingerprint.clone(),
-        display_name: path
-            .file_name()
-            .and_then(|value| value.to_str())
-            .map(ToOwned::to_owned),
+        display_name,
         media_policy: Some(MediaPolicy::Reference),
     };
-    manifest.recordings.retain(|item| item.id != recording_id);
-    manifest.recordings.push(recording.clone());
-    manifest.revision = manifest
-        .revision
-        .checked_add(1)
-        .context("project revision overflow")?;
-    manifest.updated_at = current_timestamp()?;
-    write_manifest(package, &manifest)?;
-    db.register_project(
-        &manifest.project_id,
-        package,
-        &manifest.version,
-        manifest.revision,
-    )?;
-    db.bind_project_recording(&manifest.project_id, recording_id, &fingerprint, path)?;
+    assert_path_free_value(&serde_json::to_value(&recording)?, "recording")?;
+    db.bind_project_recording(project_id, recording_id, &fingerprint, path)?;
     Ok(recording)
 }
 
@@ -411,6 +417,25 @@ mod tests {
         .unwrap();
         assert!(manifest.notes.is_empty());
         validate_manifest(&manifest).unwrap();
+    }
+
+    #[test]
+    fn preparing_recording_binding_keeps_manifest_semantic_state_unchanged() {
+        let directory = tempdir().unwrap();
+        let package = directory.path().join("Demo.ensemble");
+        let audio = directory.path().join("master.wav");
+        fs::write(&audio, b"local recording bytes").unwrap();
+        let db = BridgeDb::new(directory.path().join("bridge.sqlite3")).unwrap();
+        let manifest = create_project(&package, "Demo").unwrap();
+        register_project(&db, &package, &manifest).unwrap();
+
+        let recording =
+            prepare_recording_binding(&db, &manifest.project_id, "rec_test", &audio).unwrap();
+
+        assert_eq!(read_manifest(&package).unwrap(), manifest);
+        assert_eq!(recording.id, "rec_test");
+        assert_eq!(recording.fingerprint, fingerprint_file(&audio).unwrap());
+        assert_eq!(recording.media_policy, Some(MediaPolicy::Reference));
     }
 
     #[test]
