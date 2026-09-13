@@ -242,20 +242,7 @@ impl BridgeDb {
             .optional()?)
     }
 
-    pub fn cached_analysis(&self, recording_fingerprint: &str) -> anyhow::Result<Option<Value>> {
-        let payload: Option<String> = self
-            .open()?
-            .query_row(
-                "select payload_json from analysis_cache where recording_fingerprint=?1",
-                params![recording_fingerprint],
-                |row| row.get(0),
-            )
-            .optional()?;
-        payload
-            .map(|value| serde_json::from_str(&value).map_err(anyhow::Error::from))
-            .transpose()
-    }
-
+    #[cfg(test)]
     pub fn store_analysis(
         &self,
         recording_fingerprint: &str,
