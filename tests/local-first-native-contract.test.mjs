@@ -73,7 +73,10 @@ test("portable project boundary is directory-based, strict, durable and path-fre
   assert.ok(html.includes(".ensemble lives with you"));
   assert.ok(js.includes('invoke("create_local_project"'));
   assert.ok(js.includes('invoke("open_local_project"'));
-  assert.ok(js.includes('invoke("save_local_project"'));
+  assert.ok(js.includes('invoke("save_local_project_mutation"'));
+  assert.ok(js.includes("platformCore.createProjectMutation"));
+  assert.ok(js.includes("platformCore.applyProjectMutation"));
+  assert.equal(js.includes('invoke("save_local_project"'), false);
   assert.equal(js.includes("packagePath"), false);
   assert.equal(js.includes("filePath"), false);
 });

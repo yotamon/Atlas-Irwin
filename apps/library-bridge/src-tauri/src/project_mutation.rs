@@ -134,7 +134,11 @@ mod tests {
     use crate::project;
     use tempfile::tempdir;
 
-    fn title_mutation(project_id: &str, base_revision: u64, created_at: &str) -> PortableProjectMutation {
+    fn title_mutation(
+        project_id: &str,
+        base_revision: u64,
+        created_at: &str,
+    ) -> PortableProjectMutation {
         PortableProjectMutation {
             version: PROJECT_MUTATION_VERSION.to_string(),
             mutation_id: "mut_title_1".to_string(),
@@ -181,7 +185,8 @@ mod tests {
 
         let created_at = "2026-09-14T00:00:00.000Z";
         let mut mutation = title_mutation(&current.project_id, current.revision + 1, created_at);
-        mutation.payload = serde_json::json!({"title": "Renamed", "filePath": "/Users/example/private.wav"});
+        mutation.payload =
+            serde_json::json!({"title": "Renamed", "filePath": "/Users/example/private.wav"});
         let mut next = current.clone();
         next.title = "Renamed".to_string();
         next.revision += 2;
