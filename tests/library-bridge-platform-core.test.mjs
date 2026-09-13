@@ -1,10 +1,18 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
 import test from "node:test";
 
-const bundlePath = join(process.cwd(), "apps", "library-bridge", "ui", "platform-core.js");
+const repoRoot = process.cwd();
+const buildScript = join(repoRoot, "apps", "library-bridge", "build-platform-core.mjs");
+const bundlePath = join(repoRoot, "apps", "library-bridge", "ui", "platform-core.js");
+
+execFileSync(process.execPath, [buildScript], {
+  cwd: repoRoot,
+  stdio: "pipe",
+});
 
 function loadCore() {
   const source = readFileSync(bundlePath, "utf8");
