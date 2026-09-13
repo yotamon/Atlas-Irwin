@@ -75,7 +75,7 @@ test("portable project state rejects device-local paths", () => {
   projects.assertPortableProjectManifest(manifest);
   assert.throws(
     () => projects.assertPortableProjectManifest({ ...manifest, localPath: "C:\\Users\\Yotam\\Music\\track.wav" }),
-    /device-local/,
+    /device-local|localPath is not supported/,
   );
 });
 

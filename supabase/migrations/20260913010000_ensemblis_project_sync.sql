@@ -136,7 +136,7 @@ begin
     select 1
     from public.workspace_memberships membership
     where membership.workspace_id = p_workspace_id
-      and membership.user_id = p_actor_id
+      and membership.profile_id = p_actor_id
       and membership.status = 'active'
   ) then
     raise exception 'active workspace membership is required'
