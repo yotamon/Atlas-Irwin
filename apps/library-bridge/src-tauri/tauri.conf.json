@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "identifier": "com.ensemblis.library-bridge",
   "build": {
+    "beforeDevCommand": "node build-platform-core.mjs",
+    "beforeBuildCommand": "node build-platform-core.mjs",
     "frontendDist": "../ui"
   },
   "app": {

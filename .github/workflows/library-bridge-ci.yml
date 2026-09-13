@@ -23,6 +23,7 @@ on:
       - "supabase/migrations/*dj_library*"
       - "supabase/migrations/*ensemblis_project*"
       - "tests/dj-library-phase-8-bridge.test.mjs"
+      - "tests/library-bridge-platform-core.test.mjs"
       - "tests/local-first-*.test.mjs"
       - "tests/project-sync-*.test.mjs"
       - "docs/adr/**"
@@ -51,6 +52,7 @@ on:
       - "supabase/migrations/*dj_library*"
       - "supabase/migrations/*ensemblis_project*"
       - "tests/dj-library-phase-8-bridge.test.mjs"
+      - "tests/library-bridge-platform-core.test.mjs"
       - "tests/local-first-*.test.mjs"
       - "tests/project-sync-*.test.mjs"
       - "docs/adr/**"
@@ -72,6 +74,8 @@ jobs:
           node-version: "22"
       - name: Install pinned TypeScript test runtime
         run: npm install --ignore-scripts --no-save --package-lock=false typescript@5.9.3
+      - name: Build desktop platform core from canonical TypeScript
+        run: node apps/library-bridge/build-platform-core.mjs
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -79,6 +83,7 @@ jobs:
         run: >-
           node --test
           tests/dj-library-phase-8-bridge.test.mjs
+          tests/library-bridge-platform-core.test.mjs
           tests/local-first-platform.test.mjs
           tests/local-first-native-contract.test.mjs
           tests/project-sync-server-contract.test.mjs
@@ -147,6 +152,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Install pinned TypeScript build runtime
+        run: npm install --ignore-scripts --no-save --package-lock=false typescript@5.9.3
       - name: Install Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:

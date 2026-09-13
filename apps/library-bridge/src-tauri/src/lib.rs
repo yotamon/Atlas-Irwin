@@ -8,6 +8,7 @@ mod model;
 mod network;
 mod privacy;
 mod project;
+mod project_mutation;
 mod scanner;
 mod sidecar;
 mod watcher;
@@ -19,6 +20,7 @@ use crate::{
     identity::hash_text,
     model::{BridgeStatus, PairResponse, ScanSummary},
     project::ProjectManifest,
+    project_mutation::PortableProjectMutation,
     watcher::LibraryWatcher,
 };
 use std::{path::PathBuf, sync::Arc};
@@ -199,15 +201,18 @@ async fn open_local_project(
 }
 
 #[tauri::command]
-async fn save_local_project(
+async fn save_local_project_mutation(
     state: State<'_, BridgeState>,
-    manifest: ProjectManifest,
+    mutation: PortableProjectMutation,
+    next_manifest: ProjectManifest,
 ) -> Result<ProjectManifest, String> {
     let db = Arc::clone(&state.db);
-    tauri::async_runtime::spawn_blocking(move || project::save_registered_project(&db, manifest))
-        .await
-        .map_err(command_error)?
-        .map_err(command_error)
+    tauri::async_runtime::spawn_blocking(move || {
+        project_mutation::persist_project_mutation(&db, mutation, next_manifest)
+    })
+    .await
+    .map_err(command_error)?
+    .map_err(command_error)
 }
 
 #[tauri::command]
@@ -393,7 +398,7 @@ pub fn run() {
             rescan_source,
             create_local_project,
             open_local_project,
-            save_local_project,
+            save_local_project_mutation,
             choose_and_bind_project_recording,
             pair_device,
             sync_pending,

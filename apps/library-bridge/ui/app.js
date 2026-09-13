@@ -1,4 +1,7 @@
 const invoke = window.__TAURI__.core.invoke;
+const platformCore = window.EnsemblisPlatformCore;
+if (!platformCore) throw new Error("Ensemblis platform core was not generated before the desktop UI loaded.");
+
 const log = document.getElementById("log");
 const projectTitle = document.getElementById("project-title");
 const projectSave = document.getElementById("project-save");
@@ -98,9 +101,21 @@ document.getElementById("project-open").addEventListener("click", () => {
 
 projectSave.addEventListener("click", () => {
   if (!activeProject) return;
-  void run("Saving portable project", async () => {
-    const manifest = { ...activeProject, title: projectTitle.value.trim() };
-    const saved = await invoke("save_local_project", { manifest });
+  void run("Saving semantic project mutation", async () => {
+    const title = projectTitle.value.trim();
+    if (!title) throw new Error("Project title is required.");
+    if (title === activeProject.title) return "No project changes to save.";
+
+    const mutation = platformCore.createProjectMutation({
+      mutationId: `mut_${crypto.randomUUID()}`,
+      projectId: activeProject.projectId,
+      baseRevision: activeProject.revision,
+      operation: "project.title.set",
+      payload: { title },
+      createdAt: new Date(),
+    });
+    const nextManifest = platformCore.applyProjectMutation(activeProject, mutation);
+    const saved = await invoke("save_local_project_mutation", { mutation, nextManifest });
     renderProject(saved);
     return saved;
   });
