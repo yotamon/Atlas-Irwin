@@ -339,7 +339,11 @@ pub fn prepare_recording_binding(
     if manifest.project_id != project_id {
         anyhow::bail!("project identity does not match the registered package");
     }
-    if manifest.recordings.iter().any(|item| item.id == recording_id) {
+    if manifest
+        .recordings
+        .iter()
+        .any(|item| item.id == recording_id)
+    {
         anyhow::bail!("project recording id already exists");
     }
 
