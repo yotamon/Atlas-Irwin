@@ -1,8 +1,33 @@
 const invoke = window.__TAURI__.core.invoke;
+const platformCore = window.EnsemblisPlatformCore;
+if (!platformCore) throw new Error("Ensemblis platform core was not generated before the desktop UI loaded.");
+
 const log = document.getElementById("log");
+const projectTitle = document.getElementById("project-title");
+const projectSave = document.getElementById("project-save");
+const projectAddRecording = document.getElementById("project-add-recording");
+const projectSummary = document.getElementById("project-summary");
+let activeProject = null;
+
 const setLog = (value) => {
   log.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
 };
+
+function renderProject(project) {
+  activeProject = project ?? null;
+  const open = Boolean(activeProject);
+  projectSave.disabled = !open;
+  projectAddRecording.disabled = !open;
+  if (!open) {
+    projectTitle.value = "";
+    projectSummary.textContent = "No project open.";
+    return;
+  }
+  projectTitle.value = activeProject.title;
+  const recordingCount = Array.isArray(activeProject.recordings) ? activeProject.recordings.length : 0;
+  const analysisCount = Array.isArray(activeProject.analysisArtifacts) ? activeProject.analysisArtifacts.length : 0;
+  projectSummary.textContent = `${activeProject.title} · revision ${activeProject.revision} · ${recordingCount} recording${recordingCount === 1 ? "" : "s"} · ${analysisCount} analysis artifact${analysisCount === 1 ? "" : "s"}`;
+}
 
 async function refresh() {
   const status = await invoke("bridge_status");
@@ -57,8 +82,72 @@ document.getElementById("export").addEventListener("click", () => {
   });
 });
 
+document.getElementById("project-create").addEventListener("click", () => {
+  const title = projectTitle.value.trim();
+  void run("Creating portable project", async () => {
+    const project = await invoke("create_local_project", { title });
+    if (project) renderProject(project);
+    return project ?? "Project creation cancelled.";
+  });
+});
+
+document.getElementById("project-open").addEventListener("click", () => {
+  void run("Opening portable project", async () => {
+    const project = await invoke("open_local_project");
+    if (project) renderProject(project);
+    return project ?? "Project open cancelled.";
+  });
+});
+
+projectSave.addEventListener("click", () => {
+  if (!activeProject) return;
+  void run("Saving semantic project mutation", async () => {
+    const title = projectTitle.value.trim();
+    if (!title) throw new Error("Project title is required.");
+    if (title === activeProject.title) return "No project changes to save.";
+
+    const mutation = platformCore.createProjectMutation({
+      mutationId: `mut_${crypto.randomUUID()}`,
+      projectId: activeProject.projectId,
+      baseRevision: activeProject.revision,
+      operation: "project.title.set",
+      payload: { title },
+      createdAt: new Date(),
+    });
+    const nextManifest = platformCore.applyProjectMutation(activeProject, mutation);
+    const saved = await invoke("save_local_project_mutation", { mutation, nextManifest });
+    renderProject(saved);
+    return saved;
+  });
+});
+
+projectAddRecording.addEventListener("click", () => {
+  if (!activeProject) return;
+  void run("Adding local recording reference", async () => {
+    const recording = await invoke("choose_and_prepare_project_recording", {
+      projectId: activeProject.projectId,
+    });
+    if (!recording) return "Recording selection cancelled.";
+
+    const mutation = platformCore.createProjectMutation({
+      mutationId: `mut_${crypto.randomUUID()}`,
+      projectId: activeProject.projectId,
+      baseRevision: activeProject.revision,
+      operation: "recording.add",
+      entityId: recording.id,
+      payload: { recording },
+      createdAt: new Date(),
+    });
+    const nextManifest = platformCore.applyProjectMutation(activeProject, mutation);
+    const saved = await invoke("save_local_project_mutation", { mutation, nextManifest });
+    renderProject(saved);
+    return saved;
+  });
+});
+
 document.getElementById("refresh").addEventListener("click", () => {
   void run("Refreshing bridge status", refresh);
 });
 
+renderProject(null);
 refresh().catch((error) => setLog(String(error)));
