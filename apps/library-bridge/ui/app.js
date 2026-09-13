@@ -124,9 +124,24 @@ projectSave.addEventListener("click", () => {
 projectAddRecording.addEventListener("click", () => {
   if (!activeProject) return;
   void run("Adding local recording reference", async () => {
-    const project = await invoke("choose_and_bind_project_recording", { projectId: activeProject.projectId });
-    if (project) renderProject(project);
-    return project ?? "Recording selection cancelled.";
+    const recording = await invoke("choose_and_prepare_project_recording", {
+      projectId: activeProject.projectId,
+    });
+    if (!recording) return "Recording selection cancelled.";
+
+    const mutation = platformCore.createProjectMutation({
+      mutationId: `mut_${crypto.randomUUID()}`,
+      projectId: activeProject.projectId,
+      baseRevision: activeProject.revision,
+      operation: "recording.add",
+      entityId: recording.id,
+      payload: { recording },
+      createdAt: new Date(),
+    });
+    const nextManifest = platformCore.applyProjectMutation(activeProject, mutation);
+    const saved = await invoke("save_local_project_mutation", { mutation, nextManifest });
+    renderProject(saved);
+    return saved;
   });
 });
 
