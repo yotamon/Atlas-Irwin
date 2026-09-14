@@ -99,16 +99,24 @@ test("analysis payload schema is strict and versioned", async () => {
 });
 
 test("release validation includes fully native Windows ARM64 audio runtime", async () => {
-  const [workflow, sidecarBuilder, ffmpegBuilder, sidecar] = await Promise.all([
+  const [workflow, sidecarBuilder, ffmpegBuilder, sidecar, armRequirements, armVerifier] = await Promise.all([
     source(".github/workflows/library-bridge-ci.yml"),
     source("apps/library-bridge/renderer/build_sidecar.py"),
     source("apps/library-bridge/renderer/prepare_native_ffmpeg.py"),
     source("apps/library-bridge/renderer/bridge_sidecar.py"),
+    source("apps/library-bridge/renderer/requirements-windows-arm64.txt"),
+    source("apps/library-bridge/renderer/verify_windows_arm64_python.py"),
   ]);
 
   assert.ok(workflow.includes("runs-on: windows-11-arm"));
+  assert.ok(workflow.includes('python-version: "3.14"'));
   assert.ok(workflow.includes("architecture: arm64"));
   assert.ok(workflow.includes("aarch64-pc-windows-msvc"));
+  assert.ok(workflow.includes("--only-binary=:all:"));
+  assert.ok(workflow.includes("--no-binary=soxr soxr==1.1.0"));
+  assert.ok(workflow.includes("--no-binary=imageio-ffmpeg --no-deps imageio-ffmpeg==0.6.0"));
+  assert.ok(workflow.includes("--no-binary=python-stretch python-stretch==0.3.1"));
+  assert.ok(workflow.includes("verify_windows_arm64_python.py"));
   assert.ok(workflow.includes("Prepare pinned Windows ARM64 FFmpeg"));
   assert.ok(workflow.includes("--ffmpeg-binary apps/library-bridge/renderer/.native-tools/windows-arm64/ffmpeg.exe"));
   assert.ok(workflow.includes("Build and verify Windows ARM64 sidecar"));
@@ -116,6 +124,25 @@ test("release validation includes fully native Windows ARM64 audio runtime", asy
   assert.ok(workflow.includes("Verify Windows ARM64 application executable"));
   assert.ok(workflow.includes("--verify-binary apps/library-bridge/src-tauri/target/aarch64-pc-windows-msvc/release/ensemblis-library-bridge.exe"));
   assert.ok(workflow.includes("target/aarch64-pc-windows-msvc/release/bundle/**"));
+
+  for (const pin of [
+    "PyInstaller==6.22.2",
+    "numpy==2.5.3",
+    "scipy==1.18.1",
+    "numba==0.67.0",
+    "llvmlite==0.49.0",
+    "scikit-learn==1.9.1",
+    "librosa==0.11.0",
+    "soundfile==0.14.0",
+    "pyloudnorm==0.2.0",
+  ]) {
+    assert.ok(armRequirements.includes(pin), `Windows ARM64 dependency profile must pin ${pin}`);
+  }
+
+  assert.ok(armVerifier.includes("EXPECTED_PE_MACHINE = 0xAA64"));
+  assert.ok(armVerifier.includes('(\"*.pyd\", \"*.dll\", \"*.exe\")'));
+  assert.ok(armVerifier.includes('machine != "aarch64"'));
+  assert.ok(armVerifier.includes("non-ARM64 binaries detected in Python environment"));
 
   assert.ok(sidecarBuilder.includes('"aarch64-pc-windows-msvc": 0xAA64'));
   assert.ok(sidecarBuilder.includes("assert_native_host(target_triple)"));
