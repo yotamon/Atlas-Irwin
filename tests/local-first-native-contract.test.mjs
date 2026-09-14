@@ -97,3 +97,22 @@ test("analysis payload schema is strict and versioned", async () => {
   assert.equal(schema.properties.beatGrid.additionalProperties, false);
   assert.equal(schema.properties.planningEvidence.additionalProperties, false);
 });
+
+test("release validation includes a native Windows ARM64 build and architecture guard", async () => {
+  const [workflow, sidecarBuilder] = await Promise.all([
+    source(".github/workflows/library-bridge-ci.yml"),
+    source("apps/library-bridge/renderer/build_sidecar.py"),
+  ]);
+
+  assert.ok(workflow.includes("runs-on: windows-11-arm"));
+  assert.ok(workflow.includes("architecture: arm64"));
+  assert.ok(workflow.includes("aarch64-pc-windows-msvc"));
+  assert.ok(workflow.includes("Build and verify Windows ARM64 sidecar"));
+  assert.ok(workflow.includes("Build Windows ARM64 Tauri release bundle"));
+  assert.ok(workflow.includes("target/aarch64-pc-windows-msvc/release/bundle/**"));
+
+  assert.ok(sidecarBuilder.includes('"aarch64-pc-windows-msvc": 0xAA64'));
+  assert.ok(sidecarBuilder.includes("assert_native_host(target_triple)"));
+  assert.ok(sidecarBuilder.includes("assert_target_binary_architecture(target, target_triple)"));
+  assert.ok(sidecarBuilder.includes("read_pe_machine"));
+});
