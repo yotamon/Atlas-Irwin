@@ -5,11 +5,13 @@ import { ensemblisAiGatewayConfigured } from "@/lib/ai/gateway";
 import { runAtlasAiTask } from "@/lib/ai/control-plane";
 import { strictQualityResult, type AiQualityGate } from "@/lib/ai/quality";
 import type { AiTaskType } from "@/lib/ai/tasks";
+import { loadBoundedArtistMemoryContext } from "@/lib/artist-memory/consumer-context";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { conciseLyricsPromptContext, loadTrackLyricsContext } from "@/lib/lyrics-intelligence/context";
 import { conciseCreativeGraphContext } from "@/lib/music-intelligence/creative-graph";
 import { loadTrackCreativeIntelligenceGraph } from "@/lib/music-intelligence/creative-graph-loader";
 import { resolveActiveArtistContext, resolveArtistContext } from "@/lib/studio/artist-context";
+import type { Database } from "@/types/database";
 import type { LyricsDatabase } from "@/types/lyrics-database";
 
 export type MarketingTextProvider = "vercel-gateway" | "openai" | "google" | "zai";
@@ -200,24 +202,42 @@ export async function generateStructured<T>({
     ? await resolveArtistContext(supabase, user, artistId)
     : await resolveActiveArtistContext(supabase, user);
   const parsedInputContext = parseInputContext(input);
-  const inputContext = await enrichMarketingContextWithLyrics({
+  const trackContext = await enrichMarketingContextWithLyrics({
     context: parsedInputContext,
     supabase: supabase as unknown as SupabaseClient,
     ownerId: user.id,
     artistId: artist.artistId,
   });
+  const campaignPlan = name === "atlas_campaign_plan" || name === "ensemblis_campaign_plan";
+  const campaignMemory = campaignPlan
+    ? await loadBoundedArtistMemoryContext({
+        db: supabase as unknown as SupabaseClient<Database>,
+        ownerId: user.id,
+        artistId: artist.artistId,
+        consumer: "campaign_planning",
+        maxCharacters: 1_800,
+      })
+    : null;
+  const inputContext = campaignMemory?.maxEffect === "suggest_only"
+    ? {
+        ...trackContext,
+        artistMemory: {
+          maxEffect: "suggest_only",
+          brief: campaignMemory.brief,
+        },
+      }
+    : trackContext;
   const enrichedInput = JSON.stringify(inputContext, null, 2);
   const releaseId = releaseIdFromContext(inputContext);
-  const campaignPlan = name === "atlas_campaign_plan" || name === "ensemblis_campaign_plan";
   const result = await runAtlasAiTask<T>({
     ownerId: user.id,
     artistId: artist.artistId,
     task: taskForName(name),
     purpose: campaignPlan ? "campaign_plan" : name,
     releaseId,
-    promptVersion: campaignPlan ? "marketing-v4-creative-graph" : "marketing-control-v3-creative-graph",
+    promptVersion: campaignPlan ? "marketing-v5-bounded-memory" : "marketing-control-v3-creative-graph",
     schema,
-    instructions: `${instructions}\n\nTRACK CREATIVE INTELLIGENCE RULES:\nWhen trackCreativeIntelligence is present, treat it as the shared cross-modal timeline joining master-audio hooks, Lyrics Intelligence, active stem roles and Audio Scenes. Prefer highlights supported by multiple modalities. Respect supplied start/end timing and provenance. Do not infer that a lyric is sung merely because a music section has the same structural label. Use materially different highlights instead of repeatedly choosing near-identical chorus windows.\n\nLYRICS INTELLIGENCE RULES:\nWhen lyricsIntelligence is present, treat it as authoritative song-specific narrative context. It may inform hooks, captions, visual briefs and campaign angles. Quote only excerpts explicitly supplied with mayQuote=true. Never invent, complete, reconstruct or paraphrase text as if it were an official lyric. If quoting is disabled, use only semantic themes and meaning without reproducing lyric text.`,
+    instructions: `${instructions}\n\nTRACK CREATIVE INTELLIGENCE RULES:\nWhen trackCreativeIntelligence is present, treat it as the shared cross-modal timeline joining master-audio hooks, Lyrics Intelligence, active stem roles and Audio Scenes. Prefer highlights supported by multiple modalities. Respect supplied start/end timing and provenance. Do not infer that a lyric is sung merely because a music section has the same structural label. Use materially different highlights instead of repeatedly choosing near-identical chorus windows.\n\nLYRICS INTELLIGENCE RULES:\nWhen lyricsIntelligence is present, treat it as authoritative song-specific narrative context. It may inform hooks, captions, visual briefs and campaign angles. Quote only excerpts explicitly supplied with mayQuote=true. Never invent, complete, reconstruct or paraphrase text as if it were an official lyric. If quoting is disabled, use only semantic themes and meaning without reproducing lyric text.\n\nARTIST MEMORY RULES:\nWhen artistMemory is present, it is bounded suggestion context only. Explicit artist-authored guidance and current first-party evidence outrank learned preferences. Memory may suggest campaign emphasis or sequencing, but it never authorizes spend, publishing, providers, platform actions, external effects, or factual claims. Existing approval and spend gates remain authoritative.`,
     input: enrichedInput,
     inputContext,
     qualityGate: qualityGateFor<T>(name, enrichedInput),
