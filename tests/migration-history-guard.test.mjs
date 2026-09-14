@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -5,7 +6,10 @@ import {
   parseNameStatus,
   validateMigrationChanges,
 } from "../scripts/validate-migration-history.mjs";
-import { compareMigrationHistory } from "../scripts/check-supabase-migration-parity.mjs";
+import {
+  compareMigrationHistory,
+  readLocalMigrations,
+} from "../scripts/check-supabase-migration-parity.mjs";
 import {
   classifyMigrationRecovery,
   validateRecoveryBaseline,
@@ -203,4 +207,20 @@ test("strict recovery baseline fails if production changes after the audit", () 
 
   const errors = validateRecoveryBaseline({ local, remote, result, baseline, projectRef: "project" });
   assert.ok(errors.some((error) => error.includes("Remote-only set changed")));
+});
+
+test("dated production recovery baseline matches the canonical migration directory", () => {
+  const baseline = JSON.parse(
+    fs.readFileSync(
+      new URL("../scripts/fixtures/production-migration-recovery-2026-09-14.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  const local = readLocalMigrations();
+  const localIds = new Set(local.map((migration) => `${migration.version}_${migration.name}`));
+
+  assert.equal(local.length, baseline.canonicalMigrationCount);
+  for (const migration of baseline.genuineMissingSql) {
+    assert.ok(localIds.has(migration), `Audited missing migration is no longer canonical: ${migration}`);
+  }
 });
