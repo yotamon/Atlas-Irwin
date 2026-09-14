@@ -72,6 +72,13 @@ fn sha256_file(path: &Path) -> anyhow::Result<String> {
     Ok(format!("sha256:{}", hex::encode(hasher.finalize())))
 }
 
+fn safe_https_url(url: &Url) -> bool {
+    url.scheme() == "https"
+        && url.host_str().is_some()
+        && url.username().is_empty()
+        && url.password().is_none()
+}
+
 fn validate_descriptor(descriptor: &ModelDescriptor) -> anyhow::Result<()> {
     safe_segment(&descriptor.id, "id")?;
     safe_segment(&descriptor.version, "version")?;
@@ -99,11 +106,7 @@ fn validate_descriptor(descriptor: &ModelDescriptor) -> anyhow::Result<()> {
         anyhow::bail!("model required capability is invalid");
     }
     let url = Url::parse(&descriptor.url).context("model artifact URL is invalid")?;
-    if url.scheme() != "https"
-        || url.host_str().is_none()
-        || !url.username().is_empty()
-        || url.password().is_some()
-    {
+    if !safe_https_url(&url) {
         anyhow::bail!("model artifact URL must be an HTTPS URL without embedded credentials");
     }
     Ok(())
@@ -160,7 +163,7 @@ pub fn install_model_from_catalog(
         let client = reqwest::blocking::Client::builder()
             .timeout(DOWNLOAD_TIMEOUT)
             .redirect(reqwest::redirect::Policy::custom(|attempt| {
-                if attempt.previous().len() >= 5 || attempt.url().scheme() != "https" {
+                if attempt.previous().len() >= 5 || !safe_https_url(attempt.url()) {
                     attempt.stop()
                 } else {
                     attempt.follow()
@@ -173,6 +176,9 @@ pub fn install_model_from_catalog(
             .context("could not download the model artifact")?
             .error_for_status()
             .context("model artifact server returned an error")?;
+        if !safe_https_url(response.url()) {
+            anyhow::bail!("model artifact redirect resolved to an unsafe URL");
+        }
         if let Some(length) = response.content_length() {
             if length != descriptor.size_bytes {
                 anyhow::bail!("model artifact server reported an unexpected size");
