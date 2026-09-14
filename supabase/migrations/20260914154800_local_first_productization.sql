@@ -154,13 +154,29 @@ $$;
 revoke all on function public.activate_ensemblis_perpetual_license(uuid, uuid, integer) from public, anon, authenticated;
 grant execute on function public.activate_ensemblis_perpetual_license(uuid, uuid, integer) to service_role;
 
--- Existing paired desktop users are grandfathered into Studio v1 so this migration never
--- silently removes local processing from an already-working installation.
+-- Existing paired desktop users are grandfathered into Studio v1. Preserve every active device,
+-- even for owners who already exceed the default three-device limit, and make those activations
+-- idempotent before the new entitlement boundary becomes effective.
 insert into public.ensemblis_perpetual_licenses(owner_id, major_version, device_limit, active)
-select distinct owner_id, 1, 3, true
-from public.dj_library_devices
-where revoked_at is null
-on conflict (owner_id, major_version) do nothing;
+select d.owner_id, 1, greatest(3, count(*)::integer), true
+from public.dj_library_devices as d
+where d.revoked_at is null
+group by d.owner_id
+on conflict (owner_id, major_version) do update
+set device_limit = greatest(public.ensemblis_perpetual_licenses.device_limit, excluded.device_limit),
+    active = true,
+    updated_at = now();
+
+insert into public.ensemblis_license_activations(license_id, device_id, owner_id, activated_at, revoked_at)
+select l.id, d.id, d.owner_id, coalesce(d.paired_at, now()), null
+from public.dj_library_devices as d
+join public.ensemblis_perpetual_licenses as l
+  on l.owner_id = d.owner_id
+ and l.major_version = 1
+where d.revoked_at is null
+on conflict (license_id, device_id) do update
+set owner_id = excluded.owner_id,
+    revoked_at = null;
 
 -- Cloud compute becomes capability-gated at the same time as this migration. Owners with existing
 -- cloud workloads receive a short migration window so queued/current product flows are not cut off
