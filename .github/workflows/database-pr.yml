@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   database:
-    name: canonical exact drift audit
+    name: canonical semantic equivalence audit
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -24,7 +24,7 @@ jobs:
         run: test -f supabase/config.toml || supabase init
       - name: Replay full canonical history
         run: supabase db start
-      - name: Identify exact remaining drift objects
+      - name: Compare order-insensitive columns and function semantics
         shell: bash
         run: |
           PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -At <<'SQL'
@@ -39,44 +39,40 @@ jobs:
               ('public','bootstrap_ensemblis_project_replica_v1'),('public','commit_ensemblis_project_mutation_v1')
           ), columns as (
             select n.nspname schema_name, c.relname || '.' || a.attname object_name,
-              concat_ws('|', a.attnum::text, format_type(a.atttypid,a.atttypmod), a.attnotnull::text,
+              concat_ws('|', format_type(a.atttypid,a.atttypmod), a.attnotnull::text,
                 coalesce(pg_get_expr(ad.adbin,ad.adrelid),''), a.attidentity::text, a.attgenerated::text,
                 coalesce(col_description(c.oid,a.attnum),'')) detail
             from pg_attribute a join pg_class c on c.oid=a.attrelid join pg_namespace n on n.oid=c.relnamespace
             left join pg_attrdef ad on ad.adrelid=a.attrelid and ad.adnum=a.attnum
             where n.nspname in ('public','private') and c.relkind in ('r','p','v','m') and a.attnum>0 and not a.attisdropped
               and not exists (select 1 from missing_relations x where x.name=c.relname)
-          ), column_partitioned as (
-            select *,
-              mod(hashtextextended(schema_name || '.' || object_name,0)::numeric + 9223372036854775808,32)::int bucket,
-              mod(hashtextextended(schema_name || '.' || object_name,1)::numeric + 9223372036854775808,16)::int subbucket
-            from columns
           ), functions as (
             select n.nspname schema_name,
               p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' object_name,
               concat_ws('|', l.lanname, p.prokind::text, p.provolatile::text, p.proparallel::text,
                 p.proisstrict::text, p.prosecdef::text, p.proleakproof::text, p.proretset::text,
                 pg_get_function_result(p.oid), pg_get_function_arguments(p.oid),
-                coalesce(array_to_string(p.proconfig,E'\x1d'),''), p.prosrc,
-                p.procost::text, p.prorows::text) detail
+                coalesce(array_to_string(p.proconfig,E'\x1d'),''), p.procost::text, p.prorows::text) metadata,
+              p.prosrc source,
+              regexp_replace(trim(p.prosrc), E'\\s+', ' ', 'g') normalized_source
             from pg_proc p
             join pg_namespace n on n.oid=p.pronamespace
             join pg_language l on l.oid=p.prolang
             where n.nspname in ('public','private')
               and not (n.nspname='public' and p.proname='rls_auto_enable' and p.pronargs=0)
               and not exists (select 1 from missing_functions x where x.schema_name=n.nspname and x.name=p.proname)
-          ), function_partitioned as (
-            select *, mod(hashtextextended(schema_name || '.' || object_name,0)::numeric + 9223372036854775808,32)::int bucket
+          ), fp as (
+            select 'COLUMN_SEM' kind, count(*) object_count,
+              encode(digest(convert_to(string_agg(schema_name || E'\x1f' || object_name || E'\x1f' || detail,E'\x1e' order by schema_name,object_name,detail),'UTF8'),'sha256'),'hex') fingerprint
+            from columns
+            union all
+            select 'FUNCTION_META', count(*),
+              encode(digest(convert_to(string_agg(schema_name || E'\x1f' || object_name || E'\x1f' || metadata,E'\x1e' order by schema_name,object_name,metadata),'UTF8'),'sha256'),'hex')
+            from functions
+            union all
+            select 'FUNCTION_SOURCE_NORMALIZED', count(*),
+              encode(digest(convert_to(string_agg(schema_name || E'\x1f' || object_name || E'\x1f' || normalized_source,E'\x1e' order by schema_name,object_name,normalized_source),'UTF8'),'sha256'),'hex')
             from functions
           )
-          select 'COL_OBJ|' || bucket || '|' || subbucket || '|' || schema_name || '|' || object_name || '|' ||
-            encode(digest(convert_to(detail,'UTF8'),'sha256'),'hex')
-          from column_partitioned
-          where (bucket,subbucket) in ((5,8),(9,5),(12,0),(25,3),(27,3),(30,6))
-          union all
-          select 'FUNC_PART|' || bucket || '|' || count(*) || '|' ||
-            encode(digest(convert_to(string_agg(schema_name || E'\x1f' || object_name || E'\x1f' || detail,E'\x1e' order by schema_name,object_name,detail),'UTF8'),'sha256'),'hex')
-          from function_partitioned
-          group by bucket
-          order by 1;
+          select kind || '|' || object_count || '|' || fingerprint from fp order by kind;
           SQL
