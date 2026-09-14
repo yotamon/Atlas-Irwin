@@ -16,6 +16,7 @@ let activeProject = null;
 let currentStatus = null;
 let currentPolicy = { ...platformCore.DEFAULT_EXECUTION_POLICY };
 let currentModels = [];
+let startupEntitlementRefreshAttempted = false;
 
 const setLog = (value) => {
   log.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
@@ -182,7 +183,7 @@ async function refresh() {
   document.getElementById("runtime-health").textContent = status.localIntelligenceAvailable
     ? "Local runtime ready"
     : status.paired
-      ? "Pairing ready · local license needed"
+      ? "Paired · refresh or import a Studio license for local intelligence"
       : "Pair this device to begin";
   if (status.apiBaseUrl) document.getElementById("api").value = status.apiBaseUrl;
   renderCapabilities(status);
@@ -227,12 +228,30 @@ function routeTrackPlanning(recording) {
   };
 }
 
+async function refreshEntitlement() {
+  const entitlement = await invoke("refresh_desktop_entitlement");
+  await refresh();
+  return entitlement;
+}
+
 document.getElementById("pair").addEventListener("click", () => {
-  void run("Pairing device", () => invoke("pair_device", {
-    apiBaseUrl: document.getElementById("api").value.trim(),
-    pairingCode: document.getElementById("code").value.trim(),
-    deviceName: null,
-  }));
+  void run("Pairing device", async () => {
+    const paired = await invoke("pair_device", {
+      apiBaseUrl: document.getElementById("api").value.trim(),
+      pairingCode: document.getElementById("code").value.trim(),
+      deviceName: null,
+    });
+    try {
+      const entitlement = await invoke("refresh_desktop_entitlement");
+      return { paired, entitlement };
+    } catch (error) {
+      return { paired, entitlementWarning: String(error) };
+    }
+  });
+});
+
+document.getElementById("license-refresh").addEventListener("click", () => {
+  void run("Refreshing signed Studio entitlement", refreshEntitlement);
 });
 
 document.getElementById("license-import").addEventListener("click", () => {
@@ -392,5 +411,19 @@ document.getElementById("refresh").addEventListener("click", () => {
   void run("Refreshing runtime status", refresh);
 });
 
-renderProject(null);
-refresh().catch((error) => setLog(String(error)));
+async function bootstrap() {
+  renderProject(null);
+  const status = await refresh();
+  if (!status.paired || startupEntitlementRefreshAttempted) return;
+  startupEntitlementRefreshAttempted = true;
+  try {
+    await invoke("refresh_desktop_entitlement");
+    await refresh();
+  } catch (error) {
+    if (status.entitlementMode === "unlicensed" || status.entitlementMode === "expired") {
+      setLog(`Paired successfully. Entitlement refresh is unavailable right now: ${String(error)}`);
+    }
+  }
+}
+
+bootstrap().catch((error) => setLog(String(error)));
