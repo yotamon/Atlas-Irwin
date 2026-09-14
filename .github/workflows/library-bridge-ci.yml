@@ -94,6 +94,7 @@ jobs:
           apps/library-bridge/renderer/bridge_renderer.py
           apps/library-bridge/renderer/bridge_sidecar.py
           apps/library-bridge/renderer/build_sidecar.py
+          apps/library-bridge/renderer/prepare_native_ffmpeg.py
           services/media-worker/app/automix_device_sources.py
 
   native-contract:
@@ -201,8 +202,10 @@ jobs:
         run: rustup target add aarch64-pc-windows-msvc
       - name: Install pinned local sidecar dependencies
         run: python -m pip install -r apps/library-bridge/renderer/requirements.txt
+      - name: Prepare pinned Windows ARM64 FFmpeg
+        run: python apps/library-bridge/renderer/prepare_native_ffmpeg.py --target-triple aarch64-pc-windows-msvc --output apps/library-bridge/renderer/.native-tools/windows-arm64/ffmpeg.exe
       - name: Build and verify Windows ARM64 sidecar
-        run: python apps/library-bridge/renderer/build_sidecar.py --target-triple aarch64-pc-windows-msvc
+        run: python apps/library-bridge/renderer/build_sidecar.py --target-triple aarch64-pc-windows-msvc --ffmpeg-binary apps/library-bridge/renderer/.native-tools/windows-arm64/ffmpeg.exe
       - name: Build Windows ARM64 Tauri release bundle
         working-directory: apps/library-bridge
         run: npx --yes @tauri-apps/cli@2.11.4 build --config src-tauri/tauri.release.conf.json --bundles nsis --target aarch64-pc-windows-msvc
