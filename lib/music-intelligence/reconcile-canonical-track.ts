@@ -70,10 +70,12 @@ export async function reconcileCanonicalTrackIntelligence({
   client,
   trackId,
   expectedOwnerId,
+  expectedAudioUrl,
 }: {
   client: SupabaseClient<Database>;
   trackId: string;
   expectedOwnerId?: string;
+  expectedAudioUrl?: string;
 }): Promise<CanonicalTrackReconciliation> {
   let trackQuery = client
     .from("tracks")
@@ -84,6 +86,9 @@ export async function reconcileCanonicalTrackIntelligence({
   if (trackResult.error) throw new Error(trackResult.error.message);
   if (!trackResult.data) throw new Error("Track not found.");
   if (!trackResult.data.audio_url) throw new Error("Track has no canonical master.");
+  if (expectedAudioUrl && trackResult.data.audio_url !== expectedAudioUrl) {
+    throw new Error("Canonical master changed before Music ingestion follow-up completed.");
+  }
 
   const track = trackResult.data;
   const lyricsDb = client as unknown as SupabaseClient<LyricsDatabase>;
