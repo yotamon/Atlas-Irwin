@@ -61,7 +61,8 @@ function ingestionProgress(track: VaultTrack) {
 }
 
 function analysisStatus(track: VaultTrack) {
-  return ingestionProgress(track).label;
+  const progress = ingestionProgress(track);
+  return progress.phase === "ready" ? "Understanding ready" : progress.label;
 }
 
 export function MusicWorkspaceOverview({
