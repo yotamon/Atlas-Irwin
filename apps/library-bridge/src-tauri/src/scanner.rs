@@ -244,25 +244,6 @@ pub fn scan_source_with_sidecar(
     persist_tracks(db, source_id, source_kind, root, build_tracks(db, seeds)?)
 }
 
-pub fn rescan_registered_source(db: &BridgeDb, source_id: &str) -> anyhow::Result<ScanSummary> {
-    let (kind, root) = db
-        .source_root(source_id)?
-        .context("DJ library source is not registered on this device")?;
-    scan_source(db, source_id, &kind, &root)
-}
-
-pub fn rescan_registered_source_with_sidecar(
-    db: &BridgeDb,
-    source_id: &str,
-    sidecar_binary: &Path,
-    work_root: &Path,
-) -> anyhow::Result<ScanSummary> {
-    let (kind, root) = db
-        .source_root(source_id)?
-        .context("DJ library source is not registered on this device")?;
-    scan_source_with_sidecar(db, source_id, &kind, &root, sidecar_binary, work_root)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
