@@ -359,6 +359,23 @@ async fn pair_device(
 }
 
 #[tauri::command]
+async fn refresh_desktop_entitlement(
+    state: State<'_, BridgeState>,
+) -> Result<EffectiveEntitlement, String> {
+    let device_id = device_id(&state.db)
+        .map_err(command_error)?
+        .ok_or_else(|| "Pair this device before refreshing its entitlement.".to_string())?;
+    let db = Arc::clone(&state.db);
+    tauri::async_runtime::spawn_blocking(move || -> anyhow::Result<EffectiveEntitlement> {
+        network::refresh_device_entitlement(&db, true)?;
+        entitlements::effective_entitlement(&db, Some(&device_id))
+    })
+    .await
+    .map_err(command_error)?
+    .map_err(command_error)
+}
+
+#[tauri::command]
 async fn import_desktop_license(
     app: tauri::AppHandle,
     state: State<'_, BridgeState>,
@@ -531,6 +548,7 @@ async fn export_latest_render(
 #[tauri::command]
 fn unpair_device(state: State<'_, BridgeState>) -> Result<(), String> {
     clear_device_credential().map_err(command_error)?;
+    entitlements::clear_trust(&state.db).map_err(command_error)?;
     state
         .db
         .set_setting("device_id", "")
@@ -577,6 +595,20 @@ pub fn run() {
                 )
                 .map_err(|error| std::io::Error::other(error.to_string()))?,
             );
+            let entitlement_db = Arc::clone(&db);
+            std::thread::Builder::new()
+                .name("ensemblis-entitlement-refresh".to_string())
+                .spawn(move || {
+                    let paired = entitlement_db
+                        .get_setting("device_id")
+                        .ok()
+                        .flatten()
+                        .is_some_and(|value| !value.is_empty());
+                    if paired {
+                        let _ = network::refresh_device_entitlement(&entitlement_db, true);
+                    }
+                })
+                .map_err(|error| std::io::Error::other(error.to_string()))?;
             app.manage(BridgeState {
                 db,
                 watcher,
@@ -596,6 +628,7 @@ pub fn run() {
             choose_and_prepare_project_recording,
             choose_and_execute_local_runtime_task,
             pair_device,
+            refresh_desktop_entitlement,
             import_desktop_license,
             get_execution_policy,
             set_execution_policy,
