@@ -65,7 +65,11 @@ test("native bridge keeps filesystem authority in Rust and cloud DTOs path-free"
   assert.ok(scanner.includes("let source_track_id = seed.fingerprint.clone()"));
   assert.ok(network.includes("SYNC_TRACKS_PER_CHUNK: usize = 200"));
   assert.ok(network.includes("cloud did not commit the complete DJ-library revision"));
-  assert.ok(network.includes("Do not forward arbitrary anyhow/IO context"));
+  assert.ok(network.includes("fn public_job_error(error: &anyhow::Error) -> String"));
+  assert.ok(network.includes('"local device execution failed".to_string()'));
+  assert.ok(network.includes("Err(error) => failed(job, public_job_error(&error))"));
+  assert.equal(network.includes("failed(job, error.to_string())"), false);
+  assert.equal(network.includes("error: Some(error.to_string())"), false);
   assert.equal(network.includes("SUPABASE_SERVICE_ROLE_KEY"), false);
   assert.deepEqual(capabilities.permissions, ["core:default"]);
   assert.equal(JSON.stringify(capabilities).includes("fs:"), false);

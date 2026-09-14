@@ -16,6 +16,7 @@ const EXPECTED_JOB_TYPES = [
   "master_audio",
   "finish_social_video",
   "render_automix",
+  "render_automix_preview",
 ];
 
 test("Media Worker contract v1 stays aligned across JSON, TypeScript dispatch, Sandbox and Python runner", async () => {

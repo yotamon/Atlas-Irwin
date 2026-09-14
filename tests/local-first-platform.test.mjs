@@ -40,6 +40,7 @@ function compilePlatform() {
 const compiled = compilePlatform();
 const runtime = compiled.require(join(compiled.outputDirectory, "runtime.js"));
 const router = compiled.require(join(compiled.outputDirectory, "compute-router.js"));
+const entitlements = compiled.require(join(compiled.outputDirectory, "entitlements.js"));
 const projects = compiled.require(join(compiled.outputDirectory, "projects.js"));
 const processors = compiled.require(join(compiled.outputDirectory, "processors.js"));
 const sync = compiled.require(join(compiled.outputDirectory, "sync.js"));
@@ -60,6 +61,9 @@ for (const contract of [
   "project-mutation.v1.json",
   "sync-envelope.v2.json",
   "entitlement-set.v1.json",
+  "signed-entitlement-claims.v1.json",
+  "desktop-license.v1.json",
+  "model-catalog.v1.json",
   "cost-telemetry.v1.json",
 ]) {
   test(`${contract} is strict and versioned`, () => {
@@ -155,6 +159,42 @@ test("paid compute and entitlement constraints fail closed", () => {
   assert.match(decision.reason, /paid compute is disabled/);
 });
 
+test("perpetual signed entitlements preserve only declared offline capabilities after online expiry", () => {
+  const claims = {
+    version: "ensemblis.signed-entitlement-claims.v1",
+    subjectId: "owner_1",
+    deviceId: "device_1",
+    capabilities: ["local.processing", "local.advanced_models", "cloud.compute"],
+    offlineCapabilities: ["local.processing", "local.advanced_models"],
+    issuedAt: "2026-09-14T00:00:00Z",
+    expiresAt: "2026-09-15T00:00:00Z",
+    offlineGraceUntil: "9999-12-31T23:59:59Z",
+    license: { kind: "studio_perpetual_v1", majorVersion: 1 },
+  };
+  const online = entitlements.effectiveSignedCapabilities(claims, new Date("2026-09-14T12:00:00Z"));
+  assert.equal(online.mode, "online");
+  assert.equal(online.capabilities.has("cloud.compute"), true);
+  const offline = entitlements.effectiveSignedCapabilities(claims, new Date("2036-09-14T12:00:00Z"));
+  assert.equal(offline.mode, "offline_grace");
+  assert.deepEqual([...offline.capabilities].sort(), ["local.advanced_models", "local.processing"]);
+});
+
+test("invalid signed entitlement time windows fail closed", () => {
+  const state = entitlements.effectiveSignedCapabilities({
+    version: "ensemblis.signed-entitlement-claims.v1",
+    subjectId: "owner_1",
+    deviceId: "device_1",
+    capabilities: ["local.processing"],
+    offlineCapabilities: ["local.processing"],
+    issuedAt: "2026-09-14T00:00:00Z",
+    expiresAt: "2026-09-15T00:00:00Z",
+    offlineGraceUntil: "2026-09-14T12:00:00Z",
+    license: { kind: "studio_perpetual_v1", majorVersion: 1 },
+  }, new Date("2026-09-14T10:00:00Z"));
+  assert.equal(state.mode, "expired");
+  assert.equal(state.capabilities.size, 0);
+});
+
 test("Media Worker job types all map to stable processor ids", () => {
   const source = readFileSync(join(root, "lib", "media-worker", "contract.ts"), "utf8");
   const listMatch = source.match(/MEDIA_WORKER_JOB_TYPES = \[([\s\S]*?)\] as const/);
@@ -163,6 +203,16 @@ test("Media Worker job types all map to stable processor ids", () => {
   assert.deepEqual(jobTypes.sort(), Object.keys(processors.MEDIA_WORKER_PROCESSOR_BY_JOB).sort());
   const contract = readJson("contracts/media-worker.v1.json");
   assert.deepEqual(contract.processorIdsByJobType, processors.MEDIA_WORKER_PROCESSOR_BY_JOB);
+});
+
+test("Media Worker queue resolves owner capabilities instead of self-granting cloud compute", () => {
+  const dispatcher = readFileSync(join(root, "lib", "media-worker", "dispatcher.ts"), "utf8");
+  const queue = readFileSync(join(root, "lib", "media-worker", "queue.ts"), "utf8");
+  assert.equal(dispatcher.includes('new Set(["cloud.compute"])'), false);
+  assert.ok(dispatcher.includes("authorization.entitlements"));
+  assert.ok(queue.includes("activeCapabilitiesForOwner(claimed.owner_id)"));
+  assert.ok(queue.includes("dispatchMediaWorkerJob({"));
+  assert.ok(queue.includes("{ entitlements }"));
 });
 
 test("semantic project mutations reject filesystem locators", () => {
@@ -293,7 +343,7 @@ test("new portable contracts never define local filesystem path fields", () => {
       walk(nested);
     }
   }
-  for (const name of readdirSync(contractsDirectory).filter((name) => /^(recording|media-reference|analysis-envelope|runtime-task|project-|sync-envelope|cost-telemetry)/.test(name))) {
+  for (const name of readdirSync(contractsDirectory).filter((name) => /^(recording|media-reference|analysis-envelope|runtime-task|project-|sync-envelope|entitlement|signed-entitlement|desktop-license|model-catalog|cost-telemetry)/.test(name))) {
     walk(readJson(`contracts/${name}`));
   }
 });

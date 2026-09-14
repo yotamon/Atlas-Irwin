@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FiCheck,
   FiClipboard,
+  FiDownload,
   FiHardDrive,
   FiLink,
   FiRefreshCw,
@@ -59,6 +60,12 @@ function sourceLabel(kind: string) {
   if (kind === "rekordbox") return "Rekordbox";
   if (kind === "traktor") return "Traktor";
   return kind;
+}
+
+function responseFilename(response: Response, fallback: string) {
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const match = /filename="([^"]+)"/i.exec(disposition);
+  return match?.[1] || fallback;
 }
 
 export function LibraryBridgePanel({ artistId }: { artistId: string }) {
@@ -142,6 +149,38 @@ export function LibraryBridgePanel({ artistId }: { artistId: string }) {
     setCopied(true);
   }
 
+  async function downloadLicense(device: Device) {
+    if (busy) return;
+    setBusy(`license:${device.id}`);
+    setStatus("");
+    try {
+      const response = await fetch("/api/studio/dj-library/license", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ artistId, deviceId: device.id }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(String(record(body).error || "Could not issue the Studio license."));
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      try {
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = responseFilename(response, `Ensemblis-Studio-${device.public_id}.license`);
+        link.click();
+      } finally {
+        window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      }
+      setStatus(`Studio license issued for ${device.name}. Import the downloaded file in the desktop runtime.`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not issue the Studio license.");
+    } finally {
+      setBusy("");
+    }
+  }
+
   async function revoke(device: Device) {
     if (busy) return;
     const confirmed = window.confirm(
@@ -205,7 +244,7 @@ export function LibraryBridgePanel({ artistId }: { artistId: string }) {
         <FiShield aria-hidden="true" />
         <div>
           <strong>Local-first boundary</strong>
-          <span>Credential in OS vault · paths in local SQLite only · HTTPS outbound only · revocable device identity</span>
+          <span>Credential in OS vault · paths in local SQLite only · signed offline license · HTTPS outbound only · revocable device identity</span>
         </div>
       </div>
 
@@ -235,15 +274,26 @@ export function LibraryBridgePanel({ artistId }: { artistId: string }) {
                   </div>
                   <span className={styles.meta}>{device.platform} · bridge {device.app_version} · last seen {relativeTime(device.last_seen_at, observedAtMs)}</span>
                 </div>
-                <button
-                  className={styles.dangerButton}
-                  type="button"
-                  onClick={() => revoke(device)}
-                  disabled={Boolean(busy)}
-                  title="Revoke device"
-                >
-                  <FiTrash2 aria-hidden="true" /> Revoke
-                </button>
+                <div className={styles.headerActions}>
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={() => void downloadLicense(device)}
+                    disabled={Boolean(busy)}
+                    title="Download a signed offline Studio license for this device"
+                  >
+                    <FiDownload aria-hidden="true" /> {busy === `license:${device.id}` ? "Issuing…" : "Studio license"}
+                  </button>
+                  <button
+                    className={styles.dangerButton}
+                    type="button"
+                    onClick={() => revoke(device)}
+                    disabled={Boolean(busy)}
+                    title="Revoke device"
+                  >
+                    <FiTrash2 aria-hidden="true" /> Revoke
+                  </button>
+                </div>
               </div>
 
               <div className={styles.sourceGrid}>
