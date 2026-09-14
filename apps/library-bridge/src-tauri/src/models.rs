@@ -42,9 +42,9 @@ pub struct InstalledModel {
 fn safe_segment(value: &str, field: &str) -> anyhow::Result<&str> {
     if value.is_empty()
         || value.len() > 120
-        || !value
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-'))
+        || !value.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-')
+        })
     {
         anyhow::bail!("model {field} is invalid");
     }
@@ -75,7 +75,9 @@ fn sha256_file(path: &Path) -> anyhow::Result<String> {
 fn validate_descriptor(descriptor: &ModelDescriptor) -> anyhow::Result<()> {
     safe_segment(&descriptor.id, "id")?;
     safe_segment(&descriptor.version, "version")?;
-    if descriptor.platform != std::env::consts::OS || descriptor.architecture != std::env::consts::ARCH {
+    if descriptor.platform != std::env::consts::OS
+        || descriptor.architecture != std::env::consts::ARCH
+    {
         anyhow::bail!("model artifact does not match this platform and architecture");
     }
     if descriptor.size_bytes == 0 || descriptor.size_bytes > MAX_MODEL_BYTES {
@@ -97,7 +99,11 @@ fn validate_descriptor(descriptor: &ModelDescriptor) -> anyhow::Result<()> {
         anyhow::bail!("model required capability is invalid");
     }
     let url = Url::parse(&descriptor.url).context("model artifact URL is invalid")?;
-    if url.scheme() != "https" || url.host_str().is_none() || !url.username().is_empty() || url.password().is_some() {
+    if url.scheme() != "https"
+        || url.host_str().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+    {
         anyhow::bail!("model artifact URL must be an HTTPS URL without embedded credentials");
     }
     Ok(())
@@ -145,7 +151,9 @@ pub fn install_model_from_catalog(
     }
 
     let destination = artifact_path(root, descriptor)?;
-    let parent = destination.parent().context("model destination has no parent")?;
+    let parent = destination
+        .parent()
+        .context("model destination has no parent")?;
     fs::create_dir_all(parent)?;
     let temporary = parent.join(format!(".download.{}.tmp", Uuid::new_v4()));
     let operation = (|| -> anyhow::Result<()> {
@@ -235,7 +243,9 @@ pub fn install_model_from_file(
     }
 
     let destination = artifact_path(root, descriptor)?;
-    let parent = destination.parent().context("model destination has no parent")?;
+    let parent = destination
+        .parent()
+        .context("model destination has no parent")?;
     fs::create_dir_all(parent)?;
     let temporary = parent.join(format!(".artifact.{}.tmp", Uuid::new_v4()));
     let operation = (|| -> anyhow::Result<()> {
