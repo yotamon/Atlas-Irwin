@@ -25,6 +25,10 @@ export type LyricsReconciliationState =
   | {
       state: "skipped";
       reason: "instrumental";
+    }
+  | {
+      state: "failed";
+      message: string;
     };
 
 export type StemReconciliationState =
@@ -45,6 +49,10 @@ export type StemReconciliationState =
   | {
       state: "skipped";
       reason: "no_stems";
+    }
+  | {
+      state: "failed";
+      message: string;
     };
 
 export type CanonicalTrackReconciliation = {
@@ -53,6 +61,10 @@ export type CanonicalTrackReconciliation = {
   lyrics: LyricsReconciliationState;
   stems: StemReconciliationState;
 };
+
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
 
 export async function reconcileCanonicalTrackIntelligence({
   client,
@@ -100,20 +112,27 @@ export async function reconcileCanonicalTrackIntelligence({
   } else if (!lyricsResult.data.allow_ai_context) {
     lyrics = { state: "needs_input", reason: "ai_context_disabled" };
   } else {
-    const result = await analyzeTrackLyrics({
-      db: lyricsDb,
-      ownerId: track.owner_id,
-      trackId: track.id,
-      releaseId: track.release_id,
-      cacheMode: "use",
-    });
-    lyrics = {
-      state: "ready",
-      alignedSections: result.alignedSections,
-      alignedLines: result.alignedLines,
-      moments: result.moments,
-      semanticCacheHit: result.cacheHit,
-    };
+    try {
+      const result = await analyzeTrackLyrics({
+        db: lyricsDb,
+        ownerId: track.owner_id,
+        trackId: track.id,
+        releaseId: track.release_id,
+        cacheMode: "use",
+      });
+      lyrics = {
+        state: "ready",
+        alignedSections: result.alignedSections,
+        alignedLines: result.alignedLines,
+        moments: result.moments,
+        semanticCacheHit: result.cacheHit,
+      };
+    } catch (error) {
+      lyrics = {
+        state: "failed",
+        message: errorMessage(error, "Lyrics Intelligence reconciliation failed."),
+      };
+    }
   }
 
   const stems = (stemsResult.data ?? []) as TrackStem[];
@@ -132,16 +151,23 @@ export async function reconcileCanonicalTrackIntelligence({
   } else if (!readyStems.length) {
     stemState = { state: "processing", stems: currentMasterStems.length };
   } else {
-    const scenes = await regenerateSystemAudioScenes({
-      client,
-      ownerId: track.owner_id,
-      trackId: track.id,
-    });
-    stemState = {
-      state: "ready",
-      readyStems: readyStems.length,
-      audioScenes: scenes.length,
-    };
+    try {
+      const scenes = await regenerateSystemAudioScenes({
+        client,
+        ownerId: track.owner_id,
+        trackId: track.id,
+      });
+      stemState = {
+        state: "ready",
+        readyStems: readyStems.length,
+        audioScenes: scenes.length,
+      };
+    } catch (error) {
+      stemState = {
+        state: "failed",
+        message: errorMessage(error, "Stem Intelligence reconciliation failed."),
+      };
+    }
   }
 
   return {
