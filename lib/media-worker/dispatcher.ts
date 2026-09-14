@@ -1,12 +1,16 @@
 import "server-only";
 
 import { dispatchMediaWorkerJob as dispatchVercelSandboxJob } from "@/lib/media-worker/sandbox";
-import { withMediaWorkerContractVersion } from "@/lib/media-worker/contract";
+import { mediaWorkerProcessorId, withMediaWorkerContractVersion } from "@/lib/media-worker/contract";
 import {
   childExecutionContext,
   EXECUTION_TRACE_QUERY,
   observeExecution,
 } from "@/lib/observability/execution-context";
+import { routeProcessor } from "@/lib/platform/compute-router";
+import { processorDescriptor } from "@/lib/platform/processors";
+import { DEFAULT_EXECUTION_POLICY } from "@/lib/platform/runtime";
+import { createRuntimeTask } from "@/lib/platform/tasks";
 
 export const MEDIA_WORKER_TRACE_PAYLOAD_KEY = "__ensemblis_trace_id";
 
@@ -48,8 +52,35 @@ export function getMediaWorkerDispatcher() {
   return dispatcher;
 }
 
+function authorizeCloudExecution(input: MediaWorkerDispatchInput) {
+  const processorId = mediaWorkerProcessorId(input.jobType);
+  const descriptor = processorDescriptor(processorId);
+  if (!descriptor) throw new Error(`No processor descriptor exists for ${processorId}.`);
+  const task = createRuntimeTask({
+    id: input.jobId,
+    idempotencyKey: input.jobId,
+    processorId: descriptor.id,
+    processorVersion: descriptor.processorVersion,
+    payload: input.payload,
+    policy: DEFAULT_EXECUTION_POLICY,
+    requestedTarget: "cloud",
+  });
+  const decision = routeProcessor(descriptor, {
+    policy: task.execution.policy,
+    networkOnline: true,
+    availableTargets: new Set(["cloud"]),
+    media: { local: false, cloud: true, browser: false },
+    entitlements: new Set(["cloud.compute"]),
+  });
+  if (decision.kind !== "selected" || decision.target !== "cloud") {
+    throw new Error(`ComputeRouter rejected Media Worker execution: ${decision.reason}`);
+  }
+  return { task, decision };
+}
+
 export async function dispatchMediaWorkerJob(input: MediaWorkerDispatchInput) {
   const dispatcher = getMediaWorkerDispatcher();
+  const routed = authorizeCloudExecution(input);
   const context = childExecutionContext({
     jobId: input.jobId,
     provider: dispatcher.name,
@@ -60,6 +91,8 @@ export async function dispatchMediaWorkerJob(input: MediaWorkerDispatchInput) {
     callbackUrl: callbackUrlWithTrace(input.callbackUrl, context.traceId),
     payload: withMediaWorkerContractVersion({
       ...input.payload,
+      __ensemblis_runtime_task_id: routed.task.id,
+      __ensemblis_execution_target: routed.decision.target,
       [MEDIA_WORKER_TRACE_PAYLOAD_KEY]: context.traceId,
     }),
   };
