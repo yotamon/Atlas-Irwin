@@ -126,7 +126,42 @@ These counts are an inventory, not a to-do list.
 
 Do not bulk-create 190 indexes, bulk-rewrite RLS, bulk-collapse policies, or drop 93 indexes from advisor output alone. #147 requires evidence from actual access patterns, referential delete/update paths, and query plans.
 
-The first performance pass after production recovery should focus on high-frequency lineage/event paths already called out by #147: Creative Memory, Smart Links, Paid Growth, Distribution operations, and RLS-heavy artist-scoped tables. Each change should be a small reversible migration with query-plan or concrete workload justification.
+### Measured production scale
+
+A live catalog readback of the currently populated core paths shows why advisor count alone is not enough to justify broad index work:
+
+- `moments`: approximately 80 rows;
+- `releases`: approximately 5 rows;
+- `content_items`: approximately 4 rows;
+- `campaigns`: approximately 1 row;
+- many newer Smart Links, Paid Growth, Distribution and Creative Memory tables have not accumulated enough rows for meaningful planner statistics yet.
+
+At this scale, adding dozens of speculative indexes would increase write/storage overhead and maintenance complexity without measurable user benefit. Revisit index candidates as these event/lineage tables grow or when query plans show sequential-scan cost on real workloads.
+
+### RLS init-plan candidates worth carrying forward
+
+The targeted audit found direct `auth.uid()` calls, rather than the planner-reusable `(select auth.uid())` form, in these high-value feature areas:
+
+- `creative_asset_profiles`: insert/select/update owner policies;
+- `creative_memory_events`: insert/select owner policies;
+- `distribution_release_metadata`: select/insert/update/delete policies;
+- `moment_calibration_events`: artist/admin select policy;
+- `paid_growth_events`: select policy;
+- `paid_growth_experiments`: select/insert/update policies;
+- `paid_growth_observations`: select policy;
+- `paid_growth_operations`: select policy.
+
+These form a sensible post-#146 RLS optimization batch because they are modern Ensemblis paths likely to become read-heavy. The semantic predicate must remain identical; only wrap stable Auth lookups as `(select auth.uid())` where Supabase/Postgres can reuse the init plan.
+
+Do not combine that optimization with policy consolidation unless an `EXPLAIN` or concrete API workload shows the multiple-permissive-policy structure itself is materially costly.
+
+### Foreign-key index candidates
+
+The targeted FK audit found many unindexed single-column foreign keys across the same feature areas, but production volume is currently too small to justify bulk creation. When these paths grow, prioritize indexes that protect high-cardinality event/lineage tables and parent deletion/update checks, especially Smart Link events/sources, Paid Growth events/operations, Creative Memory events, and Distribution event/submission lineage.
+
+Before adding each index, verify that an existing composite index does not already provide the same leading-column access path and capture the query/delete workload that benefits from it.
+
+The first performance pass after production recovery should therefore be small and evidence-driven: fix the identified direct Auth RLS calls, then add only FK/query indexes supported by actual growth or plans.
 
 ## Remaining non-database action
 
