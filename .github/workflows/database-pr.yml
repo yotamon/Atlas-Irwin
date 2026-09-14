@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   database:
-    name: canonical semantic drift audit
+    name: canonical exact drift audit
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -24,7 +24,7 @@ jobs:
         run: test -f supabase/config.toml || supabase init
       - name: Replay full canonical history
         run: supabase db start
-      - name: Audit semantic function definitions and column subpartitions
+      - name: Identify exact remaining drift objects
         shell: bash
         run: |
           PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -At <<'SQL'
@@ -65,15 +65,18 @@ jobs:
             where n.nspname in ('public','private')
               and not (n.nspname='public' and p.proname='rls_auto_enable' and p.pronargs=0)
               and not exists (select 1 from missing_functions x where x.schema_name=n.nspname and x.name=p.proname)
+          ), function_partitioned as (
+            select *, mod(hashtextextended(schema_name || '.' || object_name,0)::numeric + 9223372036854775808,32)::int bucket
+            from functions
           )
-          select 'FUNC_SEM|' || count(*) || '|' ||
-            encode(digest(convert_to(string_agg(schema_name || E'\x1f' || object_name || E'\x1f' || detail,E'\x1e' order by schema_name,object_name,detail),'UTF8'),'sha256'),'hex')
-          from functions
-          union all
-          select 'COL_SUB|' || bucket || '|' || subbucket || '|' || count(*) || '|' ||
-            encode(digest(convert_to(string_agg(schema_name || E'\x1f' || object_name || E'\x1f' || detail,E'\x1e' order by schema_name,object_name,detail),'UTF8'),'sha256'),'hex')
+          select 'COL_OBJ|' || bucket || '|' || subbucket || '|' || schema_name || '|' || object_name || '|' ||
+            encode(digest(convert_to(detail,'UTF8'),'sha256'),'hex')
           from column_partitioned
-          where bucket in (5,9,12,25,27,30)
-          group by bucket,subbucket
+          where (bucket,subbucket) in ((5,8),(9,5),(12,0),(25,3),(27,3),(30,6))
+          union all
+          select 'FUNC_PART|' || bucket || '|' || count(*) || '|' ||
+            encode(digest(convert_to(string_agg(schema_name || E'\x1f' || object_name || E'\x1f' || detail,E'\x1e' order by schema_name,object_name,detail),'UTF8'),'sha256'),'hex')
+          from function_partitioned
+          group by bucket
           order by 1;
           SQL
