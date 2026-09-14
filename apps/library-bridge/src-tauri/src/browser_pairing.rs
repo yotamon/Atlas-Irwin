@@ -202,7 +202,8 @@ mod tests {
 
     #[test]
     fn callback_rejects_mismatched_state() {
-        let request = "GET /callback?state=wrong&code=ABCDEFGHIJKLMNOP HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+        let request =
+            "GET /callback?state=wrong&code=ABCDEFGHIJKLMNOP HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
         assert!(parse_callback(request, "right").is_err());
     }
 
