@@ -142,7 +142,7 @@ begin
 
   insert into public.ensemblis_license_activations(license_id, device_id, owner_id, activated_at, revoked_at)
   values (v_license.id, p_device_id, p_owner_id, now(), null)
-  on conflict (license_id, device_id) do update
+  on conflict on constraint ensemblis_license_activations_pkey do update
     set owner_id = excluded.owner_id,
         activated_at = now(),
         revoked_at = null;
