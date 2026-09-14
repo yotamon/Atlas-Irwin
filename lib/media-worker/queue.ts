@@ -1,5 +1,6 @@
 import "server-only";
 
+import { activeCapabilitiesForOwner } from "@/lib/licensing/capabilities";
 import { dispatchMediaWorkerJob } from "@/lib/media-worker/dispatcher";
 import {
   createMediaWorkerCallbackCredential,
@@ -269,13 +270,14 @@ async function dispatchVideoJob(db: SupabaseClient<VideoDatabase>, job: MusicVid
   if (!claimed) return false;
 
   try {
+    const entitlements = await activeCapabilitiesForOwner(claimed.owner_id);
     const dispatch = await dispatchMediaWorkerJob({
       jobId: claimed.id,
       jobType: claimed.job_type as DispatchableWorkerJobType,
       payload: requestPayload,
       callbackUrl: `${getSiteUrl()}/api/video-director/worker/callback`,
       callbackToken: credential.token,
-    });
+    }, { entitlements });
     await db.from("music_video_worker_jobs")
       .update({ external_job_id: dispatch.sandboxName, error: null })
       .eq("id", claimed.id);
@@ -340,13 +342,14 @@ async function dispatchStemJob(db: SupabaseClient<StemDatabase>, job: TrackStemJ
 
   try {
     const dispatchPayload = await prepareStemPayloadForDispatch(db, claimed as TrackStemJob, requestPayload);
+    const entitlements = await activeCapabilitiesForOwner(claimed.owner_id);
     const dispatch = await dispatchMediaWorkerJob({
       jobId: claimed.id,
       jobType: claimed.job_type as DispatchableWorkerJobType,
       payload: dispatchPayload,
       callbackUrl: `${getSiteUrl()}/api/studio/stems/callback`,
       callbackToken: credential.token,
-    });
+    }, { entitlements });
     await db.from("track_stem_jobs").update({ external_job_id: dispatch.sandboxName }).eq("id", claimed.id);
     return true;
   } catch (error) {
@@ -380,6 +383,7 @@ async function dispatchVaultTrack(
   growth: ReturnType<typeof asGrowthClient>,
   track: {
     id: string;
+    owner_id: string;
     media_asset_id: string | null;
     audio_url: string | null;
     analysis: Json;
@@ -414,6 +418,7 @@ async function dispatchVaultTrack(
   if (claimError || !claimed) throw new Error(claimError?.message || "Could not claim queued track analysis.");
 
   try {
+    const entitlements = await activeCapabilitiesForOwner(claimed.owner_id);
     await dispatchMediaWorkerJob({
       jobId: `${track.id}:${requestId}`,
       jobType: "analyze_audio",
@@ -424,7 +429,7 @@ async function dispatchVaultTrack(
       },
       callbackUrl: `${getSiteUrl()}/api/studio/growth/audio-callback`,
       callbackToken: credential.token,
-    });
+    }, { entitlements });
     return true;
   } catch (error) {
     if (busyError(error)) {
