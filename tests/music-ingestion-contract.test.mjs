@@ -58,18 +58,20 @@ test("new master state and analysis are explicitly scoped to the active artist",
     "master intake, release linking and analysis recovery should stay artist-local");
 });
 
-test("Music overview presents both unreleased and release tracks without portfolio scoring", async () => {
+test("Music overview presents both unreleased and release tracks through the shared ingestion model", async () => {
   const overview = await requireSnippets("components/studio/music-workspace-overview.tsx", [
     "Catalog tracks",
-    "Understanding ready",
+    "describeMusicIngestionProgress",
+    "progress?.label",
+    "focusProgress.label",
     "Create from this track",
     "Add master",
     "linked_track_id",
   ]);
   assert.ok(overview.includes("tracks.map"), "release tracks must be directly visible from Music");
   assert.ok(overview.includes("trackHref(vault?.id ?? track.id)"), "catalog rows must deep-link to the exact track object");
-  assert.doesNotMatch(overview, /rankVaultTracks|Portfolio score|Edit portfolio signals|Manage Portfolio/,
-    "Music overview must not expose Growth ranking as the primary music model");
+  assert.doesNotMatch(overview, /function analysisStatus|Understanding ready|rankVaultTracks|Portfolio score|Edit portfolio signals|Manage Portfolio/,
+    "Music overview must use one ingestion model instead of legacy status copy or Growth ranking");
 });
 
 test("track workspace keeps normal ingestion automatic and recovery secondary", async () => {
