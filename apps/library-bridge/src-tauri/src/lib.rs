@@ -52,7 +52,9 @@ fn command_error(error: impl std::fmt::Display) -> String {
 }
 
 fn device_id(db: &BridgeDb) -> anyhow::Result<Option<String>> {
-    Ok(db.get_setting("device_id")?.filter(|value| !value.is_empty()))
+    Ok(db
+        .get_setting("device_id")?
+        .filter(|value| !value.is_empty()))
 }
 
 fn local_processing_enabled(db: &BridgeDb) -> bool {
@@ -124,7 +126,9 @@ async fn choose_and_scan_source(
         .file()
         .set_title("Choose a DJ music library folder")
         .blocking_pick_folder();
-    let Some(path) = path else { return Ok(None) };
+    let Some(path) = path else {
+        return Ok(None);
+    };
     let path = path.into_path().map_err(command_error)?;
     let source_id = format!("device-source-{}", Uuid::new_v4());
     let db = Arc::clone(&state.db);
@@ -302,18 +306,14 @@ async fn choose_and_execute_local_runtime_task(
         .file()
         .set_title("Choose the recording bytes for this local analysis")
         .blocking_pick_file();
-    let Some(source) = source else { return Ok(None) };
+    let Some(source) = source else {
+        return Ok(None);
+    };
     let source = source.into_path().map_err(command_error)?;
     let db = Arc::clone(&state.db);
     let work_root = state.sidecar_work_root.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        runtime_task::execute_track_planning_task(
-            &db,
-            &sidecar_binary,
-            &work_root,
-            &source,
-            &task,
-        )
+        runtime_task::execute_track_planning_task(&db, &sidecar_binary, &work_root, &source, &task)
     })
     .await
     .map_err(command_error)?
@@ -371,7 +371,9 @@ async fn import_desktop_license(
         .file()
         .set_title("Choose an Ensemblis Studio license file")
         .blocking_pick_file();
-    let Some(file) = file else { return Ok(None) };
+    let Some(file) = file else {
+        return Ok(None);
+    };
     let file = file.into_path().map_err(command_error)?;
     let db = Arc::clone(&state.db);
     tauri::async_runtime::spawn_blocking(move || -> anyhow::Result<EffectiveEntitlement> {
@@ -399,7 +401,9 @@ fn set_execution_policy(
 }
 
 #[tauri::command]
-async fn refresh_model_catalog(state: State<'_, BridgeState>) -> Result<Vec<ModelDescriptor>, String> {
+async fn refresh_model_catalog(
+    state: State<'_, BridgeState>,
+) -> Result<Vec<ModelDescriptor>, String> {
     let db = Arc::clone(&state.db);
     tauri::async_runtime::spawn_blocking(move || model_catalog::fetch_catalog(&db))
         .await
@@ -434,13 +438,21 @@ async fn choose_and_import_model(
         .file()
         .set_title("Choose an Ensemblis model artifact to verify and import")
         .blocking_pick_file();
-    let Some(source) = source else { return Ok(None) };
+    let Some(source) = source else {
+        return Ok(None);
+    };
     let source = source.into_path().map_err(command_error)?;
     let db = Arc::clone(&state.db);
     let model_root = state.model_root.clone();
     let device_id = device_id(&state.db).map_err(command_error)?;
     tauri::async_runtime::spawn_blocking(move || {
-        models::install_model_from_file(&db, device_id.as_deref(), &model_root, &descriptor, &source)
+        models::install_model_from_file(
+            &db,
+            device_id.as_deref(),
+            &model_root,
+            &descriptor,
+            &source,
+        )
     })
     .await
     .map_err(command_error)?
@@ -455,10 +467,12 @@ async fn uninstall_model(
     version: String,
 ) -> Result<bool, String> {
     let model_root = state.model_root.clone();
-    tauri::async_runtime::spawn_blocking(move || models::uninstall_model(&model_root, &id, &version))
-        .await
-        .map_err(command_error)?
-        .map_err(command_error)
+    tauri::async_runtime::spawn_blocking(move || {
+        models::uninstall_model(&model_root, &id, &version)
+    })
+    .await
+    .map_err(command_error)?
+    .map_err(command_error)
 }
 
 #[tauri::command]
@@ -495,7 +509,9 @@ async fn export_latest_render(
     state: State<'_, BridgeState>,
 ) -> Result<Option<ExportedRender>, String> {
     let asset = export::latest_completed_render(&state.sidecar_work_root).map_err(command_error)?;
-    let Some(asset) = asset else { return Ok(None) };
+    let Some(asset) = asset else {
+        return Ok(None);
+    };
     let destination = app
         .dialog()
         .file()
