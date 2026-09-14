@@ -156,6 +156,13 @@ pub fn trust_key_is_pinned(db: &BridgeDb) -> anyhow::Result<bool> {
     Ok(key && key_id)
 }
 
+pub fn clear_trust(db: &BridgeDb) -> anyhow::Result<()> {
+    db.set_setting(TOKEN_SETTING, "")?;
+    db.set_setting(PUBLIC_KEY_SETTING, "")?;
+    db.set_setting(KEY_ID_SETTING, "")?;
+    Ok(())
+}
+
 pub fn store_pairing_entitlement(
     db: &BridgeDb,
     bundle: &EntitlementPublicKey,
@@ -212,7 +219,10 @@ pub fn effective_entitlement(
             major_version: None,
         });
     };
-    let Some(token) = db.get_setting(TOKEN_SETTING)? else {
+    let Some(token) = db
+        .get_setting(TOKEN_SETTING)?
+        .filter(|value| !value.trim().is_empty())
+    else {
         return Ok(EffectiveEntitlement {
             mode: "unlicensed".to_string(),
             capabilities: vec![],
@@ -224,6 +234,7 @@ pub fn effective_entitlement(
     };
     let key = db
         .get_setting(PUBLIC_KEY_SETTING)?
+        .filter(|value| !value.trim().is_empty())
         .context("desktop entitlement trust key is missing")?;
     let claims = verify_token(&token, &key, device_id)?;
     let now = OffsetDateTime::now_utc();
@@ -255,9 +266,26 @@ pub fn has_capability(db: &BridgeDb, device_id: Option<&str>, capability: &str) 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::tempdir;
 
     #[test]
     fn key_id_is_stable_sha256_prefix() {
         assert_eq!(key_id(b"abc"), "ba7816bf8f01cfea414140de");
+    }
+
+    #[test]
+    fn explicit_trust_clear_returns_device_to_unlicensed_state() {
+        let directory = tempdir().unwrap();
+        let db = BridgeDb::new(directory.path().join("bridge.sqlite3")).unwrap();
+        db.set_setting("device_id", "device-1").unwrap();
+        db.set_setting(TOKEN_SETTING, "stale-token").unwrap();
+        db.set_setting(PUBLIC_KEY_SETTING, "stale-key").unwrap();
+        db.set_setting(KEY_ID_SETTING, "stale-id").unwrap();
+        clear_trust(&db).unwrap();
+        assert!(!trust_key_is_pinned(&db).unwrap());
+        assert_eq!(
+            effective_entitlement(&db, Some("device-1")).unwrap().mode,
+            "unlicensed"
+        );
     }
 }
