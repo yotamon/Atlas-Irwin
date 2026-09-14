@@ -50,6 +50,33 @@ test("Needs You decisions preserve source lineage, affected Mission and timing m
   assert.ok(queuePage.includes("entry.timing.label"), "The full queue should expose useful timing context when available");
 });
 
+test("Audience and Sites human decisions converge into the universal queue", async () => {
+  const [projection, snapshot] = await Promise.all([
+    source("lib/studio/needs-you.ts"),
+    source("lib/studio/artist-operating-snapshot.ts"),
+  ]);
+
+  for (const sourceKind of ['| "audience"', '| "site"']) {
+    assert.ok(projection.includes(sourceKind), `Needs You source contract is missing ${sourceKind}`);
+  }
+  assert.ok(projection.includes("audienceDecisions?:"));
+  assert.ok(projection.includes("siteDecisions?:"));
+  assert.ok(projection.includes('category: "Audience"'));
+  assert.ok(projection.includes('category: "Site"'));
+  assert.ok(projection.includes('source: { kind: "audience"'));
+  assert.ok(projection.includes('source: { kind: "site"'));
+
+  assert.ok(snapshot.includes('action.action_type === "reply_to_listener"'), "Audience reply decisions must enter Needs You from canonical next-best actions");
+  assert.ok(snapshot.includes('href: "/studio/audience"'));
+  assert.ok(snapshot.includes("asSitesClient"));
+  assert.ok(snapshot.includes('from("artist_sites")'));
+  assert.ok(snapshot.includes('from("artist_site_domains")'));
+  assert.ok(snapshot.includes('title: "Review site changes"'));
+  assert.ok(snapshot.includes("Finish connecting ${primaryDomain.hostname}"));
+  assert.ok(snapshot.includes('title: "Choose the site\'s primary domain"'));
+  assert.ok(snapshot.includes("siteDecisions,"));
+});
+
 test("Needs You stays a projection rather than a second task database", async () => {
   const projection = await source("lib/studio/needs-you.ts");
   assert.equal(projection.includes(".from("), false);
