@@ -246,23 +246,38 @@ export async function loadArtistOperatingSnapshot({
 
   const needsYou = deriveNeedsYouQueue({
     activeReleaseId: activeRelease?.id ?? null,
+    activeReleaseDate: activeRelease?.release_date ?? null,
+    activeReleaseDateLabel: activeRelease?.release_date ? formatOperatingDate(activeRelease.release_date, preferences) : null,
     activeMission,
     distributionDecisions: activeRelease ? (activeDistribution?.decisions ?? []).map((decision) => ({ key: decision.key, title: decision.title, detail: decision.detail, severity: decision.severity, releaseId: activeRelease.id })) : [],
     paidGrowthDecisions: paidGrowthNeedsYou(paidWorkspace.cards),
     workflowApprovalCount,
     outreachDraftCount,
-    manualReady: manualReady.map((job) => ({ id: job.id, platform: job.platform, contentItemId: job.content_item_id })),
+    manualReady: manualReady.map((job) => ({
+      id: job.id,
+      platform: job.platform,
+      contentItemId: job.content_item_id,
+      scheduledAt: job.scheduled_at,
+      scheduledLabel: job.scheduled_at ? formatOperatingDateTime(job.scheduled_at, preferences) : null,
+    })),
     unmatchedCount: unmatched,
     missingAssets: missingAssets.map((item) => ({
       id: item.id,
       title: item.title,
       platform: item.platform,
+      scheduledAt: item.scheduled_at,
       scheduledLabel: item.scheduled_at ? formatOperatingDate(item.scheduled_at, preferences) : null,
       releaseId: item.release_id,
     })),
-    dueTasks: dueTasks.map((task) => ({ id: task.id, title: task.title, priority: task.priority, dueLabel: task.due_at ? dateDistance(task.due_at, now) : null })),
+    dueTasks: dueTasks.map((task) => ({
+      id: task.id,
+      title: task.title,
+      priority: task.priority,
+      dueAt: task.due_at,
+      dueLabel: task.due_at ? dateDistance(task.due_at, now) : null,
+    })),
     proposedLearningCount,
-  }).slice(0, 7);
+  });
 
   const working: OperatingWorkingItem[] = [
     ...automation.filter((job) => job.status === "queued" || job.status === "running").map((job) => ({
