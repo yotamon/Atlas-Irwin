@@ -378,6 +378,7 @@ impl BridgeDb {
         Ok(())
     }
 
+    #[cfg(test)]
     pub fn resolve_project_recording_binding(
         &self,
         project_id: &str,
