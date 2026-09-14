@@ -98,15 +98,19 @@ test("analysis payload schema is strict and versioned", async () => {
   assert.equal(schema.properties.planningEvidence.additionalProperties, false);
 });
 
-test("release validation includes a native Windows ARM64 build and architecture guard", async () => {
-  const [workflow, sidecarBuilder] = await Promise.all([
+test("release validation includes fully native Windows ARM64 audio runtime", async () => {
+  const [workflow, sidecarBuilder, ffmpegBuilder, sidecar] = await Promise.all([
     source(".github/workflows/library-bridge-ci.yml"),
     source("apps/library-bridge/renderer/build_sidecar.py"),
+    source("apps/library-bridge/renderer/prepare_native_ffmpeg.py"),
+    source("apps/library-bridge/renderer/bridge_sidecar.py"),
   ]);
 
   assert.ok(workflow.includes("runs-on: windows-11-arm"));
   assert.ok(workflow.includes("architecture: arm64"));
   assert.ok(workflow.includes("aarch64-pc-windows-msvc"));
+  assert.ok(workflow.includes("Prepare pinned Windows ARM64 FFmpeg"));
+  assert.ok(workflow.includes("--ffmpeg-binary apps/library-bridge/renderer/.native-tools/windows-arm64/ffmpeg.exe"));
   assert.ok(workflow.includes("Build and verify Windows ARM64 sidecar"));
   assert.ok(workflow.includes("Build Windows ARM64 Tauri release bundle"));
   assert.ok(workflow.includes("Verify Windows ARM64 application executable"));
@@ -116,6 +120,16 @@ test("release validation includes a native Windows ARM64 build and architecture 
   assert.ok(sidecarBuilder.includes('"aarch64-pc-windows-msvc": 0xAA64'));
   assert.ok(sidecarBuilder.includes("assert_native_host(target_triple)"));
   assert.ok(sidecarBuilder.includes("assert_target_binary_architecture(target, target_triple)"));
-  assert.ok(sidecarBuilder.includes("--verify-binary"));
+  assert.ok(sidecarBuilder.includes("--ffmpeg-binary"));
+  assert.ok(sidecarBuilder.includes('"runtime-check"'));
   assert.ok(sidecarBuilder.includes("read_pe_machine"));
+
+  assert.ok(ffmpegBuilder.includes("autobuild-2026-09-13-14-50"));
+  assert.ok(ffmpegBuilder.includes("ffmpeg-n9.0.1-29-gad500d59cb-winarm64-lgpl-9.0.zip"));
+  assert.ok(ffmpegBuilder.includes("9f33212fbd3a74913034d6f535d712a48969ac5115ccaaae312120c92f517904"));
+  assert.ok(ffmpegBuilder.includes("assert_target_binary_architecture(temp_output, target_triple)"));
+
+  assert.ok(sidecar.includes('os.environ["IMAGEIO_FFMPEG_EXE"]'));
+  assert.ok(sidecar.includes('RUNTIME_CHECK_VERSION = "ensemblis.library-bridge.runtime-check.v1"'));
+  assert.ok(sidecar.includes("imageio_ffmpeg.get_ffmpeg_exe()"));
 });
