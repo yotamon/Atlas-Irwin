@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   database:
-    name: canonical suspect function fingerprints
+    name: canonical executable function fingerprints
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -36,10 +36,7 @@ jobs:
           ), functions as (
             select n.nspname schema_name,
               p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' object_name,
-              regexp_replace(
-                regexp_replace(p.prosrc, E'(^|\\n)[ \\t]*--[^\\n]*(\\n|$)', E'\\1', 'g'),
-                E'\\s+', '', 'g'
-              ) executable_source,
+              regexp_replace(regexp_replace(p.prosrc, E'--[^\\n]*', '', 'g'), E'\\s+', '', 'g') executable_source,
               mod(hashtextextended(n.nspname || '.' || p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')',0)::numeric + 9223372036854775808,32)::int bucket,
               mod(hashtextextended(n.nspname || '.' || p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')',1)::numeric + 9223372036854775808,16)::int subbucket
             from pg_proc p
