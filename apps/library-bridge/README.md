@@ -70,9 +70,11 @@ Release validation covers the native application and bundled Python sidecar on:
 - Windows ARM64 (`aarch64-pc-windows-msvc`)
 - macOS ARM64 (`aarch64-apple-darwin`)
 
-Windows ARM64 is built on a native GitHub-hosted ARM64 runner. The sidecar build rejects an emulated x64 Python host and validates the PE machine type of the packaged sidecar as ARM64 before Tauri packaging begins.
+Windows ARM64 is built on a native GitHub-hosted ARM64 runner. The build rejects an emulated x64 Python host and validates the PE machine type of both the packaged sidecar and the Tauri application as ARM64.
 
-Tauri's NSIS bootstrap installer may itself run as x86 under Windows on ARM, but the installed Ensemblis application and bundled sidecar are built for ARM64.
+The Windows ARM64 audio runtime also bundles a pinned native FFmpeg LGPL executable. Its archive SHA-256 and PE machine type are verified before packaging, and the frozen sidecar runs a `runtime-check` command that must successfully execute the packaged FFmpeg before the Tauri installer is allowed to build. The exact third-party source and checksum are recorded in `THIRD_PARTY_NOTICES.md` and bundled with release artifacts.
+
+Tauri's NSIS bootstrap installer may itself run as x86 under Windows on ARM, but the installed Ensemblis application, Python sidecar and FFmpeg process are built for ARM64.
 
 ## Validation
 
@@ -84,4 +86,4 @@ Pull requests touching the Library Bridge run:
 - `cargo clippy --all-targets --all-features -- -D warnings`
 - `cargo test --all-targets`
 
-When a pull request is marked ready for review, CI additionally builds the actual Tauri release bundle and bundled Python sidecar on Windows x64, Windows ARM64 and macOS ARM64.
+When a pull request is marked ready for review, CI additionally builds the actual Tauri release bundle and bundled Python sidecar on Windows x64, Windows ARM64 and macOS ARM64. Windows ARM64 additionally verifies the native FFmpeg runtime end to end.
