@@ -97,3 +97,69 @@ test("analysis payload schema is strict and versioned", async () => {
   assert.equal(schema.properties.beatGrid.additionalProperties, false);
   assert.equal(schema.properties.planningEvidence.additionalProperties, false);
 });
+
+test("release validation includes fully native Windows ARM64 audio runtime", async () => {
+  const [workflow, sidecarBuilder, ffmpegBuilder, sidecar, armRequirements, armVerifier] = await Promise.all([
+    source(".github/workflows/library-bridge-ci.yml"),
+    source("apps/library-bridge/renderer/build_sidecar.py"),
+    source("apps/library-bridge/renderer/prepare_native_ffmpeg.py"),
+    source("apps/library-bridge/renderer/bridge_sidecar.py"),
+    source("apps/library-bridge/renderer/requirements-windows-arm64.txt"),
+    source("apps/library-bridge/renderer/verify_windows_arm64_python.py"),
+  ]);
+
+  assert.ok(workflow.includes("runs-on: windows-11-arm"));
+  assert.ok(workflow.includes('python-version: "3.14"'));
+  assert.ok(workflow.includes("architecture: arm64"));
+  assert.ok(workflow.includes("aarch64-pc-windows-msvc"));
+  assert.ok(workflow.includes("--only-binary=:all:"));
+  assert.ok(workflow.includes("--no-binary=soxr soxr==1.1.0"));
+  assert.ok(workflow.includes("--no-binary=imageio-ffmpeg --no-deps imageio-ffmpeg==0.6.0"));
+  assert.ok(workflow.includes("--no-binary=python-stretch python-stretch==0.3.1"));
+  assert.ok(workflow.includes("verify_windows_arm64_python.py"));
+  assert.ok(workflow.includes("Prepare pinned Windows ARM64 FFmpeg"));
+  assert.ok(workflow.includes("--ffmpeg-binary apps/library-bridge/renderer/.native-tools/windows-arm64/ffmpeg.exe"));
+  assert.ok(workflow.includes("Build and verify Windows ARM64 sidecar"));
+  assert.ok(workflow.includes("Build Windows ARM64 Tauri release bundle"));
+  assert.ok(workflow.includes("Verify Windows ARM64 application executable"));
+  assert.ok(workflow.includes("--verify-binary apps/library-bridge/src-tauri/target/aarch64-pc-windows-msvc/release/ensemblis-library-bridge.exe"));
+  assert.ok(workflow.includes("target/aarch64-pc-windows-msvc/release/bundle/**"));
+
+  for (const pin of [
+    "PyInstaller==6.22.2",
+    "numpy==2.5.3",
+    "scipy==1.18.1",
+    "numba==0.67.0",
+    "llvmlite==0.49.0",
+    "scikit-learn==1.9.1",
+    "librosa==0.11.0",
+    "soundfile==0.14.0",
+    "pyloudnorm==0.2.0",
+  ]) {
+    assert.ok(armRequirements.includes(pin), `Windows ARM64 dependency profile must pin ${pin}`);
+  }
+
+  assert.ok(armVerifier.includes("EXPECTED_PE_MACHINE = 0xAA64"));
+  assert.ok(armVerifier.includes('NATIVE_RUNTIME_SUFFIXES = {".pyd", ".dll"}'));
+  assert.ok(armVerifier.includes("def _dependency_closure"));
+  assert.ok(armVerifier.includes("distribution.locate_file(relative)"));
+  assert.ok(armVerifier.includes('machine != "aarch64"'));
+  assert.ok(armVerifier.includes("non-ARM64 binaries detected in Python runtime dependencies"));
+  assert.equal(armVerifier.includes('".exe"'), false, "generic packaging executables must not be treated as runtime extension dependencies");
+
+  assert.ok(sidecarBuilder.includes('"aarch64-pc-windows-msvc": 0xAA64'));
+  assert.ok(sidecarBuilder.includes("assert_native_host(target_triple)"));
+  assert.ok(sidecarBuilder.includes("assert_target_binary_architecture(target, target_triple)"));
+  assert.ok(sidecarBuilder.includes("--ffmpeg-binary"));
+  assert.ok(sidecarBuilder.includes('"runtime-check"'));
+  assert.ok(sidecarBuilder.includes("read_pe_machine"));
+
+  assert.ok(ffmpegBuilder.includes("autobuild-2026-09-13-14-50"));
+  assert.ok(ffmpegBuilder.includes("ffmpeg-n9.0.1-29-gad500d59cb-winarm64-lgpl-9.0.zip"));
+  assert.ok(ffmpegBuilder.includes("9f33212fbd3a74913034d6f535d712a48969ac5115ccaaae312120c92f517904"));
+  assert.ok(ffmpegBuilder.includes("assert_target_binary_architecture(temp_output, target_triple)"));
+
+  assert.ok(sidecar.includes('os.environ["IMAGEIO_FFMPEG_EXE"]'));
+  assert.ok(sidecar.includes('RUNTIME_CHECK_VERSION = "ensemblis.library-bridge.runtime-check.v1"'));
+  assert.ok(sidecar.includes("imageio_ffmpeg.get_ffmpeg_exe()"));
+});
