@@ -148,6 +148,7 @@ pub fn persist_project_mutation(
 mod tests {
     use super::*;
     use crate::project;
+    use std::fs;
     use tempfile::tempdir;
 
     fn title_mutation(
@@ -165,6 +166,27 @@ mod tests {
             operation: "project.title.set".to_string(),
             entity_id: None,
             payload: serde_json::json!({"title": "Renamed"}),
+        }
+    }
+
+    fn recording_mutation(
+        project_id: &str,
+        base_revision: u64,
+        created_at: &str,
+        mutation_id: &str,
+        operation: &str,
+        recording_id: &str,
+    ) -> PortableProjectMutation {
+        PortableProjectMutation {
+            version: PROJECT_MUTATION_VERSION.to_string(),
+            mutation_id: mutation_id.to_string(),
+            project_id: project_id.to_string(),
+            base_revision,
+            actor_id: None,
+            created_at: created_at.to_string(),
+            operation: operation.to_string(),
+            entity_id: Some(recording_id.to_string()),
+            payload: serde_json::json!({}),
         }
     }
 
@@ -192,6 +214,107 @@ mod tests {
     }
 
     #[test]
+    fn successful_save_cleans_prepared_but_uncommitted_binding() {
+        let directory = tempdir().unwrap();
+        let package = directory.path().join("Demo.ensemble");
+        let audio = directory.path().join("orphan.wav");
+        fs::write(&audio, b"orphan recording bytes").unwrap();
+        let db = BridgeDb::new(directory.path().join("bridge.sqlite3")).unwrap();
+        let current = project::create_project(&package, "Demo").unwrap();
+        project::register_project(&db, &package, &current).unwrap();
+
+        project::prepare_recording_binding(&db, &current.project_id, "rec_orphan", &audio).unwrap();
+        assert!(
+            db.resolve_project_recording_binding(&current.project_id, "rec_orphan")
+                .unwrap()
+                .is_some()
+        );
+
+        let created_at = "2026-09-14T00:01:00.000Z";
+        let mutation = title_mutation(&current.project_id, current.revision, created_at);
+        let mut next = current.clone();
+        next.title = "Renamed".to_string();
+        next.revision += 1;
+        next.updated_at = created_at.to_string();
+        persist_project_mutation(&db, mutation, next).unwrap();
+
+        assert!(
+            db.resolve_project_recording_binding(&current.project_id, "rec_orphan")
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn recording_remove_and_exact_retry_reconcile_local_bindings() {
+        let directory = tempdir().unwrap();
+        let package = directory.path().join("Demo.ensemble");
+        let audio = directory.path().join("master.wav");
+        fs::write(&audio, b"committed recording bytes").unwrap();
+        let db = BridgeDb::new(directory.path().join("bridge.sqlite3")).unwrap();
+        let current = project::create_project(&package, "Demo").unwrap();
+        project::register_project(&db, &package, &current).unwrap();
+
+        let recording =
+            project::prepare_recording_binding(&db, &current.project_id, "rec_master", &audio)
+                .unwrap();
+        let add_at = "2026-09-14T00:02:00.000Z";
+        let add = recording_mutation(
+            &current.project_id,
+            current.revision,
+            add_at,
+            "mut_add_1",
+            "recording.add",
+            "rec_master",
+        );
+        let mut added = current.clone();
+        added.recordings.push(recording);
+        added.revision += 1;
+        added.updated_at = add_at.to_string();
+        persist_project_mutation(&db, add, added.clone()).unwrap();
+        assert!(
+            db.resolve_project_recording_binding(&current.project_id, "rec_master")
+                .unwrap()
+                .is_some()
+        );
+
+        let remove_at = "2026-09-14T00:03:00.000Z";
+        let remove = recording_mutation(
+            &current.project_id,
+            added.revision,
+            remove_at,
+            "mut_remove_1",
+            "recording.remove",
+            "rec_master",
+        );
+        let mut removed = added.clone();
+        removed.recordings.clear();
+        removed.revision += 1;
+        removed.updated_at = remove_at.to_string();
+        persist_project_mutation(&db, remove.clone(), removed.clone()).unwrap();
+        assert!(
+            db.resolve_project_recording_binding(&current.project_id, "rec_master")
+                .unwrap()
+                .is_none()
+        );
+
+        // Simulate local cleanup being interrupted after the portable manifest became durable.
+        project::prepare_recording_binding(&db, &current.project_id, "rec_retry_orphan", &audio)
+            .unwrap();
+        assert!(
+            db.resolve_project_recording_binding(&current.project_id, "rec_retry_orphan")
+                .unwrap()
+                .is_some()
+        );
+        persist_project_mutation(&db, remove, removed).unwrap();
+        assert!(
+            db.resolve_project_recording_binding(&current.project_id, "rec_retry_orphan")
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
     fn rejects_stale_or_path_bearing_mutations() {
         let directory = tempdir().unwrap();
         let package = directory.path().join("Demo.ensemble");
@@ -201,8 +324,10 @@ mod tests {
 
         let created_at = "2026-09-14T00:00:00.000Z";
         let mut mutation = title_mutation(&current.project_id, current.revision + 1, created_at);
-        mutation.payload =
-            serde_json::json!({"title": "Renamed", "filePath": "/example/local.wav"});
+        mutation.payload = serde_json::json!({
+            "title": "Renamed",
+            "filePath": "/example/local.wav"
+        });
         let mut next = current.clone();
         next.title = "Renamed".to_string();
         next.revision += 2;
