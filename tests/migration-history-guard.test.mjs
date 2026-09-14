@@ -12,6 +12,7 @@ import {
 } from "../scripts/check-supabase-migration-parity.mjs";
 import {
   classifyMigrationRecovery,
+  migrationHistoryFingerprint,
   validateRecoveryBaseline,
 } from "../scripts/audit-supabase-migration-recovery.mjs";
 
@@ -173,6 +174,7 @@ test("strict recovery baseline accepts only the audited production shape", () =>
     projectRef: "project",
     canonicalMigrationCount: 3,
     remoteMigrationCount: 3,
+    remoteHistoryFingerprint: migrationHistoryFingerprint(remote),
     matchedRemoteNames: 2,
     expectedRemoteOnly: [{ version: "275", name: "production_repair" }],
     genuineMissingSql: ["300_three"],
@@ -209,6 +211,43 @@ test("strict recovery baseline fails if production changes after the audit", () 
   assert.ok(errors.some((error) => error.includes("Remote-only set changed")));
 });
 
+test("strict recovery baseline fingerprints every remote timestamp and logical name", () => {
+  const local = [
+    { version: "100", name: "one" },
+    { version: "200", name: "two" },
+    { version: "300", name: "three" },
+  ];
+  const auditedRemote = [
+    { version: "100", name: "one" },
+    { version: "250", name: "two" },
+    { version: "275", name: "production_repair" },
+  ];
+  const changedRemote = [
+    { version: "100", name: "one" },
+    { version: "251", name: "two" },
+    { version: "275", name: "production_repair" },
+  ];
+  const result = classifyMigrationRecovery(local, changedRemote);
+  const baseline = {
+    projectRef: "project",
+    canonicalMigrationCount: 3,
+    remoteMigrationCount: 3,
+    remoteHistoryFingerprint: migrationHistoryFingerprint(auditedRemote),
+    matchedRemoteNames: 2,
+    expectedRemoteOnly: [{ version: "275", name: "production_repair" }],
+    genuineMissingSql: ["300_three"],
+  };
+
+  const errors = validateRecoveryBaseline({
+    local,
+    remote: changedRemote,
+    result,
+    baseline,
+    projectRef: "project",
+  });
+  assert.ok(errors.some((error) => error.includes("Remote migration history changed")));
+});
+
 test("dated production recovery baseline matches the canonical migration directory", () => {
   const baseline = JSON.parse(
     fs.readFileSync(
@@ -220,6 +259,7 @@ test("dated production recovery baseline matches the canonical migration directo
   const localIds = new Set(local.map((migration) => `${migration.version}_${migration.name}`));
 
   assert.equal(local.length, baseline.canonicalMigrationCount);
+  assert.match(baseline.remoteHistoryFingerprint, /^[0-9a-f]{64}$/);
   for (const migration of baseline.genuineMissingSql) {
     assert.ok(localIds.has(migration), `Audited missing migration is no longer canonical: ${migration}`);
   }
