@@ -5,6 +5,7 @@ import { loadArtistMemory } from "@/lib/artist-memory/server";
 import type { ArtistMemoryClass, ArtistMemoryItem } from "@/lib/artist-memory/domain";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { evidenceConfidenceLabel, evidenceFreshnessLabel } from "@/lib/studio/decision-language";
 
 const CLASS_LABELS: Record<ArtistMemoryClass, string> = {
   identity: "Identity",
@@ -23,10 +24,7 @@ function compactDate(value: string | null | undefined) {
 }
 
 function confidence(item: ArtistMemoryItem) {
-  if (item.confidence.label === "explicit") return "Explicit artist rule";
-  const percent = Math.round(item.confidence.score * 100);
-  const sample = item.confidence.sampleSize ? ` · ${item.confidence.sampleSize} decision${item.confidence.sampleSize === 1 ? "" : "s"}` : "";
-  return `${percent}% ${item.confidence.label} confidence${sample}`;
+  return evidenceConfidenceLabel(item.confidence.label, item.confidence.sampleSize);
 }
 
 export default async function ArtistMemoryPage() {
@@ -61,7 +59,8 @@ export default async function ArtistMemoryPage() {
               <details className="track-object-advanced">
                 <summary>Why does Ensemblis know this?</summary>
                 <div>
-                  <p>{confidence(item)}</p>
+                  <p>Evidence: {confidence(item)}</p>
+                  <p>Freshness: {evidenceFreshnessLabel({ observedAt: item.source.observedAt, expiresAt: item.expiresAt })}</p>
                   <p>Source: {item.source.label}{compactDate(item.source.observedAt) ? ` · ${compactDate(item.source.observedAt)}` : ""}</p>
                   {item.expiresAt ? <p>Expires: {compactDate(item.expiresAt) ?? item.expiresAt}</p> : null}
                   <p>Allowed consumers: {item.consumers.length ? item.consumers.join(", ").replaceAll("_", " ") : "none"}</p>
@@ -69,7 +68,7 @@ export default async function ArtistMemoryPage() {
                 </div>
               </details>
             </div>
-            <div className="actions"><Status>{item.confidence.label === "explicit" ? "Artist rule" : "Learned"}</Status></div>
+            <div className="actions"><Status>{confidence(item)}</Status></div>
           </article>
         ))}</div> : <div className="v2-calm-state"><strong>No durable artist memory yet.</strong><p>Add explicit artist guidance first. Learned signals only become active after trustworthy evidence and review.</p></div>}
       </section>
