@@ -80,7 +80,7 @@ node scripts/audit-supabase-migration-recovery.mjs \
   --expect-baseline scripts/fixtures/production-migration-recovery-2026-09-14.json
 ```
 
-The script reads canonical filenames and live Supabase Management API history, then prints every `TRACKING <remote> -> <canonical>` pair. It separately reports `MISSING_HISTORY` entries and remote-only entries. It fails closed on duplicate logical names, duplicate versions, same-version/different-name collisions, or any change from the audited production baseline.
+The dated baseline includes a SHA-256 fingerprint of every production migration version/name pair, so even a single timestamp/name change invalidates the preflight. The classifier also reports every `TRACKING <remote> -> <canonical>` pair, `MISSING_HISTORY` entry, remote-only entry, and any duplicate/collision ambiguity.
 
 A `MISSING_HISTORY` result does not prove that migration SQL is missing. The current nine-file SQL gap was established separately through schema readback.
 
@@ -88,7 +88,7 @@ A `MISSING_HISTORY` result does not prove that migration SQL is missing. The cur
 
 ## Exact one-time cutover sequence
 
-### 1. Freeze and snapshot
+### 1. Freeze and seal the before-state
 
 No other production migration operation may run during recovery.
 
@@ -112,9 +112,11 @@ genuine SQL gaps            9
 
 If the strict baseline check fails, stop and re-audit. Do not adapt repair commands on the fly.
 
+The dated fingerprint is a **pre-mutation seal**. Use it exactly once immediately before the first repair. Any successful repair intentionally changes production history, so subsequent checks use the live classifier without `--expect-baseline`.
+
 ### 2. Canonicalize name-matched history
 
-For every `TRACKING` pair emitted by the audit, repair only the tracking row:
+For every `TRACKING` pair emitted by the sealed before-state audit, repair only the tracking row:
 
 ```bash
 supabase migration repair <REMOTE_VERSION> --status reverted
@@ -123,7 +125,13 @@ supabase migration repair <CANONICAL_VERSION> --status applied
 
 Do not run the migration SQL during this phase. The audited schema effect is already present.
 
-After each small batch, rerun the same strict baseline audit. Timestamp repairs do not change the expected name/count/missing-history sets, so the dated baseline remains valid during this phase. Any ambiguity or unexpected remote-only name is a hard stop.
+After each complete revert/apply pair or small reviewed batch, run:
+
+```bash
+node scripts/audit-supabase-migration-recovery.mjs
+```
+
+Do not reuse the dated fingerprint after mutation has started. The live classifier must show the expected tracking drift shrinking without introducing new remote-only names, missing-history entries, ambiguity, or collisions. Any unexpected change is a hard stop.
 
 ### 3. Remove the obsolete Growth Engine repair history row
 
@@ -135,7 +143,7 @@ supabase migration repair 20260904014123 --status reverted
 
 This removes only the migration-history row. It does not roll back the Growth Engine SQL.
 
-From this point onward the dated pre-recovery baseline is intentionally no longer valid because the known remote-only row has been removed. Use the live classifier without `--expect-baseline` for the remainder of recovery.
+Continue with the live classifier, not the dated pre-mutation fingerprint.
 
 ### 4. Verify the recovery set before SQL mutation
 
