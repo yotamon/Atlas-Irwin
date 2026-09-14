@@ -1,7 +1,7 @@
 {
   "auditDate": "2026-09-14",
   "projectRef": "zhyjnpajlvwwbvuryeyv",
-  "canonicalMigrationCount": 145,
+  "canonicalMigrationCount": 146,
   "remoteMigrationCount": 137,
   "remoteHistoryFingerprint": "7702abd1ce1cdea66e61a99576d10da2c9e25fc056d2f84d37b10aa9a6ff2108",
   "matchedRemoteNames": 136,
@@ -20,6 +20,7 @@
     "20260910005500_dj_library_planning_evidence",
     "20260910010000_dj_library_render_jobs",
     "20260910013000_remove_serato_from_dj_library_sources",
-    "20260913010000_ensemblis_project_sync"
+    "20260913010000_ensemblis_project_sync",
+    "20260914154800_local_first_productization"
   ]
 }
