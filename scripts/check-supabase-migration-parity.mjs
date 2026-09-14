@@ -66,10 +66,12 @@ export async function fetchRemoteMigrations({ projectRef, token }) {
     throw new Error("Supabase migration history response was not an array");
   }
 
-  return payload.map((migration) => ({
-    version: String(migration.version),
-    name: String(migration.name),
-  }));
+  return payload
+    .map((migration) => ({
+      version: String(migration.version),
+      name: String(migration.name),
+    }))
+    .sort((a, b) => a.version.localeCompare(b.version));
 }
 
 function hasArg(name) {
