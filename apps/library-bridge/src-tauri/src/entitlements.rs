@@ -146,6 +146,16 @@ pub fn verify_token(
     Ok(claims)
 }
 
+pub fn trust_key_is_pinned(db: &BridgeDb) -> anyhow::Result<bool> {
+    let key = db
+        .get_setting(PUBLIC_KEY_SETTING)?
+        .is_some_and(|value| !value.trim().is_empty());
+    let key_id = db
+        .get_setting(KEY_ID_SETTING)?
+        .is_some_and(|value| !value.trim().is_empty());
+    Ok(key && key_id)
+}
+
 pub fn store_pairing_entitlement(
     db: &BridgeDb,
     bundle: &EntitlementPublicKey,
