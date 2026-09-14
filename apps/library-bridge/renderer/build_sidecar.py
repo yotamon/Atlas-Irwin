@@ -86,7 +86,7 @@ def assert_target_binary_architecture(path: Path, target_triple: str) -> None:
     actual_pe_machine = read_pe_machine(path)
     if actual_pe_machine != expected_pe_machine:
         raise RuntimeError(
-            f"sidecar architecture mismatch for {target_triple}: "
+            f"binary architecture mismatch for {target_triple}: "
             f"expected PE machine 0x{expected_pe_machine:04x}, got 0x{actual_pe_machine:04x}"
         )
 
@@ -157,10 +157,18 @@ def build(target_triple: str) -> Path:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Build the Ensemblis Library Bridge sidecar for Tauri externalBin")
+    parser = argparse.ArgumentParser(description="Build or verify an Ensemblis native binary for Tauri packaging")
     parser.add_argument("--target-triple", default=None)
+    parser.add_argument("--verify-binary", type=Path, default=None)
     args = parser.parse_args()
-    target = build(args.target_triple or host_triple())
+    target_triple = args.target_triple or host_triple()
+
+    if args.verify_binary is not None:
+        assert_target_binary_architecture(args.verify_binary, target_triple)
+        print(args.verify_binary)
+        return 0
+
+    target = build(target_triple)
     print(target)
     return 0
 
