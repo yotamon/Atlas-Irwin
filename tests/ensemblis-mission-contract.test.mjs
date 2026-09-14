@@ -40,7 +40,7 @@ test("Today and Release share release truth while Today projects the artist's pr
   assert.ok(snapshot.includes("proposedActions: nextActions"));
   assert.ok(snapshot.includes("completedActions: completedManagerActions"));
   assert.ok(snapshot.includes('select("id,title,release_date,active_release,artwork_url,cover_asset,primary_hook,smart_link_url,spotify_url,soundcloud_url,youtube_url,status,is_archived")'));
-  assert.ok(snapshot.includes('select("id,release_id,audio_url,is_primary")'));
+  assert.ok(snapshot.includes('select("id,release_id,title,audio_url,is_primary")'));
   assert.ok(snapshot.includes('select("id,release_id,status")'));
   assert.ok(release.includes("Release Mission"));
   assert.equal(release.includes("Workflow readiness"), false);
@@ -73,6 +73,40 @@ test("primary Mission projection stays semantic and reuses Manager evidence with
   assert.ok(today.includes("Keep making music. Ensemblis is managing the next moves."));
   assert.ok(today.includes("primaryMission.kind === \"release\""));
   assert.equal(today.includes("activeMission?.nextAction"), false, "Today should not let release-only Mission semantics own every artist goal");
+});
+
+test("ready musical Moments flow into Manager and Mission with inspectable provenance", async () => {
+  const snapshot = await source("lib/studio/artist-operating-snapshot.ts");
+  const mission = await source("lib/studio/artist-mission.ts");
+  const handoff = await source("lib/studio/moment-mission.ts");
+
+  assert.ok(snapshot.includes("asMomentsClient"), "Today must read canonical Moments through the typed artist snapshot");
+  assert.ok(snapshot.includes('moments.from("moments").select("*").eq("owner_id", userId).eq("artist_id", artist.artistId)'));
+  assert.ok(snapshot.includes("deriveMomentMissionRecommendation"));
+  assert.ok(snapshot.includes("preferredReleaseId: activeRelease?.id ?? null"));
+  assert.ok(snapshot.includes("momentRecommendation,"));
+  assert.ok(snapshot.includes("working.slice(0, momentRecommendation ? 4 : 5)"), "Manager must reserve room for the musical handoff");
+
+  assert.ok(handoff.includes("curateReleaseMoments"), "Manager handoff must reuse canonical Moment curation");
+  for (const provenance of [
+    "momentId",
+    "sourceFingerprint",
+    "trackId",
+    "releaseId",
+    "sourceMode",
+    "sourceModes",
+    "startMs",
+    "endMs",
+    "qualityScore",
+  ]) assert.ok(handoff.includes(provenance), `Moment handoff is missing provenance field ${provenance}`);
+  assert.ok(handoff.includes('href: `/studio/music/${moment.track_id}`'));
+  assert.ok(handoff.includes('moment.state === "approved" ? "Artist-approved Moment" : "Track Intelligence Moment"'));
+  assert.equal(handoff.includes(".from("), false, "Moment recommendation projection must stay pure");
+  assert.equal(handoff.includes(".insert("), false, "Moment recommendation must not create parallel persisted tasks");
+
+  assert.ok(mission.includes("momentRecommendation?: MomentMissionRecommendation | null"));
+  assert.ok(mission.includes("recommendationAction(momentRecommendation)"));
+  assert.ok(mission.includes('source: momentRecommendation ? "manager" : "strategy"'));
 });
 
 test("safe product copy no longer asks artists to manually scan opportunities from Release", async () => {

@@ -12,6 +12,8 @@ import { loadPaidGrowthWorkspace, paidGrowthNeedsYou } from "@/lib/paid-growth/s
 import type { Database } from "@/types/database";
 import { deriveArtistMission } from "./artist-mission";
 import type { ArtistContext } from "./artist-context";
+import { deriveMomentMissionRecommendation } from "./moment-mission";
+import { asMomentsClient } from "./moments-db";
 import { asArtistScopedMusicClient } from "./music-db";
 import { deriveNeedsYouQueue } from "./needs-you";
 import {
@@ -127,6 +129,7 @@ export async function loadArtistOperatingSnapshot({
 }) {
   const operational = asArtistScopedOperationalClient(db);
   const music = asArtistScopedMusicClient(db);
+  const moments = asMomentsClient(db);
   const marketing = asMarketingClient(db);
   const autonomy = createAutonomyServiceClient();
   const preferencesPromise = loadWorkspaceOperatingPreferences(db, artist.workspaceId);
@@ -142,6 +145,7 @@ export async function loadArtistOperatingSnapshot({
     operatingContext,
     releasesResult,
     tracksResult,
+    momentsResult,
     campaignsResult,
     tasksResult,
     automationResult,
@@ -158,7 +162,8 @@ export async function loadArtistOperatingSnapshot({
     preferencesPromise,
     operatingContextPromise,
     music.from("releases").select("id,title,release_date,active_release,artwork_url,cover_asset,primary_hook,smart_link_url,spotify_url,soundcloud_url,youtube_url,status,is_archived").eq("owner_id", userId).eq("artist_id", artist.artistId).order("updated_at", { ascending: false }),
-    music.from("tracks").select("id,release_id,audio_url,is_primary").eq("owner_id", userId).eq("artist_id", artist.artistId),
+    music.from("tracks").select("id,release_id,title,audio_url,is_primary").eq("owner_id", userId).eq("artist_id", artist.artistId),
+    moments.from("moments").select("*").eq("owner_id", userId).eq("artist_id", artist.artistId).in("state", ["proposed", "approved"]).limit(100),
     marketing.from("campaigns").select("id,release_id,status").eq("owner_id", userId).eq("artist_id", artist.artistId).not("status", "eq", "archived"),
     operational.from("tasks").select("id,title,due_at,priority,status").eq("owner_id", userId).eq("artist_id", artist.artistId).not("status", "in", '("Done","Skipped")').order("due_at", { ascending: true }).limit(30),
     marketing.from("automation_jobs").select("id,campaign_id,job_type,status,approval_status,run_after").eq("owner_id", userId).eq("artist_id", artist.artistId).not("status", "in", '("completed","failed","cancelled")').order("run_after", { ascending: true }).limit(40),
@@ -176,6 +181,7 @@ export async function loadArtistOperatingSnapshot({
   const firstError = [
     releasesResult,
     tracksResult,
+    momentsResult,
     campaignsResult,
     tasksResult,
     automationResult,
@@ -192,6 +198,7 @@ export async function loadArtistOperatingSnapshot({
 
   const releases = releasesResult.data ?? [];
   const tracks = tracksResult.data ?? [];
+  const momentRows = momentsResult.data ?? [];
   const campaigns = campaignsResult.data ?? [];
   const content = contentResult.data ?? [];
   const automation = automationResult.data ?? [];
@@ -204,6 +211,13 @@ export async function loadArtistOperatingSnapshot({
     ?? releases.find((release) => release.release_date && release.release_date >= now.toISOString().slice(0, 10))
     ?? releases[0]
     ?? null;
+  const momentRecommendation = deriveMomentMissionRecommendation({
+    moments: momentRows,
+    tracks: tracks.map((track) => ({ id: track.id, release_id: track.release_id, title: track.title })),
+    releases: releases.map((release) => ({ id: release.id, title: release.title })),
+    primaryGoal: operatingContext.profile.primaryGoal,
+    preferredReleaseId: activeRelease?.id ?? null,
+  });
 
   const workflowApprovalCount = automation.filter((job) => job.status === "awaiting_approval" || job.approval_status === "pending").length
     + publications.filter((job) => job.status === "awaiting_approval" || job.approval_status === "pending").length;
@@ -296,9 +310,17 @@ export async function loadArtistOperatingSnapshot({
     releaseMission: activeMission,
     proposedActions: nextActions,
     completedActions: completedManagerActions,
+    momentRecommendation,
   });
   const managerPlan: OperatingManagerPlanItem[] = [
-    ...working.map((item) => ({ ...item })),
+    ...working.slice(0, momentRecommendation ? 4 : 5).map((item) => ({ ...item })),
+    ...(momentRecommendation ? [{
+      id: `manager-${momentRecommendation.id}`,
+      title: momentRecommendation.title,
+      detail: momentRecommendation.detail,
+      status: "Planned" as const,
+      href: href(momentRecommendation.href),
+    }] : []),
     ...completedManagerActions.slice(0, 2).map((action) => ({
       id: `manager-completed-${action.id}`,
       title: action.title,
@@ -338,6 +360,7 @@ export async function loadArtistOperatingSnapshot({
     strategy,
     activeRelease,
     activeMission,
+    momentRecommendation,
     primaryMission,
     needsYou,
     topDecision: needsYou[0] ?? null,
