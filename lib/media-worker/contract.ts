@@ -16,6 +16,7 @@ export const MEDIA_WORKER_JOB_TYPES = [
   "master_audio",
   "finish_social_video",
   "render_automix",
+  "render_automix_preview",
 ] as const;
 
 export type MediaWorkerJobType = typeof MEDIA_WORKER_JOB_TYPES[number];
