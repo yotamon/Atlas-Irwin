@@ -3,60 +3,92 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Ensemblis Library Bridge</title>
+  <title>Ensemblis Studio Runtime</title>
   <link rel="stylesheet" href="./app.css" />
 </head>
 <body>
 <main>
-  <header>
-    <span class="eyebrow">Ensemblis / Native bridge</span>
-    <h1>Your music can stay on this computer.</h1>
-    <p>The bridge keeps local filesystem authority on-device, runs compatible intelligence locally, and sends only path-free semantic evidence when cloud features are used.</p>
+  <header class="hero">
+    <div>
+      <span class="eyebrow">Ensemblis / Local-first runtime</span>
+      <h1>One project. Local power. Cloud when you choose it.</h1>
+      <p>The desktop runtime keeps filesystem authority on this device, executes verified local processors, and exposes only path-free semantic state to Ensemblis.</p>
+    </div>
+    <div class="hero-badge" id="runtime-health">Checking runtime…</div>
   </header>
 
   <section>
-    <div>
-      <span class="eyebrow">Pair this device</span>
-      <p>Create a pairing code in Ensemblis Studio, then claim it here. The resulting device credential is stored in your operating system credential vault.</p>
+    <div class="section-heading">
+      <div><span class="eyebrow">Device</span><h2>Pairing and license</h2></div>
+      <button id="refresh">Refresh</button>
+    </div>
+    <div class="stats stats-five">
+      <div class="stat"><small>Connection</small><strong id="paired">Checking…</strong></div>
+      <div class="stat"><small>License</small><strong id="license">Checking…</strong></div>
+      <div class="stat"><small>Local intelligence</small><strong id="intelligence">Checking…</strong></div>
+      <div class="stat"><small>Sources</small><strong id="sources">0</strong></div>
+      <div class="stat"><small>Pending sync</small><strong id="pending">0</strong></div>
     </div>
     <div class="row">
       <input id="api" value="https://atlasirwin.com" aria-label="Ensemblis API base URL" />
       <input id="code" placeholder="Pairing code" aria-label="Pairing code" autocomplete="off" />
-      <button id="pair" class="primary">Pair</button>
+      <button id="pair" class="primary">Pair device</button>
+      <button id="license-import">Import Studio license</button>
       <button id="unpair">Unpair</button>
     </div>
+    <div id="capabilities" class="chips" aria-live="polite"></div>
   </section>
 
   <section>
-    <div class="stats">
-      <div class="stat"><small>Connection</small><strong id="paired">Checking…</strong></div>
-      <div class="stat"><small>Local sources</small><strong id="sources">0</strong></div>
-      <div class="stat"><small>Pending sync</small><strong id="pending">0</strong></div>
-      <div class="stat"><small>Local intelligence</small><strong id="intelligence">Checking…</strong></div>
+    <div class="section-heading">
+      <div><span class="eyebrow">Execution</span><h2>Runtime policy</h2><p>Preferences guide routing. Privacy and spend switches are hard constraints.</p></div>
+    </div>
+    <div class="policy-grid">
+      <label><span>Preference</span><select id="policy-preference"><option value="automatic">Automatic</option><option value="prefer_local">Prefer local</option><option value="prefer_cloud">Prefer cloud</option></select></label>
+      <label class="toggle"><input type="checkbox" id="policy-never-upload" /><span><strong>Never upload audio</strong><small>Cloud can use audio only when it is already there.</small></span></label>
+      <label class="toggle"><input type="checkbox" id="policy-paid" /><span><strong>Allow paid compute</strong><small>Required for processors that consume paid cloud compute.</small></span></label>
+      <label class="toggle"><input type="checkbox" id="policy-cloud-fallback" /><span><strong>Cloud fallback</strong><small>Allow cloud when a preferred local target cannot run.</small></span></label>
+    </div>
+    <div class="row"><button id="policy-save" class="primary">Save execution policy</button></div>
+  </section>
+
+  <section>
+    <div class="section-heading">
+      <div><span class="eyebrow">Local library</span><h2>Device-local music sources</h2><p>Scanning and optional intelligence happen behind the Rust trust boundary.</p></div>
     </div>
     <div class="row">
       <button id="add" class="primary">Choose music folder</button>
-      <button id="sync">Sync changes</button>
+      <button id="sync">Sync semantic changes</button>
       <button id="jobs">Check device jobs</button>
       <button id="export">Export latest mix</button>
-      <button id="refresh">Refresh status</button>
     </div>
   </section>
 
   <section>
-    <div>
-      <span class="eyebrow">Portable project</span>
-      <h2>.ensemble lives with you, not with one database.</h2>
-      <p>Create or open a portable project package. Its semantic state is path-free; the package location and local media bindings stay inside the trusted Rust runtime.</p>
+    <div class="section-heading">
+      <div><span class="eyebrow">Portable project</span><h2>.ensemble is the source of truth</h2><p>Project state stays portable and path-free. Local paths remain only in device-local infrastructure.</p></div>
     </div>
     <div class="row">
       <input id="project-title" placeholder="Project title" aria-label="Project title" />
       <button id="project-create" class="primary">Create project</button>
       <button id="project-open">Open project</button>
-      <button id="project-save" disabled>Save project</button>
+      <button id="project-save" disabled>Save title</button>
       <button id="project-add-recording" disabled>Add recording</button>
     </div>
     <div id="project-summary" class="project-summary" aria-live="polite">No project open.</div>
+    <div class="analysis-panel">
+      <label><span>Recording to analyze</span><select id="analysis-recording" disabled><option value="">Open a project first</option></select></label>
+      <button id="project-analyze" class="primary" disabled>Route & analyze locally</button>
+      <div id="route-decision" class="route-decision">No runtime decision yet.</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-heading">
+      <div><span class="eyebrow">Models</span><h2>Verified optional model packs</h2><p>Catalog entries are target-specific. Downloads are size-bounded, SHA-256 verified, capability-gated and installed atomically.</p></div>
+      <button id="models-refresh">Refresh catalog</button>
+    </div>
+    <div id="models" class="model-grid"><div class="empty-state">Refresh the catalog to see compatible models.</div></div>
   </section>
 
   <section>
