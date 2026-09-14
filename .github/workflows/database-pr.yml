@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   database:
-    name: production-equivalent schema audit
+    name: canonical final schema audit
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -22,30 +22,10 @@ jobs:
           version: 2.111.0
           github-token: ${{ github.token }}
 
-      - name: Hold migrations proven absent from production
-        shell: bash
-        run: |
-          mkdir -p /tmp/held-migrations
-          for name in \
-            marketing_creative_brand_media \
-            automix_transition_previews \
-            dj_intelligence_reset \
-            dj_library_devices \
-            dj_library_pairing_lint_fix \
-            dj_library_planning_evidence \
-            dj_library_render_jobs \
-            remove_serato_from_dj_library_sources \
-            ensemblis_project_sync
-          do
-            file="$(find supabase/migrations -maxdepth 1 -type f -name "*_${name}.sql" -print -quit)"
-            test -n "$file"
-            mv "$file" /tmp/held-migrations/
-          done
-
       - name: Initialize local Supabase config
         run: test -f supabase/config.toml || supabase init
 
-      - name: Replay production-equivalent canonical history
+      - name: Replay full canonical history
         run: supabase db start
 
       - name: Emit schema fingerprints
