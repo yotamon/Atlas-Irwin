@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { loadBoundedArtistMemoryContext } from "@/lib/artist-memory/consumer-context";
 import { loadArtistCreativeMemory } from "@/lib/creative-memory/server";
 import { loadTrackLyricsContext } from "@/lib/lyrics-intelligence/context";
 import { conciseCreativeGraphContext, type TrackCreativeIntelligenceGraph } from "@/lib/music-intelligence/creative-graph";
@@ -63,6 +64,7 @@ export async function loadVideoProjectContext(
   const operationalDb = db as unknown as SupabaseClient<ArtistScopedCoreOperationalDatabase>;
   const stemDb = db as unknown as SupabaseClient<StemDatabase>;
   const lyricsDb = db as unknown as SupabaseClient<LyricsDatabase>;
+  const coreDb = db as unknown as SupabaseClient<Database>;
   let releaseQuery = musicDb.from("releases").select("*")
     .eq("id", project.release_id)
     .eq("owner_id", ownerId);
@@ -72,7 +74,7 @@ export async function loadVideoProjectContext(
   const artistId = releaseResult.data.artist_id;
   if (expectedArtistId && artistId !== expectedArtistId) throw new Error("Video project does not belong to the active artist.");
 
-  const [trackResult, brandResult, linkResult, sceneResult, lyrics, creativeMemory] = await Promise.all([
+  const [trackResult, brandResult, linkResult, sceneResult, lyrics, creativeMemory, artistMemory] = await Promise.all([
     musicDb.from("tracks").select("*")
       .eq("id", project.track_id)
       .eq("owner_id", ownerId)
@@ -96,12 +98,19 @@ export async function loadVideoProjectContext(
       .order("score", { ascending: false, nullsFirst: false }),
     loadTrackLyricsContext(lyricsDb, project.track_id, ownerId),
     loadArtistCreativeMemory({
-      db: db as unknown as SupabaseClient<Database>,
+      db: coreDb,
       ownerId,
       artistId,
       releaseId: project.release_id,
       trackId: project.track_id,
       recommendationLimit: 8,
+    }),
+    loadBoundedArtistMemoryContext({
+      db: coreDb,
+      ownerId,
+      artistId,
+      consumer: "video_director",
+      maxCharacters: 1_800,
     }),
   ]);
 
@@ -159,10 +168,22 @@ export async function loadVideoProjectContext(
     positive: creativeMemory.preferences.positive,
     negative: creativeMemory.preferences.negative,
   };
+  const boundedProject: ExtendedMusicVideoProject = artistMemory?.maxEffect === "brief_only"
+    ? {
+        ...project,
+        creative_brief: {
+          ...jsonRecord(project.creative_brief),
+          artist_memory: {
+            max_effect: "brief_only",
+            brief: artistMemory.brief,
+          },
+        } satisfies Json,
+      }
+    : project;
 
   return {
     artistId,
-    project,
+    project: boundedProject,
     release: releaseResult.data,
     track: trackResult.data,
     musicMap: stemAwareMusicMap(project.music_map, (sceneResult.data ?? []) as AudioScene[], graph),
