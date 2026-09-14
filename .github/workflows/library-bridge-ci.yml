@@ -206,6 +206,8 @@ jobs:
       - name: Build Windows ARM64 Tauri release bundle
         working-directory: apps/library-bridge
         run: npx --yes @tauri-apps/cli@2.11.4 build --config src-tauri/tauri.release.conf.json --bundles nsis --target aarch64-pc-windows-msvc
+      - name: Verify Windows ARM64 application executable
+        run: python apps/library-bridge/renderer/build_sidecar.py --target-triple aarch64-pc-windows-msvc --verify-binary apps/library-bridge/src-tauri/target/aarch64-pc-windows-msvc/release/ensemblis-library-bridge.exe
       - name: Upload unsigned Windows ARM64 validation bundle
         uses: actions/upload-artifact@v4
         with:
