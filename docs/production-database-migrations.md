@@ -24,11 +24,13 @@ Representative examples observed against production project `zhyjnpajlvwwbvuryey
 | `track_music_intelligence` | `20260821165000` | `20260821151355` |
 | `dj_library_history_evidence` | `20260910001500` | `20260910154008` |
 
+Production is also missing canonical migrations **inside** the historical sequence, not only at the tail. `20260819164000_marketing_creative_brand_media.sql` is absent from migration history while later migrations are recorded. A schema readback confirmed its three `media_asset_type` enum values (`brand_reference`, `brand_logo`, `brand_motion_reference`) are also absent, so this is a genuine skipped migration rather than tracking drift.
+
 The repository also contains newer migrations that are not represented in the current production history, including `20260913010000_ensemblis_project_sync.sql`.
 
 A production schema readback on 2026-09-14 confirmed that `20260913010000_ensemblis_project_sync.sql` is genuinely pending, not merely missing from migration tracking: `public.ensemblis_project_replicas`, `public.ensemblis_project_mutations`, `bootstrap_ensemblis_project_replica_v1`, and `commit_ensemblis_project_mutation_v1` were all absent. During history repair this migration must remain pending until its SQL is actually deployed.
 
-The older timestamp mismatches are consistent with migrations having been applied manually under server-generated execution timestamps. Their schema effects must still be verified individually before migration tracking is repaired. Supabase CLI migration parity is timestamp-based, so applying `db push` before repairing history can attempt to replay logically existing work.
+The older timestamp mismatches are consistent with migrations having been applied manually under server-generated execution timestamps. Their schema effects must still be verified individually before migration tracking is repaired. Because production contains at least one genuine interior gap, the cutover requires a complete gap audit rather than timestamp repair alone. Supabase CLI migration parity is timestamp-based, so applying `db push` before repairing history can attempt to replay logically existing work or encounter missing prerequisites out of canonical order.
 
 ## Pre-merge protection
 
@@ -72,16 +74,17 @@ Required environment values:
 
 Do not repair migration history by timestamp alone and do not assume two migrations are equivalent because their names look similar.
 
-For every mismatch:
+For every mismatch or gap:
 
 1. Run `supabase migration list` against production and save the before-state.
-2. Match the production migration to a canonical repository file by migration name and intended SQL/schema effect.
-3. Verify the expected schema/readback is already present in production.
+2. Match each production migration to a canonical repository file by migration name and intended SQL/schema effect.
+3. Verify the expected schema/readback for each canonical migration, including local migrations missing from remote history.
 4. If the schema change is already present but only the history timestamp is wrong, use `supabase migration repair` to mark the incorrect production version reverted and the canonical repository version applied. `migration repair` changes migration tracking only; it does not execute or undo migration SQL.
-5. If a canonical local migration is genuinely not applied, leave it pending. Do not mark it applied merely to obtain parity.
+5. If a canonical migration is genuinely not applied, keep it unapplied until it can be executed in a reviewed, dependency-safe order. Do not mark it applied merely to obtain parity.
 6. If production contains a migration with no trustworthy canonical repository equivalent, stop. Capture the production schema difference into a reviewed migration before continuing.
-7. Repeat until `node scripts/check-supabase-migration-parity.mjs --allow-pending` reports only a contiguous local suffix, then decide whether that suffix should be deployed.
-8. After the pending canonical migrations are applied, require exact parity with `node scripts/check-supabase-migration-parity.mjs`.
+7. After genuine interior gaps are safely executed, repair their canonical versions as needed and continue until production history becomes an exact canonical prefix.
+8. Require `node scripts/check-supabase-migration-parity.mjs --allow-pending` to report only a contiguous local suffix before enabling automated delivery.
+9. After the pending canonical suffix is deployed, require exact parity with `node scripts/check-supabase-migration-parity.mjs`.
 
 Never run `db reset --linked` against production.
 
