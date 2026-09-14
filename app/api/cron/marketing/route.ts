@@ -2,6 +2,7 @@ import { kickAutoMixQueue } from "@/lib/automix/jobs";
 import { kickAutoMixPreviewQueue } from "@/lib/automix/previews";
 import { kickMasteringQueue } from "@/lib/mastering/jobs";
 import { kickMediaWorkerQueue } from "@/lib/media-worker/queue";
+import { recoverStrandedMusicIngestionFollowUp } from "@/lib/music-intelligence/ingestion-follow-up";
 import { runMarketingAutomationCycle } from "@/lib/marketing/automation";
 import { syncAudienceInteractions } from "@/lib/marketing/audience";
 import { processAutonomousCreativeSpend } from "@/lib/marketing/autonomous-creative-spend";
@@ -14,6 +15,7 @@ import { processDueOutreachEnrollments } from "@/lib/marketing/outreach";
 import { processDuePublicationJobs } from "@/lib/marketing/publications";
 import { refreshMarketingRadarIfDue } from "@/lib/marketing/radar";
 import { reconcileMarketingState } from "@/lib/marketing/state-reconciliation";
+import { createServiceClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,9 +47,16 @@ export async function GET(request: Request) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  // The same authenticated 15-minute heartbeat recovers every durable workload that shares the
-  // single Media Worker Sandbox. Healthy callbacks still drain these queues immediately; this is
-  // the recovery path for interrupted enqueue/dispatch/callback windows.
+  // Recover at most one stranded post-analysis Music follow-up per authenticated heartbeat.
+  // Healthy callbacks run this work immediately through `after()`; this bounded pass is the
+  // durable fallback when that post-response task is interrupted or a deployment is recycled.
+  const musicIngestion = await runStep("music ingestion follow-up", () => recoverStrandedMusicIngestionFollowUp({
+    client: createServiceClient(),
+  }));
+
+  // The same authenticated heartbeat recovers every durable workload that shares the single
+  // Media Worker Sandbox. Healthy callbacks still drain these queues immediately; this is the
+  // recovery path for interrupted enqueue/dispatch/callback windows.
   const mediaWorker = await runStep("media worker queue", () => kickMediaWorkerQueue());
   const mastering = dispatched(mediaWorker)
     ? { ok: true as const, value: { dispatched: false, reason: "shared-worker-busy" as const } }
@@ -91,6 +100,7 @@ export async function GET(request: Request) {
   const managerExecution = await runStep("safe manager execution", () => executeSafeManagerActions());
 
   const results = {
+    musicIngestion,
     mediaWorker,
     mastering,
     autoMix,

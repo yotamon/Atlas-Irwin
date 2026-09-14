@@ -60,14 +60,9 @@ function ingestionProgress(track: VaultTrack) {
   });
 }
 
-function analysisStatus(track: VaultTrack) {
-  const progress = ingestionProgress(track);
-  return progress.phase === "ready" ? "Understanding ready" : progress.label;
-}
-
 export function MusicWorkspaceOverview({
   artistId,
-  artistName,
+ artistName,
   vaultTracks,
   releases,
   tracks,
@@ -155,7 +150,7 @@ export function MusicWorkspaceOverview({
             <>
               <div className="music-track-meta-line">
                 <span>{titleCase(focusTrack.status)}</span>
-                <span>{focusProgress?.label ?? analysisStatus(focusTrack)}</span>
+                <span>{focusProgress?.label ?? "Preparing"}</span>
                 {focusTrack.version ? <span>{focusTrack.version}</span> : null}
               </div>
               <p className="v2-muted-copy">{focusProgress?.detail}</p>
