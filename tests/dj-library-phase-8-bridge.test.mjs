@@ -86,7 +86,7 @@ test("native webview uses a strict local-only CSP without unsafe inline executio
   assert.ok(html.includes('href="./app.css"'));
 });
 
-test("Studio exposes explicit pairing and revocation without exposing credential hashes", async () => {
+test("Studio makes automatic browser connection primary while preserving explicit recovery and revocation", async () => {
   const route = await source("app/api/studio/dj-library/devices/route.ts");
   const component = await source("components/studio/library-bridge-panel.tsx");
   const page = await source("app/studio/(protected)/music/automix/page.tsx");
@@ -94,8 +94,10 @@ test("Studio exposes explicit pairing and revocation without exposing credential
   assert.ok(route.includes('action === "create_pairing"'));
   assert.ok(route.includes('action === "revoke"'));
   assert.equal(route.includes('select("*")'), false);
-  assert.ok(component.includes("Pair a computer"));
-  assert.ok(component.includes("Raw filesystem paths stay inside the native bridge"));
+  assert.ok(component.includes("Your connected computers"));
+  assert.ok(component.includes("Connect to Ensemblis"));
+  assert.ok(component.includes("Manual connection"));
+  assert.ok(component.includes("Your music stays local"));
   assert.ok(page.includes("<LibraryBridgePanel"));
   assert.ok(page.includes("<LocalSetBuilderWorkspace"));
 });
@@ -171,7 +173,7 @@ test("local renderer reuses canonical MixPlan DSP and double-checks frozen recor
   assert.equal(renderer.includes("download("), false, "local renderer must not upload or fetch local audio through cloud helpers");
 });
 
-test("desktop export only copies a reverified completed render from the trusted local workspace", async () => {
+test("desktop export stays a trusted native capability without leaking helper controls into onboarding", async () => {
   const exporter = await source("apps/library-bridge/src-tauri/src/export.rs");
   const native = await source("apps/library-bridge/src-tauri/src/lib.rs");
   const html = await source("apps/library-bridge/ui/index.html");
@@ -182,8 +184,8 @@ test("desktop export only copies a reverified completed render from the trusted 
   assert.ok(exporter.includes("fingerprint_file(&asset.source_path)? != asset.sha256"));
   assert.ok(exporter.includes("fs::copy(&asset.source_path"));
   assert.ok(native.includes("export_latest_render"));
-  assert.ok(html.includes("Export latest mix"));
-  assert.ok(js.includes('invoke("export_latest_render")'));
+  assert.equal(html.includes("Export latest mix"), false);
+  assert.equal(js.includes('invoke("export_latest_render")'), false);
 });
 
 test("release configuration declares pinned, version-checked Windows/macOS Tauri bundles", async () => {
