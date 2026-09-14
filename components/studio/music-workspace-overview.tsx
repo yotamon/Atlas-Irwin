@@ -4,6 +4,7 @@ import { MusicIntelligencePreview } from "@/components/studio/music-intelligence
 import { Status } from "@/components/studio/ui";
 import { TrackPreview } from "@/components/studio/track-preview";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
+import { describeMusicIngestionProgress } from "@/lib/studio/track-analysis-state";
 import type { VaultTrack } from "@/types/growth-database";
 
 type ReleaseSummary = {
@@ -50,16 +51,17 @@ function hasMusicMap(track: VaultTrack) {
   );
 }
 
+function ingestionProgress(track: VaultTrack) {
+  return describeMusicIngestionProgress({
+    hasMaster: Boolean(track.audio_url),
+    analysisValue: track.analysis,
+    musicMapValue: track.audio_profile,
+    releaseBound: Boolean(track.linked_track_id || track.linked_release_id),
+  });
+}
+
 function analysisStatus(track: VaultTrack) {
-  if (hasMusicMap(track)) return "Understanding ready";
-  if (!track.audio_url) return "Needs master";
-  if (track.analysis && typeof track.analysis === "object" && !Array.isArray(track.analysis)) {
-    const status = (track.analysis as Record<string, unknown>).status;
-    if (status === "queued" || status === "running" || status === "dispatched") return "Understanding…";
-    if (status === "failed") return "Analysis needs attention";
-    if (status === "unavailable") return "Analysis unavailable";
-  }
-  return "Master ready";
+  return ingestionProgress(track).label;
 }
 
 export function MusicWorkspaceOverview({
@@ -77,6 +79,7 @@ export function MusicWorkspaceOverview({
 }) {
   const unreleased = vaultTracks.filter((track) => !track.linked_release_id);
   const focusTrack = unreleased[0] ?? null;
+  const focusProgress = focusTrack ? ingestionProgress(focusTrack) : null;
   const remaining = focusTrack ? unreleased.filter((track) => track.id !== focusTrack.id) : unreleased;
   const analyzedCount = unreleased.filter(hasMusicMap).length;
   const masteredCount = unreleased.filter((track) => Boolean(track.audio_url)).length;
@@ -118,14 +121,15 @@ export function MusicWorkspaceOverview({
               const release = releaseById.get(track.release_id);
               const hasMaster = Boolean(track.audio_url || vault?.audio_url);
               const exactHref = trackHref(vault?.id ?? track.id);
+              const progress = vault ? ingestionProgress(vault) : null;
               return (
                 <Link className="v2-inbox-item music-catalog-track-row" href={exactHref} key={track.id}>
                   <span className="music-track-rank">{String(track.track_number ?? track.display_order + 1).padStart(2, "0")}</span>
                   <span className="music-track-copy">
                     <strong>{track.title}{track.version ? ` · ${track.version}` : ""}</strong>
-                    <small>{release?.title ?? "Release"} · {vault ? analysisStatus(vault) : hasMaster ? "Master needs track-level intelligence" : "Master needed"}</small>
+                    <small>{release?.title ?? "Release"} · {progress?.detail ?? (hasMaster ? "Master needs track-level intelligence" : "Master needed")}</small>
                   </span>
-                  <Status tone={hasMaster ? "success" : "attention"}>{hasMaster ? "Master ready" : "Needs master"}</Status>
+                  <Status tone={!hasMaster || progress?.phase === "needs_attention" ? "attention" : "success"}>{progress?.label ?? (hasMaster ? "Master ready" : "Needs master")}</Status>
                   <b aria-hidden>→</b>
                 </Link>
               );
@@ -143,23 +147,17 @@ export function MusicWorkspaceOverview({
               <span className="section-label">Unreleased focus</span>
               <h2>{focusTrack ? focusTrack.title : "Add the music Ensemblis should understand"}</h2>
             </div>
-            {focusTrack ? <span className="music-score">{hasMusicMap(focusTrack) ? "Ready" : "Listening"}</span> : null}
+            {focusProgress ? <span className="music-score">{focusProgress.progress}%</span> : null}
           </div>
 
           {focusTrack ? (
             <>
               <div className="music-track-meta-line">
                 <span>{titleCase(focusTrack.status)}</span>
-                <span>{analysisStatus(focusTrack)}</span>
+                <span>{focusProgress?.label ?? analysisStatus(focusTrack)}</span>
                 {focusTrack.version ? <span>{focusTrack.version}</span> : null}
               </div>
-              <p className="v2-muted-copy">
-                {hasMusicMap(focusTrack)
-                  ? "Structure and strongest Moments are ready. Hear the evidence below, then use the track in Create."
-                  : focusTrack.audio_url
-                    ? "The master is safe in Music while Ensemblis prepares its musical understanding."
-                    : "Attach the canonical master so Ensemblis can understand the actual song."}
-              </p>
+              <p className="v2-muted-copy">{focusProgress?.detail}</p>
               {focusTrack.audio_url && !hasMusicMap(focusTrack) ? <TrackPreview src={focusTrack.audio_url} label={`${focusTrack.title} master`} /> : null}
               {hasMusicMap(focusTrack) ? (
                 <MusicIntelligencePreview audioUrl={focusTrack.audio_url} musicMap={focusTrack.audio_profile} />
@@ -219,18 +217,21 @@ export function MusicWorkspaceOverview({
         </div>
         {remaining.length ? (
           <div className="music-track-list">
-            {remaining.map((track, index) => (
-              <div className="music-track-row" key={track.id}>
-                <span className="music-track-rank">{String(index + 2).padStart(2, "0")}</span>
-                <span className="music-track-copy">
-                  <strong>{track.title}</strong>
-                  <small>{titleCase(track.status)} · {analysisStatus(track)}{track.version ? ` · ${track.version}` : ""}</small>
-                </span>
-                {track.audio_url ? <TrackPreview src={track.audio_url} label={track.title} compact /> : <span className="music-track-missing">No master</span>}
-                <span className="music-score small">{hasMusicMap(track) ? "Ready" : "Listening"}</span>
-                <Link className="music-row-link" href={trackHref(track.id)}>Open →</Link>
-              </div>
-            ))}
+            {remaining.map((track, index) => {
+              const progress = ingestionProgress(track);
+              return (
+                <div className="music-track-row" key={track.id}>
+                  <span className="music-track-rank">{String(index + 2).padStart(2, "0")}</span>
+                  <span className="music-track-copy">
+                    <strong>{track.title}</strong>
+                    <small>{titleCase(track.status)} · {progress.label}{track.version ? ` · ${track.version}` : ""}</small>
+                  </span>
+                  {track.audio_url ? <TrackPreview src={track.audio_url} label={track.title} compact /> : <span className="music-track-missing">No master</span>}
+                  <span className="music-score small">{progress.progress}%</span>
+                  <Link className="music-row-link" href={trackHref(track.id)}>Open →</Link>
+                </div>
+              );
+            })}
           </div>
         ) : (
           <div className="v2-calm-state compact inline">
