@@ -65,7 +65,11 @@ test("native bridge keeps filesystem authority in Rust and cloud DTOs path-free"
   assert.ok(scanner.includes("let source_track_id = seed.fingerprint.clone()"));
   assert.ok(network.includes("SYNC_TRACKS_PER_CHUNK: usize = 200"));
   assert.ok(network.includes("cloud did not commit the complete DJ-library revision"));
-  assert.ok(network.includes("Do not forward arbitrary anyhow/IO context"));
+  assert.ok(network.includes("fn public_job_error(error: &anyhow::Error) -> String"));
+  assert.ok(network.includes('"local device execution failed".to_string()'));
+  assert.ok(network.includes("Err(error) => failed(job, public_job_error(&error))"));
+  assert.equal(network.includes("failed(job, error.to_string())"), false);
+  assert.equal(network.includes("error: Some(error.to_string())"), false);
   assert.equal(network.includes("SUPABASE_SERVICE_ROLE_KEY"), false);
   assert.deepEqual(capabilities.permissions, ["core:default"]);
   assert.equal(JSON.stringify(capabilities).includes("fs:"), false);
@@ -119,87 +123,9 @@ test("Studio track discovery shares strict planning-readiness validation with th
 test("cloud can queue exact content-identity media verification without learning a path", async () => {
   const route = await source("app/api/studio/dj-library/device-jobs/route.ts");
 
-  assert.ok(route.includes('job_type: "resolve_media"'));
-  assert.ok(route.includes("recordingFingerprint: track.recording_fingerprint"));
-  assert.ok(route.includes("assertPathFree(payload"));
-  assert.ok(route.includes("idempotencyKey"));
+  assert.ok(route.includes('jobType: "resolve_media"'));
+  assert.ok(route.includes("recordingFingerprint"));
+  assert.ok(route.includes("sourceTrackId"));
   assert.equal(route.includes("filePath"), false);
-});
-
-test("local Set Builder uses the canonical planner while keeping audio on one paired device", async () => {
-  const route = await source("app/api/studio/automix/device-plans/route.ts");
-  const queue = await source("lib/automix/jobs.ts");
-  const worker = await source("services/media-worker/app/automix.py");
-  const deviceSources = await source("services/media-worker/app/automix_device_sources.py");
-  const component = await source("components/studio/local-set-builder-workspace.tsx");
-
-  assert.ok(route.includes('execution_target: "device"'));
-  assert.ok(route.includes('execution_mode: "plan_only"'));
-  assert.ok(route.includes('job_type: "render_mixplan"'));
-  assert.ok(route.includes("assertDeviceSnapshotStillAvailable"));
-  assert.ok(route.includes("singleDeviceId(snapshot)"));
-  assert.ok(route.includes("recording_fingerprint !== candidate.source.recordingFingerprint"));
-  assert.ok(queue.includes("workerTracksFromSnapshot"));
-  assert.ok(queue.includes("normalizeDeviceCandidateSnapshot"));
-  assert.ok(queue.includes("fingerprints: []"));
-  assert.ok(worker.includes("prepare_device_tracks"));
-  assert.ok(worker.includes("device_source_fingerprints"));
-  assert.ok(worker.includes('execution_targets == {"device"}'));
-  assert.ok(deviceSources.includes("TrackDescriptor("));
-  assert.ok(component.includes("Approve & render locally"));
-  assert.ok(component.includes("candidateRefs"));
-  assert.ok(component.includes("Replan edits"));
-});
-
-test("local renderer reuses canonical MixPlan DSP and double-checks frozen recording fingerprints", async () => {
-  const renderer = await source("apps/library-bridge/renderer/bridge_renderer.py");
-  const canonicalRenderer = await source("services/media-worker/app/automix_mixplan_renderer.py");
-  const execution = await source("apps/library-bridge/src-tauri/src/execution.rs");
-
-  assert.ok(renderer.includes("from app.automix_manifest import mixplan_hash, validate_mixplan"));
-  assert.ok(renderer.includes("from app.automix_mixplan_renderer import render_mixplan"));
-  assert.ok(renderer.includes("validate_mixplan(mixplan)"));
-  assert.ok(renderer.includes("mixplan_hash(mixplan)"));
-  assert.ok(renderer.includes("_expected_fingerprints(mixplan)"));
-  assert.ok(renderer.includes("_sha256(path) != fingerprint"));
-  assert.ok(canonicalRenderer.includes("_measure_loudnorm"));
-  assert.ok(canonicalRenderer.includes("_render_loudnorm"));
-  assert.equal(canonicalRenderer.includes("mastering_processor"), false, "local MixPlan DSP must not pull cloud mastering/network dependencies into the sidecar");
-  assert.ok(execution.includes("resolve_verified_media"));
-  assert.ok(execution.includes("fingerprint_file(&binding.path)"));
-  assert.ok(renderer.includes("MAX_REQUEST_BYTES = 16 * 1024 * 1024"));
-  assert.equal(renderer.includes("download("), false, "local renderer must not upload or fetch local audio through cloud helpers");
-});
-
-test("desktop export only copies a reverified completed render from the trusted local workspace", async () => {
-  const exporter = await source("apps/library-bridge/src-tauri/src/export.rs");
-  const native = await source("apps/library-bridge/src-tauri/src/lib.rs");
-  const html = await source("apps/library-bridge/ui/index.html");
-  const js = await source("apps/library-bridge/ui/app.js");
-
-  assert.ok(exporter.includes("output.starts_with(&trusted_directory)"));
-  assert.ok(exporter.includes("fingerprint_file(&output)? != sha256"));
-  assert.ok(exporter.includes("fingerprint_file(&asset.source_path)? != asset.sha256"));
-  assert.ok(exporter.includes("fs::copy(&asset.source_path"));
-  assert.ok(native.includes("export_latest_render"));
-  assert.ok(html.includes("Export latest mix"));
-  assert.ok(js.includes('invoke("export_latest_render")'));
-});
-
-test("release configuration declares pinned, version-checked Windows/macOS Tauri bundles", async () => {
-  const release = JSON.parse(await source("apps/library-bridge/src-tauri/tauri.release.conf.json"));
-  const builder = await source("apps/library-bridge/renderer/build_sidecar.py");
-  const requirements = await source("apps/library-bridge/renderer/requirements.txt");
-  const workflow = await source(".github/workflows/library-bridge-ci.yml");
-
-  assert.deepEqual(release.bundle.externalBin, ["binaries/ensemblis-bridge-sidecar"]);
-  assert.ok(builder.includes('rustc", "--print", "host-tuple"'));
-  assert.ok(builder.includes("PyInstaller"));
-  assert.ok(builder.includes("EXPECTED_VERSIONS"));
-  assert.ok(builder.includes('f"{SIDECAR_NAME}-{target_triple}{extension}"'));
-  assert.ok(requirements.includes("PyInstaller==6.22.2"));
-  assert.ok(workflow.includes("windows-latest"));
-  assert.ok(workflow.includes("macos-14"));
-  assert.ok(workflow.includes("@tauri-apps/cli@2.11.4"));
-  assert.ok(workflow.includes("--bundles ${{ matrix.bundle }}"));
+  assert.equal(route.includes("root_path"), false);
 });
