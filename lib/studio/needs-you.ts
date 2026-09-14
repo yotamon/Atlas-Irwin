@@ -11,6 +11,8 @@ export type NeedsYouSourceKind =
   | "publication"
   | "catalog_match"
   | "creative"
+  | "audience"
+  | "site"
   | "task"
   | "learning";
 
@@ -50,6 +52,25 @@ export type NeedsYouProjectionInput = {
   }>;
   paidGrowthDecisions?: Array<{
     key: string;
+    title: string;
+    detail: string;
+    severity: NeedsYouSeverity;
+    href: string;
+    deadlineAt?: string | null;
+    freshnessAt?: string | null;
+    timingLabel?: string | null;
+  }>;
+  audienceDecisions?: Array<{
+    id: string;
+    title: string;
+    detail: string;
+    href: string;
+    deadlineAt?: string | null;
+    freshnessAt?: string | null;
+    timingLabel?: string | null;
+  }>;
+  siteDecisions?: Array<{
+    id: string;
     title: string;
     detail: string;
     severity: NeedsYouSeverity;
@@ -171,6 +192,44 @@ export function deriveNeedsYouQueue(input: NeedsYouProjectionInput): NeedsYouIte
       severity: decision.severity,
       priority: decision.severity === "required" ? 88 : 78,
       source: { kind: "paid_growth", id: decision.key },
+      missionId,
+      timing: {
+        deadlineAt: decision.deadlineAt ?? null,
+        freshnessAt: decision.freshnessAt ?? null,
+        label: decision.timingLabel ?? null,
+      },
+    }));
+  }
+
+  for (const decision of (input.audienceDecisions ?? []).slice(0, 3)) {
+    queue.push(item({
+      id: `audience:${decision.id}`,
+      category: "Audience",
+      title: decision.title,
+      detail: decision.detail,
+      href: decision.href,
+      severity: "decision",
+      priority: 74,
+      source: { kind: "audience", id: decision.id },
+      missionId,
+      timing: {
+        deadlineAt: decision.deadlineAt ?? null,
+        freshnessAt: decision.freshnessAt ?? null,
+        label: decision.timingLabel ?? null,
+      },
+    }));
+  }
+
+  for (const decision of (input.siteDecisions ?? []).slice(0, 3)) {
+    queue.push(item({
+      id: `site:${decision.id}`,
+      category: "Site",
+      title: decision.title,
+      detail: decision.detail,
+      href: decision.href,
+      severity: decision.severity,
+      priority: decision.severity === "required" ? 82 : decision.severity === "decision" ? 68 : 42,
+      source: { kind: "site", id: decision.id },
       missionId,
       timing: {
         deadlineAt: decision.deadlineAt ?? null,
