@@ -9,6 +9,7 @@ import { createAutonomyServiceClient } from "@/lib/marketing/autonomy-db";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { releaseLifecycle } from "@/lib/marketing/release-lifecycle";
 import { loadPaidGrowthWorkspace, paidGrowthNeedsYou } from "@/lib/paid-growth/server";
+import { asSitesClient } from "@/lib/sites/db";
 import type { Database } from "@/types/database";
 import { deriveArtistMission } from "./artist-mission";
 import type { ArtistContext } from "./artist-context";
@@ -132,6 +133,7 @@ export async function loadArtistOperatingSnapshot({
   const moments = asMomentsClient(db);
   const marketing = asMarketingClient(db);
   const autonomy = createAutonomyServiceClient();
+  const sites = asSitesClient(db);
   const preferencesPromise = loadWorkspaceOperatingPreferences(db, artist.workspaceId);
   const operatingContextPromise = loadArtistOperatingContext({ db, artist });
   const sevenDays = new Date(now);
@@ -157,6 +159,7 @@ export async function loadArtistOperatingSnapshot({
     soundCloudPendingResult,
     spotifyPendingResult,
     outreachDraftsResult,
+    siteResult,
     paidWorkspace,
   ] = await Promise.all([
     preferencesPromise,
@@ -170,11 +173,12 @@ export async function loadArtistOperatingSnapshot({
     marketing.from("publication_jobs").select("id,campaign_id,content_item_id,platform,status,approval_status,scheduled_at").eq("owner_id", userId).eq("artist_id", artist.artistId).not("status", "in", '("published","failed","cancelled")').order("scheduled_at", { ascending: true }).limit(40),
     marketing.from("content_items").select("id,title,platform,status,asset_url,scheduled_at,release_id").eq("owner_id", userId).eq("artist_id", artist.artistId).not("status", "eq", "Archived").order("scheduled_at", { ascending: true }).limit(100),
     marketing.from("marketing_learnings").select("id,status").eq("owner_id", userId).eq("artist_id", artist.artistId).eq("status", "proposed").limit(20),
-    autonomy.from("next_best_actions").select("id,title,rationale,action_type,score,status,source_type,payload").eq("owner_id", userId).eq("artist_id", artist.artistId).eq("status", "proposed").order("score", { ascending: false }).limit(8),
+    autonomy.from("next_best_actions").select("id,title,rationale,action_type,score,status,source_type,payload,expires_at").eq("owner_id", userId).eq("artist_id", artist.artistId).eq("status", "proposed").order("score", { ascending: false }).limit(8),
     autonomy.from("next_best_actions").select("id,title,rationale,action_type,status,source_type,payload,updated_at").eq("owner_id", userId).eq("artist_id", artist.artistId).eq("status", "completed").eq("source_type", "artist_operating_profile").gte("updated_at", sevenDaysAgo.toISOString()).order("updated_at", { ascending: false }).limit(6),
     db.from("soundcloud_tracks").select("id,linked_track_id").eq("owner_id", userId).eq("reconcile_status", "pending"),
     db.from("spotify_tracks").select("id,linked_track_id").eq("owner_id", userId).eq("reconcile_status", "pending"),
     marketing.from("outreach_messages").select("id").eq("owner_id", userId).eq("artist_id", artist.artistId).is("sent_at", null).eq("response_status", "Draft"),
+    sites.from("artist_sites").select("id,state,draft_version_id,published_version_id,updated_at").eq("artist_id", artist.artistId).maybeSingle(),
     loadPaidGrowthWorkspace({ db, ownerId: userId, artistId: artist.artistId }),
   ]);
 
@@ -193,6 +197,7 @@ export async function loadArtistOperatingSnapshot({
     soundCloudPendingResult,
     spotifyPendingResult,
     outreachDraftsResult,
+    siteResult,
   ].find((result) => result.error)?.error;
   if (firstError) throw new Error(firstError.message);
 
@@ -228,6 +233,56 @@ export async function loadArtistOperatingSnapshot({
   const dueTasks = (tasksResult.data ?? []).filter((task) => task.due_at && new Date(task.due_at) <= sevenDays);
   const outreachDraftCount = outreachDraftsResult.data?.length ?? 0;
 
+  const site = siteResult.data ?? null;
+  const siteDecisions: NonNullable<Parameters<typeof deriveNeedsYouQueue>[0]["siteDecisions"]> = [];
+  if (site) {
+    const domainsResult = await sites
+      .from("artist_site_domains")
+      .select("id,hostname,verification_status,ssl_status,is_primary,last_checked_at")
+      .eq("site_id", site.id)
+      .order("is_primary", { ascending: false })
+      .order("created_at", { ascending: true });
+    if (domainsResult.error) throw new Error(domainsResult.error.message);
+
+    const domains = domainsResult.data ?? [];
+    const primaryDomain = domains.find((domain) => domain.is_primary) ?? null;
+    const readyDomains = domains.filter((domain) => domain.verification_status === "verified" && domain.ssl_status === "active");
+
+    if (site.draft_version_id && site.draft_version_id !== site.published_version_id) {
+      siteDecisions.push({
+        id: `publish-draft:${site.id}`,
+        title: "Review site changes",
+        detail: "A private site draft is ready. Preview the artist-facing result and publish only if it is right.",
+        severity: "review",
+        href: "/studio/sites",
+        freshnessAt: site.updated_at,
+        timingLabel: "Private draft ready",
+      });
+    }
+
+    if (primaryDomain && (primaryDomain.verification_status !== "verified" || primaryDomain.ssl_status !== "active")) {
+      siteDecisions.push({
+        id: `domain:${primaryDomain.id}`,
+        title: `Finish connecting ${primaryDomain.hostname}`,
+        detail: "This domain is not fully verified and secure yet. Complete the remaining connection step before relying on it publicly.",
+        severity: site.state === "published" ? "required" : "decision",
+        href: "/studio/sites",
+        freshnessAt: primaryDomain.last_checked_at,
+        timingLabel: "Domain connection needs attention",
+      });
+    } else if (site.state === "published" && !primaryDomain && readyDomains.length) {
+      siteDecisions.push({
+        id: `primary-domain:${site.id}`,
+        title: "Choose the site's primary domain",
+        detail: "A verified domain is ready, but the public site does not yet have a primary hostname.",
+        severity: "decision",
+        href: "/studio/sites",
+        freshnessAt: readyDomains[0]?.last_checked_at ?? site.updated_at,
+        timingLabel: "Verified domain ready",
+      });
+    }
+  }
+
   const activeReleaseContentIds = new Set(activeRelease ? content.filter((item) => item.release_id === activeRelease.id).map((item) => item.id) : []);
   const activeProviderScheduledCount = publications.filter((job) => job.content_item_id && activeReleaseContentIds.has(job.content_item_id) && String(job.status) === "provider_scheduled").length;
   const activeMission = activeRelease ? deriveReleaseMission({
@@ -251,6 +306,17 @@ export async function loadArtistOperatingSnapshot({
     activeMission,
     distributionDecisions: activeRelease ? (activeDistribution?.decisions ?? []).map((decision) => ({ key: decision.key, title: decision.title, detail: decision.detail, severity: decision.severity, releaseId: activeRelease.id })) : [],
     paidGrowthDecisions: paidGrowthNeedsYou(paidWorkspace.cards),
+    audienceDecisions: nextActions
+      .filter((action) => action.action_type === "reply_to_listener")
+      .map((action) => ({
+        id: action.id,
+        title: action.title,
+        detail: action.rationale,
+        href: "/studio/audience",
+        deadlineAt: action.expires_at,
+        timingLabel: action.expires_at ? `Reply window · ${formatOperatingDateTime(action.expires_at, preferences)}` : null,
+      })),
+    siteDecisions,
     workflowApprovalCount,
     outreachDraftCount,
     manualReady: manualReady.map((job) => ({
