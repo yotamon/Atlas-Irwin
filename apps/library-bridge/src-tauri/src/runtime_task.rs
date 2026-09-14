@@ -94,7 +94,9 @@ fn public_artifact(fingerprint: &str) -> Value {
     let identity = format!(
         "{fingerprint}|{TRACK_PLANNING_PROCESSOR_ID}|{TRACK_PLANNING_PROCESSOR_VERSION}|{TRACK_PLANNING_MODEL_ID}|{TRACK_PLANNING_MODEL_VERSION}|{TRACK_PLANNING_SCHEMA_VERSION}|{TRACK_PLANNING_PARAMETERS_HASH}",
     );
-    let artifact_hash = hash_text(&identity).trim_start_matches("sha256:").to_string();
+    let artifact_hash = hash_text(&identity)
+        .trim_start_matches("sha256:")
+        .to_string();
     serde_json::json!({
         "artifactId": format!("art_{}", &artifact_hash[..32]),
         "recordingFingerprint": fingerprint,
