@@ -111,6 +111,7 @@ pub struct BridgeStatus {
     pub device_id: Option<String>,
     pub api_base_url: Option<String>,
     pub sources: usize,
+    pub tracks: usize,
     pub pending_sync_batches: usize,
     pub local_intelligence_available: bool,
 }
