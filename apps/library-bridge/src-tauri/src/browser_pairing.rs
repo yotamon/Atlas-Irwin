@@ -17,7 +17,10 @@ pub struct BrowserPairingCallback {
 
 pub fn connect_url(api_base_url: &str, callback_url: &str, state: &str) -> anyhow::Result<String> {
     let base = Url::parse(api_base_url).context("invalid Ensemblis URL")?;
-    let local_dev = matches!(base.host_str(), Some("localhost" | "127.0.0.1" | "::1"));
+    let local_dev = matches!(
+        base.host_str(),
+        Some("localhost" | "127.0.0.1" | "::1")
+    );
     if base.scheme() != "https" && !(local_dev && base.scheme() == "http") {
         anyhow::bail!("Ensemblis requires HTTPS outside localhost development");
     }
@@ -190,7 +193,10 @@ mod tests {
         let query = parsed
             .query_pairs()
             .collect::<std::collections::HashMap<_, _>>();
-        assert_eq!(query.get("state").map(|value| value.as_ref()), Some("state-123"));
+        assert_eq!(
+            query.get("state").map(|value| value.as_ref()),
+            Some("state-123")
+        );
         assert_eq!(
             query.get("callback").map(|value| value.as_ref()),
             Some("http://127.0.0.1:43123/callback")
@@ -199,7 +205,8 @@ mod tests {
 
     #[test]
     fn callback_rejects_mismatched_state() {
-        let request = "GET /callback?state=wrong&code=ABCDEFGHIJKLMNOP HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+        let request =
+            "GET /callback?state=wrong&code=ABCDEFGHIJKLMNOP HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
         assert!(parse_callback(request, "right").is_err());
     }
 
