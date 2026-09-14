@@ -6,7 +6,10 @@ import {
   validateMigrationChanges,
 } from "../scripts/validate-migration-history.mjs";
 import { compareMigrationHistory } from "../scripts/check-supabase-migration-parity.mjs";
-import { classifyMigrationRecovery } from "../scripts/audit-supabase-migration-recovery.mjs";
+import {
+  classifyMigrationRecovery,
+  validateRecoveryBaseline,
+} from "../scripts/audit-supabase-migration-recovery.mjs";
 
 const basePaths = [
   "supabase/migrations/20260901000000_first.sql",
@@ -148,4 +151,56 @@ test("recovery audit fails closed on duplicate names and same-version collisions
   assert.deepEqual(result.versionCollisions, [
     { version: "100", canonicalName: "one", remoteName: "unexpected" },
   ]);
+});
+
+test("strict recovery baseline accepts only the audited production shape", () => {
+  const local = [
+    { version: "100", name: "one" },
+    { version: "200", name: "two" },
+    { version: "300", name: "three" },
+  ];
+  const remote = [
+    { version: "100", name: "one" },
+    { version: "250", name: "two" },
+    { version: "275", name: "production_repair" },
+  ];
+  const result = classifyMigrationRecovery(local, remote);
+  const baseline = {
+    projectRef: "project",
+    canonicalMigrationCount: 3,
+    remoteMigrationCount: 3,
+    matchedRemoteNames: 2,
+    expectedRemoteOnly: [{ version: "275", name: "production_repair" }],
+    genuineMissingSql: ["300_three"],
+  };
+
+  assert.deepEqual(
+    validateRecoveryBaseline({ local, remote, result, baseline, projectRef: "project" }),
+    [],
+  );
+});
+
+test("strict recovery baseline fails if production changes after the audit", () => {
+  const local = [
+    { version: "100", name: "one" },
+    { version: "200", name: "two" },
+    { version: "300", name: "three" },
+  ];
+  const remote = [
+    { version: "100", name: "one" },
+    { version: "250", name: "two" },
+    { version: "275", name: "unexpected_hotfix" },
+  ];
+  const result = classifyMigrationRecovery(local, remote);
+  const baseline = {
+    projectRef: "project",
+    canonicalMigrationCount: 3,
+    remoteMigrationCount: 3,
+    matchedRemoteNames: 2,
+    expectedRemoteOnly: [{ version: "275", name: "production_repair" }],
+    genuineMissingSql: ["300_three"],
+  };
+
+  const errors = validateRecoveryBaseline({ local, remote, result, baseline, projectRef: "project" });
+  assert.ok(errors.some((error) => error.includes("Remote-only set changed")));
 });
