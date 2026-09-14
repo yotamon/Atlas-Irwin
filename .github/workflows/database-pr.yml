@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   database:
-    name: canonical lexical function audit
+    name: canonical lexical drift partition
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -24,7 +24,7 @@ jobs:
         run: test -f supabase/config.toml || supabase init
       - name: Replay full canonical history
         run: supabase db start
-      - name: Compare function tokens and exact string literals
+      - name: Partition function token and string-literal drift
         shell: bash
         run: |
           PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -At <<'SQL'
@@ -46,12 +46,16 @@ jobs:
             where n.nspname in ('public','private')
               and not (n.nspname='public' and p.proname='rls_auto_enable' and p.pronargs=0)
               and not exists (select 1 from missing_functions x where x.schema_name=n.nspname and x.name=p.proname)
+          ), partitioned as (
+            select *, mod(hashtextextended(schema_name || '.' || object_name,0)::numeric + 9223372036854775808,32)::int bucket
+            from functions
           )
-          select 'BODY_NOWS|' || count(*) || '|' ||
+          select 'NOWS_PART|' || bucket || '|' || count(*) || '|' ||
             encode(digest(convert_to(string_agg(schema_name || E'\x1f' || object_name || E'\x1f' || no_ws_source,E'\x1e' order by schema_name,object_name,no_ws_source),'UTF8'),'sha256'),'hex')
-          from functions
+          from partitioned group by bucket
           union all
-          select 'STRING_LITERALS|' || count(*) || '|' ||
+          select 'STR_PART|' || bucket || '|' || count(*) || '|' ||
             encode(digest(convert_to(string_agg(schema_name || E'\x1f' || object_name || E'\x1f' || exact_strings,E'\x1e' order by schema_name,object_name,exact_strings),'UTF8'),'sha256'),'hex')
-          from functions;
+          from partitioned group by bucket
+          order by 1;
           SQL
