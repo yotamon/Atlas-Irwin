@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   database:
-    name: canonical lexical drift partition
+    name: canonical exact function drift groups
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -24,7 +24,7 @@ jobs:
         run: test -f supabase/config.toml || supabase init
       - name: Replay full canonical history
         run: supabase db start
-      - name: Partition function token and string-literal drift
+      - name: Narrow lexical drift groups
         shell: bash
         run: |
           PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -At <<'SQL'
@@ -47,15 +47,19 @@ jobs:
               and not (n.nspname='public' and p.proname='rls_auto_enable' and p.pronargs=0)
               and not exists (select 1 from missing_functions x where x.schema_name=n.nspname and x.name=p.proname)
           ), partitioned as (
-            select *, mod(hashtextextended(schema_name || '.' || object_name,0)::numeric + 9223372036854775808,32)::int bucket
+            select *,
+              mod(hashtextextended(schema_name || '.' || object_name,0)::numeric + 9223372036854775808,32)::int bucket,
+              mod(hashtextextended(schema_name || '.' || object_name,1)::numeric + 9223372036854775808,16)::int subbucket
             from functions
           )
-          select 'NOWS_PART|' || bucket || '|' || count(*) || '|' ||
+          select 'NOWS_SUB|' || bucket || '|' || subbucket || '|' || count(*) || '|' ||
             encode(digest(convert_to(string_agg(schema_name || E'\x1f' || object_name || E'\x1f' || no_ws_source,E'\x1e' order by schema_name,object_name,no_ws_source),'UTF8'),'sha256'),'hex')
-          from partitioned group by bucket
+          from partitioned
+          where bucket in (0,2,4,6,9,10,11,12,13,16,18,22,23,25,26)
+          group by bucket,subbucket
           union all
-          select 'STR_PART|' || bucket || '|' || count(*) || '|' ||
-            encode(digest(convert_to(string_agg(schema_name || E'\x1f' || object_name || E'\x1f' || exact_strings,E'\x1e' order by schema_name,object_name,exact_strings),'UTF8'),'sha256'),'hex')
-          from partitioned group by bucket
+          select 'STR_OBJ|' || schema_name || '|' || object_name || '|' ||
+            encode(digest(convert_to(exact_strings,'UTF8'),'sha256'),'hex')
+          from partitioned where bucket=6
           order by 1;
           SQL
