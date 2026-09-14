@@ -109,10 +109,13 @@ test("release validation includes a native Windows ARM64 build and architecture 
   assert.ok(workflow.includes("aarch64-pc-windows-msvc"));
   assert.ok(workflow.includes("Build and verify Windows ARM64 sidecar"));
   assert.ok(workflow.includes("Build Windows ARM64 Tauri release bundle"));
+  assert.ok(workflow.includes("Verify Windows ARM64 application executable"));
+  assert.ok(workflow.includes("--verify-binary apps/library-bridge/src-tauri/target/aarch64-pc-windows-msvc/release/ensemblis-library-bridge.exe"));
   assert.ok(workflow.includes("target/aarch64-pc-windows-msvc/release/bundle/**"));
 
   assert.ok(sidecarBuilder.includes('"aarch64-pc-windows-msvc": 0xAA64'));
   assert.ok(sidecarBuilder.includes("assert_native_host(target_triple)"));
   assert.ok(sidecarBuilder.includes("assert_target_binary_architecture(target, target_triple)"));
+  assert.ok(sidecarBuilder.includes("--verify-binary"));
   assert.ok(sidecarBuilder.includes("read_pe_machine"));
 });
