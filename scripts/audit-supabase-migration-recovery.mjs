@@ -49,12 +49,12 @@ export function classifyMigrationRecovery(localInput, remoteInput) {
 
   const exact = [];
   const trackingOnly = [];
-  const missingSql = [];
+  const missingHistory = [];
 
   for (const localMigration of local) {
     const remoteMatches = remoteByName.get(localMigration.name) ?? [];
     if (remoteMatches.length === 0) {
-      missingSql.push(localMigration);
+      missingHistory.push(localMigration);
       continue;
     }
     if (remoteMatches.length !== 1) continue;
@@ -93,7 +93,7 @@ export function classifyMigrationRecovery(localInput, remoteInput) {
   return {
     exact,
     trackingOnly,
-    missingSql,
+    missingHistory,
     remoteOnly,
     ambiguousNames,
     ambiguousVersions,
@@ -111,9 +111,9 @@ function printHumanReadable(result) {
     );
   }
 
-  console.log(`Canonical migrations with missing SQL/history: ${result.missingSql.length}`);
-  for (const migration of result.missingSql) {
-    console.log(`  MISSING ${migration.version}_${migration.name}`);
+  console.log(`Canonical migrations missing from remote history: ${result.missingHistory.length}`);
+  for (const migration of result.missingHistory) {
+    console.log(`  MISSING_HISTORY ${migration.version}_${migration.name}`);
   }
 
   console.log(`Remote-only migrations: ${result.remoteOnly.length}`);
