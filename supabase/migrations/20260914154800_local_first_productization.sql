@@ -109,11 +109,11 @@ begin
     raise exception 'service_role_required';
   end if;
 
-  select * into v_license
-  from public.ensemblis_perpetual_licenses
-  where owner_id = p_owner_id
-    and major_version = p_major_version
-    and active = true
+  select l.* into v_license
+  from public.ensemblis_perpetual_licenses as l
+  where l.owner_id = p_owner_id
+    and l.major_version = p_major_version
+    and l.active = true
   for update;
 
   if not found then
@@ -121,19 +121,20 @@ begin
   end if;
 
   if exists (
-    select 1 from public.ensemblis_license_activations
-    where license_id = v_license.id
-      and device_id = p_device_id
-      and revoked_at is null
+    select 1
+    from public.ensemblis_license_activations as a
+    where a.license_id = v_license.id
+      and a.device_id = p_device_id
+      and a.revoked_at is null
   ) then
     return query select v_license.id, true, v_license.device_limit;
     return;
   end if;
 
   select count(*)::integer into v_active_count
-  from public.ensemblis_license_activations
-  where license_id = v_license.id
-    and revoked_at is null;
+  from public.ensemblis_license_activations as a
+  where a.license_id = v_license.id
+    and a.revoked_at is null;
 
   if v_active_count >= v_license.device_limit then
     raise exception 'ensemblis_device_limit_reached';
