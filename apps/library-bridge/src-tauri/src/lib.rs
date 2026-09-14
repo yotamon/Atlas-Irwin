@@ -408,7 +408,23 @@ async fn refresh_model_catalog(state: State<'_, BridgeState>) -> Result<Vec<Mode
 }
 
 #[tauri::command]
-async fn choose_and_install_model(
+async fn install_model(
+    state: State<'_, BridgeState>,
+    descriptor: ModelDescriptor,
+) -> Result<InstalledModel, String> {
+    let db = Arc::clone(&state.db);
+    let model_root = state.model_root.clone();
+    let device_id = device_id(&state.db).map_err(command_error)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        models::install_model_from_catalog(&db, device_id.as_deref(), &model_root, &descriptor)
+    })
+    .await
+    .map_err(command_error)?
+    .map_err(command_error)
+}
+
+#[tauri::command]
+async fn choose_and_import_model(
     app: tauri::AppHandle,
     state: State<'_, BridgeState>,
     descriptor: ModelDescriptor,
@@ -416,7 +432,7 @@ async fn choose_and_install_model(
     let source = app
         .dialog()
         .file()
-        .set_title("Choose the downloaded Ensemblis model artifact")
+        .set_title("Choose an Ensemblis model artifact to verify and import")
         .blocking_pick_file();
     let Some(source) = source else { return Ok(None) };
     let source = source.into_path().map_err(command_error)?;
@@ -568,7 +584,8 @@ pub fn run() {
             get_execution_policy,
             set_execution_policy,
             refresh_model_catalog,
-            choose_and_install_model,
+            install_model,
+            choose_and_import_model,
             uninstall_model,
             sync_pending,
             poll_device_jobs,
