@@ -1,5 +1,6 @@
 import type { ArtistStrategy } from "@/lib/artist-operating/domain";
 import type { ArtistGoalKind } from "@/types/ensemblis-database";
+import type { MomentMissionRecommendation } from "./moment-mission";
 import type { ReleaseMissionState } from "./release-mission";
 
 export type ArtistMissionStatus =
@@ -55,16 +56,26 @@ function preparedCount(action: MissionManagerAction) {
   return Math.max(0, Number(execution.prepared ?? execution.synced ?? 0) || 0);
 }
 
+function recommendationAction(recommendation: MomentMissionRecommendation): ArtistMissionNextAction {
+  return {
+    title: recommendation.title,
+    detail: recommendation.detail,
+    href: recommendation.href,
+  };
+}
+
 function releaseProjection({
   strategy,
   activeReleaseTitle,
   activeReleaseHref,
   releaseMission,
+  momentRecommendation,
 }: {
   strategy: ArtistStrategy;
   activeReleaseTitle: string | null;
   activeReleaseHref: string | null;
   releaseMission: ReleaseMissionState | null;
+  momentRecommendation: MomentMissionRecommendation | null;
 }): ArtistMissionProjection {
   if (!releaseMission) {
     return {
@@ -72,10 +83,11 @@ function releaseProjection({
       title: strategy.recommendedMission.title,
       status: "planned",
       label: "Planned",
-      summary: "No active release Mission is blocking progress. Ensemblis can prepare the next release path from the strongest ready music.",
-      href: strategy.recommendedMission.href,
-      nextAction: null,
-      source: "strategy",
+      summary: momentRecommendation?.detail
+        ?? "No active release Mission is blocking progress. Ensemblis can prepare the next release path from the strongest ready music.",
+      href: momentRecommendation?.href ?? strategy.recommendedMission.href,
+      nextAction: momentRecommendation ? recommendationAction(momentRecommendation) : null,
+      source: momentRecommendation ? "manager" : "strategy",
     };
   }
 
@@ -105,6 +117,7 @@ export function deriveArtistMission({
   releaseMission = null,
   proposedActions = [],
   completedActions = [],
+  momentRecommendation = null,
 }: {
   primaryGoal: ArtistGoalKind;
   strategy: ArtistStrategy;
@@ -113,9 +126,10 @@ export function deriveArtistMission({
   releaseMission?: ReleaseMissionState | null;
   proposedActions?: MissionManagerAction[];
   completedActions?: MissionManagerAction[];
+  momentRecommendation?: MomentMissionRecommendation | null;
 }): ArtistMissionProjection {
   if (primaryGoal === "release_music") {
-    return releaseProjection({ strategy, activeReleaseTitle, activeReleaseHref, releaseMission });
+    return releaseProjection({ strategy, activeReleaseTitle, activeReleaseHref, releaseMission, momentRecommendation });
   }
 
   const actionType = GOAL_MANAGER_ACTION[primaryGoal];
@@ -153,6 +167,19 @@ export function deriveArtistMission({
         detail: proposed.rationale,
         href: strategy.recommendedMission.href,
       },
+      source: "manager",
+    };
+  }
+
+  if (momentRecommendation) {
+    return {
+      kind: strategy.recommendedMission.kind,
+      title: strategy.recommendedMission.title,
+      status: "planned",
+      label: "Planned",
+      summary: momentRecommendation.detail,
+      href: momentRecommendation.href,
+      nextAction: recommendationAction(momentRecommendation),
       source: "manager",
     };
   }
