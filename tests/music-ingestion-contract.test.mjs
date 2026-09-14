@@ -63,7 +63,7 @@ test("Music overview presents both unreleased and release tracks through the sha
     "Catalog tracks",
     "describeMusicIngestionProgress",
     "progress?.label",
-    "focusProgress.label",
+    "focusProgress?.label",
     "Create from this track",
     "Add master",
     "linked_track_id",
