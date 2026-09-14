@@ -61,10 +61,7 @@ fn auth_header() -> anyhow::Result<String> {
     device_credential()?.context("this Library Bridge is not paired")
 }
 
-pub fn refresh_device_entitlement(
-    db: &BridgeDb,
-    allow_initial_trust: bool,
-) -> anyhow::Result<()> {
+pub fn refresh_device_entitlement(db: &BridgeDb, allow_initial_trust: bool) -> anyhow::Result<()> {
     let api_base = db
         .get_setting("api_base_url")?
         .context("Bridge API is not configured")?;
@@ -91,12 +88,7 @@ pub fn refresh_device_entitlement(
             &device_id,
         )?;
     } else if allow_initial_trust {
-        entitlements::store_pairing_entitlement(
-            db,
-            &issued.public_key,
-            &issued.token,
-            &device_id,
-        )?;
+        entitlements::store_pairing_entitlement(db, &issued.public_key, &issued.token, &device_id)?;
     } else {
         anyhow::bail!("desktop entitlement trust key is not pinned");
     }
