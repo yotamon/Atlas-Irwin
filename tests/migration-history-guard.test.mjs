@@ -6,6 +6,7 @@ import {
   validateMigrationChanges,
 } from "../scripts/validate-migration-history.mjs";
 import { compareMigrationHistory } from "../scripts/check-supabase-migration-parity.mjs";
+import { classifyMigrationRecovery } from "../scripts/audit-supabase-migration-recovery.mjs";
 
 const basePaths = [
   "supabase/migrations/20260901000000_first.sql",
@@ -105,4 +106,46 @@ test("postdeploy parity requires exact equality", () => {
   ];
   const result = compareMigrationHistory(local, [{ version: "1", name: "one" }]);
   assert.deepEqual(result.errors, ["Local-only migration: 2_two"]);
+});
+
+test("recovery audit separates exact, tracking-only, missing SQL, and remote-only migrations", () => {
+  const local = [
+    { version: "100", name: "one" },
+    { version: "200", name: "two" },
+    { version: "300", name: "three" },
+  ];
+  const remote = [
+    { version: "100", name: "one" },
+    { version: "250", name: "two" },
+    { version: "275", name: "production_repair" },
+  ];
+
+  const result = classifyMigrationRecovery(local, remote);
+  assert.deepEqual(result.exact, [{ version: "100", name: "one" }]);
+  assert.deepEqual(result.trackingOnly, [
+    { name: "two", canonicalVersion: "200", remoteVersion: "250" },
+  ]);
+  assert.deepEqual(result.missingSql, [{ version: "300", name: "three" }]);
+  assert.deepEqual(result.remoteOnly, [{ version: "275", name: "production_repair" }]);
+  assert.equal(result.hasAmbiguity, false);
+});
+
+test("recovery audit fails closed on duplicate names and same-version collisions", () => {
+  const result = classifyMigrationRecovery(
+    [
+      { version: "100", name: "one" },
+      { version: "200", name: "two" },
+    ],
+    [
+      { version: "100", name: "unexpected" },
+      { version: "150", name: "one" },
+      { version: "175", name: "one" },
+    ],
+  );
+
+  assert.equal(result.hasAmbiguity, true);
+  assert.equal(result.ambiguousNames.length, 1);
+  assert.deepEqual(result.versionCollisions, [
+    { version: "100", canonicalName: "one", remoteName: "unexpected" },
+  ]);
 });
