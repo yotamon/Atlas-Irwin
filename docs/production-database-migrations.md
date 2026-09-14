@@ -26,7 +26,9 @@ Representative examples observed against production project `zhyjnpajlvwwbvuryey
 
 The repository also contains newer migrations that are not represented in the current production history, including `20260913010000_ensemblis_project_sync.sql`.
 
-This pattern is consistent with migrations having been applied manually under server-generated execution timestamps. The schema may already contain the intended changes, but Supabase CLI migration parity is timestamp-based, so applying `db push` before repairing history can attempt to replay logically existing work.
+A production schema readback on 2026-09-14 confirmed that `20260913010000_ensemblis_project_sync.sql` is genuinely pending, not merely missing from migration tracking: `public.ensemblis_project_replicas`, `public.ensemblis_project_mutations`, `bootstrap_ensemblis_project_replica_v1`, and `commit_ensemblis_project_mutation_v1` were all absent. During history repair this migration must remain pending until its SQL is actually deployed.
+
+The older timestamp mismatches are consistent with migrations having been applied manually under server-generated execution timestamps. Their schema effects must still be verified individually before migration tracking is repaired. Supabase CLI migration parity is timestamp-based, so applying `db push` before repairing history can attempt to replay logically existing work.
 
 ## Pre-merge protection
 
