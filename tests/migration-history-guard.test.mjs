@@ -108,7 +108,7 @@ test("postdeploy parity requires exact equality", () => {
   assert.deepEqual(result.errors, ["Local-only migration: 2_two"]);
 });
 
-test("recovery audit separates exact, tracking-only, missing SQL, and remote-only migrations", () => {
+test("recovery audit separates exact, tracking-only, missing-history, and remote-only migrations", () => {
   const local = [
     { version: "100", name: "one" },
     { version: "200", name: "two" },
@@ -125,7 +125,7 @@ test("recovery audit separates exact, tracking-only, missing SQL, and remote-onl
   assert.deepEqual(result.trackingOnly, [
     { name: "two", canonicalVersion: "200", remoteVersion: "250" },
   ]);
-  assert.deepEqual(result.missingSql, [{ version: "300", name: "three" }]);
+  assert.deepEqual(result.missingHistory, [{ version: "300", name: "three" }]);
   assert.deepEqual(result.remoteOnly, [{ version: "275", name: "production_repair" }]);
   assert.equal(result.hasAmbiguity, false);
 });
