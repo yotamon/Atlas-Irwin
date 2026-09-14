@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { pathToFileURL } from "node:url";
 import {
@@ -25,6 +26,15 @@ function groupBy(items, key) {
     groups.set(value, existing);
   }
   return groups;
+}
+
+export function migrationHistoryFingerprint(migrations) {
+  const canonical = migrations
+    .map(normalizeMigration)
+    .sort((a, b) => a.version.localeCompare(b.version) || a.name.localeCompare(b.name))
+    .map((migration) => `${migration.version}\x1f${migration.name}`)
+    .join("\x1e");
+  return createHash("sha256").update(canonical, "utf8").digest("hex");
 }
 
 export function classifyMigrationRecovery(localInput, remoteInput) {
@@ -114,6 +124,7 @@ export function validateRecoveryBaseline({ local, remote, result, baseline, proj
   const expectedMissing = [...(baseline.genuineMissingSql ?? [])].map(String).sort();
   const actualMissing = result.missingHistory.map(migrationId).sort();
   const matchedRemoteNames = remote.length - result.remoteOnly.length;
+  const actualRemoteFingerprint = migrationHistoryFingerprint(remote);
 
   if (baseline.projectRef && baseline.projectRef !== projectRef) {
     errors.push(`Project ref changed: expected ${baseline.projectRef}, got ${projectRef}`);
@@ -126,6 +137,14 @@ export function validateRecoveryBaseline({ local, remote, result, baseline, proj
   if (Number(baseline.remoteMigrationCount) !== remote.length) {
     errors.push(
       `Remote migration count changed: expected ${baseline.remoteMigrationCount}, got ${remote.length}`,
+    );
+  }
+  if (
+    baseline.remoteHistoryFingerprint &&
+    baseline.remoteHistoryFingerprint !== actualRemoteFingerprint
+  ) {
+    errors.push(
+      `Remote migration history changed: expected fingerprint ${baseline.remoteHistoryFingerprint}, got ${actualRemoteFingerprint}`,
     );
   }
   if (Number(baseline.matchedRemoteNames) !== matchedRemoteNames) {
@@ -200,7 +219,12 @@ function printHumanReadable(result) {
 
 function argValue(name) {
   const index = process.argv.indexOf(name);
-  return index >= 0 ? process.argv[index + 1] : undefined;
+  if (index < 0) return undefined;
+  const value = process.argv[index + 1];
+  if (!value || value.startsWith("--")) {
+    throw new Error(`${name} requires a value`);
+  }
+  return value;
 }
 
 async function run() {
