@@ -114,7 +114,7 @@ export async function recoverStrandedMusicIngestionFollowUp({
     .select("id,owner_id,linked_track_id,audio_url,analysis,updated_at")
     .not("linked_track_id", "is", null)
     .not("audio_url", "is", null)
-    .order("updated_at", { ascending: true })
+    .order("updated_at", { ascending: false })
     .limit(80);
   if (result.error) throw new Error(result.error.message);
 
