@@ -12,7 +12,7 @@ import type { LicensingDatabase } from "@/types/licensing-database";
 
 const STUDIO_MAJOR_VERSION = 1;
 const ONLINE_TOKEN_MS = 24 * 60 * 60 * 1000;
-const OFFLINE_GRACE_MS = 30 * 24 * 60 * 60 * 1000;
+const PERPETUAL_OFFLINE_GRACE = "9999-12-31T23:59:59Z";
 const HEADER = { alg: "EdDSA", typ: "ENSEMBLIS-ENTITLEMENT" } as const;
 
 function requiredConfig(name: "ENSEMBLIS_ENTITLEMENT_SIGNER_PKCS8_BASE64" | "ENSEMBLIS_ENTITLEMENT_PUBLIC_KEY_SPKI_BASE64") {
@@ -88,7 +88,7 @@ export async function issueDeviceEntitlement(device: DjLibraryDeviceRow) {
 
   const issuedAt = new Date();
   const expiresAt = new Date(issuedAt.getTime() + ONLINE_TOKEN_MS);
-  const offlineGraceUntil = new Date(license?.activated ? issuedAt.getTime() + OFFLINE_GRACE_MS : expiresAt.getTime());
+  const offlineGraceUntil = license?.activated ? PERPETUAL_OFFLINE_GRACE : expiresAt.toISOString();
   const claims: SignedEntitlementClaims = {
     version: SIGNED_ENTITLEMENT_CLAIMS_VERSION,
     subjectId: device.owner_id,
@@ -97,7 +97,7 @@ export async function issueDeviceEntitlement(device: DjLibraryDeviceRow) {
     offlineCapabilities: [...offline].sort(),
     issuedAt: issuedAt.toISOString(),
     expiresAt: expiresAt.toISOString(),
-    offlineGraceUntil: offlineGraceUntil.toISOString(),
+    offlineGraceUntil,
     license: {
       kind: license?.activated ? "studio_perpetual_v1" : "account",
       majorVersion: license?.activated ? STUDIO_MAJOR_VERSION : null,
