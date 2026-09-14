@@ -72,14 +72,18 @@ test("Music overview presents both unreleased and release tracks without portfol
     "Music overview must not expose Growth ranking as the primary music model");
 });
 
-test("track workspace keeps analysis recovery secondary and removes manual scorecards", async () => {
+test("track workspace keeps normal ingestion automatic and recovery secondary", async () => {
   const detail = await requireSnippets("app/studio/(protected)/music/[id]/page.tsx", [
     "Recommended next move",
     "Strong moments",
     "analysisNeedsRecovery",
     "Retry Track Intelligence",
-    "Nothing to fill in manually",
+    "Needs You ·",
+    "Normal ingestion is automatic",
+    "No action needed.",
   ]);
+  assert.doesNotMatch(detail, />Run Track Intelligence</,
+    "track workspace must not present a normal-path manual Track Intelligence CTA");
   assert.doesNotMatch(detail, /scoreVaultTrack|Portfolio score|Edit portfolio signals|hook_strength|short_form_potential/,
     "track workspace must explain musical understanding rather than expose manual ranking signals");
 });
