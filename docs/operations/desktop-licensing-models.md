@@ -11,9 +11,17 @@ Production license issuance requires two server-only environment values:
 - `ENSEMBLIS_ENTITLEMENT_SIGNER_PKCS8_BASE64`: Ed25519 private signing key encoded as PKCS#8 DER then Base64.
 - `ENSEMBLIS_ENTITLEMENT_PUBLIC_KEY_SPKI_BASE64`: matching Ed25519 public key encoded as SPKI DER then Base64.
 
+Generate a fresh production pair locally with:
+
+```bash
+node scripts/generate-entitlement-signing-key.mjs
+```
+
+Run that command only in a trusted local/admin environment. It prints the new private and public values once so they can be copied directly into the deployment secret manager. Never run the generator in shared CI logs and never commit either generated value to the repository.
+
 Never expose the private key to browser or desktop code. Store it only in the deployment secret manager. The public key is distributed inside an explicitly issued `.license` document and is pinned by the desktop after signature verification.
 
-A signing-key rotation is an explicit trust event. Existing desktop installations fail closed if a different key is presented through a refresh/import path. Re-pair or explicitly import a license signed by the new trusted key as part of a documented rotation.
+A signing-key rotation is an explicit trust event. Existing desktop installations fail closed if a different key is presented through a refresh/import path. Re-pair or explicitly import a license signed by the new trusted key as part of a documented rotation. Generate the replacement pair first, update both server values atomically, then deliberately re-establish trust on affected desktops. Do not silently accept a key change during entitlement refresh.
 
 ## Perpetual Studio activation
 
