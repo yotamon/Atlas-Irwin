@@ -17,6 +17,8 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 anyhow = "1"
+base64 = "0.22"
+ed25519-dalek = { version = "2.2", features = ["pkcs8"] }
 hex = "0.4"
 keyring = "4.2"
 notify = "8.2.0"
