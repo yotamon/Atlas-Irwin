@@ -112,6 +112,14 @@ export const PROCESSOR_REGISTRY = {
     targets: { cloud: { supported: true, requiresNetwork: true, paidCompute: true, requiredEntitlement: "cloud.compute" } },
     privacy: { requiresRawAudio: true },
   }),
+  "media-worker.render-automix-preview": descriptor({
+    id: "media-worker.render-automix-preview",
+    processorVersion: "1",
+    inputKinds: ["recording", "analysis", "project"],
+    outputKinds: ["audio.automix-preview"],
+    targets: { cloud: { supported: true, requiresNetwork: true, paidCompute: true, requiredEntitlement: "cloud.compute" } },
+    privacy: { requiresRawAudio: true },
+  }),
 } as const satisfies Record<string, ProcessorDescriptor>;
 
 export type ProcessorId = keyof typeof PROCESSOR_REGISTRY;
@@ -132,4 +140,5 @@ export const MEDIA_WORKER_PROCESSOR_BY_JOB = {
   master_audio: "media-worker.master-audio",
   finish_social_video: "media-worker.finish-social-video",
   render_automix: "media-worker.render-automix",
+  render_automix_preview: "media-worker.render-automix-preview",
 } as const;
