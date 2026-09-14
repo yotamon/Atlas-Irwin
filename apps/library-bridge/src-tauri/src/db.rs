@@ -8,7 +8,7 @@ use anyhow::Context;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Map, Value};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     path::{Path, PathBuf},
 };
 
@@ -376,6 +376,59 @@ impl BridgeDb {
             params![project_id, recording_id, recording_fingerprint, path.to_string_lossy().as_ref()],
         )?;
         Ok(())
+    }
+
+    #[cfg(test)]
+    pub fn resolve_project_recording_binding(
+        &self,
+        project_id: &str,
+        recording_id: &str,
+    ) -> anyhow::Result<Option<LocalBinding>> {
+        Ok(self
+            .open()?
+            .query_row(
+                "select path,recording_fingerprint from project_recording_bindings where project_id=?1 and recording_id=?2",
+                params![project_id, recording_id],
+                |row| {
+                    Ok(LocalBinding {
+                        path: PathBuf::from(row.get::<_, String>(0)?),
+                        recording_fingerprint: row.get(1)?,
+                    })
+                },
+            )
+            .optional()?)
+    }
+
+    pub fn reconcile_project_recording_bindings(
+        &self,
+        project_id: &str,
+        recording_ids: &[String],
+    ) -> anyhow::Result<usize> {
+        let desired: HashSet<&str> = recording_ids.iter().map(String::as_str).collect();
+        let mut connection = self.open()?;
+        let transaction = connection.transaction()?;
+        let mut existing = Vec::<String>::new();
+        {
+            let mut statement = transaction.prepare(
+                "select recording_id from project_recording_bindings where project_id=?1",
+            )?;
+            let rows = statement.query_map(params![project_id], |row| row.get::<_, String>(0))?;
+            for row in rows {
+                existing.push(row?);
+            }
+        }
+
+        let mut removed = 0usize;
+        for recording_id in existing {
+            if !desired.contains(recording_id.as_str()) {
+                removed += transaction.execute(
+                    "delete from project_recording_bindings where project_id=?1 and recording_id=?2",
+                    params![project_id, recording_id],
+                )?;
+            }
+        }
+        transaction.commit()?;
+        Ok(removed)
     }
 
     pub fn persist_scan(
