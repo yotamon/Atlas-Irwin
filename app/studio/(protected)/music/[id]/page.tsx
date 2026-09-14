@@ -17,7 +17,11 @@ import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asGrowthClient } from "@/lib/studio/growth-db";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
-import { describeTrackAnalysis, hasMusicIntelligenceMap } from "@/lib/studio/track-analysis-state";
+import {
+  describeMusicIngestionProgress,
+  describeTrackAnalysis,
+  hasMusicIntelligenceMap,
+} from "@/lib/studio/track-analysis-state";
 import type { Json, Track } from "@/types/database";
 
 type AnalysisProcessingStep = {
@@ -207,7 +211,30 @@ export default async function TrackWorkspacePage({
   }
 
   const analysis = describeTrackAnalysis(vaultTrack.analysis, vaultTrack.audio_profile);
+  const ingestion = describeMusicIngestionProgress({
+    hasMaster: Boolean(vaultTrack.audio_url),
+    analysisValue: vaultTrack.analysis,
+    musicMapValue: vaultTrack.audio_profile,
+    releaseBound: Boolean(vaultTrack.linked_track_id),
+  });
   const analysisNeedsRecovery = analysis.needsRecovery;
+  const ingestionActive = ingestion.phase === "enriching";
+  const needsArtistInput = ingestion.phase === "needs_input" && Boolean(releaseTrack);
+  const needsYouHref = ingestion.inputReason === "stems_from_previous_master" ? "#stems" : "#lyrics";
+  const needsYouTitle = ingestion.inputReason === "official_lyrics_missing"
+    ? "Add the official lyrics"
+    : ingestion.inputReason === "ai_context_disabled"
+      ? "Choose whether Ensemblis may use the lyrics"
+      : ingestion.inputReason === "stems_from_previous_master"
+        ? "Reconnect stems to this master"
+        : "One artist input can unlock more context";
+  const needsYouAction = ingestion.inputReason === "official_lyrics_missing"
+    ? "Add official lyrics"
+    : ingestion.inputReason === "ai_context_disabled"
+      ? "Review lyric permissions"
+      : ingestion.inputReason === "stems_from_previous_master"
+        ? "Review stems"
+        : "Open source input";
   const processing = describeAnalysisProcessing(analysis.status, analysis.isRefreshing);
   const musicMap = asRecord(vaultTrack.audio_profile);
   const sections = Array.isArray(musicMap.sections) ? musicMap.sections.length : 0;
@@ -227,13 +254,13 @@ export default async function TrackWorkspacePage({
 
   return (
     <div className="studio-v2-page track-object-page">
-      <AnalysisAutoRefresh active={analysis.isActive} />
+      <AnalysisAutoRefresh active={analysis.isActive || ingestionActive} />
       <ObjectHeader
         backHref={release ? href(`/studio/releases/${release.id}`) : href("/studio/music")}
         backLabel={release?.title ?? "Music"}
         eyebrow="Track"
         title={vaultTrack.title}
-        subtitle={`${duration(vaultTrack.duration_seconds)} · ${vaultTrack.audio_url ? "Master attached" : "Master required"}`}
+        subtitle={`${duration(vaultTrack.duration_seconds)} · ${ingestion.label}`}
         imageUrl={release?.artwork_url}
         imageAlt={release?.cover_alt || (release ? `${release.title} artwork` : "")}
         facts={[
@@ -252,9 +279,7 @@ export default async function TrackWorkspacePage({
               ? <Link className="button primary" href="#analysis-recovery">Retry intelligence</Link>
               : analysis.hasMusicMap && !analysis.isActive
                 ? <Link className="button primary" href={createHref}>Create from this track</Link>
-                : !analysis.isActive
-                  ? <Link className="button" href="#analysis-recovery">Run Track Intelligence</Link>
-                  : undefined}
+                : undefined}
         tabs={tabs}
       />
 
@@ -265,6 +290,20 @@ export default async function TrackWorkspacePage({
           detail={processing.detail}
           steps={processing.steps}
           ariaLabel={`Track Intelligence. ${processing.title}`}
+        />
+      ) : ingestionActive ? (
+        <ProcessingState
+          eyebrow="Music Intelligence · Context"
+          title="Ensemblis is finishing the release context."
+          detail={ingestion.detail}
+          progress={ingestion.progress}
+          steps={[
+            { label: "Master attached", state: "complete" },
+            { label: "Track Intelligence", state: "complete" },
+            { label: "Release context", state: "active" },
+            { label: "Ready to use", state: "waiting" },
+          ]}
+          ariaLabel="Music ingestion. Ensemblis is finishing release context."
         />
       ) : null}
 
@@ -289,23 +328,29 @@ export default async function TrackWorkspacePage({
               <p>Mastering Inspector found a technical issue that should be corrected before distribution.</p>
               <Link href="#mastering">Review mastering →</Link>
             </>
+          ) : needsArtistInput ? (
+            <>
+              <strong>Needs You · {needsYouTitle}</strong>
+              <p>{ingestion.detail}</p>
+              <Link href={needsYouHref}>{needsYouAction} →</Link>
+            </>
           ) : analysis.hasMusicMap && !analysis.isActive ? (
             <>
               <strong>Create from the strongest Moment</strong>
-              <p>Track Intelligence and mastering checks are ready. Start creative work from the musical evidence.</p>
+              <p>{ingestion.phase === "needs_attention" ? "Core Track Intelligence is ready even though an optional enrichment step needs attention." : "Track Intelligence and mastering checks are ready. Start creative work from the musical evidence."}</p>
               <Link href={createHref}>Create with this track →</Link>
             </>
-          ) : analysis.isActive ? (
+          ) : analysis.isActive || ingestionActive ? (
             <>
-              <strong>{analysis.isRefreshing ? "Fresh pass in progress" : "Analysis is already moving"}</strong>
-              <p>{analysis.isRefreshing ? "Keep using the verified intelligence already on this track while Ensemblis refreshes it in the background." : "Nothing to fill in manually. Ensemblis is processing the master automatically. You do not need to start or babysit anything."}</p>
+              <strong>{analysis.isRefreshing ? "Fresh pass in progress" : ingestionActive ? "Context is finishing automatically" : "Analysis is already moving"}</strong>
+              <p>{analysis.isRefreshing ? "Keep using the verified intelligence already on this track while Ensemblis refreshes it in the background." : ingestion.detail}</p>
               <Link href="#intelligence">View Track Intelligence →</Link>
             </>
           ) : vaultTrack.audio_url ? (
             <>
-              <strong>Ready when you are</strong>
-              <p>The master is attached. Run Track Intelligence when you want structure, strong Moments and mastering checks.</p>
-              <Link href="#analysis-recovery">Open analysis controls →</Link>
+              <strong>Ensemblis owns the analysis</strong>
+              <p>{ingestion.detail}</p>
+              <Link href="#intelligence">View intelligence status →</Link>
             </>
           ) : (
             <>
@@ -321,7 +366,7 @@ export default async function TrackWorkspacePage({
         <div className="v2-section-heading">
           <div>
             <span className="section-label">Track Intelligence</span>
-            <h2>{analysis.isPartial ? "Verified intelligence remains available" : analysis.isRefreshing ? "Current intelligence while Ensemblis refreshes" : analysis.hasMusicMap ? "What Ensemblis hears" : analysisNeedsRecovery ? "Understanding needs recovery" : analysis.isActive ? "Analysis in progress" : "Understand this track"}</h2>
+            <h2>{analysis.isPartial ? "Verified intelligence remains available" : analysis.isRefreshing ? "Current intelligence while Ensemblis refreshes" : analysis.hasMusicMap ? "What Ensemblis hears" : analysisNeedsRecovery ? "Understanding needs recovery" : analysis.isActive ? "Analysis in progress" : "Ensemblis is preparing the track"}</h2>
           </div>
         </div>
 
@@ -331,8 +376,8 @@ export default async function TrackWorkspacePage({
 
         {!analysis.hasMusicMap && !analysis.isActive && !analysisNeedsRecovery ? (
           <div className="v2-calm-state compact">
-            <strong>{vaultTrack.audio_url ? "Master ready for analysis." : "No source audio yet."}</strong>
-            <p>{vaultTrack.audio_url ? "Run Track Intelligence to generate music-aware structure, Moments and mastering checks." : "Add a master first."}</p>
+            <strong>{vaultTrack.audio_url ? "No action needed." : "No source audio yet."}</strong>
+            <p>{vaultTrack.audio_url ? "Track Intelligence starts automatically. The controls below are only for deliberate refresh or recovery." : "Add a master first."}</p>
           </div>
         ) : null}
 
@@ -341,6 +386,7 @@ export default async function TrackWorkspacePage({
           <dl>
             <div><dt>Source</dt><dd>{titleCase(vaultTrack.source)}</dd></div>
             <div><dt>Analysis state</dt><dd>{titleCase(analysis.status)}</dd></div>
+            <div><dt>Ingestion</dt><dd>{ingestion.label}</dd></div>
             <div><dt>Attempt</dt><dd>{analysis.attempt}</dd></div>
             <div><dt>Music map</dt><dd>{analysis.hasMusicMap ? `v${typeof musicMap.version === "number" ? musicMap.version : "?"}` : "Pending"}</dd></div>
             <div><dt>Media asset</dt><dd>{vaultTrack.media_asset_id ? "Connected" : "Legacy source"}</dd></div>
@@ -350,8 +396,8 @@ export default async function TrackWorkspacePage({
 
         {vaultTrack.audio_url && !analysis.isActive ? (
           <details className="track-object-advanced" id="analysis-recovery" open={analysisNeedsRecovery || undefined}>
-            <summary>{analysisNeedsRecovery ? "Retry Track Intelligence" : "Analysis controls"}</summary>
-            <p className="v2-muted-copy">{analysisNeedsRecovery ? "Analysis recovery retries only the intelligence step. The canonical master and any verified results remain untouched until a new full result succeeds." : "Re-run Track Intelligence only when you intentionally want a fresh pass. The canonical master stays unchanged."}</p>
+            <summary>{analysisNeedsRecovery ? "Retry Track Intelligence" : "Advanced analysis controls"}</summary>
+            <p className="v2-muted-copy">{analysisNeedsRecovery ? "Analysis recovery retries only the intelligence step. The canonical master and any verified results remain untouched until a new full result succeeds." : "Normal ingestion is automatic. Start a fresh Track Intelligence pass here only when you intentionally want to refresh or repair the current result."}</p>
             <form action={analyzeMusicTrack}>
               <input type="hidden" name="id" value={vaultTrack.id} />
               <AnalysisSubmitButton
