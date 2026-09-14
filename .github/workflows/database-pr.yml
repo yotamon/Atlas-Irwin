@@ -33,9 +33,7 @@ jobs:
         run: |
           PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -At <<'SQL'
           with functions as (
-            select n.nspname,
-                   p.proname,
-                   n.nspname || '.' || p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' as signature
+            select n.nspname || '.' || p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' as signature
             from pg_proc p
             join pg_namespace n on n.oid = p.pronamespace
             where n.nspname in ('public','private')
@@ -52,7 +50,9 @@ jobs:
                 ))
               )
           )
-          select 'SHARED_FUNCTION_COUNT|' || count(*) from functions;
-          select 'SHARED_FUNCTION_SUM|' || coalesce(sum(hashtextextended(signature, 0)::numeric), 0) from functions;
-          select 'SHARED_FUNCTION_NAMES_SHA256|' || encode(digest(convert_to(string_agg(signature, E'\x1e' order by signature),'UTF8'),'sha256'),'hex') from functions;
+          select
+            'SHARED_FUNCTION_COUNT|' || count(*) || E'\n' ||
+            'SHARED_FUNCTION_SUM|' || coalesce(sum(hashtextextended(signature, 0)::numeric), 0) || E'\n' ||
+            'SHARED_FUNCTION_NAMES_SHA256|' || encode(digest(convert_to(string_agg(signature, E'\x1e' order by signature), 'UTF8'), 'sha256'), 'hex')
+          from functions;
           SQL
