@@ -9,13 +9,18 @@ import {
 } from "@/lib/observability/execution-context";
 import { routeProcessor } from "@/lib/platform/compute-router";
 import { processorDescriptor } from "@/lib/platform/processors";
-import { DEFAULT_EXECUTION_POLICY } from "@/lib/platform/runtime";
+import { DEFAULT_EXECUTION_POLICY, type ExecutionPolicy } from "@/lib/platform/runtime";
 import { createRuntimeTask } from "@/lib/platform/tasks";
 
 export const MEDIA_WORKER_TRACE_PAYLOAD_KEY = "__ensemblis_trace_id";
 
 export type MediaWorkerDispatchInput = Parameters<typeof dispatchVercelSandboxJob>[0];
 export type MediaWorkerDispatchResult = Awaited<ReturnType<typeof dispatchVercelSandboxJob>>;
+
+export type MediaWorkerExecutionAuthorization = {
+  entitlements: ReadonlySet<string>;
+  policy?: ExecutionPolicy;
+};
 
 export interface MediaWorkerDispatcher {
   readonly name: string;
@@ -52,17 +57,21 @@ export function getMediaWorkerDispatcher() {
   return dispatcher;
 }
 
-function authorizeCloudExecution(input: MediaWorkerDispatchInput) {
+function authorizeCloudExecution(
+  input: MediaWorkerDispatchInput,
+  authorization: MediaWorkerExecutionAuthorization,
+) {
   const processorId = mediaWorkerProcessorId(input.jobType);
   const descriptor = processorDescriptor(processorId);
   if (!descriptor) throw new Error(`No processor descriptor exists for ${processorId}.`);
+  const policy = authorization.policy ?? DEFAULT_EXECUTION_POLICY;
   const task = createRuntimeTask({
     id: input.jobId,
     idempotencyKey: input.jobId,
     processorId: descriptor.id,
     processorVersion: descriptor.processorVersion,
     payload: input.payload,
-    policy: DEFAULT_EXECUTION_POLICY,
+    policy,
     requestedTarget: "cloud",
   });
   const decision = routeProcessor(descriptor, {
@@ -70,7 +79,7 @@ function authorizeCloudExecution(input: MediaWorkerDispatchInput) {
     networkOnline: true,
     availableTargets: new Set(["cloud"]),
     media: { local: false, cloud: true, browser: false },
-    entitlements: new Set(["cloud.compute"]),
+    entitlements: authorization.entitlements,
   });
   if (decision.kind !== "selected" || decision.target !== "cloud") {
     throw new Error(`ComputeRouter rejected Media Worker execution: ${decision.reason}`);
@@ -78,9 +87,12 @@ function authorizeCloudExecution(input: MediaWorkerDispatchInput) {
   return { task, decision };
 }
 
-export async function dispatchMediaWorkerJob(input: MediaWorkerDispatchInput) {
+export async function dispatchMediaWorkerJob(
+  input: MediaWorkerDispatchInput,
+  authorization: MediaWorkerExecutionAuthorization,
+) {
   const dispatcher = getMediaWorkerDispatcher();
-  const routed = authorizeCloudExecution(input);
+  const routed = authorizeCloudExecution(input, authorization);
   const context = childExecutionContext({
     jobId: input.jobId,
     provider: dispatcher.name,
