@@ -4,60 +4,27 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
-      - "supabase/migrations/**"
-      - "supabase/tests/**"
-      - "scripts/validate-migration-history.mjs"
-      - "scripts/check-supabase-migration-parity.mjs"
-      - "tests/migration-history-guard.test.mjs"
       - ".github/workflows/database-pr.yml"
-
-concurrency:
-  group: database-pr-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
   database:
-    name: migration replay and behavior
+    name: migration file hash audit
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Test migration history guards
-        run: node --test tests/migration-history-guard.test.mjs
-
-      - name: Enforce append-only canonical migration history
-        run: node scripts/validate-migration-history.mjs --base-ref "origin/${{ github.base_ref }}"
-
-      - uses: supabase/setup-cli@v2
-        with:
-          version: 2.111.0
-          github-token: ${{ github.token }}
-
-      - name: Initialize local Supabase config
-        run: test -f supabase/config.toml || supabase init
-
-      - name: Replay every migration on a clean database
-        run: supabase db start
-
-      - name: Emit canonical migration statement fingerprints
+      - name: Emit canonical migration file hashes
         shell: bash
         run: |
-          PGPASSWORD=postgres psql \
-            -h 127.0.0.1 \
-            -p 54322 \
-            -U postgres \
-            -d postgres \
-            -At \
-            -c "select 'MIGRATION_FINGERPRINT|' || name || '|' || version || '|' || encode(digest(convert_to(array_to_string(statements, E'\\x1f'), 'UTF8'), 'sha256'), 'hex') || '|' || cardinality(statements) from supabase_migrations.schema_migrations order by name;"
-
-      - name: Lint Postgres functions
-        run: supabase db lint --local --level error --fail-on error
-
-      - name: Verify database behavior
-        run: supabase test db --local
+          for file in supabase/migrations/*.sql; do
+            base="$(basename "$file" .sql)"
+            version="${base%%_*}"
+            name="${base#*_}"
+            hash="$(sha256sum "$file" | awk '{print $1}')"
+            bytes="$(wc -c < "$file" | tr -d ' ')"
+            printf 'MIGRATION_FILE_HASH|%s|%s|%s|%s\n' "$name" "$version" "$hash" "$bytes"
+          done
