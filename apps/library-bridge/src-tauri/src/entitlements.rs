@@ -1,6 +1,9 @@
 use crate::db::BridgeDb;
 use anyhow::Context;
-use base64::{Engine as _, engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD}};
+use base64::{
+    Engine as _,
+    engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+};
 use ed25519_dalek::{Signature, Verifier, VerifyingKey, pkcs8::DecodePublicKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -65,11 +68,14 @@ fn key_id(bytes: &[u8]) -> String {
 }
 
 fn parse_time(value: &str, field: &str) -> anyhow::Result<OffsetDateTime> {
-    OffsetDateTime::parse(value, &Rfc3339).with_context(|| format!("signed entitlement {field} is invalid"))
+    OffsetDateTime::parse(value, &Rfc3339)
+        .with_context(|| format!("signed entitlement {field} is invalid"))
 }
 
 fn decode_public_key(encoded: &str) -> anyhow::Result<(Vec<u8>, VerifyingKey)> {
-    let bytes = STANDARD.decode(encoded).context("signed entitlement public key is invalid base64")?;
+    let bytes = STANDARD
+        .decode(encoded)
+        .context("signed entitlement public key is invalid base64")?;
     if bytes.len() > 256 {
         anyhow::bail!("signed entitlement public key is oversized");
     }
@@ -90,9 +96,15 @@ pub fn verify_token(
     if parts.len() != 3 || parts.iter().any(|part| part.is_empty()) {
         anyhow::bail!("signed entitlement token format is invalid");
     }
-    let header_bytes = URL_SAFE_NO_PAD.decode(parts[0]).context("signed entitlement header is invalid")?;
-    let payload_bytes = URL_SAFE_NO_PAD.decode(parts[1]).context("signed entitlement payload is invalid")?;
-    let signature_bytes = URL_SAFE_NO_PAD.decode(parts[2]).context("signed entitlement signature is invalid")?;
+    let header_bytes = URL_SAFE_NO_PAD
+        .decode(parts[0])
+        .context("signed entitlement header is invalid")?;
+    let payload_bytes = URL_SAFE_NO_PAD
+        .decode(parts[1])
+        .context("signed entitlement payload is invalid")?;
+    let signature_bytes = URL_SAFE_NO_PAD
+        .decode(parts[2])
+        .context("signed entitlement signature is invalid")?;
     let header: TokenHeader = serde_json::from_slice(&header_bytes)?;
     if header.alg != "EdDSA" || header.typ != "ENSEMBLIS-ENTITLEMENT" {
         anyhow::bail!("signed entitlement header is unsupported");
@@ -101,15 +113,24 @@ pub fn verify_token(
     if header.kid != key_id(&public_der) {
         anyhow::bail!("signed entitlement key id does not match the pinned key");
     }
-    let signature = Signature::from_slice(&signature_bytes).context("signed entitlement signature length is invalid")?;
+    let signature = Signature::from_slice(&signature_bytes)
+        .context("signed entitlement signature length is invalid")?;
     verifier
-        .verify(format!("{}.{}", parts[0], parts[1]).as_bytes(), &signature)
+        .verify(
+            format!("{}.{}", parts[0], parts[1]).as_bytes(),
+            &signature,
+        )
         .context("signed entitlement signature verification failed")?;
     let claims: SignedEntitlementClaims = serde_json::from_slice(&payload_bytes)?;
-    if claims.version != SIGNED_ENTITLEMENT_CLAIMS_VERSION || claims.device_id != expected_device_id {
+    if claims.version != SIGNED_ENTITLEMENT_CLAIMS_VERSION
+        || claims.device_id != expected_device_id
+    {
         anyhow::bail!("signed entitlement identity is invalid");
     }
-    if claims.subject_id.trim().is_empty() || claims.capabilities.len() > 128 || claims.offline_capabilities.len() > 128 {
+    if claims.subject_id.trim().is_empty()
+        || claims.capabilities.len() > 128
+        || claims.offline_capabilities.len() > 128
+    {
         anyhow::bail!("signed entitlement claims exceed safety limits");
     }
     let issued = parse_time(&claims.issued_at, "issuedAt")?;
@@ -119,7 +140,11 @@ pub fn verify_token(
         anyhow::bail!("signed entitlement time window is invalid");
     }
     let online = claims.capabilities.iter().collect::<HashSet<_>>();
-    if claims.offline_capabilities.iter().any(|capability| !online.contains(capability)) {
+    if claims
+        .offline_capabilities
+        .iter()
+        .any(|capability| !online.contains(capability))
+    {
         anyhow::bail!("offline entitlements must be a subset of online entitlements");
     }
     Ok(claims)
@@ -151,17 +176,26 @@ pub fn store_refreshed_entitlement(
     token: &str,
     expected_device_id: &str,
 ) -> anyhow::Result<SignedEntitlementClaims> {
-    let pinned_key = db.get_setting(PUBLIC_KEY_SETTING)?.context("desktop entitlement trust key is not pinned")?;
-    let pinned_key_id = db.get_setting(KEY_ID_SETTING)?.context("desktop entitlement trust key id is not pinned")?;
+    let pinned_key = db
+        .get_setting(PUBLIC_KEY_SETTING)?
+        .context("desktop entitlement trust key is not pinned")?;
+    let pinned_key_id = db
+        .get_setting(KEY_ID_SETTING)?
+        .context("desktop entitlement trust key id is not pinned")?;
     if bundle.public_key_spki_base64 != pinned_key || bundle.key_id != pinned_key_id {
-        anyhow::bail!("desktop entitlement signing key changed; explicitly re-pair this device to trust a new key");
+        anyhow::bail!(
+            "desktop entitlement signing key changed; explicitly re-pair this device to trust a new key"
+        );
     }
     let claims = verify_token(token, &pinned_key, expected_device_id)?;
     db.set_setting(TOKEN_SETTING, token)?;
     Ok(claims)
 }
 
-pub fn effective_entitlement(db: &BridgeDb, device_id: Option<&str>) -> anyhow::Result<EffectiveEntitlement> {
+pub fn effective_entitlement(
+    db: &BridgeDb,
+    device_id: Option<&str>,
+) -> anyhow::Result<EffectiveEntitlement> {
     let Some(device_id) = device_id.filter(|value| !value.is_empty()) else {
         return Ok(EffectiveEntitlement {
             mode: "unpaired".to_string(),
@@ -182,7 +216,9 @@ pub fn effective_entitlement(db: &BridgeDb, device_id: Option<&str>) -> anyhow::
             major_version: None,
         });
     };
-    let key = db.get_setting(PUBLIC_KEY_SETTING)?.context("desktop entitlement trust key is missing")?;
+    let key = db
+        .get_setting(PUBLIC_KEY_SETTING)?
+        .context("desktop entitlement trust key is missing")?;
     let claims = verify_token(&token, &key, device_id)?;
     let now = OffsetDateTime::now_utc();
     let expires = parse_time(&claims.expires_at, "expiresAt")?;
