@@ -16,10 +16,12 @@ test("release Mission derivation is categorical rather than percentage based", a
     '"Add the canonical master"',
     '"Choose the release date"',
     '"Add release artwork"',
-    '"Campaign engine needs repair"',
+    '"Promotion plan needs attention"',
     '"Review the strongest musical Moment"',
   ]) assert.ok(mission.includes(snippet), `Mission model is missing ${snippet}`);
   assert.equal(mission.includes("score"), false, "Mission readiness must not regress to an additive score");
+  assert.equal(mission.includes("Campaign engine needs repair"), false, "Default Mission copy must not expose subsystem repair jargon");
+  assert.equal(mission.includes("Campaign Brain"), false, "Default Mission copy must not expose specialist subsystem names");
 });
 
 test("Today and Release share release truth while Today projects the artist's primary Mission", async () => {

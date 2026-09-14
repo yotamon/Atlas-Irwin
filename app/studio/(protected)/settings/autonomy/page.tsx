@@ -11,6 +11,7 @@ import {
 import { loadArtistAutonomyContracts } from "@/lib/autonomy/server";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
+import { autonomyModeLabel } from "@/lib/studio/decision-language";
 
 const GROUPS: Array<{ label: string; domains: AutonomyDomain[] }> = [
   {
@@ -32,12 +33,6 @@ const MODE_OPTIONS = [
   { value: "prepare", label: "Prepare · finish safe internal work, ask before external effects" },
   { value: "run", label: "Run · execute explicitly allowed work inside these rules" },
 ];
-
-function modeLabel(mode: string) {
-  if (mode === "run") return "Run";
-  if (mode === "prepare") return "Prepare";
-  return "Assist";
-}
 
 function dateInput(value: string | null | undefined) {
   if (!value) return "";
@@ -67,7 +62,7 @@ function ContractCard({
             <h2>{meta.label}</h2>
             <p>{meta.description}</p>
           </div>
-          <Status>{configured ? `${modeLabel(selectedMode)} contract` : `${modeLabel(meta.defaultMode)} default`}</Status>
+          <Status>{configured ? `${autonomyModeLabel(selectedMode)} contract` : `${autonomyModeLabel(meta.defaultMode)} default`}</Status>
         </div>
 
         <div className="v2-settings-grid">
@@ -222,7 +217,7 @@ export default async function AutonomySettingsPage() {
 
       <section className="v2-section v2-compact-section">
         <div className="v2-section-heading"><div><span className="section-label">Auditability</span><h2>Every execution boundary can explain its authority</h2></div></div>
-        <p className="v2-muted-copy">The resolver returns Run, Prepare or Ask deterministically and can persist the exact contract and effect snapshot used for that decision. This audit trail is append-only and artist-scoped.</p>
+        <p className="v2-muted-copy">The resolver returns Working, Prepared, or Needs You deterministically and records the exact contract and effect snapshot used for that decision. This audit trail is append-only and artist-scoped.</p>
       </section>
     </div>
   );

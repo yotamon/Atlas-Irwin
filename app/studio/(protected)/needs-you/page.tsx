@@ -5,6 +5,7 @@ import { requireStudioAdmin } from "@/lib/auth/studio";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { loadArtistOperatingSnapshot } from "@/lib/studio/artist-operating-snapshot";
 import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { decisionSeverityLabel } from "@/lib/studio/decision-language";
 import { needsYouTone } from "@/lib/studio/needs-you";
 
 function decisionTone(value: string): SemanticTone {
@@ -31,7 +32,7 @@ export default async function NeedsYouPage() {
       <DecisionRow
         href={href(entry.href)}
         key={entry.id}
-        meta={`${entry.category} · ${entry.severity}${timing}`}
+        meta={`${decisionSeverityLabel(entry.severity)} · ${entry.category}${timing}`}
         title={entry.title}
         description={entry.detail}
         tone={decisionTone(needsYouTone(entry))}
@@ -46,14 +47,14 @@ export default async function NeedsYouPage() {
       <PriorityHero
         eyebrow="Decision queue"
         title={queue.length ? `${queue.length} decision${queue.length === 1 ? "" : "s"} worth your attention` : "Ensemblis can keep moving"}
-        description={queue.length ? "Release blockers and spend stop conditions come first, then external effects, ambiguity and review work. Resolve the source action and the queue updates automatically." : "Nothing currently needs human judgment. Safe internal work can continue without manufacturing tasks."}
+        description={queue.length ? "Required decisions come first, then choices that need your judgment and evidence-backed recommendations. Resolve the source action and the queue updates automatically." : "Nothing currently needs human judgment. Safe internal work can continue without manufacturing tasks."}
         status={required.length ? "Blocked" : queue.length ? "Needs attention" : "Clear"}
         tone={required.length ? "danger" : queue.length ? "attention" : "success"}
       />
 
       {required.length ? <DecisionQueue eyebrow="Required now" title="Blocking decisions" count={required.length}>{required.map(renderDecision)}</DecisionQueue> : null}
 
-      {review.length ? <DecisionQueue eyebrow={required.length ? "Then review" : "Decisions"} title={required.length ? "Everything else" : "Needs you"} count={review.length}>{review.map(renderDecision)}</DecisionQueue> : null}
+      {review.length ? <DecisionQueue eyebrow={required.length ? "Then review" : "Decisions"} title={required.length ? "Everything else" : "Needs You"} count={review.length}>{review.map(renderDecision)}</DecisionQueue> : null}
 
       {!queue.length ? <CalmState title="Nothing needs your judgment right now." body="Approvals, ambiguity, release blockers and trustworthy learning decisions will appear here automatically." /> : null}
     </div>

@@ -12,6 +12,7 @@ import { requireStudioAdmin } from "@/lib/auth/studio";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { loadArtistOperatingSnapshot } from "@/lib/studio/artist-operating-snapshot";
 import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { decisionSeverityLabel } from "@/lib/studio/decision-language";
 import { needsYouTone } from "@/lib/studio/needs-you";
 import { formatOperatingDateTime } from "@/lib/studio/operating-preferences";
 
@@ -69,7 +70,7 @@ export default async function TodayPage() {
     || actionableNext?.rationale
     || (handsOff ? managerLead?.detail || strategy.humanIntervention : strategy.recommendedMission.rationale);
   const heroStatus = topDecision
-    ? (topDecision.severity === "required" ? "Required" : "Needs attention")
+    ? decisionSeverityLabel(topDecision.severity)
     : primaryMission
       ? primaryMission.label
       : actionableNext
@@ -172,7 +173,7 @@ export default async function TodayPage() {
                 <DecisionRow
                   href={href(item.href)}
                   key={item.id}
-                  meta={item.severity === "required" ? "Required" : item.category}
+                  meta={`${decisionSeverityLabel(item.severity)} · ${item.category}`}
                   title={item.title}
                   description={item.detail}
                   tone={decisionTone(needsYouTone(item))}
