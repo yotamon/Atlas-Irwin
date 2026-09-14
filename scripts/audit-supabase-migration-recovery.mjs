@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { pathToFileURL } from "node:url";
 import {
   fetchRemoteMigrations,
@@ -9,6 +10,10 @@ function normalizeMigration(migration) {
     version: String(migration.version),
     name: String(migration.name),
   };
+}
+
+function migrationId(migration) {
+  return `${migration.version}_${migration.name}`;
 }
 
 function groupBy(items, key) {
@@ -102,6 +107,46 @@ export function classifyMigrationRecovery(localInput, remoteInput) {
   };
 }
 
+export function validateRecoveryBaseline({ local, remote, result, baseline, projectRef }) {
+  const errors = [];
+  const expectedRemoteOnly = (baseline.expectedRemoteOnly ?? []).map(normalizeMigration).map(migrationId).sort();
+  const actualRemoteOnly = result.remoteOnly.map(migrationId).sort();
+  const expectedMissing = [...(baseline.genuineMissingSql ?? [])].map(String).sort();
+  const actualMissing = result.missingHistory.map(migrationId).sort();
+  const matchedRemoteNames = remote.length - result.remoteOnly.length;
+
+  if (baseline.projectRef && baseline.projectRef !== projectRef) {
+    errors.push(`Project ref changed: expected ${baseline.projectRef}, got ${projectRef}`);
+  }
+  if (Number(baseline.canonicalMigrationCount) !== local.length) {
+    errors.push(
+      `Canonical migration count changed: expected ${baseline.canonicalMigrationCount}, got ${local.length}`,
+    );
+  }
+  if (Number(baseline.remoteMigrationCount) !== remote.length) {
+    errors.push(
+      `Remote migration count changed: expected ${baseline.remoteMigrationCount}, got ${remote.length}`,
+    );
+  }
+  if (Number(baseline.matchedRemoteNames) !== matchedRemoteNames) {
+    errors.push(
+      `Matched remote-name count changed: expected ${baseline.matchedRemoteNames}, got ${matchedRemoteNames}`,
+    );
+  }
+  if (JSON.stringify(expectedRemoteOnly) !== JSON.stringify(actualRemoteOnly)) {
+    errors.push(
+      `Remote-only set changed: expected [${expectedRemoteOnly.join(", ")}], got [${actualRemoteOnly.join(", ")}]`,
+    );
+  }
+  if (JSON.stringify(expectedMissing) !== JSON.stringify(actualMissing)) {
+    errors.push(
+      `Missing-history set changed: expected [${expectedMissing.join(", ")}], got [${actualMissing.join(", ")}]`,
+    );
+  }
+
+  return errors;
+}
+
 function printHumanReadable(result) {
   console.log(`Exact canonical migrations: ${result.exact.length}`);
   console.log(`Tracking-only timestamp drift: ${result.trackingOnly.length}`);
@@ -153,11 +198,17 @@ function printHumanReadable(result) {
   }
 }
 
+function argValue(name) {
+  const index = process.argv.indexOf(name);
+  return index >= 0 ? process.argv[index + 1] : undefined;
+}
+
 async function run() {
   try {
+    const projectRef = process.env.SUPABASE_PROJECT_ID;
     const local = readLocalMigrations();
     const remote = await fetchRemoteMigrations({
-      projectRef: process.env.SUPABASE_PROJECT_ID,
+      projectRef,
       token: process.env.SUPABASE_ACCESS_TOKEN,
     });
     const result = classifyMigrationRecovery(local, remote);
@@ -168,8 +219,19 @@ async function run() {
       printHumanReadable(result);
     }
 
+    const errors = [];
     if (result.hasAmbiguity) {
-      console.error("::error::Migration recovery audit found ambiguous history. Do not repair or deploy.");
+      errors.push("Migration recovery audit found ambiguous history. Do not repair or deploy.");
+    }
+
+    const baselinePath = argValue("--expect-baseline");
+    if (baselinePath) {
+      const baseline = JSON.parse(fs.readFileSync(baselinePath, "utf8"));
+      errors.push(...validateRecoveryBaseline({ local, remote, result, baseline, projectRef }));
+    }
+
+    if (errors.length > 0) {
+      for (const error of errors) console.error(`::error::${error}`);
       process.exit(1);
     }
   } catch (error) {
