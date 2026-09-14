@@ -77,6 +77,19 @@ fn validate_mutation(mutation: &PortableProjectMutation) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn reconcile_manifest_recording_bindings(
+    db: &BridgeDb,
+    manifest: &ProjectManifest,
+) -> anyhow::Result<()> {
+    let recording_ids = manifest
+        .recordings
+        .iter()
+        .map(|recording| recording.id.clone())
+        .collect::<Vec<_>>();
+    db.reconcile_project_recording_bindings(&manifest.project_id, &recording_ids)?;
+    Ok(())
+}
+
 pub fn persist_project_mutation(
     db: &BridgeDb,
     mutation: PortableProjectMutation,
@@ -108,8 +121,10 @@ pub fn persist_project_mutation(
         .context("project revision overflow")?;
 
     // A command response can be lost after the manifest was durably replaced. Treat the exact
-    // next state as an idempotent retry rather than forcing the user to reopen the project.
+    // next state as an idempotent retry while also repairing device-local bookkeeping.
     if current == next_manifest && current.revision == expected_revision {
+        project::register_project(db, &package, &current)?;
+        reconcile_manifest_recording_bindings(db, &current)?;
         return Ok(current);
     }
 
@@ -125,6 +140,7 @@ pub fn persist_project_mutation(
 
     project::write_manifest(&package, &next_manifest)?;
     project::register_project(db, &package, &next_manifest)?;
+    reconcile_manifest_recording_bindings(db, &next_manifest)?;
     Ok(next_manifest)
 }
 
@@ -186,7 +202,7 @@ mod tests {
         let created_at = "2026-09-14T00:00:00.000Z";
         let mut mutation = title_mutation(&current.project_id, current.revision + 1, created_at);
         mutation.payload =
-            serde_json::json!({"title": "Renamed", "filePath": "/Users/example/private.wav"});
+            serde_json::json!({"title": "Renamed", "filePath": "/example/local.wav"});
         let mut next = current.clone();
         next.title = "Renamed".to_string();
         next.revision += 2;
