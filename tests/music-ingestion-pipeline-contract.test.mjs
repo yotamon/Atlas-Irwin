@@ -46,4 +46,4 @@ test("optional artist inputs remain explicit non-error states", async () => {
 
   assert.equal(reconciliation.includes("lower(t.title)"), false);
   assert.equal(reconciliation.includes("is_primary desc"), false);
-}
+});
