@@ -91,7 +91,7 @@ def assert_target_binary_architecture(path: Path, target_triple: str) -> None:
         )
 
 
-def build(target_triple: str) -> Path:
+def build(target_triple: str, ffmpeg_binary: Path | None = None) -> Path:
     assert_native_host(target_triple)
 
     renderer_dir = Path(__file__).resolve().parent
@@ -132,8 +132,14 @@ def build(target_triple: str) -> Path:
         "python_stretch",
         "--collect-all",
         "imageio_ffmpeg",
-        str(renderer_dir / "bridge_sidecar.py"),
     ]
+    if ffmpeg_binary is not None:
+        resolved_ffmpeg = ffmpeg_binary.resolve()
+        if not resolved_ffmpeg.is_file():
+            raise FileNotFoundError(f"native FFmpeg binary does not exist: {resolved_ffmpeg}")
+        assert_target_binary_architecture(resolved_ffmpeg, target_triple)
+        command.extend(["--add-binary", f"{resolved_ffmpeg}{os.pathsep}native-tools"])
+    command.append(str(renderer_dir / "bridge_sidecar.py"))
     subprocess.run(command, cwd=repo_root, check=True)
 
     extension = ".exe" if os.name == "nt" else ""
@@ -153,6 +159,14 @@ def build(target_triple: str) -> Path:
     for key, expected in EXPECTED_VERSIONS.items():
         if payload.get(key) != expected:
             raise RuntimeError(f"sidecar contract mismatch for {key}: {payload.get(key)!r}")
+
+    runtime_output = subprocess.check_output([str(target), "runtime-check", "--json"], text=True).strip()
+    runtime_payload = json.loads(runtime_output)
+    if runtime_payload.get("version") != "ensemblis.library-bridge.runtime-check.v1":
+        raise RuntimeError("sidecar runtime check returned an unsupported contract")
+    ffmpeg_version = str(runtime_payload.get("ffmpegVersion") or "")
+    if not ffmpeg_version.startswith("ffmpeg version "):
+        raise RuntimeError("sidecar runtime check could not execute FFmpeg")
     return target
 
 
@@ -160,6 +174,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Build or verify an Ensemblis native binary for Tauri packaging")
     parser.add_argument("--target-triple", default=None)
     parser.add_argument("--verify-binary", type=Path, default=None)
+    parser.add_argument("--ffmpeg-binary", type=Path, default=None)
     args = parser.parse_args()
     target_triple = args.target_triple or host_triple()
 
@@ -168,7 +183,7 @@ def main() -> int:
         print(args.verify_binary)
         return 0
 
-    target = build(target_triple)
+    target = build(target_triple, args.ffmpeg_binary)
     print(target)
     return 0
 
