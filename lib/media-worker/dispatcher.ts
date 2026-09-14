@@ -2,6 +2,7 @@ import "server-only";
 
 import { dispatchMediaWorkerJob as dispatchVercelSandboxJob } from "@/lib/media-worker/sandbox";
 import { mediaWorkerProcessorId, withMediaWorkerContractVersion } from "@/lib/media-worker/contract";
+import { persistedMediaWorkerEntitlements } from "@/lib/media-worker/job-authorization";
 import {
   childExecutionContext,
   EXECUTION_TRACE_QUERY,
@@ -87,12 +88,22 @@ function authorizeCloudExecution(
   return { task, decision };
 }
 
+async function executionAuthorization(
+  input: MediaWorkerDispatchInput,
+  authorization?: MediaWorkerExecutionAuthorization,
+): Promise<MediaWorkerExecutionAuthorization> {
+  if (authorization) return authorization;
+  return {
+    entitlements: await persistedMediaWorkerEntitlements(input.jobType, input.jobId),
+  };
+}
+
 export async function dispatchMediaWorkerJob(
   input: MediaWorkerDispatchInput,
-  authorization: MediaWorkerExecutionAuthorization,
+  authorization?: MediaWorkerExecutionAuthorization,
 ) {
   const dispatcher = getMediaWorkerDispatcher();
-  const routed = authorizeCloudExecution(input, authorization);
+  const routed = authorizeCloudExecution(input, await executionAuthorization(input, authorization));
   const context = childExecutionContext({
     jobId: input.jobId,
     provider: dispatcher.name,
