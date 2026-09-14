@@ -113,4 +113,8 @@ pub struct BridgeStatus {
     pub sources: usize,
     pub pending_sync_batches: usize,
     pub local_intelligence_available: bool,
+    pub entitlement_mode: String,
+    pub capabilities: Vec<String>,
+    pub license_kind: Option<String>,
+    pub license_major_version: Option<u32>,
 }
