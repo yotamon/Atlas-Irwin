@@ -4,6 +4,7 @@ import {
   MEDIA_WORKER_CALLBACK_HASH_KEY,
   scheduleMediaWorkerSandboxCleanup,
 } from "@/lib/media-worker/sandbox";
+import { reconcileCanonicalTrackIntelligence } from "@/lib/music-intelligence/reconcile-canonical-track";
 import { sanitizeMusicIntelligenceMap } from "@/lib/music-intelligence/sanitize";
 import { createServiceClient } from "@/lib/supabase/service";
 import { asGrowthClient } from "@/lib/studio/growth-db";
@@ -52,6 +53,22 @@ function json(value: unknown) {
 }
 function scheduleCleanup() {
   after(scheduleMediaWorkerSandboxCleanup());
+}
+function scheduleCanonicalFollowUp(trackId: string, ownerId: string) {
+  after(async () => {
+    try {
+      await reconcileCanonicalTrackIntelligence({
+        client: createServiceClient(),
+        trackId,
+        expectedOwnerId: ownerId,
+      });
+    } catch (error) {
+      console.error("[music-ingestion] canonical follow-up failed", {
+        trackId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
 }
 
 function topHook(musicMap: Record<string, unknown>) {
@@ -244,6 +261,7 @@ export async function POST(request: Request) {
     }),
   }).eq("id", track.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (track.linked_track_id) scheduleCanonicalFollowUp(track.linked_track_id, track.owner_id);
   scheduleCleanup();
   return NextResponse.json({ ok: true });
 }
