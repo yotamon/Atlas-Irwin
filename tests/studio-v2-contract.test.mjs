@@ -203,8 +203,9 @@ test("release workspace is one Mission object with tracks visible before release
   assert.ok(workspace.includes("/studio/video?release="));
   assert.ok(workspace.includes("Release Mission"));
   assert.ok(workspace.includes("deriveReleaseMission"));
-  assert.ok(mission.includes('label: "Blocked"'));
-  assert.ok(mission.includes('label: "On track"'));
+  assert.ok(mission.includes('missionStateLabel("blocked")'));
+  assert.ok(mission.includes('missionStateLabel("on_track")'));
+  assert.equal(mission.includes('label: "Blocked"'), false, "Release Mission must use the shared state language helper");
   assert.equal(workspace.includes("Workflow readiness"), false);
 });
 
