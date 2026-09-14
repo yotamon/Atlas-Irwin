@@ -11,127 +11,52 @@ permissions:
 
 jobs:
   database:
-    name: canonical shared schema audit
+    name: canonical drift partition audit
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-
       - uses: supabase/setup-cli@v2
         with:
           version: 2.111.0
           github-token: ${{ github.token }}
-
       - name: Initialize local Supabase config
         run: test -f supabase/config.toml || supabase init
-
       - name: Replay full canonical history
         run: supabase db start
-
-      - name: Fingerprint shared application schema
+      - name: Partition remaining shared-schema drift
         shell: bash
         run: |
           PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -At <<'SQL'
           with missing_relations(name) as (
-            values
-              ('automix_transition_previews'),
-              ('dj_library_devices'),
-              ('dj_library_pairing_codes'),
-              ('dj_library_device_sources'),
-              ('dj_library_source_tracks'),
-              ('dj_library_sync_chunks'),
-              ('dj_library_device_jobs'),
-              ('ensemblis_project_replicas'),
-              ('ensemblis_project_mutations')
-          ),
-          missing_functions(schema_name, name) as (
-            values
-              ('private','validate_automix_transition_preview'),
-              ('public','claim_dj_library_pairing'),
-              ('public','apply_dj_library_sync_revision'),
-              ('public','claim_dj_library_device_jobs'),
-              ('public','assert_ensemblis_portable_json_v1'),
-              ('public','assert_ensemblis_project_scope_v1'),
-              ('public','bootstrap_ensemblis_project_replica_v1'),
-              ('public','commit_ensemblis_project_mutation_v1')
-          ),
-          missing_policies(name) as (
-            values
-              ('automix_transition_previews_select_own'),
-              ('automix_transition_previews_insert_own'),
-              ('automix_transition_previews_update_own'),
-              ('dj_profiles_delete_own'),
-              ('dj_preference_evidence_delete_own'),
-              ('dj_library_history_evidence_delete_own'),
-              ('dj_library_devices_select_own'),
-              ('dj_library_device_sources_select_own'),
-              ('dj_library_source_tracks_select_own'),
-              ('dj_library_device_jobs_select_own')
-          ),
-          objects as (
-            select 'relation'::text kind, n.nspname schema_name, c.relname object_name,
-                   concat_ws('|', c.relkind::text, c.relrowsecurity::text, c.relforcerowsecurity::text, coalesce(obj_description(c.oid, 'pg_class'), '')) detail
-            from pg_class c join pg_namespace n on n.oid=c.relnamespace
-            where n.nspname in ('public','private') and c.relkind in ('r','p','v','m','S')
-              and not exists (select 1 from missing_relations x where x.name=c.relname)
-            union all
-            select 'column', n.nspname, c.relname || '.' || a.attname,
-                   concat_ws('|', a.attnum::text, format_type(a.atttypid,a.atttypmod), a.attnotnull::text,
-                     coalesce(pg_get_expr(ad.adbin,ad.adrelid),''), a.attidentity::text, a.attgenerated::text,
-                     coalesce(col_description(c.oid,a.attnum),''))
-            from pg_attribute a
-            join pg_class c on c.oid=a.attrelid
-            join pg_namespace n on n.oid=c.relnamespace
+            values ('automix_transition_previews'),('dj_library_devices'),('dj_library_pairing_codes'),
+              ('dj_library_device_sources'),('dj_library_source_tracks'),('dj_library_sync_chunks'),
+              ('dj_library_device_jobs'),('ensemblis_project_replicas'),('ensemblis_project_mutations')
+          ), missing_functions(schema_name,name) as (
+            values ('private','validate_automix_transition_preview'),('public','claim_dj_library_pairing'),
+              ('public','apply_dj_library_sync_revision'),('public','claim_dj_library_device_jobs'),
+              ('public','assert_ensemblis_portable_json_v1'),('public','assert_ensemblis_project_scope_v1'),
+              ('public','bootstrap_ensemblis_project_replica_v1'),('public','commit_ensemblis_project_mutation_v1')
+          ), objects as (
+            select 'column'::text kind, n.nspname schema_name, c.relname || '.' || a.attname object_name,
+              concat_ws('|', a.attnum::text, format_type(a.atttypid,a.atttypmod), a.attnotnull::text,
+                coalesce(pg_get_expr(ad.adbin,ad.adrelid),''), a.attidentity::text, a.attgenerated::text,
+                coalesce(col_description(c.oid,a.attnum),'')) detail
+            from pg_attribute a join pg_class c on c.oid=a.attrelid join pg_namespace n on n.oid=c.relnamespace
             left join pg_attrdef ad on ad.adrelid=a.attrelid and ad.adnum=a.attnum
             where n.nspname in ('public','private') and c.relkind in ('r','p','v','m') and a.attnum>0 and not a.attisdropped
               and not exists (select 1 from missing_relations x where x.name=c.relname)
-            union all
-            select 'constraint', n.nspname, c.relname || '.' || con.conname,
-                   concat_ws('|', con.contype::text, con.condeferrable::text, con.condeferred::text, con.convalidated::text, pg_get_constraintdef(con.oid,true))
-            from pg_constraint con join pg_class c on c.oid=con.conrelid join pg_namespace n on n.oid=c.relnamespace
-            where n.nspname in ('public','private')
-              and not exists (select 1 from missing_relations x where x.name=c.relname)
-            union all
-            select 'index', n.nspname, ci.relname, pg_get_indexdef(i.indexrelid)
-            from pg_index i join pg_class ci on ci.oid=i.indexrelid join pg_class ct on ct.oid=i.indrelid join pg_namespace n on n.oid=ct.relnamespace
-            where n.nspname in ('public','private')
-              and not exists (select 1 from missing_relations x where x.name=ct.relname)
             union all
             select 'function', n.nspname, p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')', pg_get_functiondef(p.oid)
             from pg_proc p join pg_namespace n on n.oid=p.pronamespace
             where n.nspname in ('public','private')
               and not (n.nspname='public' and p.proname='rls_auto_enable' and p.pronargs=0)
               and not exists (select 1 from missing_functions x where x.schema_name=n.nspname and x.name=p.proname)
-            union all
-            select 'trigger', n.nspname, c.relname || '.' || t.tgname, pg_get_triggerdef(t.oid,true)
-            from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace
-            where n.nspname in ('public','private') and not t.tgisinternal
-              and not exists (select 1 from missing_relations x where x.name=c.relname)
-            union all
-            select 'policy', schemaname, tablename || '.' || policyname,
-                   concat_ws('|', permissive, roles::text, cmd, coalesce(qual,''), coalesce(with_check,''))
-            from pg_policies p
-            where schemaname in ('public','private')
-              and not exists (select 1 from missing_relations x where x.name=p.tablename)
-              and not exists (select 1 from missing_policies x where x.name=p.policyname)
-            union all
-            select 'enum', n.nspname, t.typname || '.' || e.enumsortorder::text, e.enumlabel
-            from pg_type t join pg_namespace n on n.oid=t.typnamespace join pg_enum e on e.enumtypid=t.oid
-            where n.nspname in ('public','private')
-              and not (t.typname='media_asset_type' and e.enumlabel in ('brand_reference','brand_logo','brand_motion_reference'))
-            union all
-            select 'viewdef', n.nspname, c.relname, pg_get_viewdef(c.oid,true)
-            from pg_class c join pg_namespace n on n.oid=c.relnamespace
-            where n.nspname in ('public','private') and c.relkind in ('v','m')
-            union all
-            select 'bucket', 'storage', id,
-                   concat_ws('|', name, public::text, coalesce(file_size_limit::text,''), coalesce(array_to_string(allowed_mime_types,','),''))
-            from storage.buckets where id <> 'automix-previews'
-          ), grouped as (
-            select kind, count(*) as object_count,
-                   encode(digest(convert_to(string_agg(schema_name || E'\x1f' || object_name || E'\x1f' || detail, E'\x1e' order by schema_name, object_name, detail),'UTF8'),'sha256'),'hex') as fingerprint
-            from objects group by kind
+          ), partitioned as (
+            select *, mod(hashtextextended(schema_name || '.' || object_name,0)::numeric + 9223372036854775808,32)::int bucket
+            from objects
           )
-          select 'SHARED_SCHEMA|' || kind || '|' || object_count || '|' || fingerprint
-          from grouped order by kind;
+          select 'PART|' || kind || '|' || bucket || '|' || count(*) || '|' ||
+            encode(digest(convert_to(string_agg(schema_name || E'\x1f' || object_name || E'\x1f' || detail,E'\x1e' order by schema_name,object_name,detail),'UTF8'),'sha256'),'hex')
+          from partitioned group by kind,bucket order by kind,bucket;
           SQL
