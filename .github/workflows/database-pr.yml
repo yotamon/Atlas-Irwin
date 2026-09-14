@@ -45,6 +45,17 @@ jobs:
       - name: Replay every migration on a clean database
         run: supabase db start
 
+      - name: Emit canonical migration statement fingerprints
+        shell: bash
+        run: |
+          PGPASSWORD=postgres psql \
+            -h 127.0.0.1 \
+            -p 54322 \
+            -U postgres \
+            -d postgres \
+            -At \
+            -c "select 'MIGRATION_FINGERPRINT|' || name || '|' || version || '|' || encode(digest(convert_to(array_to_string(statements, E'\\x1f'), 'UTF8'), 'sha256'), 'hex') || '|' || cardinality(statements) from supabase_migrations.schema_migrations order by name;"
+
       - name: Lint Postgres functions
         run: supabase db lint --local --level error --fail-on error
 
