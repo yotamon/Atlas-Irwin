@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   database:
-    name: canonical function body drift audit
+    name: canonical lexical function audit
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -24,7 +24,7 @@ jobs:
         run: test -f supabase/config.toml || supabase init
       - name: Replay full canonical history
         run: supabase db start
-      - name: Partition normalized function body drift
+      - name: Compare function tokens and exact string literals
         shell: bash
         run: |
           PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -At <<'SQL'
@@ -36,19 +36,22 @@ jobs:
           ), functions as (
             select n.nspname schema_name,
               p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' object_name,
-              regexp_replace(trim(p.prosrc), E'\\s+', ' ', 'g') normalized_source
+              regexp_replace(p.prosrc, E'\\s+', '', 'g') no_ws_source,
+              coalesce((
+                select string_agg((m)[1], E'\x1e' order by ord)
+                from regexp_matches(p.prosrc, $re$('(?:''|[^'])*')$re$, 'g') with ordinality as x(m,ord)
+              ), '') exact_strings
             from pg_proc p
             join pg_namespace n on n.oid=p.pronamespace
             where n.nspname in ('public','private')
               and not (n.nspname='public' and p.proname='rls_auto_enable' and p.pronargs=0)
               and not exists (select 1 from missing_functions x where x.schema_name=n.nspname and x.name=p.proname)
-          ), partitioned as (
-            select *, mod(hashtextextended(schema_name || '.' || object_name,0)::numeric + 9223372036854775808,32)::int bucket
-            from functions
           )
-          select 'BODY_PART|' || bucket || '|' || count(*) || '|' ||
-            encode(digest(convert_to(string_agg(schema_name || E'\x1f' || object_name || E'\x1f' || normalized_source,E'\x1e' order by schema_name,object_name,normalized_source),'UTF8'),'sha256'),'hex')
-          from partitioned
-          group by bucket
-          order by bucket;
+          select 'BODY_NOWS|' || count(*) || '|' ||
+            encode(digest(convert_to(string_agg(schema_name || E'\x1f' || object_name || E'\x1f' || no_ws_source,E'\x1e' order by schema_name,object_name,no_ws_source),'UTF8'),'sha256'),'hex')
+          from functions
+          union all
+          select 'STRING_LITERALS|' || count(*) || '|' ||
+            encode(digest(convert_to(string_agg(schema_name || E'\x1f' || object_name || E'\x1f' || exact_strings,E'\x1e' order by schema_name,object_name,exact_strings),'UTF8'),'sha256'),'hex')
+          from functions;
           SQL
