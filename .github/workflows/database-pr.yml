@@ -8,6 +8,7 @@ on:
       - "supabase/tests/**"
       - "scripts/validate-migration-history.mjs"
       - "scripts/check-supabase-migration-parity.mjs"
+      - "scripts/audit-supabase-migration-recovery.mjs"
       - "tests/migration-history-guard.test.mjs"
       - ".github/workflows/database-pr.yml"
 
