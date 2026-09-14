@@ -2,16 +2,34 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
-from bridge_analyzer import ANALYSIS_PAYLOAD_VERSION, ANALYZER_VERSION, analyze
-from bridge_renderer import PROTOCOL_VERSION as RENDERER_VERSION, execute as render
+
+def _configure_packaged_ffmpeg() -> None:
+    bundle_root = getattr(sys, "_MEIPASS", None)
+    if not bundle_root:
+        return
+    executable = "ffmpeg.exe" if sys.platform.startswith("win") else "ffmpeg"
+    candidate = Path(bundle_root) / "native-tools" / executable
+    if candidate.is_file():
+        os.environ["IMAGEIO_FFMPEG_EXE"] = str(candidate)
+
+
+_configure_packaged_ffmpeg()
+
+import imageio_ffmpeg  # noqa: E402
+
+from bridge_analyzer import ANALYSIS_PAYLOAD_VERSION, ANALYZER_VERSION, analyze  # noqa: E402
+from bridge_renderer import PROTOCOL_VERSION as RENDERER_VERSION, execute as render  # noqa: E402
 
 SIDECAR_VERSION = "ensemblis.library-bridge.sidecar.v1"
 ANALYSIS_BATCH_VERSION = "ensemblis.library-bridge.analysis-batch.v1"
+RUNTIME_CHECK_VERSION = "ensemblis.library-bridge.runtime-check.v1"
 MAX_ANALYSIS_BATCH = 8
 MAX_BATCH_REQUEST_BYTES = 512 * 1024
 _FINGERPRINT_RE = re.compile(r"^sha256:[a-f0-9]{64}$")
@@ -67,6 +85,24 @@ def _analyze_batch(request_path: Path, result_path: Path) -> None:
     result_path.write_text(json.dumps(output, separators=(",", ":")), encoding="utf-8")
 
 
+def _runtime_check() -> dict[str, str]:
+    executable = imageio_ffmpeg.get_ffmpeg_exe()
+    process = subprocess.run(
+        [executable, "-version"],
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    first_line = (process.stdout or "").splitlines()[0].strip() if process.stdout else ""
+    if not first_line.startswith("ffmpeg version "):
+        raise RuntimeError("FFmpeg runtime did not return a recognizable version")
+    return {
+        "version": RUNTIME_CHECK_VERSION,
+        "ffmpegVersion": first_line[:512],
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Ensemblis Library Bridge local intelligence sidecar")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -86,6 +122,9 @@ def main() -> int:
 
     version = subparsers.add_parser("version")
     version.add_argument("--json", action="store_true")
+
+    runtime_check = subparsers.add_parser("runtime-check")
+    runtime_check.add_argument("--json", action="store_true")
 
     args = parser.parse_args()
     try:
@@ -108,6 +147,10 @@ def main() -> int:
                 "rendererVersion": RENDERER_VERSION,
             }
             print(json.dumps(payload, separators=(",", ":")) if args.json else SIDECAR_VERSION)
+            return 0
+        if args.command == "runtime-check":
+            payload = _runtime_check()
+            print(json.dumps(payload, separators=(",", ":")) if args.json else payload["ffmpegVersion"])
             return 0
         raise ValueError("unsupported sidecar command")
     except Exception as exc:
