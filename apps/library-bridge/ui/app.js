@@ -21,10 +21,6 @@ const setLog = (value) => {
   log.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
 };
 
-function escapeText(value) {
-  return String(value ?? "");
-}
-
 function metadataValue(metadata, key, fallback) {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return fallback;
   const value = metadata[key];
@@ -148,9 +144,14 @@ function renderModels(models) {
     install.className = "primary";
     install.textContent = "Install / verify";
     install.addEventListener("click", () => {
-      void run(`Installing ${descriptor.id}`, async () => {
-        const result = await invoke("choose_and_install_model", { descriptor });
-        return result ?? "Model installation cancelled.";
+      void run(`Installing ${descriptor.id}`, () => invoke("install_model", { descriptor }));
+    });
+    const importArtifact = document.createElement("button");
+    importArtifact.textContent = "Import artifact";
+    importArtifact.addEventListener("click", () => {
+      void run(`Importing ${descriptor.id}`, async () => {
+        const result = await invoke("choose_and_import_model", { descriptor });
+        return result ?? "Model import cancelled.";
       });
     });
     const remove = document.createElement("button");
@@ -158,7 +159,7 @@ function renderModels(models) {
     remove.addEventListener("click", () => {
       void run(`Removing ${descriptor.id}`, () => invoke("uninstall_model", { id: descriptor.id, version: descriptor.version }));
     });
-    actions.append(install, remove);
+    actions.append(install, importArtifact, remove);
     card.append(heading, description, meta, actions);
     modelsRoot.append(card);
   }
