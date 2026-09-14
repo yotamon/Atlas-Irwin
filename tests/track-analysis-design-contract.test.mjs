@@ -33,7 +33,7 @@ test("active analysis is automatic and recovery remains explicit", async () => {
   assert.match(source, /AnalysisAutoRefresh active=\{analysis\.isActive\}/);
   assert.match(source, /analysisNeedsRecovery\s*\? <Link className="button primary" href="#analysis-recovery">Retry intelligence<\/Link>/);
   assert.match(source, /analysis\.isActive \? \(/);
-  assert.match(source, /Nothing to fill in manually/);
-  assert.match(source, /You do not need to start or babysit anything/);
-  assert.match(source, /canonical master and any verified results remain untouched/);
+  assert.match(source, /Normal ingestion is automatic/);
+  assert.match(source, /Start a fresh Track Intelligence pass here only when you intentionally want to refresh or repair the current result/);
+  assert.match(source, /The canonical master and any verified results remain untouched until a new full result succeeds/);
 });
