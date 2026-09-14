@@ -39,7 +39,7 @@ pub struct InstalledModel {
     pub size_bytes: u64,
 }
 
-fn safe_segment(value: &str, field: &str) -> anyhow::Result<&str> {
+fn safe_segment<'a>(value: &'a str, field: &str) -> anyhow::Result<&'a str> {
     if value.is_empty()
         || value.len() > 120
         || !value.chars().all(|character| {
