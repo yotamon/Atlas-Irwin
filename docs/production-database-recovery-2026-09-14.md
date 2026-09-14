@@ -36,7 +36,7 @@ All 186 existing application function contracts matched. Apparent function-body 
 
 ## Genuine missing canonical SQL
 
-Nine canonical migrations are genuinely absent from production. They must not be marked applied before their SQL has executed successfully.
+Nine canonical migrations are genuinely absent from production. This conclusion comes from the schema/readback audit, not from migration history alone. They must not be marked applied before their SQL has executed successfully.
 
 | Order | Canonical migration | Classification | Dependency notes |
 | ---: | --- | --- | --- |
@@ -79,7 +79,9 @@ Do not maintain a handwritten timestamp-repair list. Immediately before cutover 
 node scripts/audit-supabase-migration-recovery.mjs
 ```
 
-The script reads canonical filenames and live Supabase Management API history, then prints every `TRACKING <remote> -> <canonical>` pair. It fails closed on duplicate logical names, duplicate versions, or same-version/different-name collisions.
+The script reads canonical filenames and live Supabase Management API history, then prints every `TRACKING <remote> -> <canonical>` pair. It separately reports `MISSING_HISTORY` entries and remote-only entries. It fails closed on duplicate logical names, duplicate versions, or same-version/different-name collisions.
+
+A `MISSING_HISTORY` result does not prove that migration SQL is missing. The current nine-file SQL gap was established separately through schema readback.
 
 `migration repair` changes only `supabase_migrations.schema_migrations`; it does not execute or undo schema SQL. Therefore a timestamp may be repaired only after the schema audit has established that the logical migration's effect is already present.
 
@@ -103,7 +105,7 @@ canonical migrations     145
 production history       137
 name-matched production  136
 production-only records    1
-missing canonical SQL      9
+genuine SQL gaps            9
 ```
 
 If the live shape differs, stop and re-audit. Do not adapt repair commands on the fly.
@@ -137,7 +139,7 @@ After tracking canonicalization, the recovery audit must show:
 
 - no tracking-only timestamp drift;
 - no remote-only migrations;
-- exactly the nine `MISSING` migrations listed above;
+- exactly the nine `MISSING_HISTORY` migrations listed above;
 - no ambiguity or version collision.
 
 Then preview the supported Supabase recovery push:
