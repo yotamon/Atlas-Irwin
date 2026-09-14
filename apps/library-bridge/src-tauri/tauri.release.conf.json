@@ -2,6 +2,9 @@
   "bundle": {
     "externalBin": [
       "binaries/ensemblis-bridge-sidecar"
-    ]
+    ],
+    "resources": {
+      "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md"
+    }
   }
 }
