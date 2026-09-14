@@ -307,9 +307,15 @@ mod tests {
 
     #[test]
     fn model_url_policy_requires_https_without_credentials() {
-        assert!(safe_https_url(&Url::parse("https://models.example/artifact.bin").unwrap()));
-        assert!(!safe_https_url(&Url::parse("http://models.example/artifact.bin").unwrap()));
-        assert!(!safe_https_url(&Url::parse("https://user:secret@models.example/artifact.bin").unwrap()));
+        assert!(safe_https_url(
+            &Url::parse("https://models.example/artifact.bin").unwrap()
+        ));
+        assert!(!safe_https_url(
+            &Url::parse("http://models.example/artifact.bin").unwrap()
+        ));
+        assert!(!safe_https_url(
+            &Url::parse("https://user:secret@models.example/artifact.bin").unwrap()
+        ));
     }
 
     #[test]
