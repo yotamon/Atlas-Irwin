@@ -161,4 +161,23 @@ from public.dj_library_devices
 where revoked_at is null
 on conflict (owner_id, major_version) do nothing;
 
+-- Cloud compute becomes capability-gated at the same time as this migration. Owners with existing
+-- cloud workloads receive a short migration window so queued/current product flows are not cut off
+-- abruptly. Commercial/account provisioning must create or renew explicit grants after this window.
+insert into public.ensemblis_capability_grants(owner_id, capability, expires_at)
+select owner_id, 'cloud.compute', now() + interval '30 days'
+from (
+  select distinct owner_id from public.music_video_worker_jobs where owner_id is not null
+  union
+  select distinct owner_id from public.track_stem_jobs where owner_id is not null
+  union
+  select distinct owner_id from public.track_vault where owner_id is not null
+) existing_cloud_owners
+on conflict (owner_id, capability) do update
+set expires_at = case
+  when public.ensemblis_capability_grants.expires_at is null then null
+  else greatest(public.ensemblis_capability_grants.expires_at, excluded.expires_at)
+end,
+updated_at = now();
+
 commit;
