@@ -116,14 +116,10 @@ pub fn verify_token(
     let signature = Signature::from_slice(&signature_bytes)
         .context("signed entitlement signature length is invalid")?;
     verifier
-        .verify(
-            format!("{}.{}", parts[0], parts[1]).as_bytes(),
-            &signature,
-        )
+        .verify(format!("{}.{}", parts[0], parts[1]).as_bytes(), &signature)
         .context("signed entitlement signature verification failed")?;
     let claims: SignedEntitlementClaims = serde_json::from_slice(&payload_bytes)?;
-    if claims.version != SIGNED_ENTITLEMENT_CLAIMS_VERSION
-        || claims.device_id != expected_device_id
+    if claims.version != SIGNED_ENTITLEMENT_CLAIMS_VERSION || claims.device_id != expected_device_id
     {
         anyhow::bail!("signed entitlement identity is invalid");
     }
