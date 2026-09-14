@@ -2,6 +2,8 @@
 
 Ensemblis / Atlas Irwin production is deployed from the `main` branch of `yotamon/Atlas-Irwin` through the Vercel project `atlas-irwin` in the CartShift team.
 
+Database delivery is a separate production concern. The Supabase migration safety contract, current cutover state, and recovery procedure live in [`docs/production-database-migrations.md`](./production-database-migrations.md).
+
 ## Source of truth
 
 - Git repository: `yotamon/Atlas-Irwin`

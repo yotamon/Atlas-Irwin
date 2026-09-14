@@ -6,6 +6,9 @@ on:
     paths:
       - "supabase/migrations/**"
       - "supabase/tests/**"
+      - "scripts/validate-migration-history.mjs"
+      - "scripts/check-supabase-migration-parity.mjs"
+      - "tests/migration-history-guard.test.mjs"
       - ".github/workflows/database-pr.yml"
 
 concurrency:
@@ -22,6 +25,14 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Test migration history guards
+        run: node --test tests/migration-history-guard.test.mjs
+
+      - name: Enforce append-only canonical migration history
+        run: node scripts/validate-migration-history.mjs --base-ref "origin/${{ github.base_ref }}"
 
       - uses: supabase/setup-cli@v2
         with:
