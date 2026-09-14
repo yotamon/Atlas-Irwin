@@ -140,9 +140,12 @@ test("release validation includes fully native Windows ARM64 audio runtime", asy
   }
 
   assert.ok(armVerifier.includes("EXPECTED_PE_MACHINE = 0xAA64"));
-  assert.ok(armVerifier.includes('(\"*.pyd\", \"*.dll\", \"*.exe\")'));
+  assert.ok(armVerifier.includes('NATIVE_RUNTIME_SUFFIXES = {".pyd", ".dll"}'));
+  assert.ok(armVerifier.includes("def _dependency_closure"));
+  assert.ok(armVerifier.includes("distribution.locate_file(relative)"));
   assert.ok(armVerifier.includes('machine != "aarch64"'));
-  assert.ok(armVerifier.includes("non-ARM64 binaries detected in Python environment"));
+  assert.ok(armVerifier.includes("non-ARM64 binaries detected in Python runtime dependencies"));
+  assert.equal(armVerifier.includes('".exe"'), false, "generic packaging executables must not be treated as runtime extension dependencies");
 
   assert.ok(sidecarBuilder.includes('"aarch64-pc-windows-msvc": 0xAA64'));
   assert.ok(sidecarBuilder.includes("assert_native_host(target_triple)"));
