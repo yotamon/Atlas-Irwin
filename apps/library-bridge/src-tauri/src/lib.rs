@@ -374,7 +374,8 @@ async fn begin_browser_pairing(
         api_base_url.trim().to_string()
     };
     let public_id = public_device_id(&state.db).map_err(command_error)?;
-    let (listener, callback_url) = browser_pairing::bind_callback_listener().map_err(command_error)?;
+    let (listener, callback_url) =
+        browser_pairing::bind_callback_listener().map_err(command_error)?;
     let browser_state = Uuid::new_v4().to_string();
     let target = browser_pairing::connect_url(&api_base_url, &callback_url, &browser_state)
         .map_err(command_error)?;
@@ -707,18 +708,20 @@ fn start_background_maintenance(
 ) -> std::io::Result<()> {
     std::thread::Builder::new()
         .name("ensemblis-background-maintenance".to_string())
-        .spawn(move || loop {
-            if device_credential().ok().flatten().is_some()
-                && let Ok(_guard) = maintenance_lock.lock()
-            {
-                let _ = sync_pending_blocking(&db);
-                let _ = network::poll_and_execute_jobs(
-                    &db,
-                    sidecar_binary.as_deref(),
-                    &sidecar_work_root,
-                );
+        .spawn(move || {
+            loop {
+                if device_credential().ok().flatten().is_some()
+                    && let Ok(_guard) = maintenance_lock.lock()
+                {
+                    let _ = sync_pending_blocking(&db);
+                    let _ = network::poll_and_execute_jobs(
+                        &db,
+                        sidecar_binary.as_deref(),
+                        &sidecar_work_root,
+                    );
+                }
+                std::thread::sleep(BACKGROUND_MAINTENANCE_INTERVAL);
             }
-            std::thread::sleep(BACKGROUND_MAINTENANCE_INTERVAL);
         })?;
     Ok(())
 }
