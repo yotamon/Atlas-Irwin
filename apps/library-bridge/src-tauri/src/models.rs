@@ -300,3 +300,22 @@ pub fn uninstall_model(root: &Path, id: &str, version: &str) -> anyhow::Result<b
     fs::remove_dir_all(directory)?;
     Ok(true)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn model_url_policy_requires_https_without_credentials() {
+        assert!(safe_https_url(&Url::parse("https://models.example/artifact.bin").unwrap()));
+        assert!(!safe_https_url(&Url::parse("http://models.example/artifact.bin").unwrap()));
+        assert!(!safe_https_url(&Url::parse("https://user:secret@models.example/artifact.bin").unwrap()));
+    }
+
+    #[test]
+    fn model_path_segments_reject_traversal() {
+        assert!(safe_segment("atlas-ti", "id").is_ok());
+        assert!(safe_segment("../private", "id").is_err());
+        assert!(safe_segment("model/version", "version").is_err());
+    }
+}
