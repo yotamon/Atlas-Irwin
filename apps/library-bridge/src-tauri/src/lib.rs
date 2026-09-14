@@ -14,6 +14,7 @@ mod network;
 mod privacy;
 mod project;
 mod project_mutation;
+mod runtime_task;
 mod scanner;
 mod sidecar;
 mod watcher;
@@ -29,6 +30,7 @@ use crate::{
     models::{InstalledModel, ModelDescriptor},
     project::{ProjectManifest, ProjectRecording},
     project_mutation::PortableProjectMutation,
+    runtime_task::{LocalRuntimeTaskResult, RuntimeTask},
     watcher::LibraryWatcher,
 };
 use std::{path::PathBuf, sync::Arc};
@@ -67,7 +69,10 @@ fn bridge_status(state: State<'_, BridgeState>) -> Result<BridgeStatus, String> 
         .sidecar_binary
         .as_deref()
         .is_some_and(|binary| binary.is_file())
-        && entitlement.capabilities.iter().any(|value| value == "local.processing");
+        && entitlement
+            .capabilities
+            .iter()
+            .any(|value| value == "local.processing");
     Ok(BridgeStatus {
         paired: device_id.is_some() && device_credential().map_err(command_error)?.is_some(),
         device_id,
@@ -271,6 +276,44 @@ async fn choose_and_prepare_project_recording(
     let recording_id = format!("rec_{}", Uuid::new_v4());
     tauri::async_runtime::spawn_blocking(move || {
         project::prepare_recording_binding(&db, &project_id, &recording_id, &source)
+    })
+    .await
+    .map_err(command_error)?
+    .map(Some)
+    .map_err(command_error)
+}
+
+#[tauri::command]
+async fn choose_and_execute_local_runtime_task(
+    app: tauri::AppHandle,
+    state: State<'_, BridgeState>,
+    task: RuntimeTask,
+) -> Result<Option<LocalRuntimeTaskResult>, String> {
+    if !local_processing_enabled(&state.db) {
+        return Err("This device is not entitled to local processing.".to_string());
+    }
+    let sidecar_binary = state
+        .sidecar_binary
+        .clone()
+        .filter(|binary| binary.is_file())
+        .ok_or_else(|| "The local analysis runtime is unavailable.".to_string())?;
+    let source = app
+        .dialog()
+        .file()
+        .set_title("Choose the recording bytes for this local analysis")
+        .blocking_pick_file();
+    let Some(source) = source else { return Ok(None) };
+    let source = source.into_path().map_err(command_error)?;
+    let db = Arc::clone(&state.db);
+    let work_root = state.sidecar_work_root.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        runtime_task::execute_track_planning_task(
+            &db,
+            &sidecar_binary,
+            &work_root,
+            &source,
+            &task,
+        )
     })
     .await
     .map_err(command_error)?
@@ -519,6 +562,7 @@ pub fn run() {
             open_local_project,
             save_local_project_mutation,
             choose_and_prepare_project_recording,
+            choose_and_execute_local_runtime_task,
             pair_device,
             import_desktop_license,
             get_execution_policy,
