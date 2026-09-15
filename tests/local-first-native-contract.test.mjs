@@ -99,7 +99,8 @@ test("analysis payload schema is strict and versioned", async () => {
 });
 
 test("release validation includes fully native Windows ARM64 audio runtime", async () => {
-  const [workflow, sidecarBuilder, ffmpegBuilder, sidecar, armRequirements, armVerifier] = await Promise.all([
+  const [workflow, prWorkflow, sidecarBuilder, ffmpegBuilder, sidecar, armRequirements, armVerifier] = await Promise.all([
+    source(".github/workflows/library-bridge-release.yml"),
     source(".github/workflows/library-bridge-ci.yml"),
     source("apps/library-bridge/renderer/build_sidecar.py"),
     source("apps/library-bridge/renderer/prepare_native_ffmpeg.py"),
@@ -108,6 +109,8 @@ test("release validation includes fully native Windows ARM64 audio runtime", asy
     source("apps/library-bridge/renderer/verify_windows_arm64_python.py"),
   ]);
 
+  assert.ok(workflow.includes("workflow_dispatch:"));
+  assert.ok(workflow.includes('"library-bridge-v*"'));
   assert.ok(workflow.includes("runs-on: windows-11-arm"));
   assert.ok(workflow.includes('python-version: "3.14"'));
   assert.ok(workflow.includes("architecture: arm64"));
@@ -124,6 +127,7 @@ test("release validation includes fully native Windows ARM64 audio runtime", asy
   assert.ok(workflow.includes("Verify Windows ARM64 application executable"));
   assert.ok(workflow.includes("--verify-binary apps/library-bridge/src-tauri/target/aarch64-pc-windows-msvc/release/ensemblis-library-bridge.exe"));
   assert.ok(workflow.includes("target/aarch64-pc-windows-msvc/release/bundle/**"));
+  assert.equal(prWorkflow.includes("windows-11-arm"), false, "normal PR CI must not package Windows ARM64 release bundles");
 
   for (const pin of [
     "PyInstaller==6.22.2",
