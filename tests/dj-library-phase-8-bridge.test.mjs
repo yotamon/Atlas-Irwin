@@ -198,7 +198,8 @@ test("release configuration declares pinned, version-checked Windows/macOS Tauri
   const release = JSON.parse(await source("apps/library-bridge/src-tauri/tauri.release.conf.json"));
   const builder = await source("apps/library-bridge/renderer/build_sidecar.py");
   const requirements = await source("apps/library-bridge/renderer/requirements.txt");
-  const workflow = await source(".github/workflows/library-bridge-ci.yml");
+  const releaseWorkflow = await source(".github/workflows/library-bridge-release.yml");
+  const prWorkflow = await source(".github/workflows/library-bridge-ci.yml");
 
   assert.deepEqual(release.bundle.externalBin, ["binaries/ensemblis-bridge-sidecar"]);
   assert.ok(builder.includes('rustc", "--print", "host-tuple"'));
@@ -206,8 +207,12 @@ test("release configuration declares pinned, version-checked Windows/macOS Tauri
   assert.ok(builder.includes("EXPECTED_VERSIONS"));
   assert.ok(builder.includes('f"{SIDECAR_NAME}-{target_triple}{extension}"'));
   assert.ok(requirements.includes("PyInstaller==6.22.2"));
-  assert.ok(workflow.includes("windows-latest"));
-  assert.ok(workflow.includes("macos-14"));
-  assert.ok(workflow.includes("@tauri-apps/cli@2.11.4"));
-  assert.ok(workflow.includes("--bundles ${{ matrix.bundle }}"));
+  assert.ok(releaseWorkflow.includes("workflow_dispatch:"));
+  assert.ok(releaseWorkflow.includes('"library-bridge-v*"'));
+  assert.ok(releaseWorkflow.includes("windows-latest"));
+  assert.ok(releaseWorkflow.includes("macos-14"));
+  assert.ok(releaseWorkflow.includes("@tauri-apps/cli@2.11.4"));
+  assert.ok(releaseWorkflow.includes("--bundles ${{ matrix.bundle }}"));
+  assert.equal(prWorkflow.includes("windows-latest"), false, "normal PR CI must not package desktop release bundles");
+  assert.equal(prWorkflow.includes("macos-14"), false, "normal PR CI must not package desktop release bundles");
 });

@@ -8,17 +8,26 @@ const IGNORED_PREFIXES = [
   "tests/",
   "apps/library-bridge/",
   "supabase/",
+  "services/media-worker/tests/",
+  "services/media-worker/benchmarks/",
 ];
+
+const IGNORED_EXACT = new Set([
+  ".env.example",
+  "LICENSE",
+  "services/media-worker/requirements-audio-benchmark.txt",
+  "scripts/fixtures/production-migration-recovery-2026-09-14.json",
+]);
 
 export function isDeploymentNeutralPath(path) {
   if (!path) return true;
-  if (path === "LICENSE") return true;
+  if (IGNORED_EXACT.has(path)) return true;
   if (/\.md$/i.test(path)) return true;
   return IGNORED_PREFIXES.some((prefix) => path.startsWith(prefix));
 }
 
 export function shouldIgnoreDeployment(paths) {
-  return paths.every(isDeploymentNeutralPath);
+  return paths.length > 0 && paths.every(isDeploymentNeutralPath);
 }
 
 export function changedFiles(previousSha, head = "HEAD") {

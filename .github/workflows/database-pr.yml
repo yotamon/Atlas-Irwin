@@ -1,4 +1,4 @@
-name: Database PR
+name: Database Verification
 
 on:
   pull_request:
@@ -12,9 +12,21 @@ on:
       - "scripts/fixtures/production-migration-recovery-2026-09-14.json"
       - "tests/migration-history-guard.test.mjs"
       - ".github/workflows/database-pr.yml"
+  push:
+    branches: [main]
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/tests/**"
+      - "scripts/validate-migration-history.mjs"
+      - "scripts/check-supabase-migration-parity.mjs"
+      - "scripts/audit-supabase-migration-recovery.mjs"
+      - "scripts/fixtures/production-migration-recovery-2026-09-14.json"
+      - "tests/migration-history-guard.test.mjs"
+      - ".github/workflows/database-pr.yml"
+  workflow_dispatch:
 
 concurrency:
-  group: database-pr-${{ github.event.pull_request.number || github.ref }}
+  group: database-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -34,6 +46,7 @@ jobs:
         run: node --test tests/migration-history-guard.test.mjs
 
       - name: Enforce append-only canonical migration history
+        if: github.event_name == 'pull_request'
         run: node scripts/validate-migration-history.mjs --base-ref "origin/${{ github.base_ref }}"
 
       - uses: supabase/setup-cli@v2
