@@ -8,7 +8,6 @@ import {
   formatTotalDurationLabel,
   trackNumber,
 } from "@/lib/catalog/format";
-import { resolveLegacyCanvasVideoUrl } from "@/lib/catalog/legacy-media";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import {
   createCatalogClient,
@@ -36,13 +35,8 @@ type CatalogBundle = {
   externalTrackIds: TrackExternalId[];
 };
 
-type PostgrestErrorLike = {
-  code?: string | null;
-  message?: string | null;
-};
-
 const NO_PUBLIC_ARTIST = Symbol("no-public-artist");
-type CatalogArtistId = string | null | typeof NO_PUBLIC_ARTIST;
+type CatalogArtistId = string | typeof NO_PUBLIC_ARTIST;
 
 function emptyCatalogBundle(): CatalogBundle {
   return {
@@ -54,13 +48,6 @@ function emptyCatalogBundle(): CatalogBundle {
     externalLinks: [],
     externalTrackIds: [],
   };
-}
-
-function isPreEnsemblisSchemaError(error: PostgrestErrorLike | null) {
-  return error?.code === "PGRST204"
-    || /Could not find the ['\"]artist_id['\"] column of ['\"]releases['\"] in the schema cache/i.test(
-      error?.message ?? "",
-    );
 }
 
 async function resolveCatalogOwnerId() {
@@ -94,13 +81,8 @@ async function resolveCatalogOwnerId() {
 
 /**
  * Resolve the public catalog Artist without granting anon access to the private
- * Ensemblis artists table.
- *
- * The only safe low-privilege source is the already-public release catalog. Before
- * artist_id existed, a missing-column response identifies the legacy single-artist
- * schema and owner scope remains valid. Once artist_id exists, zero public releases
- * fails closed to an empty catalog, while multiple public artists require an explicit
- * PUBLIC_CATALOG_ARTIST_ID instead of silently combining artist data.
+ * Ensemblis artists table. The already-public release catalog is the low-privilege
+ * source for determining the active artist scope.
  */
 async function resolveCatalogArtistId(ownerId: string): Promise<CatalogArtistId> {
   const explicitArtistId = process.env.PUBLIC_CATALOG_ARTIST_ID?.trim();
@@ -116,10 +98,7 @@ async function resolveCatalogArtistId(ownerId: string): Promise<CatalogArtistId>
     .eq("publish_state", "live")
     .eq("is_archived", false);
 
-  if (error) {
-    if (isPreEnsemblisSchemaError(error)) return null;
-    throw new Error(error.message);
-  }
+  if (error) throw new Error(error.message);
 
   const artistIds = [...new Set(
     (data ?? [])
@@ -150,41 +129,36 @@ async function loadCatalogBundle(
     return emptyCatalogBundle();
   }
 
-  let releasesQuery = music
+  const releasesQuery = music
     .from("releases")
     .select("*")
     .eq("owner_id", ownerId)
+    .eq("artist_id", resolvedArtistId)
     .eq("is_public", true)
     .eq("publish_state", "live")
     .eq("is_archived", false);
-  let placementsQuery = music
+  const placementsQuery = music
     .from("homepage_placements")
     .select("*")
     .eq("owner_id", ownerId)
+    .eq("artist_id", resolvedArtistId)
     .eq("enabled", true)
     .order("display_order", { ascending: true });
-  let tracksQuery = music
+  const tracksQuery = music
     .from("tracks")
     .select("*")
-    .eq("owner_id", ownerId);
-  let externalLinksQuery = music
+    .eq("owner_id", ownerId)
+    .eq("artist_id", resolvedArtistId);
+  const externalLinksQuery = music
     .from("release_external_links")
     .select("*")
-    .eq("owner_id", ownerId);
-  let externalTrackIdsQuery = music
+    .eq("owner_id", ownerId)
+    .eq("artist_id", resolvedArtistId);
+  const externalTrackIdsQuery = music
     .from("track_external_ids")
     .select("*")
-    .eq("owner_id", ownerId);
-
-  // Do not mention artist_id to PostgREST until the Ensemblis schema actually exists.
-  // This keeps old Atlas production and new Ensemblis code deployable in either order.
-  if (resolvedArtistId) {
-    releasesQuery = releasesQuery.eq("artist_id", resolvedArtistId);
-    placementsQuery = placementsQuery.eq("artist_id", resolvedArtistId);
-    tracksQuery = tracksQuery.eq("artist_id", resolvedArtistId);
-    externalLinksQuery = externalLinksQuery.eq("artist_id", resolvedArtistId);
-    externalTrackIdsQuery = externalTrackIdsQuery.eq("artist_id", resolvedArtistId);
-  }
+    .eq("owner_id", ownerId)
+    .eq("artist_id", resolvedArtistId);
 
   const [
     releasesResult,
@@ -367,7 +341,6 @@ function mapRelease(
     "/atlas-cover.png";
   const canvasVideoUrl =
     primaryMediaUrl(bundle, release.id, "canvas_video") ||
-    resolveLegacyCanvasVideoUrl(release.slug) ||
     undefined;
   return {
     slug: release.slug,
