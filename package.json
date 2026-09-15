@@ -15,6 +15,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "verify:no-runtime-legacy": "node scripts/check-no-runtime-legacy.mjs",
     "pretest:studio": "node scripts/build-studio-css.mjs",
     "test:studio": "node scripts/run-studio-tests.mjs",
     "test:e2e": "playwright test --config=playwright.config.mjs",
