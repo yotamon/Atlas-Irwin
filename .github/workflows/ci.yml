@@ -32,6 +32,9 @@ jobs:
         timeout-minutes: 8
         run: npm ci --no-audit --fetch-retries=2 --fetch-timeout=60000 --fetch-retry-mintimeout=1000 --fetch-retry-maxtimeout=5000
 
+      - name: Verify no legacy runtime compatibility
+        run: npm run verify:no-runtime-legacy
+
       - name: Verify Studio product contracts
         run: npm run test:studio
 
