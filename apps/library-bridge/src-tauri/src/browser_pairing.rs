@@ -17,10 +17,7 @@ pub struct BrowserPairingCallback {
 
 pub fn connect_url(api_base_url: &str, callback_url: &str, state: &str) -> anyhow::Result<String> {
     let base = Url::parse(api_base_url).context("invalid Ensemblis URL")?;
-    let local_dev = matches!(
-        base.host_str(),
-        Some("localhost" | "127.0.0.1" | "::1")
-    );
+    let local_dev = matches!(base.host_str(), Some("localhost" | "127.0.0.1" | "::1"));
     if base.scheme() != "https" && !(local_dev && base.scheme() == "http") {
         anyhow::bail!("Ensemblis requires HTTPS outside localhost development");
     }
