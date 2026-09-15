@@ -37,7 +37,6 @@ type Source = {
 };
 
 type Snapshot = { devices: Device[]; sources: Source[] };
-
 type Pairing = { code: string; expiresAt: string };
 
 function record(value: unknown): Record<string, unknown> {
@@ -56,7 +55,7 @@ function relativeTime(value: string | null, referenceMs: number) {
 }
 
 function sourceLabel(kind: string) {
-  if (kind === "local_library") return "Local library";
+  if (kind === "local_library") return "Music folder";
   if (kind === "rekordbox") return "Rekordbox";
   if (kind === "traktor") return "Traktor";
   return kind;
@@ -83,7 +82,7 @@ export function LibraryBridgePanel({ artistId }: { artistId: string }) {
       signal,
     });
     const body = await response.json().catch(() => null);
-    if (!response.ok) throw new Error(String(record(body).error || "Could not load Library Bridge devices."));
+    if (!response.ok) throw new Error(String(record(body).error || "Could not load connected computers."));
     setSnapshot({
       devices: Array.isArray(record(body).devices) ? record(body).devices as Device[] : [],
       sources: Array.isArray(record(body).sources) ? record(body).sources as Source[] : [],
@@ -97,7 +96,7 @@ export function LibraryBridgePanel({ artistId }: { artistId: string }) {
       setLoading(true);
       void load(controller.signal)
         .catch((error) => {
-          if (!controller.signal.aborted) setStatus(error instanceof Error ? error.message : "Could not load Library Bridge devices.");
+          if (!controller.signal.aborted) setStatus(error instanceof Error ? error.message : "Could not load connected computers.");
         })
         .finally(() => {
           if (!controller.signal.aborted) setLoading(false);
@@ -133,11 +132,11 @@ export function LibraryBridgePanel({ artistId }: { artistId: string }) {
         body: JSON.stringify({ action: "create_pairing", artistId }),
       });
       const body = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(String(record(body).error || "Could not create a pairing code."));
+      if (!response.ok) throw new Error(String(record(body).error || "Could not create a manual connection code."));
       setPairing({ code: String(record(body).code), expiresAt: String(record(body).expiresAt) });
-      setStatus("Pairing code created. Enter it in the native Library Bridge on the computer that owns the DJ library.");
+      setStatus("Manual connection code created. Use it only from Ensemblis desktop Settings → Advanced connection options.");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not create a pairing code.");
+      setStatus(error instanceof Error ? error.message : "Could not create a manual connection code.");
     } finally {
       setBusy("");
     }
@@ -173,7 +172,7 @@ export function LibraryBridgePanel({ artistId }: { artistId: string }) {
       } finally {
         window.setTimeout(() => URL.revokeObjectURL(url), 0);
       }
-      setStatus(`Studio license issued for ${device.name}. Import the downloaded file in the desktop runtime.`);
+      setStatus(`Signed offline Studio license downloaded for ${device.name}. Import it from Ensemblis desktop Settings if you need an offline bootstrap.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not issue the Studio license.");
     } finally {
@@ -184,7 +183,7 @@ export function LibraryBridgePanel({ artistId }: { artistId: string }) {
   async function revoke(device: Device) {
     if (busy) return;
     const confirmed = window.confirm(
-      `Revoke ${device.name}? Its local credential will stop working immediately and queued device jobs will be cancelled. Synced path-free library metadata remains until you remove or replace the source.`,
+      `Disconnect ${device.name}? It will stop syncing with Ensemblis. Your local music files will not be deleted.`,
     );
     if (!confirmed) return;
     setBusy(device.id);
@@ -196,120 +195,82 @@ export function LibraryBridgePanel({ artistId }: { artistId: string }) {
         body: JSON.stringify({ action: "revoke", artistId, deviceId: device.id }),
       });
       const body = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(String(record(body).error || "Could not revoke the Library Bridge device."));
-      setStatus(`${device.name} revoked. Its credential can no longer sync or claim local jobs.`);
+      if (!response.ok) throw new Error(String(record(body).error || "Could not disconnect this computer."));
+      setStatus(`${device.name} disconnected.`);
       await load();
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not revoke the Library Bridge device.");
+      setStatus(error instanceof Error ? error.message : "Could not disconnect this computer.");
     } finally {
       setBusy("");
     }
   }
 
   return (
-    <section className={styles.panel} aria-label="Native Library Bridge">
+    <section className={styles.panel} aria-label="Connected computers">
       <div className={styles.header}>
         <div>
-          <span className="section-label">DJ Library / Native Bridge</span>
-          <h2>Use the library on your computer without uploading it.</h2>
+          <span className="section-label">Music / Computers</span>
+          <h2>Your connected computers</h2>
           <p>
-            Ensemblis receives normalized musical evidence and content fingerprints. Raw filesystem paths stay inside the native bridge, and local media is re-verified before any device job can use it.
+            The Ensemblis desktop app securely gives your workspace access to music stored on your computers. Connect a new computer from the desktop app itself; it opens this browser flow for approval automatically.
           </p>
         </div>
         <div className={styles.headerActions}>
           <button className="button" type="button" onClick={() => void load()} disabled={loading || Boolean(busy)}>
             <FiRefreshCw aria-hidden="true" /> Refresh
           </button>
-          <button className="button primary" type="button" onClick={createPairing} disabled={Boolean(busy)}>
-            <FiLink aria-hidden="true" /> {busy === "pairing" ? "Creating…" : "Pair a computer"}
-          </button>
         </div>
       </div>
-
-      {pairing ? (
-        <div className={styles.pairingCard}>
-          <div>
-            <span className={styles.kicker}>One-time code</span>
-            <strong className={styles.pairingCode}>{pairing.code}</strong>
-            <span className={styles.expiry}>Expires {new Date(pairing.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-          </div>
-          <button className="button" type="button" onClick={copyPairing}>
-            {copied ? <FiCheck aria-hidden="true" /> : <FiClipboard aria-hidden="true" />}
-            {copied ? "Copied" : "Copy code"}
-          </button>
-        </div>
-      ) : null}
 
       <div className={styles.securityStrip}>
         <FiShield aria-hidden="true" />
-        <div>
-          <strong>Local-first boundary</strong>
-          <span>Credential in OS vault · paths in local SQLite only · signed offline license · HTTPS outbound only · revocable device identity</span>
-        </div>
+        <div><strong>Your music stays local</strong><span>Original audio and folder locations stay on your computer. Ensemblis receives only the path-free musical information needed by your workspace.</span></div>
       </div>
 
       <div className={styles.devices}>
-        {loading ? <p className={styles.empty}>Loading paired computers…</p> : null}
+        {loading ? <p className={styles.empty}>Loading connected computers…</p> : null}
         {!loading && activeDevices.length === 0 ? (
-          <div className={styles.emptyState}>
-            <FiHardDrive aria-hidden="true" />
-            <div>
-              <strong>No paired computer yet</strong>
-              <p>Pair the machine that holds your DJ/music library. Ensemblis will then see a path-free synchronized source.</p>
-            </div>
-          </div>
+          <div className={styles.emptyState}><FiHardDrive aria-hidden="true" /><div><strong>No computer connected yet</strong><p>Open the Ensemblis desktop app on the computer that holds your music and choose “Connect to Ensemblis.” The rest happens automatically.</p></div></div>
         ) : null}
         {activeDevices.map((device) => {
           const sources = snapshot.sources.filter((source) => source.device_id === device.id);
-          const recent = device.last_seen_at
-            ? observedAtMs - new Date(device.last_seen_at).getTime() < 2 * 60 * 1000
-            : false;
+          const recent = device.last_seen_at ? observedAtMs - new Date(device.last_seen_at).getTime() < 2 * 60 * 1000 : false;
           return (
             <article className={styles.device} key={device.id}>
               <div className={styles.deviceTop}>
                 <div>
-                  <div className={styles.deviceTitleRow}>
-                    <strong>{device.name}</strong>
-                    <span className={recent ? styles.online : styles.offline}>{recent ? "Online" : "Offline"}</span>
-                  </div>
-                  <span className={styles.meta}>{device.platform} · bridge {device.app_version} · last seen {relativeTime(device.last_seen_at, observedAtMs)}</span>
+                  <div className={styles.deviceTitleRow}><strong>{device.name}</strong><span className={recent ? styles.online : styles.offline}>{recent ? "Online" : "Offline"}</span></div>
+                  <span className={styles.meta}>{device.platform} · Ensemblis {device.app_version} · last seen {relativeTime(device.last_seen_at, observedAtMs)}</span>
                 </div>
                 <div className={styles.headerActions}>
-                  <button
-                    className="button"
-                    type="button"
-                    onClick={() => void downloadLicense(device)}
-                    disabled={Boolean(busy)}
-                    title="Download a signed offline Studio license for this device"
-                  >
-                    <FiDownload aria-hidden="true" /> {busy === `license:${device.id}` ? "Issuing…" : "Studio license"}
-                  </button>
-                  <button
-                    className={styles.dangerButton}
-                    type="button"
-                    onClick={() => revoke(device)}
-                    disabled={Boolean(busy)}
-                    title="Revoke device"
-                  >
-                    <FiTrash2 aria-hidden="true" /> Revoke
-                  </button>
+                  <button className="button" type="button" onClick={() => void downloadLicense(device)} disabled={Boolean(busy)} title="Download a signed offline Studio license"><FiDownload aria-hidden="true" /> {busy === `license:${device.id}` ? "Issuing…" : "Offline license"}</button>
+                  <button className={styles.dangerButton} type="button" onClick={() => revoke(device)} disabled={Boolean(busy)} title="Disconnect computer"><FiTrash2 aria-hidden="true" /> Disconnect</button>
                 </div>
               </div>
-
               <div className={styles.sourceGrid}>
-                {sources.length === 0 ? <p className={styles.sourceEmpty}>Paired. Waiting for the first local source sync.</p> : null}
+                {sources.length === 0 ? <p className={styles.sourceEmpty}>Connected. Waiting for the first music folder.</p> : null}
                 {sources.map((source) => (
-                  <div className={styles.source} key={source.id}>
-                    <span>{sourceLabel(source.source_kind)}</span>
-                    <strong>{source.track_count.toLocaleString()} tracks</strong>
-                    <small>{source.last_synced_at ? `Synced ${relativeTime(source.last_synced_at, observedAtMs)}` : "Not synced yet"}</small>
-                  </div>
+                  <div className={styles.source} key={source.id}><span>{sourceLabel(source.source_kind)}</span><strong>{source.track_count.toLocaleString()} tracks</strong><small>{source.last_synced_at ? `Updated ${relativeTime(source.last_synced_at, observedAtMs)}` : "Preparing…"}</small></div>
                 ))}
               </div>
             </article>
           );
         })}
       </div>
+
+      <details className={styles.device}>
+        <summary><FiLink aria-hidden="true" /> Manual connection</summary>
+        <div className={styles.devices}>
+          <div><strong>Only use this if browser connection is unavailable.</strong><p>Generate a temporary code and enter it in Ensemblis desktop under Settings → Advanced connection options.</p></div>
+          <button className="button" type="button" onClick={createPairing} disabled={Boolean(busy)}>{busy === "pairing" ? "Creating…" : "Create temporary code"}</button>
+          {pairing ? (
+            <div className={styles.pairingCard}>
+              <div><span className={styles.kicker}>Temporary code</span><strong className={styles.pairingCode}>{pairing.code}</strong><span className={styles.expiry}>Expires {new Date(pairing.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span></div>
+              <button className="button" type="button" onClick={copyPairing}>{copied ? <FiCheck aria-hidden="true" /> : <FiClipboard aria-hidden="true" />}{copied ? "Copied" : "Copy code"}</button>
+            </div>
+          ) : null}
+        </div>
+      </details>
 
       {status ? <p className={styles.status} role="status">{status}</p> : null}
     </section>
