@@ -133,7 +133,7 @@ fn respond(stream: &mut TcpStream, success: bool) {
         "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{title}</title><style>body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#090b10;color:#f7f5ef;font:16px/1.55 system-ui,sans-serif}}main{{max-width:520px;padding:48px;text-align:center}}h1{{font-size:2rem;letter-spacing:-.03em}}p{{color:#aeb7c5}}</style></head><body><main><h1>{title}</h1><p>{message}</p></main><script>history.replaceState(null,'','/connected')</script></body></html>"
     );
     let response = format!(
-        "HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n{body}",
+        "HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-store\r\nContent-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'\r\nReferrer-Policy: no-referrer\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nConnection: close\r\n\r\n{body}",
         body.len()
     );
     let _ = stream.write_all(response.as_bytes());
