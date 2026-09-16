@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMarketingClient } from "@/lib/marketing/db";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { resolveMetricReleaseId, linkSoundCloudTrack } from "@/lib/studio/reconciliation";
 import {
@@ -44,9 +44,10 @@ function slugify(input: string) {
   );
 }
 
-async function scopedContext() {
+async function scopedContext(form?: FormData) {
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const requestedArtistId = form ? value(form, "artist_id") || undefined : undefined;
+  const artist = await resolveActiveArtistContext(supabase, user, requestedArtistId);
   return {
     supabase,
     user,
@@ -124,13 +125,14 @@ export async function uploadTrackToSoundCloud(form: FormData) {
 }
 
 export async function importSoundCloudTrack(form: FormData) {
-  const context = await scopedContext();
+  const context = await scopedContext(form);
   const id = z.uuid().parse(value(form, "id"));
   const mode = value(form, "mode") || "create_release";
   const { data: track, error: trackError } = await context.supabase
     .from("soundcloud_tracks")
     .select("*")
     .eq("id", id)
+    .eq("owner_id", context.user.id)
     .single();
   if (trackError) throw new Error(trackError.message);
 
@@ -138,7 +140,8 @@ export async function importSoundCloudTrack(form: FormData) {
     const { error } = await context.supabase
       .from("soundcloud_tracks")
       .update({ reconcile_status: "dismissed", reconciled_at: new Date().toISOString() })
-      .eq("id", id);
+      .eq("id", id)
+      .eq("owner_id", context.user.id);
     if (error) throw new Error(error.message);
     revalidatePath("/studio/soundcloud");
     redirect("/studio/soundcloud");
@@ -227,6 +230,7 @@ export async function syncSoundCloudMetrics() {
   const { data: tracks, error } = await context.supabase
     .from("soundcloud_tracks")
     .select("*")
+    .eq("owner_id", context.user.id)
     .order("synced_at", { ascending: false });
   if (error) throw new Error(error.message);
   const today = new Date().toISOString().slice(0, 10);
@@ -322,18 +326,20 @@ function spotifyReleaseDate(date: string | null, precision: string | null) {
 }
 
 export async function importSpotifyAlbum(form: FormData) {
-  const context = await scopedContext();
+  const context = await scopedContext(form);
   const id = z.uuid().parse(value(form, "id"));
   const { data: album, error: albumError } = await context.supabase
     .from("spotify_albums")
     .select("*")
     .eq("id", id)
+    .eq("owner_id", context.user.id)
     .single();
   if (albumError) throw new Error(albumError.message);
 
   const { data: syncedTracks, error: tracksError } = await context.supabase
     .from("spotify_tracks")
     .select("*")
+    .eq("owner_id", context.user.id)
     .eq("album_spotify_id", album.spotify_id)
     .order("disc_number")
     .order("track_number");
@@ -415,6 +421,7 @@ export async function createCampaignPlaylist(form: FormData) {
   const { data: tracks, error } = await supabase
     .from("spotify_tracks")
     .select("uri")
+    .eq("owner_id", user.id)
     .in("id", ids);
   if (error) throw new Error(error.message);
   if (!tracks?.length) throw new Error("The selected Spotify tracks were not found.");
