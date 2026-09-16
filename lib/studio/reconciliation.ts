@@ -156,8 +156,13 @@ export async function linkSoundCloudTrack(
     artistId = scopedTrack.artist_id;
   }
 
-  const [{ data: external }, { data: track, error: trackError }] = await Promise.all([
-    supabase.from("soundcloud_tracks").select("*").eq("id", soundcloudTrackId).single(),
+  const [{ data: external, error: externalError }, { data: track, error: trackError }] = await Promise.all([
+    supabase
+      .from("soundcloud_tracks")
+      .select("*")
+      .eq("id", soundcloudTrackId)
+      .eq("owner_id", ownerId)
+      .single(),
     music
       .from("tracks")
       .select("*")
@@ -166,6 +171,7 @@ export async function linkSoundCloudTrack(
       .eq("artist_id", artistId)
       .single(),
   ]);
+  if (externalError) throw new Error(externalError.message);
   if (trackError) throw new Error(trackError.message);
   if (!external || !track) throw new Error("SoundCloud track or canonical track not found for the active artist.");
 
@@ -200,7 +206,8 @@ export async function linkSoundCloudTrack(
       reconcile_status: "linked",
       reconciled_at: new Date().toISOString(),
     })
-    .eq("id", soundcloudTrackId);
+    .eq("id", soundcloudTrackId)
+    .eq("owner_id", ownerId);
   if (reconcileError) throw new Error(reconcileError.message);
 }
 
@@ -210,10 +217,15 @@ export async function dismissExternalTrack(
   id: string,
   status: "ignored" | "dismissed" = "dismissed",
 ) {
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError) throw new Error(authError.message);
+  if (!authData.user) throw new Error("Authentication is required to dismiss an external track.");
+
   const { error } = await supabase
     .from(table)
     .update({ reconcile_status: status, reconciled_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("owner_id", authData.user.id);
   if (error) throw new Error(error.message);
 }
 
