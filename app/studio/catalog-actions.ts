@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { revalidatePublicCatalog } from "@/lib/studio/catalog";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { linkSoundCloudTrack, suggestTrackMatches } from "@/lib/studio/reconciliation";
@@ -16,7 +16,8 @@ function formValue(form: FormData, key: string) {
 
 async function assertActiveArtistTargets(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const requestedArtistId = formValue(form, "artist_id") || undefined;
+  const artist = await resolveActiveArtistContext(supabase, user, requestedArtistId);
   const db = asArtistScopedMusicClient(supabase);
 
   const releaseIds = new Set(
@@ -178,7 +179,12 @@ export async function linkExternalSpotifyTrack(form: FormData) {
   const trackId = z.uuid().parse(formValue(form, "track_id"));
 
   const [{ data: external, error: externalError }, { data: track, error: trackError }] = await Promise.all([
-    supabase.from("spotify_tracks").select("*").eq("id", externalId).single(),
+    supabase
+      .from("spotify_tracks")
+      .select("*")
+      .eq("id", externalId)
+      .eq("owner_id", user.id)
+      .single(),
     db
       .from("tracks")
       .select("id,release_id")
@@ -232,7 +238,8 @@ export async function linkExternalSpotifyTrack(form: FormData) {
       reconcile_status: "linked",
       reconciled_at: new Date().toISOString(),
     })
-    .eq("id", externalId);
+    .eq("id", externalId)
+    .eq("owner_id", user.id);
   if (reconcileError) throw new Error(reconcileError.message);
 
   revalidatePath("/studio/spotify");
@@ -248,6 +255,7 @@ export async function createTrackFromSpotify(form: FormData) {
     .from("spotify_tracks")
     .select("*")
     .eq("id", externalId)
+    .eq("owner_id", user.id)
     .single();
   if (error || !external) throw new Error(error?.message || "Spotify track not found.");
 
@@ -269,6 +277,7 @@ export async function createTrackFromSpotify(form: FormData) {
   if (insertError) throw new Error(insertError.message);
 
   const linked = new FormData();
+  linked.set("artist_id", artist.artistId);
   linked.set("external_id", externalId);
   linked.set("track_id", track.id);
   await linkExternalSpotifyTrack(linked);
@@ -282,6 +291,7 @@ export async function createTrackFromSoundCloud(form: FormData) {
     .from("soundcloud_tracks")
     .select("*")
     .eq("id", externalId)
+    .eq("owner_id", user.id)
     .single();
   if (error || !external) throw new Error(error?.message || "SoundCloud track not found.");
 
@@ -317,6 +327,7 @@ export async function getSoundCloudMatchSuggestions(form: FormData) {
     .from("soundcloud_tracks")
     .select("*")
     .eq("id", id)
+    .eq("owner_id", user.id)
     .single();
   if (error || !external) throw new Error(error?.message || "SoundCloud track not found.");
   return suggestTrackMatches(supabase, user.id, artist.artistId, {
