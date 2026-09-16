@@ -19,12 +19,12 @@ import {
   updateMediaLink,
 } from "@/app/studio/catalog-actions";
 import {
-  deleteRelease,
-  deleteStudioRecord,
-  generateContentPack,
-  generateIdentity,
-  saveTrack,
-} from "@/app/studio/actions";
+  deleteWorkspaceRelease,
+  deleteWorkspaceTrack,
+  generateReleaseContentPack,
+  generateReleaseIdentity,
+  saveWorkspaceTrack,
+} from "@/app/studio/release-workspace-actions";
 import { ReleaseForm } from "@/components/studio/release-form";
 import { MediaUploader } from "@/components/studio/media-uploader";
 import { ConfirmButton } from "@/components/studio/submit-button";
@@ -176,7 +176,7 @@ export function ReleaseCockpit({
             <div className="section-head"><div><span className="section-label">Release overview</span><h2>Identity and story</h2></div></div>
             <ReleaseForm release={release} />
             <div className="story-builder">
-              <form action={generateIdentity} className="studio-form">
+              <form action={generateReleaseIdentity} className="studio-form">
                 <input type="hidden" name="id" value={release.id} />
                 <div className="form-grid"><Field label="What emotional moment does this release represent?" wide><textarea name="emotional_moment" defaultValue={answers.emotional_moment} /></Field><Field label="What makes it musically distinctive?" wide><textarea name="musical_distinction" defaultValue={answers.musical_distinction} /></Field></div>
                 <Submit>Build release identity</Submit>
@@ -199,9 +199,9 @@ export function ReleaseCockpit({
             <div className="section-head"><div><span className="section-label">Music</span><h2>Tracklist and playback</h2></div><span>{tracks.length} track{tracks.length === 1 ? "" : "s"}</span></div>
             {tracks.length ? <div className="track-table"><div className="track-row track-head"><span>Order</span><span>Track</span><span>Duration</span><span>Playback</span><span>Identifiers</span><span>Actions</span></div>{tracks.map((track, index) => {
               const ids = externalTrackIds.filter((item) => item.track_id === track.id);
-              return <article className="track-row" key={track.id}><div className="order-controls"><strong>{String(index + 1).padStart(2, "0")}</strong><form action={moveTrack}><input type="hidden" name="track_id" value={track.id} /><input type="hidden" name="release_id" value={release.id} /><button name="direction" value="up" disabled={index === 0} aria-label={`Move ${track.title} up`}>↑</button><button name="direction" value="down" disabled={index === tracks.length - 1} aria-label={`Move ${track.title} down`}>↓</button></form></div><div><strong>{track.title}</strong><small>{track.version || "Master"}{track.is_primary ? " · Primary" : ""}{defaultTrack?.id === track.id ? " · Homepage default" : ""}</small></div><span>{duration(track.duration)}</span><div className="platform-dots"><span className={track.audio_url ? "connected" : undefined}>Preview</span><span className={track.soundcloud_url ? "connected" : undefined}>SoundCloud</span><span className={track.spotify_url ? "connected" : undefined}>Spotify</span></div><div>{ids.length ? ids.map((id) => <small key={id.id}>{id.provider.toUpperCase()} · {id.external_id}</small>) : <small>No stable IDs</small>}</div><form action={deleteStudioRecord}><input type="hidden" name="id" value={track.id} /><input type="hidden" name="table" value="tracks" /><button className="text-button">Delete</button></form></article>;
+              return <article className="track-row" key={track.id}><div className="order-controls"><strong>{String(index + 1).padStart(2, "0")}</strong><form action={moveTrack}><input type="hidden" name="track_id" value={track.id} /><input type="hidden" name="release_id" value={release.id} /><button name="direction" value="up" disabled={index === 0} aria-label={`Move ${track.title} up`}>↑</button><button name="direction" value="down" disabled={index === tracks.length - 1} aria-label={`Move ${track.title} down`}>↓</button></form></div><div><strong>{track.title}</strong><small>{track.version || "Master"}{track.is_primary ? " · Primary" : ""}{defaultTrack?.id === track.id ? " · Homepage default" : ""}</small></div><span>{duration(track.duration)}</span><div className="platform-dots"><span className={track.audio_url ? "connected" : undefined}>Preview</span><span className={track.soundcloud_url ? "connected" : undefined}>SoundCloud</span><span className={track.spotify_url ? "connected" : undefined}>Spotify</span></div><div>{ids.length ? ids.map((id) => <small key={id.id}>{id.provider.toUpperCase()} · {id.external_id}</small>) : <small>No stable IDs</small>}</div><form action={deleteWorkspaceTrack}><input type="hidden" name="id" value={track.id} /><input type="hidden" name="release_id" value={release.id} /><button className="text-button">Delete</button></form></article>;
             })}</div> : <EmptyState title="No music attached" body="Add the first canonical track. External syncs never create one silently." />}
-            <details className="workspace-drawer"><summary>Add a catalog track</summary><form action={saveTrack} className="studio-form"><input type="hidden" name="release_id" value={release.id} /><div className="form-grid"><Field label="Track title"><input name="title" required /></Field><Field label="Version"><input name="version" /></Field><Field label="Duration (seconds)"><input type="number" min="0" name="duration" /></Field><Field label="Audio preview URL"><input name="audio_url" /></Field><Field label="SoundCloud URL"><input name="soundcloud_url" /></Field><Field label="Spotify URL"><input name="spotify_url" /></Field><Field label="Primary track"><span className="checkbox-field"><input type="checkbox" name="is_primary" /> Use as the primary release track</span></Field></div><Submit>Add track</Submit></form></details>
+            <details className="workspace-drawer"><summary>Add a catalog track</summary><form action={saveWorkspaceTrack} className="studio-form"><input type="hidden" name="release_id" value={release.id} /><div className="form-grid"><Field label="Track title"><input name="title" required /></Field><Field label="Version"><input name="version" /></Field><Field label="Duration (seconds)"><input type="number" min="0" name="duration" /></Field><Field label="Audio preview URL"><input name="audio_url" /></Field><Field label="SoundCloud URL"><input name="soundcloud_url" /></Field><Field label="Spotify URL"><input name="spotify_url" /></Field><Field label="Primary track"><span className="checkbox-field"><input type="checkbox" name="is_primary" /> Use as the primary release track</span></Field></div><Submit>Add track</Submit></form></details>
           </section>
 
           <section className="workspace-section" id="platform-links">
@@ -253,7 +253,7 @@ export function ReleaseCockpit({
 
       {currentTab === "campaign" ? (
         <div className="workspace-stack">
-          <section className="workspace-section"><div className="section-head"><div><span className="section-label">Campaign plan</span><h2>Release-linked content</h2></div><Link href="/studio/marketing">Open campaign workspace</Link></div>{contentItems.length ? <div className="content-list">{contentItems.map((item) => <article key={item.id}><div><Status>{item.status}</Status><h3>{item.title}</h3><p>{item.platform} · {item.format}</p></div><div className="content-timeline"><span>{item.scheduled_at ? dateLabel(item.scheduled_at.slice(0, 10)) : "Unscheduled"}</span><small>{item.goal || "No goal set"}</small></div></article>)}</div> : <EmptyState title="No campaign content" body="Generate a content pack from this release or manage the full campaign in the campaign workspace." />}<form action={generateContentPack}><input type="hidden" name="release_id" value={release.id} /><Submit>Generate content pack</Submit></form></section>
+          <section className="workspace-section"><div className="section-head"><div><span className="section-label">Campaign plan</span><h2>Release-linked content</h2></div><Link href="/studio/marketing">Open campaign workspace</Link></div>{contentItems.length ? <div className="content-list">{contentItems.map((item) => <article key={item.id}><div><Status>{item.status}</Status><h3>{item.title}</h3><p>{item.platform} · {item.format}</p></div><div className="content-timeline"><span>{item.scheduled_at ? dateLabel(item.scheduled_at.slice(0, 10)) : "Unscheduled"}</span><small>{item.goal || "No goal set"}</small></div></article>)}</div> : <EmptyState title="No campaign content" body="Generate a content pack from this release or manage the full campaign in the campaign workspace." />}<form action={generateReleaseContentPack}><input type="hidden" name="release_id" value={release.id} /><Submit>Generate content pack</Submit></form></section>
         </div>
       ) : null}
 
@@ -264,7 +264,7 @@ export function ReleaseCockpit({
         </div>
       ) : null}
 
-      <details className="danger-zone"><summary>Danger zone</summary><form action={deleteRelease}><input type="hidden" name="id" value={release.id} /><ConfirmButton message={`Delete ${release.title}? This cannot be undone.`}>Delete release</ConfirmButton></form></details>
+      <details className="danger-zone"><summary>Danger zone</summary><form action={deleteWorkspaceRelease}><input type="hidden" name="id" value={release.id} /><ConfirmButton message={`Delete ${release.title}? This cannot be undone.`}>Delete release</ConfirmButton></form></details>
     </>
   );
 }
