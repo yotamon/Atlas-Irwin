@@ -55,8 +55,6 @@ async function uniqueReleaseSlug(
   const base = slugify(preferred || title);
   for (let index = 0; index < 50; index += 1) {
     const slug = index === 0 ? base : `${base}-${index + 1}`;
-    // Keep both ownership and artist scope explicit so slug checks cannot drift
-    // across tenants or artists even when the database uniqueness rule evolves.
     let query = db
       .from("releases")
       .select("id")
@@ -80,12 +78,14 @@ function automaticStatus(releaseDate: string | null, existingStatus?: string | n
 
 async function ensureReleaseCampaign({
   ownerId,
+  artistId,
   releaseId,
   title,
   releaseDate,
   supabase,
 }: {
   ownerId: string;
+  artistId: string;
   releaseId: string;
   title: string;
   releaseDate: string | null;
@@ -96,6 +96,7 @@ async function ensureReleaseCampaign({
     .from("campaigns")
     .select("id")
     .eq("owner_id", ownerId)
+    .eq("artist_id", artistId)
     .eq("release_id", releaseId)
     .maybeSingle();
   if (lookupError) throw new Error(lookupError.message);
@@ -108,6 +109,7 @@ async function ensureReleaseCampaign({
     .from("campaigns")
     .insert({
       owner_id: ownerId,
+      artist_id: artistId,
       release_id: releaseId,
       name: `${title} release plan`,
       status: "draft",
@@ -128,30 +130,35 @@ async function ensureReleaseCampaign({
   const phases = campaignPhasePlan(releaseDate).map((phase) => ({
     ...phase,
     owner_id: ownerId,
+    artist_id: artistId,
     campaign_id: campaign.id,
   }));
   const { error: phaseError } = await marketing.from("campaign_phases").insert(phases);
   if (phaseError) throw new Error(phaseError.message);
 
-  await marketing.from("marketing_events").insert({
+  const { error: eventError } = await marketing.from("marketing_events").insert({
     owner_id: ownerId,
+    artist_id: artistId,
     campaign_id: campaign.id,
     event_type: "release.workspace_created",
     entity_type: "release",
     entity_id: releaseId,
     payload: { releaseDate, source: "studio_v2" } as Json,
   });
+  if (eventError) throw new Error(eventError.message);
 
   return campaign.id;
 }
 
 async function shiftReleasePlan({
   ownerId,
+  artistId,
   releaseId,
   releaseDate,
   supabase,
 }: {
   ownerId: string;
+  artistId: string;
   releaseId: string;
   releaseDate: string | null;
   supabase: Awaited<ReturnType<typeof requireStudioAdmin>>["supabase"];
@@ -162,6 +169,7 @@ async function shiftReleasePlan({
     .from("campaigns")
     .select("id")
     .eq("owner_id", ownerId)
+    .eq("artist_id", artistId)
     .eq("release_id", releaseId);
   if (error) throw new Error(error.message);
 
@@ -175,7 +183,8 @@ async function shiftReleasePlan({
         end_date: window.endDate,
       })
       .eq("id", campaign.id)
-      .eq("owner_id", ownerId);
+      .eq("owner_id", ownerId)
+      .eq("artist_id", artistId);
     if (campaignError) throw new Error(campaignError.message);
 
     const plan = campaignPhasePlan(releaseDate);
@@ -185,7 +194,8 @@ async function shiftReleasePlan({
         .update({ starts_at: phase.starts_at, ends_at: phase.ends_at })
         .eq("campaign_id", campaign.id)
         .eq("code", phase.code)
-        .eq("owner_id", ownerId);
+        .eq("owner_id", ownerId)
+        .eq("artist_id", artistId);
       if (phaseError) throw new Error(phaseError.message);
     }
 
@@ -194,6 +204,7 @@ async function shiftReleasePlan({
       .select("id,relative_day,schedule_local_time,schedule_timezone")
       .eq("campaign_id", campaign.id)
       .eq("owner_id", ownerId)
+      .eq("artist_id", artistId)
       .eq("schedule_locked", false)
       .is("published_at", null)
       .not("relative_day", "is", null);
@@ -211,18 +222,21 @@ async function shiftReleasePlan({
         .from("content_items")
         .update({ scheduled_at: scheduledAt })
         .eq("id", item.id)
-        .eq("owner_id", ownerId);
+        .eq("owner_id", ownerId)
+        .eq("artist_id", artistId);
       if (itemError) throw new Error(itemError.message);
     }
 
-    await marketing.from("marketing_events").insert({
+    const { error: eventError } = await marketing.from("marketing_events").insert({
       owner_id: ownerId,
+      artist_id: artistId,
       campaign_id: campaign.id,
       event_type: "release.date_changed",
       entity_type: "release",
       entity_id: releaseId,
       payload: { releaseDate, source: "studio_v2" } as Json,
     });
+    if (eventError) throw new Error(eventError.message);
   }
 }
 
@@ -311,6 +325,7 @@ export async function saveReleaseV2(form: FormData) {
 
   await ensureReleaseCampaign({
     ownerId: user.id,
+    artistId: artist.artistId,
     releaseId: data.id,
     title,
     releaseDate,
@@ -320,6 +335,7 @@ export async function saveReleaseV2(form: FormData) {
   if (existing && existing.release_date !== releaseDate) {
     await shiftReleasePlan({
       ownerId: user.id,
+      artistId: artist.artistId,
       releaseId: data.id,
       releaseDate,
       supabase,
