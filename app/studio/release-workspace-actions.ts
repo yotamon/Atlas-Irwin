@@ -20,15 +20,29 @@ function nullable(form: FormData, key: string) {
   return value(form, key) || null;
 }
 
-async function context(form: FormData) {
+async function context(form: FormData, releaseId: string) {
   const { supabase, user } = await requireStudioAdmin();
-  const requestedArtistId = value(form, "artist_id") || undefined;
+  const music = asArtistScopedMusicClient(supabase);
+  let requestedArtistId = value(form, "artist_id") || undefined;
+
+  if (!requestedArtistId) {
+    const { data: releaseScope, error: scopeError } = await music
+      .from("releases")
+      .select("artist_id")
+      .eq("id", releaseId)
+      .eq("owner_id", user.id)
+      .maybeSingle();
+    if (scopeError) throw new Error(scopeError.message);
+    if (!releaseScope) throw new Error("Release not found for this owner.");
+    requestedArtistId = releaseScope.artist_id;
+  }
+
   const artist = await resolveActiveArtistContext(supabase, user, requestedArtistId);
   return {
     supabase,
     user,
     artist,
-    music: asArtistScopedMusicClient(supabase),
+    music,
     marketing: asMarketingClient(supabase),
   };
 }
@@ -50,8 +64,8 @@ async function releaseForArtist(
 }
 
 export async function saveWorkspaceTrack(form: FormData) {
-  const scoped = await context(form);
   const releaseId = z.uuid().parse(value(form, "release_id"));
+  const scoped = await context(form, releaseId);
   await releaseForArtist(scoped, releaseId);
   const isPrimary = form.get("is_primary") === "on";
 
@@ -85,9 +99,9 @@ export async function saveWorkspaceTrack(form: FormData) {
 }
 
 export async function deleteWorkspaceTrack(form: FormData) {
-  const scoped = await context(form);
   const trackId = z.uuid().parse(value(form, "id"));
   const releaseId = z.uuid().parse(value(form, "release_id"));
+  const scoped = await context(form, releaseId);
   await releaseForArtist(scoped, releaseId);
 
   const { error } = await scoped.music
@@ -104,8 +118,8 @@ export async function deleteWorkspaceTrack(form: FormData) {
 }
 
 export async function generateReleaseIdentity(form: FormData) {
-  const scoped = await context(form);
   const releaseId = z.uuid().parse(value(form, "id"));
+  const scoped = await context(form, releaseId);
   const release = await releaseForArtist(scoped, releaseId);
   const generator = new TemplateContentGenerationProvider();
   const releaseIdentity = await generator.generateReleaseIdentity(release);
@@ -131,8 +145,8 @@ export async function generateReleaseIdentity(form: FormData) {
 }
 
 export async function generateReleaseContentPack(form: FormData) {
-  const scoped = await context(form);
   const releaseId = z.uuid().parse(value(form, "release_id") || value(form, "id"));
+  const scoped = await context(form, releaseId);
   const release = await releaseForArtist(scoped, releaseId);
   const items = await new TemplateContentGenerationProvider().generateContentPack(release);
 
@@ -167,8 +181,8 @@ export async function generateReleaseContentPack(form: FormData) {
 }
 
 export async function deleteWorkspaceRelease(form: FormData) {
-  const scoped = await context(form);
   const releaseId = z.uuid().parse(value(form, "id"));
+  const scoped = await context(form, releaseId);
   await releaseForArtist(scoped, releaseId);
 
   const { error } = await scoped.music
