@@ -86,7 +86,6 @@ export function ReleaseForm({
           <Field label="YouTube URL" error={error("youtube_url")}><input type="url" name="youtube_url" aria-invalid={Boolean(error("youtube_url")) || undefined} defaultValue={release?.youtube_url ?? ""} /></Field>
           <Field label="Smart link URL" error={error("smart_link_url")}><input type="url" name="smart_link_url" aria-invalid={Boolean(error("smart_link_url")) || undefined} defaultValue={release?.smart_link_url ?? ""} /></Field>
           <Field label="Public slug"><input name="public_slug" defaultValue={release?.public_slug ?? ""} /></Field>
-          <Field label="Public release path" wide><input name="public_release_path" defaultValue={release?.public_release_path ?? ""} /></Field>
           <Field label="Release story" wide><textarea name="story" rows={5} defaultValue={release?.story ?? ""} /></Field>
           <Field label="Private notes" wide><textarea name="notes" rows={4} defaultValue={release?.notes ?? ""} /></Field>
         </FormGrid>
