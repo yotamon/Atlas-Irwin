@@ -5,6 +5,7 @@ const root = process.cwd();
 const retiredFiles = [
   "lib/catalog/legacy-media.ts",
   "lib/releases.ts",
+  "app/studio/actions.ts",
 ];
 const retiredScripts = [
   "import-legacy-releases.mjs",
@@ -52,6 +53,9 @@ for (const runtimeRoot of runtimeRoots) {
     if (/\bpublic_release_path\b/.test(source)) {
       violations.push(`${relativePath}: references retired releases.public_release_path`);
     }
+    if (/(?:from|import\()[^\n]*["']@\/app\/studio\/actions["']/.test(source)) {
+      violations.push(`${relativePath}: imports retired owner-only Studio action monolith`);
+    }
   }
 }
 
@@ -70,9 +74,9 @@ for (const relativePath of [".env.example", "scripts/seed-studio.mjs"]) {
 }
 
 if (violations.length) {
-  console.error("Filesystem catalog compatibility check failed:");
+  console.error("Legacy runtime compatibility check failed:");
   for (const violation of violations) console.error(`- ${violation}`);
   process.exit(1);
 }
 
-console.log("Filesystem catalog compatibility check passed.");
+console.log("Legacy runtime compatibility check passed.");
