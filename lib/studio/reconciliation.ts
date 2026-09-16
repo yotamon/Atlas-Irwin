@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import type { Database, Release, SoundCloudTrack, SpotifyTrack } from "@/types/database";
 
 export type MatchSuggestion = {
@@ -41,16 +42,19 @@ function durationScore(
 export async function suggestTrackMatches(
   supabase: SupabaseClient<Database>,
   ownerId: string,
+  artistId: string,
   input: {
     title: string;
     durationSeconds?: number | null;
     isrc?: string | null;
   },
 ): Promise<MatchSuggestion[]> {
-  const { data: tracks, error } = await supabase
+  const music = asArtistScopedMusicClient(supabase);
+  const { data: tracks, error } = await music
     .from("tracks")
     .select("*,releases(title)")
-    .eq("owner_id", ownerId);
+    .eq("owner_id", ownerId)
+    .eq("artist_id", artistId);
   if (error) throw new Error(error.message);
 
   const suggestions: MatchSuggestion[] = [];
@@ -64,10 +68,11 @@ export async function suggestTrackMatches(
       reason = "Title and duration similarity";
     }
     if (input.isrc) {
-      const { data: external } = await supabase
+      const { data: external } = await music
         .from("track_external_ids")
         .select("external_id")
         .eq("track_id", track.id)
+        .eq("artist_id", artistId)
         .eq("provider", "isrc")
         .maybeSingle();
       if (external?.external_id === input.isrc) {
@@ -92,29 +97,40 @@ export async function suggestTrackMatches(
 export async function linkSoundCloudTrack(
   supabase: SupabaseClient<Database>,
   ownerId: string,
+  artistId: string,
   soundcloudTrackId: string,
   canonicalTrackId: string,
 ) {
-  const [{ data: external }, { data: track }] = await Promise.all([
+  const music = asArtistScopedMusicClient(supabase);
+  const [{ data: external }, { data: track, error: trackError }] = await Promise.all([
     supabase
       .from("soundcloud_tracks")
       .select("*")
       .eq("id", soundcloudTrackId)
       .single(),
-    supabase.from("tracks").select("*").eq("id", canonicalTrackId).single(),
+    music
+      .from("tracks")
+      .select("*")
+      .eq("id", canonicalTrackId)
+      .eq("owner_id", ownerId)
+      .eq("artist_id", artistId)
+      .single(),
   ]);
-  if (!external || !track) throw new Error("SoundCloud track or canonical track not found.");
-  if (track.owner_id !== ownerId) throw new Error("Track ownership mismatch.");
+  if (trackError) throw new Error(trackError.message);
+  if (!external || !track) throw new Error("SoundCloud track or canonical track not found for the active artist.");
 
-  const { error: trackUpdateError } = await supabase
+  const { error: trackUpdateError } = await music
     .from("tracks")
     .update({ soundcloud_url: external.permalink_url })
-    .eq("id", canonicalTrackId);
+    .eq("id", canonicalTrackId)
+    .eq("owner_id", ownerId)
+    .eq("artist_id", artistId);
   if (trackUpdateError) throw new Error(trackUpdateError.message);
 
-  const { error: externalIdError } = await supabase.from("track_external_ids").upsert(
+  const { error: externalIdError } = await music.from("track_external_ids").upsert(
     {
       owner_id: ownerId,
+      artist_id: artistId,
       track_id: canonicalTrackId,
       provider: "soundcloud",
       external_id: String(external.soundcloud_id),
@@ -163,21 +179,35 @@ export function isUnmatchedExternal(
 export async function resolveMetricReleaseId(
   supabase: SupabaseClient<Database>,
   ownerId: string,
+  artistId: string,
   soundcloudTrack: Pick<SoundCloudTrack, "permalink_url" | "linked_release_id" | "linked_track_id">,
 ) {
-  if (soundcloudTrack.linked_release_id) return soundcloudTrack.linked_release_id;
+  const music = asArtistScopedMusicClient(supabase);
+  if (soundcloudTrack.linked_release_id) {
+    const { data } = await music
+      .from("releases")
+      .select("id")
+      .eq("id", soundcloudTrack.linked_release_id)
+      .eq("owner_id", ownerId)
+      .eq("artist_id", artistId)
+      .maybeSingle();
+    if (data?.id) return data.id;
+  }
   if (soundcloudTrack.linked_track_id) {
-    const { data } = await supabase
+    const { data } = await music
       .from("tracks")
       .select("release_id")
       .eq("id", soundcloudTrack.linked_track_id)
+      .eq("owner_id", ownerId)
+      .eq("artist_id", artistId)
       .maybeSingle();
     if (data?.release_id) return data.release_id;
   }
-  const { data: byUrl } = await supabase
+  const { data: byUrl } = await music
     .from("tracks")
     .select("release_id")
     .eq("owner_id", ownerId)
+    .eq("artist_id", artistId)
     .eq("soundcloud_url", soundcloudTrack.permalink_url)
     .maybeSingle();
   return byUrl?.release_id ?? null;
