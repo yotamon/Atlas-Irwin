@@ -26,7 +26,7 @@ function age(value: string | null) {
 const categories = [
   ["all", "All issues"], ["unmatched", "Unmatched tracks"], ["duplicates", "Duplicate candidates"],
   ["links", "Missing links"], ["media", "Public media"], ["preview", "Preview audio"],
-  ["website", "Website gaps"], ["homepage", "Homepage validity"], ["legacy", "Legacy review"],
+  ["website", "Website gaps"], ["homepage", "Homepage validity"],
   ["stale", "Stale sync"], ["metadata", "Metadata"],
 ] as const;
 
@@ -85,7 +85,6 @@ export default async function DataHealthPage({
     if (!releaseTracks.some((track) => track.audio_url || track.soundcloud_url || track.spotify_url)) items.push({ category: "preview", identity: release.title, source: "Catalog", syncedAt: release.updated_at, status: "Missing", reason: "No track has preview audio or an external playable URL.", href: `/studio/releases/${release.id}?tab=music#tracklist` });
     const matchingAlbum = albums.find((album) => normalized(album.name) === normalized(release.title));
     if (matchingAlbum && release.publish_state !== "live") items.push({ category: "website", identity: release.title, source: "Spotify", syncedAt: matchingAlbum.synced_at, status: "Platform live / website hidden", reason: "A synced Spotify release matches this draft catalog record.", href: `/studio/releases/${release.id}?tab=website#publishing` });
-    if (release.public_release_path && !release.notes?.toLowerCase().includes("reviewed")) items.push({ category: "legacy", identity: release.title, source: "Legacy import", syncedAt: release.updated_at, status: "Review", reason: `Imported from ${release.public_release_path}; verify media and platform links.`, href: `/studio/releases/${release.id}` });
     const missing = [["UPC", release.upc], ["release date", release.release_date], ["label", release.label], ["artwork alt text", release.cover_alt]].filter(([, value]) => !value).map(([label]) => label);
     if (missing.length) items.push({ category: "metadata", identity: release.title, source: "Catalog", syncedAt: release.updated_at, status: "Incomplete", reason: `Missing ${missing.join(", ")}.`, href: `/studio/releases/${release.id}?tab=overview#identity` });
   });

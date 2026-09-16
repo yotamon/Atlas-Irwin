@@ -55,8 +55,8 @@ async function uniqueReleaseSlug(
   const base = slugify(preferred || title);
   for (let index = 0; index < 50; index += 1) {
     const slug = index === 0 ? base : `${base}-${index + 1}`;
-    // owner_id remains part of the legacy uniqueness contract during the compatibility
-    // window, while artist_id prevents a release lookup from drifting into another artist.
+    // Keep both ownership and artist scope explicit so slug checks cannot drift
+    // across tenants or artists even when the database uniqueness rule evolves.
     let query = db
       .from("releases")
       .select("id")
@@ -295,7 +295,6 @@ export async function saveReleaseV2(form: FormData) {
     notes: nullable(form, "notes"),
     cover_asset: nullable(form, "cover_asset"),
     public_slug: nullable(form, "public_slug"),
-    public_release_path: nullable(form, "public_release_path"),
   };
 
   const query = id

@@ -11,8 +11,9 @@ const retiredScripts = [
   "import-public-releases.mjs",
   "migrate-media-to-public.mjs",
 ];
-const runtimeRoots = ["app", "components", "lib"];
+const runtimeRoots = ["app", "components", "lib", "types"];
 const extensions = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]);
+const retiredImportEnv = "STUDIO_IMPORT_ADMIN_EMAIL";
 
 function walk(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -48,6 +49,9 @@ for (const runtimeRoot of runtimeRoots) {
     if (/(?:from|import\()[^\n]*["']@\/lib\/releases["']/.test(source)) {
       violations.push(`${relativePath}: imports retired filesystem catalog reader`);
     }
+    if (/\bpublic_release_path\b/.test(source)) {
+      violations.push(`${relativePath}: references retired releases.public_release_path`);
+    }
   }
 }
 
@@ -55,6 +59,13 @@ const packageJson = readFileSync(path.join(root, "package.json"), "utf8");
 for (const script of retiredScripts) {
   if (packageJson.includes(script)) {
     violations.push(`package.json: references retired script ${script}`);
+  }
+}
+
+for (const relativePath of [".env.example", "scripts/seed-studio.mjs"]) {
+  const file = path.join(root, relativePath);
+  if (existsSync(file) && readFileSync(file, "utf8").includes(retiredImportEnv)) {
+    violations.push(`${relativePath}: references retired import owner environment variable`);
   }
 }
 

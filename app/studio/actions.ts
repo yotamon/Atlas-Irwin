@@ -120,7 +120,6 @@ export async function saveRelease(form: FormData) {
     notes: nullable(form, "notes"),
     cover_asset: nullable(form, "cover_asset"),
     public_slug: nullable(form, "public_slug"),
-    public_release_path: nullable(form, "public_release_path"),
   };
   const query = id
     ? supabase.from("releases").update(row).eq("id", id).select("id").single()
