@@ -13,6 +13,12 @@ export type MatchSuggestion = {
   reason: string;
 };
 
+type MatchInput = {
+  title: string;
+  durationSeconds?: number | null;
+  isrc?: string | null;
+};
+
 function normalizeTitle(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
@@ -39,16 +45,29 @@ function durationScore(
   return 0;
 }
 
-export async function suggestTrackMatches(
+export function suggestTrackMatches(
   supabase: SupabaseClient<Database>,
   ownerId: string,
   artistId: string,
-  input: {
-    title: string;
-    durationSeconds?: number | null;
-    isrc?: string | null;
-  },
+  input: MatchInput,
+): Promise<MatchSuggestion[]>;
+/** @deprecated Active artist scope is mandatory. */
+export function suggestTrackMatches(
+  supabase: SupabaseClient<Database>,
+  ownerId: string,
+  input: MatchInput,
+): Promise<MatchSuggestion[]>;
+export async function suggestTrackMatches(
+  supabase: SupabaseClient<Database>,
+  ownerId: string,
+  artistIdOrInput: string | MatchInput,
+  maybeInput?: MatchInput,
 ): Promise<MatchSuggestion[]> {
+  if (typeof artistIdOrInput !== "string" || !maybeInput) {
+    throw new Error("Active artist context is required for track matching.");
+  }
+  const artistId = artistIdOrInput;
+  const input = maybeInput;
   const music = asArtistScopedMusicClient(supabase);
   const { data: tracks, error } = await music
     .from("tracks")
@@ -61,12 +80,11 @@ export async function suggestTrackMatches(
   for (const track of tracks ?? []) {
     const release = track.releases as unknown as Pick<Release, "title"> | null;
     if (!release) continue;
-    let score = titleScore(input.title, track.title);
+    const baseScore = titleScore(input.title, track.title);
+    let score = baseScore;
     let reason = "Title similarity";
     score += durationScore(input.durationSeconds, track.duration);
-    if (score > titleScore(input.title, track.title)) {
-      reason = "Title and duration similarity";
-    }
+    if (score > baseScore) reason = "Title and duration similarity";
     if (input.isrc) {
       const { data: external } = await music
         .from("track_external_ids")
@@ -94,20 +112,52 @@ export async function suggestTrackMatches(
   return suggestions.sort((a, b) => b.score - a.score).slice(0, 5);
 }
 
-export async function linkSoundCloudTrack(
+export function linkSoundCloudTrack(
   supabase: SupabaseClient<Database>,
   ownerId: string,
   artistId: string,
   soundcloudTrackId: string,
   canonicalTrackId: string,
+): Promise<void>;
+/** @deprecated Prefer the explicit artist-scoped signature. */
+export function linkSoundCloudTrack(
+  supabase: SupabaseClient<Database>,
+  ownerId: string,
+  soundcloudTrackId: string,
+  canonicalTrackId: string,
+): Promise<void>;
+export async function linkSoundCloudTrack(
+  supabase: SupabaseClient<Database>,
+  ownerId: string,
+  artistIdOrSoundCloudTrackId: string,
+  soundCloudTrackIdOrCanonicalTrackId: string,
+  maybeCanonicalTrackId?: string,
 ) {
   const music = asArtistScopedMusicClient(supabase);
+  let artistId: string;
+  let soundcloudTrackId: string;
+  let canonicalTrackId: string;
+
+  if (maybeCanonicalTrackId) {
+    artistId = artistIdOrSoundCloudTrackId;
+    soundcloudTrackId = soundCloudTrackIdOrCanonicalTrackId;
+    canonicalTrackId = maybeCanonicalTrackId;
+  } else {
+    soundcloudTrackId = artistIdOrSoundCloudTrackId;
+    canonicalTrackId = soundCloudTrackIdOrCanonicalTrackId;
+    const { data: scopedTrack, error } = await music
+      .from("tracks")
+      .select("artist_id")
+      .eq("id", canonicalTrackId)
+      .eq("owner_id", ownerId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!scopedTrack) throw new Error("Canonical track not found for this owner.");
+    artistId = scopedTrack.artist_id;
+  }
+
   const [{ data: external }, { data: track, error: trackError }] = await Promise.all([
-    supabase
-      .from("soundcloud_tracks")
-      .select("*")
-      .eq("id", soundcloudTrackId)
-      .single(),
+    supabase.from("soundcloud_tracks").select("*").eq("id", soundcloudTrackId).single(),
     music
       .from("tracks")
       .select("*")
@@ -162,10 +212,7 @@ export async function dismissExternalTrack(
 ) {
   const { error } = await supabase
     .from(table)
-    .update({
-      reconcile_status: status,
-      reconciled_at: new Date().toISOString(),
-    })
+    .update({ reconcile_status: status, reconciled_at: new Date().toISOString() })
     .eq("id", id);
   if (error) throw new Error(error.message);
 }
@@ -176,13 +223,31 @@ export function isUnmatchedExternal(
   return item.reconcile_status === "pending" && !item.linked_track_id;
 }
 
-export async function resolveMetricReleaseId(
+export function resolveMetricReleaseId(
   supabase: SupabaseClient<Database>,
   ownerId: string,
   artistId: string,
   soundcloudTrack: Pick<SoundCloudTrack, "permalink_url" | "linked_release_id" | "linked_track_id">,
+): Promise<string | null>;
+/** @deprecated Active artist scope is mandatory. */
+export function resolveMetricReleaseId(
+  supabase: SupabaseClient<Database>,
+  ownerId: string,
+  soundcloudTrack: Pick<SoundCloudTrack, "permalink_url" | "linked_release_id" | "linked_track_id">,
+): Promise<string | null>;
+export async function resolveMetricReleaseId(
+  supabase: SupabaseClient<Database>,
+  ownerId: string,
+  artistIdOrTrack: string | Pick<SoundCloudTrack, "permalink_url" | "linked_release_id" | "linked_track_id">,
+  maybeTrack?: Pick<SoundCloudTrack, "permalink_url" | "linked_release_id" | "linked_track_id">,
 ) {
+  if (typeof artistIdOrTrack !== "string" || !maybeTrack) {
+    throw new Error("Active artist context is required for metric reconciliation.");
+  }
+  const artistId = artistIdOrTrack;
+  const soundcloudTrack = maybeTrack;
   const music = asArtistScopedMusicClient(supabase);
+
   if (soundcloudTrack.linked_release_id) {
     const { data } = await music
       .from("releases")
