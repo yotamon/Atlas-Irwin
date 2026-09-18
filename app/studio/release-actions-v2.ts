@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { asMarketingClient } from "@/lib/marketing/db";
 import {
@@ -242,7 +242,8 @@ async function shiftReleasePlan({
 
 export async function saveReleaseV2(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const requestedArtistId = value(form, "artist_id") || undefined;
+  const artist = await resolveActiveArtistContext(supabase, user, requestedArtistId);
   const db = asArtistScopedMusicClient(supabase);
   const id = value(form, "id");
   const title = required.parse(value(form, "title"));
@@ -254,6 +255,7 @@ export async function saveReleaseV2(form: FormData) {
         .from("releases")
         .select("id,slug,status,release_date")
         .eq("id", id)
+        .eq("owner_id", user.id)
         .eq("artist_id", artist.artistId)
         .single()
     : { data: null, error: null };
@@ -316,6 +318,7 @@ export async function saveReleaseV2(form: FormData) {
         .from("releases")
         .update(row)
         .eq("id", id)
+        .eq("owner_id", user.id)
         .eq("artist_id", artist.artistId)
         .select("id")
         .single()
@@ -345,5 +348,5 @@ export async function saveReleaseV2(form: FormData) {
   revalidatePath("/studio");
   revalidatePath("/studio/releases");
   revalidatePath(`/studio/releases/${data.id}`);
-  redirect(`/studio/releases/${data.id}`);
+  redirect(`/studio/releases/${data.id}?artist=${encodeURIComponent(artist.artistId)}`);
 }
