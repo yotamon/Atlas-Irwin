@@ -9,7 +9,7 @@ import {
 } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMarketingClient } from "@/lib/marketing/db";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { TASK_PRIORITIES, TASK_STATUSES } from "@/lib/studio/constants";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 
@@ -25,11 +25,11 @@ function toLocalInput(value: string | null) {
 export default async function TasksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; release?: string }>;
+  searchParams: Promise<{ status?: string; release?: string; artist?: string }>;
 }) {
   const params = await searchParams;
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user, params.artist);
   const marketing = asMarketingClient(supabase);
   const music = asArtistScopedMusicClient(supabase);
 
@@ -70,6 +70,7 @@ export default async function TasksPage({
       />
 
       <form className="studio-tabs">
+        <input type="hidden" name="artist" value={artist.artistId} />
         <select name="status" defaultValue={params.status ?? ""}>
           <option value="">All statuses</option>
           {TASK_STATUSES.map((status) => (
@@ -137,6 +138,7 @@ export default async function TasksPage({
                 <div className="task-actions">
                   {task.status !== "Done" ? (
                     <form action={completeTask}>
+                      <input type="hidden" name="artist_id" value={artist.artistId} />
                       <input type="hidden" name="id" value={task.id} />
                       <button className="button">Complete</button>
                     </form>
@@ -144,6 +146,7 @@ export default async function TasksPage({
                   <details>
                     <summary className="text-button">Edit</summary>
                     <form action={saveTask} className="studio-form">
+                      <input type="hidden" name="artist_id" value={artist.artistId} />
                       <input type="hidden" name="id" value={task.id} />
                       <div className="form-grid">
                         <Field label="Title" wide><input name="title" required defaultValue={task.title} /></Field>
@@ -169,6 +172,7 @@ export default async function TasksPage({
                     </form>
                   </details>
                   <form action={deleteTask}>
+                    <input type="hidden" name="artist_id" value={artist.artistId} />
                     <input type="hidden" name="id" value={task.id} />
                     <button className="text-button">Delete</button>
                   </form>
@@ -182,6 +186,7 @@ export default async function TasksPage({
       <section id="new" className="studio-panel feature">
         <div className="panel-head"><h2>Create task</h2></div>
         <form action={saveTask} className="studio-form">
+          <input type="hidden" name="artist_id" value={artist.artistId} />
           <div className="form-grid">
             <Field label="Title" wide><input name="title" required placeholder="What needs to happen?" /></Field>
             <Field label="Status">
