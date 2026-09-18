@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMarketingClient } from "@/lib/marketing/db";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { TASK_PRIORITIES, TASK_STATUSES } from "@/lib/studio/constants";
 import { redirectWithNotice } from "@/lib/studio/flash";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
@@ -19,9 +19,10 @@ function nullable(form: FormData, key: string) {
   return value(form, key) || null;
 }
 
-async function taskContext() {
+async function taskContext(form?: FormData) {
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const requestedArtistId = form ? value(form, "artist_id") || undefined : undefined;
+  const artist = await resolveActiveArtistContext(supabase, user, requestedArtistId);
   return {
     supabase,
     user,
@@ -48,7 +49,7 @@ async function assertRelease(
 }
 
 export async function saveTask(form: FormData) {
-  const context = await taskContext();
+  const context = await taskContext(form);
   const id = value(form, "id");
   const releaseId = nullable(form, "release_id");
   await assertRelease(context, releaseId);
@@ -75,11 +76,11 @@ export async function saveTask(form: FormData) {
 
   revalidatePath("/studio/tasks");
   revalidatePath("/studio");
-  redirectWithNotice("/studio/tasks", id ? "Task updated." : "Task created.");
+  redirectWithNotice(`/studio/tasks?artist=${encodeURIComponent(context.artist.artistId)}`, id ? "Task updated." : "Task created.");
 }
 
 export async function completeTask(form: FormData) {
-  const context = await taskContext();
+  const context = await taskContext(form);
   const id = z.uuid().parse(value(form, "id"));
   const { error } = await context.marketing
     .from("tasks")
@@ -93,7 +94,7 @@ export async function completeTask(form: FormData) {
 }
 
 export async function deleteTask(form: FormData) {
-  const context = await taskContext();
+  const context = await taskContext(form);
   const id = z.uuid().parse(value(form, "id"));
   const { error } = await context.marketing
     .from("tasks")
