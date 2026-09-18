@@ -8,10 +8,10 @@ import {
   Submit,
 } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { asMarketingClient } from "@/lib/marketing/db";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { TASK_PRIORITIES, TASK_STATUSES } from "@/lib/studio/constants";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
+import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 
 function toLocalInput(value: string | null) {
   if (!value) return "";
@@ -30,10 +30,10 @@ export default async function TasksPage({
   const params = await searchParams;
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveActiveArtistContext(supabase, user, params.artist);
-  const marketing = asMarketingClient(supabase);
+  const operational = asArtistScopedOperationalClient(supabase);
   const music = asArtistScopedMusicClient(supabase);
 
-  let query = marketing
+  let query = operational
     .from("tasks")
     .select("*")
     .eq("owner_id", user.id)
