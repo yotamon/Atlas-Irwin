@@ -8,7 +8,7 @@ import {
 } from "@/app/studio/external-actions";
 import { EmptyState, Field, FormatTime, PageHeader, Panel, Status, Submit } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { hasSpotifyEnv } from "@/lib/studio/spotify";
 
@@ -36,16 +36,16 @@ export default async function SpotifyPage({
   }>;
 }) {
   const { supabase, user } = await requireStudioAdmin();
-  const artistContext = await resolveDefaultArtistContext(supabase, user);
+  const artistContext = await resolveActiveArtistContext(supabase, user);
   const music = asArtistScopedMusicClient(supabase);
   const params = await searchParams;
   const configured = hasSpotifyEnv();
   const [{ data: account }, { data: albums }, { data: tracks }, { data: playlists }, { data: releases }] =
     await Promise.all([
-      supabase.from("spotify_accounts").select("*").maybeSingle(),
-      supabase.from("spotify_albums").select("*").order("release_date", { ascending: false }),
-      supabase.from("spotify_tracks").select("*").order("album_spotify_id").order("disc_number").order("track_number"),
-      supabase.from("spotify_playlists").select("*").order("synced_at", { ascending: false }),
+      supabase.from("spotify_accounts").select("*").eq("owner_id", user.id).maybeSingle(),
+      supabase.from("spotify_albums").select("*").eq("owner_id", user.id).order("release_date", { ascending: false }),
+      supabase.from("spotify_tracks").select("*").eq("owner_id", user.id).order("album_spotify_id").order("disc_number").order("track_number"),
+      supabase.from("spotify_playlists").select("*").eq("owner_id", user.id).order("synced_at", { ascending: false }),
       music
         .from("releases")
         .select("id,title,spotify_url")
@@ -119,7 +119,7 @@ export default async function SpotifyPage({
             </Panel>
           </div>
 
-          <Panel title="Atlas Irwin artist profile" className="feature">
+          <Panel title={`${artistContext.artistName} artist profile`} className="feature">
             {account.artist_id ? (
               <div className="soundcloud-profile">
                 {account.artist_image_url ? (
@@ -132,7 +132,7 @@ export default async function SpotifyPage({
                   <small>Artist ID: {account.artist_id}</small>
                 </div>
               </div>
-            ) : <p>Paste the Atlas Irwin artist link from Spotify. Studio verifies it against the API before saving it.</p>}
+            ) : <p>Paste the active artist link from Spotify. Studio verifies it against the API before saving it.</p>}
             <form action={saveSpotifyArtist} className="studio-form compact-form">
               <Field label="Spotify artist URL, URI, or ID"><input name="artist" defaultValue={account.artist_url ?? account.artist_id ?? ""} required /></Field>
               <Submit>{account.artist_id ? "Change artist" : "Verify artist"}</Submit>
@@ -153,7 +153,7 @@ export default async function SpotifyPage({
                         <td>{album.release_date ?? "—"}</td>
                         <td>{album.total_tracks}</td>
                         <td>{release ? <Link href={`/studio/releases/${release.id}`}><Status>{release.title}</Status></Link> : "Not imported"}</td>
-                        <td>{release ? null : <form action={importSpotifyAlbum}><input type="hidden" name="id" value={album.id} /><button className="text-button">Import release</button></form>}</td>
+                        <td>{release ? null : <form action={importSpotifyAlbum}><input type="hidden" name="artist_id" value={artistContext.artistId} /><input type="hidden" name="id" value={album.id} /><button className="text-button">Import release</button></form>}</td>
                       </tr>
                     );
                   })}
@@ -164,7 +164,7 @@ export default async function SpotifyPage({
 
           {tracks?.length ? (
             <Panel title="Create a campaign playlist" className="feature">
-              <p>Create a deliberate Spotify playlist from synced Atlas tracks. Nothing is published until you submit this form.</p>
+              <p>Create a deliberate Spotify playlist from synced Spotify tracks. Nothing is published until you submit this form.</p>
               <form action={createCampaignPlaylist} className="studio-form">
                 <div className="form-grid">
                   <Field label="Playlist name"><input name="name" required /></Field>
