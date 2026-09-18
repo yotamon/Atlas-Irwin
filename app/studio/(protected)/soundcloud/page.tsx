@@ -20,7 +20,7 @@ import {
   Submit,
 } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { hasSoundCloudEnv } from "@/lib/studio/soundcloud";
 import { isUnmatchedExternal, suggestTrackMatches } from "@/lib/studio/reconciliation";
@@ -39,15 +39,15 @@ export default async function SoundCloudPage({
   }>;
 }) {
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user);
   const music = asArtistScopedMusicClient(supabase);
   const params = await searchParams;
   const configured = hasSoundCloudEnv();
   const [{ data: account }, { data: tracks }, { data: playlists }, { data: releases }] =
     await Promise.all([
-      supabase.from("soundcloud_accounts").select("*").maybeSingle(),
-      supabase.from("soundcloud_tracks").select("*").order("synced_at", { ascending: false }),
-      supabase.from("soundcloud_playlists").select("*").order("synced_at", { ascending: false }),
+      supabase.from("soundcloud_accounts").select("*").eq("owner_id", user.id).maybeSingle(),
+      supabase.from("soundcloud_tracks").select("*").eq("owner_id", user.id).order("synced_at", { ascending: false }),
+      supabase.from("soundcloud_playlists").select("*").eq("owner_id", user.id).order("synced_at", { ascending: false }),
       music
         .from("releases")
         .select("id,title")
@@ -93,7 +93,7 @@ export default async function SoundCloudPage({
               </small>
               <div className="form-actions">
                 <form action={syncSoundCloud}><Submit>Sync catalog</Submit></form>
-                <form action={syncSoundCloudMetrics}><button className="button">Sync metrics</button></form>
+                <form action={syncSoundCloudMetrics}><input type="hidden" name="artist_id" value={artist.artistId} /><button className="button">Sync metrics</button></form>
                 <form action={disconnectSoundCloudAccount}><button className="text-button">Disconnect</button></form>
               </div>
             </Panel>
@@ -125,6 +125,7 @@ export default async function SoundCloudPage({
                           <td>
                             {suggestions.length ? suggestions.map((match) => (
                               <form action={linkExternalSoundCloudTrack} key={match.trackId}>
+                                <input type="hidden" name="artist_id" value={artist.artistId} />
                                 <input type="hidden" name="external_id" value={track.id} />
                                 <input type="hidden" name="track_id" value={match.trackId} />
                                 <button className="text-button">Link to {match.trackTitle} ({match.score})</button>
@@ -133,6 +134,7 @@ export default async function SoundCloudPage({
                           </td>
                           <td>
                             <form action={importSoundCloudTrack}>
+                              <input type="hidden" name="artist_id" value={artist.artistId} />
                               <input type="hidden" name="id" value={track.id} />
                               <button className="text-button">Create release</button>
                             </form>
