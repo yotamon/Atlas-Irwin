@@ -1,6 +1,6 @@
 import { EnsemblisMark } from "@/components/ensemblis-logo";
 import { ENSEMBLIS_PRODUCT } from "@/lib/ensemblis-product";
-import { signOut } from "../actions";
+import { signOut } from "@/app/studio/login-actions";
 
 export default function AccessDenied() {
   return (
