@@ -225,8 +225,8 @@ export async function importSoundCloudTrack(form: FormData) {
   redirect(`/studio/releases/${release.id}`);
 }
 
-export async function syncSoundCloudMetrics() {
-  const context = await scopedContext();
+export async function syncSoundCloudMetrics(form: FormData) {
+  const context = await scopedContext(form);
   const { data: tracks, error } = await context.supabase
     .from("soundcloud_tracks")
     .select("*")
