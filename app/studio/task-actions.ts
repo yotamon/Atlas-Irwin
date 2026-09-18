@@ -3,11 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { asMarketingClient } from "@/lib/marketing/db";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { TASK_PRIORITIES, TASK_STATUSES } from "@/lib/studio/constants";
 import { redirectWithNotice } from "@/lib/studio/flash";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
+import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
 
 const required = z.string().trim().min(1).max(300);
 
@@ -27,7 +27,7 @@ async function taskContext(form?: FormData) {
     supabase,
     user,
     artist,
-    marketing: asMarketingClient(supabase),
+    operational: asArtistScopedOperationalClient(supabase),
     music: asArtistScopedMusicClient(supabase),
   };
 }
@@ -65,13 +65,13 @@ export async function saveTask(form: FormData) {
   };
 
   const { error } = id
-    ? await context.marketing
+    ? await context.operational
         .from("tasks")
         .update(row)
         .eq("id", z.uuid().parse(id))
         .eq("owner_id", context.user.id)
         .eq("artist_id", context.artist.artistId)
-    : await context.marketing.from("tasks").insert(row);
+    : await context.operational.from("tasks").insert(row);
   if (error) throw new Error(error.message);
 
   revalidatePath("/studio/tasks");
@@ -82,7 +82,7 @@ export async function saveTask(form: FormData) {
 export async function completeTask(form: FormData) {
   const context = await taskContext(form);
   const id = z.uuid().parse(value(form, "id"));
-  const { error } = await context.marketing
+  const { error } = await context.operational
     .from("tasks")
     .update({ status: "Done" })
     .eq("id", id)
@@ -96,7 +96,7 @@ export async function completeTask(form: FormData) {
 export async function deleteTask(form: FormData) {
   const context = await taskContext(form);
   const id = z.uuid().parse(value(form, "id"));
-  const { error } = await context.marketing
+  const { error } = await context.operational
     .from("tasks")
     .delete()
     .eq("id", id)
