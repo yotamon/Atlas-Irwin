@@ -3,7 +3,7 @@ import { EnsemblisMark } from "@/components/ensemblis-logo";
 import { ArtistSwitcher } from "./artist-switcher";
 import { studioIcons } from "./icons";
 import { StudioAdvancedNavigation, StudioPrimaryNavigation } from "./sidebar-navigation";
-import { signOut } from "@/app/studio/actions";
+import { signOut } from "@/app/studio/login-actions";
 import {
   ENSEMBLIS_MANAGE_NAV,
   ENSEMBLIS_PRODUCT,

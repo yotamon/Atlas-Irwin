@@ -5,6 +5,7 @@ const root = process.cwd();
 const retiredFiles = [
   "lib/catalog/legacy-media.ts",
   "lib/releases.ts",
+  "app/studio/actions.ts",
 ];
 const retiredScripts = [
   "import-legacy-releases.mjs",
@@ -20,6 +21,18 @@ function walk(directory) {
     const target = path.join(directory, entry.name);
     return entry.isDirectory() ? walk(target) : [target];
   });
+}
+
+function importsRetiredStudioActions(file, source) {
+  const retiredModule = path.resolve(root, "app/studio/actions");
+  const importPattern = /(?:from\s+|import\()\s*["']([^"']+)["']/g;
+  for (const match of source.matchAll(importPattern)) {
+    const specifier = match[1];
+    if (specifier === "@/app/studio/actions") return true;
+    if (!specifier.startsWith(".")) continue;
+    if (path.resolve(path.dirname(file), specifier) === retiredModule) return true;
+  }
+  return false;
 }
 
 const violations = [];
@@ -52,6 +65,9 @@ for (const runtimeRoot of runtimeRoots) {
     if (/\bpublic_release_path\b/.test(source)) {
       violations.push(`${relativePath}: references retired releases.public_release_path`);
     }
+    if (importsRetiredStudioActions(file, source)) {
+      violations.push(`${relativePath}: imports retired owner-only Studio action monolith`);
+    }
   }
 }
 
@@ -70,9 +86,9 @@ for (const relativePath of [".env.example", "scripts/seed-studio.mjs"]) {
 }
 
 if (violations.length) {
-  console.error("Filesystem catalog compatibility check failed:");
+  console.error("Legacy runtime compatibility check failed:");
   for (const violation of violations) console.error(`- ${violation}`);
   process.exit(1);
 }
 
-console.log("Filesystem catalog compatibility check passed.");
+console.log("Legacy runtime compatibility check passed.");

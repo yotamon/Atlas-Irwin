@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import { updateContentStatus } from "@/app/studio/actions";
+import { updateContentStatus } from "@/app/studio/content-actions";
 import { CONTENT_STATUSES } from "@/lib/studio/constants";
 
 export function ContentStatusChips({

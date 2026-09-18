@@ -149,7 +149,7 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
       <details className="v2-advanced-disclosure release-source-details" id="release-details">
         <summary>Release details</summary>
         <p className="v2-muted-copy">Canonical facts Ensemblis uses across distribution, content and promotion.</p>
-        <ReleaseForm release={release} releaseDateLocked={releaseDateLocked} />
+        <ReleaseForm release={release} releaseDateLocked={releaseDateLocked} artistId={artistId} />
       </details>
 
       <details className="v2-advanced-disclosure release-specialist-tools">

@@ -1,3 +1,5 @@
+import "server-only";
+
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import type { ArtistScopedCoreOperationalDatabase } from "@/types/artist-scoped-operational-database";

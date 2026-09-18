@@ -18,10 +18,12 @@ export function ReleaseForm({
   release,
   releaseDateLocked = false,
   artistName,
+  artistId,
 }: {
   release?: Release;
   releaseDateLocked?: boolean;
   artistName?: string;
+  artistId: string;
 }) {
   const subject = artistName || "this artist";
   const [state, formAction] = useActionState(saveReleaseV2WithState, EMPTY_ACTION_FORM_STATE);
@@ -29,6 +31,7 @@ export function ReleaseForm({
 
   return (
     <form action={formAction} className="studio-form studio-release-form-v2">
+      <input type="hidden" name="artist_id" value={artistId} />
       <input type="hidden" name="id" value={release?.id} />
       {releaseDateLocked ? <input type="hidden" name="release_date" value={release?.release_date ?? ""} /> : null}
 
