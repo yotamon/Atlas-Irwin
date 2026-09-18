@@ -248,10 +248,10 @@ test("strict recovery baseline fingerprints every remote timestamp and logical n
   assert.ok(errors.some((error) => error.includes("Remote migration history changed")));
 });
 
-test("dated production recovery baseline matches the canonical migration directory", () => {
+test("latest production recovery baseline matches the canonical migration directory", () => {
   const baseline = JSON.parse(
     fs.readFileSync(
-      new URL("../scripts/fixtures/production-migration-recovery-2026-09-14.json", import.meta.url),
+      new URL("../scripts/fixtures/production-migration-recovery-2026-09-18.json", import.meta.url),
       "utf8",
     ),
   );
