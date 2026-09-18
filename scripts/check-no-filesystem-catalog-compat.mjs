@@ -23,6 +23,18 @@ function walk(directory) {
   });
 }
 
+function importsRetiredStudioActions(file, source) {
+  const retiredModule = path.resolve(root, "app/studio/actions");
+  const importPattern = /(?:from\s+|import\()\s*["']([^"']+)["']/g;
+  for (const match of source.matchAll(importPattern)) {
+    const specifier = match[1];
+    if (specifier === "@/app/studio/actions") return true;
+    if (!specifier.startsWith(".")) continue;
+    if (path.resolve(path.dirname(file), specifier) === retiredModule) return true;
+  }
+  return false;
+}
+
 const violations = [];
 
 for (const relativePath of retiredFiles) {
@@ -53,7 +65,7 @@ for (const runtimeRoot of runtimeRoots) {
     if (/\bpublic_release_path\b/.test(source)) {
       violations.push(`${relativePath}: references retired releases.public_release_path`);
     }
-    if (/(?:from|import\()[^\n]*["']@\/app\/studio\/actions["']/.test(source)) {
+    if (importsRetiredStudioActions(file, source)) {
       violations.push(`${relativePath}: imports retired owner-only Studio action monolith`);
     }
   }
