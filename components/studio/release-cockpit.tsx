@@ -176,7 +176,7 @@ export function ReleaseCockpit({
         <div className="workspace-grid">
           <section className="workspace-main" id="identity">
             <div className="section-head"><div><span className="section-label">Release overview</span><h2>Identity and story</h2></div></div>
-            <ReleaseForm release={release} />
+            <ReleaseForm release={release} artistId={artistId} />
             <div className="story-builder">
               <form action={generateReleaseIdentity} className="studio-form"><input type="hidden" name="artist_id" value={artistId} />
                 <input type="hidden" name="id" value={release.id} />
@@ -208,7 +208,7 @@ export function ReleaseCockpit({
 
           <section className="workspace-section" id="platform-links">
             <div className="section-head"><div><span className="section-label">Distribution</span><h2>Release listening destinations</h2></div></div>
-            <ReleaseForm release={release} />
+            <ReleaseForm release={release} artistId={artistId} />
             {externalLinks.length ? <div className="external-link-rail">{externalLinks.map((link) => <a href={link.external_url} target="_blank" rel="noreferrer" key={link.id}><span>{link.provider}</span><strong>{link.label || link.external_url}</strong><small>{link.synced_at ? `Synced ${dateLabel(link.synced_at.slice(0, 10))}` : "Manual link"}</small></a>)}</div> : null}
           </section>
 
