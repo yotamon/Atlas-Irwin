@@ -1,11 +1,16 @@
 import { Page, PageHeader } from "@/components/studio/ui";
 import { ReleaseForm } from "@/components/studio/release-form";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 
-export default async function NewRelease() {
+export default async function NewRelease({
+  searchParams,
+}: {
+  searchParams: Promise<{ artist?: string }>;
+}) {
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const params = await searchParams;
+  const artist = await resolveActiveArtistContext(supabase, user, params.artist);
 
   return (
     <Page width="narrow" className="v2-narrow-page">
@@ -14,7 +19,7 @@ export default async function NewRelease() {
         title="New release"
         description={`Create a release workspace for ${artist.artistName}. Ensemblis prepares the operational structure without spending money or publishing anything.`}
       />
-      <ReleaseForm artistName={artist.artistName} />
+      <ReleaseForm artistName={artist.artistName} artistId={artist.artistId} />
     </Page>
   );
 }
