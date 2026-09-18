@@ -9,7 +9,7 @@ on:
       - "scripts/validate-migration-history.mjs"
       - "scripts/check-supabase-migration-parity.mjs"
       - "scripts/audit-supabase-migration-recovery.mjs"
-      - "scripts/fixtures/production-migration-recovery-2026-09-14.json"
+      - "scripts/fixtures/production-migration-recovery-*.json"
       - "tests/migration-history-guard.test.mjs"
       - ".github/workflows/database-pr.yml"
   push:
@@ -20,7 +20,7 @@ on:
       - "scripts/validate-migration-history.mjs"
       - "scripts/check-supabase-migration-parity.mjs"
       - "scripts/audit-supabase-migration-recovery.mjs"
-      - "scripts/fixtures/production-migration-recovery-2026-09-14.json"
+      - "scripts/fixtures/production-migration-recovery-*.json"
       - "tests/migration-history-guard.test.mjs"
       - ".github/workflows/database-pr.yml"
   workflow_dispatch:
