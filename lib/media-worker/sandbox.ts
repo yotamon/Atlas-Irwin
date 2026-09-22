@@ -98,6 +98,11 @@ function sandboxDispatchError(error: unknown) {
   return `Vercel Sandbox dispatch failed: ${detail}`;
 }
 
+function sandboxGoneError(error: unknown) {
+  const detail = error instanceof Error ? error.message : String(error);
+  return /(?:status code\s*)?410\b|SANDBOX_STOPPED|SNAPSHOT_NOT_FOUND/i.test(detail);
+}
+
 export async function getMediaWorkerSandbox() {
   if (!mediaWorkerSandboxAvailable()) {
     throw new Error("Vercel Sandbox is unavailable outside a Vercel deployment. Atlas did not use a paid fallback.");
@@ -347,38 +352,54 @@ export async function dispatchMediaWorkerJob(input: {
   callbackUrl: string;
   callbackToken: string;
 }) {
-  let sandbox: Sandbox | null = null;
-  let locked = false;
-  try {
-    sandbox = await getMediaWorkerSandbox();
-    await acquireWorkerLock(sandbox);
-    locked = true;
+  let recoveredGoneSandbox = false;
 
-    const requestPath = `/tmp/atlas-worker-${input.jobId.replace(/[^a-zA-Z0-9_-]/g, "-")}.json`;
-    await sandbox.writeFiles([{
-      path: requestPath,
-      content: JSON.stringify({
-        job_id: input.jobId,
-        job_type: input.jobType,
-        payload: input.payload,
-        callback_url: input.callbackUrl,
-        callback_token: input.callbackToken,
-      }),
-    }]);
+  for (;;) {
+    let sandbox: Sandbox | null = null;
+    let locked = false;
+    try {
+      sandbox = await getMediaWorkerSandbox();
+      await acquireWorkerLock(sandbox);
+      locked = true;
 
-    const command = await sandbox.runCommand({
-      cmd: "bash",
-      args: ["-lc", detachedWorkerScript(requestPath)],
-      detached: true,
-    });
-    if (command.exitCode !== null && command.exitCode !== 0) {
-      throw new Error((await commandError(command)) || "Could not start the Media Worker runner.");
+      const requestPath = `/tmp/atlas-worker-${input.jobId.replace(/[^a-zA-Z0-9_-]/g, "-")}.json`;
+      await sandbox.writeFiles([{
+        path: requestPath,
+        content: JSON.stringify({
+          job_id: input.jobId,
+          job_type: input.jobType,
+          payload: input.payload,
+          callback_url: input.callbackUrl,
+          callback_token: input.callbackToken,
+        }),
+      }]);
+
+      const command = await sandbox.runCommand({
+        cmd: "bash",
+        args: ["-lc", detachedWorkerScript(requestPath)],
+        detached: true,
+      });
+      if (command.exitCode !== null && command.exitCode !== 0) {
+        throw new Error((await commandError(command)) || "Could not start the Media Worker runner.");
+      }
+      return { sandboxName: mediaWorkerSandboxName() };
+    } catch (error) {
+      if (sandbox && locked) await releaseWorkerLock(sandbox);
+
+      // Persistent Sandbox sessions can become unrecoverable after their retained snapshot expires
+      // or the backing session is already gone. Vercel reports these states as HTTP 410. Recreate
+      // the same stable sandbox identity once, then let normal bootstrap rebuild its environment.
+      // Never loop or create a versioned fallback lineage: one retry protects both correctness and
+      // Hobby storage/compute usage.
+      if (sandbox && !recoveredGoneSandbox && sandboxGoneError(error)) {
+        recoveredGoneSandbox = true;
+        await sandbox.delete().catch(() => undefined);
+        continue;
+      }
+
+      if (sandbox) await sandbox.stop().catch(() => undefined);
+      throw new Error(sandboxDispatchError(error));
     }
-    return { sandboxName: mediaWorkerSandboxName() };
-  } catch (error) {
-    if (sandbox && locked) await releaseWorkerLock(sandbox);
-    if (sandbox) await sandbox.stop().catch(() => undefined);
-    throw new Error(sandboxDispatchError(error));
   }
 }
 
