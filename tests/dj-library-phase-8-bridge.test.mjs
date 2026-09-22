@@ -167,7 +167,7 @@ test("local Set Builder uses the canonical planner while keeping audio on one pa
   assert.ok(deviceSources.includes("TrackDescriptor("));
   assert.ok(component.includes("Approve & render locally"));
   assert.ok(component.includes("Process audio on your computer."));
-  assert.ok(component.includes("Analysis: local · Planning: Ensemblis · Final render: local"));
+  assert.ok(component.includes("Analysis: paired computer · Planning: Ensemblis · Final render: paired computer"));
   assert.ok(component.includes("candidateRefs"));
   assert.ok(component.includes("Replan edits"));
 });
