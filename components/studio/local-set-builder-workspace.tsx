@@ -415,9 +415,9 @@ export function LocalSetBuilderWorkspace({ artistId, artistName }: { artistId: s
         <div className={styles.contract}>
           <FiCpu />
           <span>Where the work happens</span>
-          <strong>Audio analysis → this computer</strong>
+          <strong>Audio analysis → paired computer</strong>
           <strong>Set planning → Ensemblis</strong>
-          <strong>AutoMix render → this computer</strong>
+          <strong>AutoMix render → paired computer</strong>
           <small>Original audio and local file paths stay on the paired computer.</small>
         </div>
       </header>
@@ -451,7 +451,7 @@ export function LocalSetBuilderWorkspace({ artistId, artistName }: { artistId: s
           {!loading && !readyTracks.length ? <div className={styles.empty}><FiHardDrive /><strong>No planning-ready local tracks yet.</strong><span>Open Ensemblis desktop, connect this computer, choose a music folder, and let local analysis finish. Studio receives path-free musical evidence only.</span></div> : null}
           {loading ? <div className={styles.empty}><FiRefreshCw className={styles.spin} /><span>Loading local library evidence…</span></div> : null}
         </div>
-        <div className={styles.createBar}><div><strong>Local audio stays on your computer.</strong><small>Analysis: local · Planning: Ensemblis · Final render: local</small></div><button className="button button-primary" type="button" disabled={selected.length < 2 || Boolean(busy)} onClick={() => void createPlan()}>{busy === "create" ? <FiRefreshCw /> : <FiZap />} Build Set Plan from local tracks</button></div>
+        <div className={styles.createBar}><div><strong>Local audio stays on your computer.</strong><small>Analysis: paired computer · Planning: Ensemblis · Final render: paired computer</small></div><button className="button button-primary" type="button" disabled={selected.length < 2 || Boolean(busy)} onClick={() => void createPlan()}>{busy === "create" ? <FiRefreshCw /> : <FiZap />} Build Set Plan from local tracks</button></div>
       </div>
 
       {error ? <div className={styles.error} role="alert"><FiX /><span>{error}</span></div> : null}
