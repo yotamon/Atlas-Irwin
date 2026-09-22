@@ -6,7 +6,7 @@
 **Product:** Ensemblis  
 **Production reference artist:** Atlas Irwin  
 **Traditional/non-AI acceptance reference:** Cerebero Spinal  
-**Last reconciled:** 2026-09-06
+**Last reconciled:** 2026-09-23
 
 ## 1. North star
 
@@ -250,8 +250,17 @@ Remaining exit work:
 - complete Mission/Needs You explanations of the exact contract boundary;
 - preserve hard overrides for sensitive communication, rights/legal declarations and Distribution.
 
-#### P1.5 Product navigation and artist-context UX - #58 - **Complete**
-Outcome-oriented Ensemblis surfaces with active artist context replace the old Atlas-specific hierarchy. Subsequent UX convergence and Component System V2 made the core flow materially quieter on desktop and mobile.
+#### P1.5 Product navigation and artist-context UX - #58 - **V3 foundation complete; V4 interaction reset active**
+Outcome-oriented Ensemblis surfaces with active artist context replaced the old Atlas-specific hierarchy, but dogfooding exposed a deeper discoverability problem: capability is still too often represented as hidden routes, long feature pages or specialist panels that users must know how to find.
+
+The canonical next step is [`docs/ensemblis-ux-architecture-v4.md`](ensemblis-ux-architecture-v4.md):
+- keep Today / Music / Grow as the stable primary workspaces;
+- make Create and search/action intent global rather than navigational knowledge;
+- center Tracks, Releases, Mixes and Creative Assets as coherent objects;
+- expose valid actions contextually on those objects;
+- replace long multi-tool pages with guided workflows, widgets and inspectors;
+- preserve specialist capabilities and routes as implementation/advanced layers without making them the default mental model;
+- use AutoMix as the first reference migration from stacked specialist panels to Source → Intent → Build → Review → Render.
 
 #### P1.6 Rebrand implementation / Atlas decoupling - #59 - **Complete**
 Ensemblis is the product identity. Atlas Irwin remains artist data/reference production content.
