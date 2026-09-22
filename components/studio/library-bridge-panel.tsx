@@ -265,7 +265,7 @@ export function LibraryBridgePanel({ artistId }: { artistId: string }) {
           <div>
             <FiCpu aria-hidden="true" />
             <span>Audio analysis</span>
-            <strong>{primaryOnlineDevice ? "This computer" : activeDevices.length ? "Waiting for desktop" : "Desktop required"}</strong>
+            <strong>{primaryOnlineDevice ? primaryOnlineDevice.name : activeDevices.length ? "Waiting for desktop" : "Desktop required"}</strong>
           </div>
           <div>
             <FiCloud aria-hidden="true" />
@@ -275,7 +275,7 @@ export function LibraryBridgePanel({ artistId }: { artistId: string }) {
           <div>
             <FiHardDrive aria-hidden="true" />
             <span>AutoMix render</span>
-            <strong>{primaryOnlineDevice ? "This computer" : activeDevices.length ? "Waiting for desktop" : "Desktop required"}</strong>
+            <strong>{primaryOnlineDevice ? primaryOnlineDevice.name : activeDevices.length ? "Waiting for desktop" : "Desktop required"}</strong>
           </div>
         </div>
         <p className={styles.engineExplanation}>
