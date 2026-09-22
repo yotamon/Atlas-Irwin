@@ -1,5 +1,7 @@
 # Ensemblis UX Architecture V3
 
+> **Historical:** Superseded by [`docs/ensemblis-ux-architecture-v4.md`](ensemblis-ux-architecture-v4.md). V4 is the canonical artist-facing interaction architecture.
+
 Status: canonical artist-facing product architecture
 
 ## Product principle
