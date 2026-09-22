@@ -167,7 +167,7 @@ test("production Media Worker remains self-bootstrapping, zero-idle and Sandbox-
   assert.ok(runner.includes("finish_social_video"));
   assert.ok(runner.includes('payload.get("job_type") == "master_audio"'));
   assert.ok(socialFinishing.includes("finish_social_video_job"));
-  assert.ok(bridge.includes("vercel/sandbox/universal@sha256:"));
+  assert.ok(bridge.includes('MEDIA_WORKER_SANDBOX_IMAGE = "vercel/sandbox/universal:latest"'));
   assert.ok(bridge.includes('MEDIA_WORKER_PYTHON_VERSION = "3.13.14"'));
   assert.ok(bridge.includes("resources: { vcpus: 4 }"));
   assert.ok(bridge.includes("persistent: true"));
