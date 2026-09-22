@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const sandbox = readFileSync(join(root, "lib", "media-worker", "sandbox.ts"), "utf8");
+const packageJson = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 
 test("Media Worker uses a generation-stable persistent sandbox", () => {
   assert.match(sandbox, /const MEDIA_WORKER_SANDBOX_GENERATION = \d+;/);
@@ -26,5 +27,22 @@ test("Media Worker bounds and expires retained snapshots", () => {
   assert.match(
     sandbox,
     /keepLastSnapshots:\s*\{\s*count: 1,\s*expiration: MEDIA_WORKER_SNAPSHOT_EXPIRATION_MS,\s*deleteEvicted: true,/s,
+  );
+});
+
+
+test("Media Worker uses the current managed Sandbox lifecycle", () => {
+  const sandboxVersion = String(packageJson.dependencies["@vercel/sandbox"] ?? "");
+  const major = Number.parseInt(sandboxVersion.replace(/^[^0-9]*/, "").split(".")[0] ?? "0", 10);
+
+  assert.ok(major >= 3, "Sandbox SDK must support managed images and stale-snapshot recovery");
+  assert.match(
+    sandbox,
+    /const MEDIA_WORKER_SANDBOX_IMAGE = "vercel\/sandbox\/universal:latest";/,
+  );
+  assert.doesNotMatch(
+    sandbox,
+    /MEDIA_WORKER_SANDBOX_IMAGE = "[^"]+@sha256:/,
+    "do not pin the worker to a retired managed-image digest",
   );
 });
