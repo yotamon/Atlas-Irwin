@@ -30,7 +30,6 @@ test("Media Worker bounds and expires retained snapshots", () => {
   );
 });
 
-
 test("Media Worker uses the current managed Sandbox lifecycle", () => {
   const sandboxVersion = String(packageJson.dependencies["@vercel/sandbox"] ?? "");
   const major = Number.parseInt(sandboxVersion.replace(/^[^0-9]*/, "").split(".")[0] ?? "0", 10);
