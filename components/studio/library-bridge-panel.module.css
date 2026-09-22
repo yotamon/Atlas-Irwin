@@ -390,12 +390,12 @@
 @media (max-width: 760px) {
   .header,
   .pairingCard,
-  .deviceTop,
-  .engineStatus {
+  .deviceTop {
     flex-direction: column;
     align-items: stretch;
   }
 
+  .engineStatus,
   .executionRoute {
     grid-template-columns: 1fr;
   }
