@@ -83,9 +83,9 @@ test("portable project boundary stays native, durable and path-free without leak
     assert.equal(js.includes(`invoke(\"${command}\"`), false, `${command} must not leak into setup UI`);
   }
   assert.equal(html.includes(".ensemble lives with you"), false);
-  assert.ok(html.includes("Connect your music to Ensemblis"));
+  assert.ok(html.includes("Connect this computer as your Local Engine"));
   assert.ok(html.includes("Choose music folder"));
-  assert.ok(html.includes("Your music is connected"));
+  assert.ok(html.includes("This computer is ready for local audio processing"));
   assert.equal(js.includes("packagePath"), false);
   assert.equal(js.includes("filePath"), false);
 });
