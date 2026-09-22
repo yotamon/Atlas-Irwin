@@ -88,6 +88,12 @@ test("native webview uses a strict local-only CSP without unsafe inline executio
   assert.equal(/<script(?![^>]*\bsrc=)/.test(html), false, "native HTML must not contain inline script blocks");
   assert.ok(html.includes('src="./app.js"'));
   assert.ok(html.includes('href="./app.css"'));
+  assert.ok(html.includes("Connect this computer as your Local Engine"));
+  assert.ok(html.includes("Local Engine ready"));
+  assert.ok(html.includes("Audio analysis"));
+  assert.ok(html.includes("Set planning"));
+  assert.ok(html.includes("AutoMix render"));
+  assert.ok(html.includes("Open Ensemblis Studio"));
 });
 
 test("Studio makes automatic browser connection primary while preserving explicit recovery, licensing and revocation", async () => {
