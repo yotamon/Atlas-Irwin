@@ -38,3 +38,9 @@ test("Media Worker recovers one stale persistent sandbox without creating a new 
   assert.match(sandbox, /await sandbox\.delete\(\)\.catch\(\(\) => undefined\);/);
   assert.match(sandbox, /recoveredGoneSandbox = true;/);
 });
+
+
+test("Media Worker classifies Hobby quota responses without a paid fallback", () => {
+  assert.match(sandbox, /402\|429\|hobby/i);
+  assert.match(sandbox, /Atlas did not use a paid fallback/);
+});

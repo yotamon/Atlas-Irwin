@@ -91,7 +91,7 @@ async function commandError(command: { stderr: () => Promise<string> }) {
 
 function sandboxDispatchError(error: unknown) {
   const detail = error instanceof Error ? error.message : String(error);
-  if (/quota|limit|billing|payment|resource|429|hobby/i.test(detail)) {
+  if (/quota|limit|billing|payment|required|resource|402|429|hobby/i.test(detail)) {
     return "Vercel Hobby Sandbox quota is unavailable right now. Atlas did not use a paid fallback. Try again after the free quota resets.";
   }
   if (/already processing|worker is busy/i.test(detail)) return detail;
