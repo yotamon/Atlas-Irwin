@@ -408,11 +408,18 @@ export function LocalSetBuilderWorkspace({ artistId, artistName }: { artistId: s
     <section className={styles.builder} aria-label="Local Set Builder">
       <header className={styles.hero}>
         <div>
-          <span className="section-label">Set Intelligence / device library</span>
-          <h2>Plan in Ensemblis.<br /><em>Render where the music lives.</em></h2>
-          <p>Local audio never enters the cloud. Only compact musical evidence reaches Set Intelligence, then your paired computer executes the exact approved MixPlan.</p>
+          <span className="section-label">Local Set Builder · local audio execution</span>
+          <h2>Control it in Studio.<br /><em>Process audio on your computer.</em></h2>
+          <p>The browser is the control surface. Your paired Ensemblis desktop app analyzes local tracks and renders the approved AutoMix on your processor; Set Intelligence plans from path-free musical evidence.</p>
         </div>
-        <div className={styles.contract}><FiCpu /><span>Execution contract</span><strong>Cloud plan → frozen hash → local DSP</strong><small>One paired computer per local set in Phase 8.</small></div>
+        <div className={styles.contract}>
+          <FiCpu />
+          <span>Where the work happens</span>
+          <strong>Audio analysis → this computer</strong>
+          <strong>Set planning → Ensemblis</strong>
+          <strong>AutoMix render → this computer</strong>
+          <small>Original audio and local file paths stay on the paired computer.</small>
+        </div>
       </header>
 
       <div className={styles.setup}>
@@ -441,10 +448,10 @@ export function LocalSetBuilderWorkspace({ artistId, artistName }: { artistId: s
               <span className={styles.identity}><strong>{track.metadata.title || "Untitled"}</strong><small>{track.metadata.artist || "Local recording"} · {track.metadata.bpm ? `${track.metadata.bpm.toFixed(1)} BPM` : "tempo analyzed"} · {track.metadata.musicalKey || "key analyzed"}</small></span>
             </button>;
           })}
-          {!loading && !readyTracks.length ? <div className={styles.empty}><FiHardDrive /><strong>No planning-ready local tracks yet.</strong><span>Pair the Library Bridge, choose a music folder, let local analysis finish, then sync the path-free evidence.</span></div> : null}
+          {!loading && !readyTracks.length ? <div className={styles.empty}><FiHardDrive /><strong>No planning-ready local tracks yet.</strong><span>Open Ensemblis desktop, connect this computer, choose a music folder, and let local analysis finish. Studio receives path-free musical evidence only.</span></div> : null}
           {loading ? <div className={styles.empty}><FiRefreshCw className={styles.spin} /><span>Loading local library evidence…</span></div> : null}
         </div>
-        <div className={styles.createBar}><div><strong>No audio upload.</strong><small>The planner receives fingerprints and musical evidence only.</small></div><button className="button button-primary" type="button" disabled={selected.length < 2 || Boolean(busy)} onClick={() => void createPlan()}>{busy === "create" ? <FiRefreshCw /> : <FiZap />} Build local Set Plan</button></div>
+        <div className={styles.createBar}><div><strong>Local audio stays on your computer.</strong><small>Analysis: local · Planning: Ensemblis · Final render: local</small></div><button className="button button-primary" type="button" disabled={selected.length < 2 || Boolean(busy)} onClick={() => void createPlan()}>{busy === "create" ? <FiRefreshCw /> : <FiZap />} Build Set Plan from local tracks</button></div>
       </div>
 
       {error ? <div className={styles.error} role="alert"><FiX /><span>{error}</span></div> : null}
