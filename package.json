@@ -3,8 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "description": "Ensemblis music-aware artist growth platform with the Atlas Irwin public artist site as its production reference artist",
-  "repository": { "type": "git", "url": "https://github.com/yotamon/Atlas-Irwin.git" },
-  "bugs": { "url": "https://github.com/yotamon/Atlas-Irwin/issues" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yotamon/Atlas-Irwin.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yotamon/Atlas-Irwin/issues"
+  },
   "author": "Yotam Faraggi",
   "license": "MIT",
   "scripts": {
@@ -29,7 +34,7 @@
     "@base-ui/react": "1.8.0",
     "@supabase/ssr": "0.12.0",
     "@supabase/supabase-js": "^2.110.1",
-    "@vercel/sandbox": "2.9.2",
+    "@vercel/sandbox": "3.3.0",
     "framer-motion": "^12.42.2",
     "next": "^16.3.4",
     "nodemailer": "^9.0.3",
@@ -51,8 +56,14 @@
     "tailwindcss": "^4.3.2",
     "typescript": "^5"
   },
-  "overrides": { "next": { "postcss": "8.5.23" } },
-  "engines": { "node": "22.x" },
+  "overrides": {
+    "next": {
+      "postcss": "8.5.23"
+    }
+  },
+  "engines": {
+    "node": "22.x"
+  },
   "optionalDependencies": {
     "lightningcss-win32-arm64-msvc": "^1.32.0",
     "lightningcss-win32-x64-msvc": "^1.32.0"
