@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FiCheck,
   FiClipboard,
+  FiCloud,
+  FiCpu,
   FiDownload,
   FiHardDrive,
   FiLink,
@@ -119,6 +121,15 @@ export function LibraryBridgePanel({ artistId }: { artistId: string }) {
     () => snapshot.devices.filter((device) => !device.revoked_at),
     [snapshot.devices],
   );
+  const onlineDevices = useMemo(
+    () => activeDevices.filter((device) => (
+      Boolean(device.last_seen_at)
+      && observedAtMs - new Date(device.last_seen_at as string).getTime() < 2 * 60 * 1000
+    )),
+    [activeDevices, observedAtMs],
+  );
+  const primaryOnlineDevice = onlineDevices[0] ?? null;
+  const primaryDevice = primaryOnlineDevice ?? activeDevices[0] ?? null;
 
   async function createPairing() {
     if (busy) return;
@@ -206,7 +217,7 @@ export function LibraryBridgePanel({ artistId }: { artistId: string }) {
   }
 
   return (
-    <section className={styles.panel} aria-label="Connected computers">
+    <section className={styles.panel} id="local-engine" aria-label="Local Engine and connected computers">
       <div className={styles.header}>
         <div>
           <span className="section-label">Music / Computers</span>
@@ -220,6 +231,56 @@ export function LibraryBridgePanel({ artistId }: { artistId: string }) {
             <FiRefreshCw aria-hidden="true" /> Refresh
           </button>
         </div>
+      </div>
+
+      <div
+        className={`${styles.engineStatus} ${primaryOnlineDevice ? styles.engineOnline : activeDevices.length ? styles.engineOffline : styles.engineMissing}`}
+        aria-live="polite"
+      >
+        <div className={styles.engineLead}>
+          <span className={styles.enginePulse} aria-hidden="true" />
+          <div>
+            <span className={styles.kicker}>Local Engine</span>
+            <strong>
+              {loading
+                ? "Checking your local processor…"
+                : primaryOnlineDevice
+                  ? `Connected · ${primaryOnlineDevice.name}`
+                  : activeDevices.length
+                    ? "Desktop app is offline"
+                    : "No local computer connected"}
+            </strong>
+            <small>
+              {loading
+                ? "Ensemblis is checking whether local audio processing is available."
+                : primaryOnlineDevice
+                  ? `${primaryOnlineDevice.platform} · Ensemblis ${primaryOnlineDevice.app_version} · ready for local audio work`
+                  : primaryDevice
+                    ? `Open Ensemblis desktop on ${primaryDevice.name}. Local analysis and render jobs will wait until it comes online.`
+                    : "Install and connect Ensemblis desktop to analyze and render local-library audio on your own processor."}
+            </small>
+          </div>
+        </div>
+        <div className={styles.executionRoute} aria-label="Where processing happens">
+          <div>
+            <FiCpu aria-hidden="true" />
+            <span>Audio analysis</span>
+            <strong>{primaryOnlineDevice ? primaryOnlineDevice.name : activeDevices.length ? "Waiting for desktop" : "Desktop required"}</strong>
+          </div>
+          <div>
+            <FiCloud aria-hidden="true" />
+            <span>Set planning</span>
+            <strong>Ensemblis</strong>
+          </div>
+          <div>
+            <FiHardDrive aria-hidden="true" />
+            <span>AutoMix render</span>
+            <strong>{primaryOnlineDevice ? primaryOnlineDevice.name : activeDevices.length ? "Waiting for desktop" : "Desktop required"}</strong>
+          </div>
+        </div>
+        <p className={styles.engineExplanation}>
+          <strong>Browser = control surface.</strong> The desktop app is the local audio processor. Original audio files and folder paths stay on your computer.
+        </p>
       </div>
 
       <div className={styles.securityStrip}>
