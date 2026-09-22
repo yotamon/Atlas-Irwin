@@ -3,11 +3,24 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import platform
 import re
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+
+
+def _configure_windows_arm64_numba() -> None:
+    if not sys.platform.startswith("win"):
+        return
+    machine = platform.machine().strip().lower()
+    if machine not in {"arm64", "aarch64"}:
+        return
+    # Numba/LLVM can select a CPU-specific Windows ARM64 scheduling model that aborts during
+    # code generation on Snapdragon-class CPUs. The generic ARM64 target keeps JIT enabled while
+    # avoiding that LLVM backend path. Remove this once upstream numba#10388 is resolved.
+    os.environ["NUMBA_CPU_NAME"] = "generic"
 
 
 def _configure_packaged_ffmpeg() -> None:
@@ -20,6 +33,7 @@ def _configure_packaged_ffmpeg() -> None:
         os.environ["IMAGEIO_FFMPEG_EXE"] = str(candidate)
 
 
+_configure_windows_arm64_numba()
 _configure_packaged_ffmpeg()
 
 import imageio_ffmpeg  # noqa: E402
