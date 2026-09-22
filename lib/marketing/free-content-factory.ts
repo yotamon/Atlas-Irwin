@@ -8,6 +8,7 @@ import type { Json } from "@/types/database";
 
 const SANDBOX_NAME = "atlas-free-content-factory";
 const SANDBOX_TIMEOUT_MS = 55 * 1000;
+const SANDBOX_SNAPSHOT_EXPIRATION_MS = 7 * 24 * 60 * 60 * 1000;
 const OUTPUT_SECONDS = 15;
 const BUCKET = "public-media";
 const DAILY_RENDER_LIMIT = 2;
@@ -98,7 +99,12 @@ async function composerSandbox() {
     resources: { vcpus: 2 },
     timeout: SANDBOX_TIMEOUT_MS,
     persistent: true,
-    keepLastSnapshots: { count: 1 },
+    snapshotExpiration: SANDBOX_SNAPSHOT_EXPIRATION_MS,
+    keepLastSnapshots: {
+      count: 1,
+      expiration: SANDBOX_SNAPSHOT_EXPIRATION_MS,
+      deleteEvicted: true,
+    },
     tags: { app: "atlas-irwin", role: "free-content-factory" },
     onCreate: async (sandbox) => {
       const setup = await sandbox.runCommand({
