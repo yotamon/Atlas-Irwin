@@ -100,6 +100,7 @@ test("Studio makes automatic browser connection primary while preserving explici
   const route = await source("app/api/studio/dj-library/devices/route.ts");
   const component = await source("components/studio/library-bridge-panel.tsx");
   const page = await source("app/studio/(protected)/music/automix/page.tsx");
+  const workflow = await source("components/studio/automix-workflow.tsx");
 
   assert.ok(route.includes('action === "create_pairing"'));
   assert.ok(route.includes('action === "revoke"'));
@@ -115,8 +116,10 @@ test("Studio makes automatic browser connection primary while preserving explici
   assert.ok(component.includes("Browser = control surface."));
   assert.ok(component.includes("Offline license"));
   assert.ok(component.includes('/api/studio/dj-library/license'));
-  assert.ok(page.includes("<LibraryBridgePanel"));
-  assert.ok(page.includes("<LocalSetBuilderWorkspace"));
+  assert.ok(page.includes("<AutoMixWorkflow"));
+  assert.ok(workflow.includes("<LibraryBridgePanel"));
+  assert.ok(workflow.includes("<LocalSetBuilderWorkspace"));
+  assert.ok(workflow.includes("DJ preferences & connection tools"));
 });
 
 test("Studio track discovery shares strict planning-readiness validation with the local planner", async () => {
@@ -165,11 +168,12 @@ test("local Set Builder uses the canonical planner while keeping audio on one pa
   assert.ok(worker.includes("device_source_fingerprints"));
   assert.ok(worker.includes('execution_targets == {"device"}'));
   assert.ok(deviceSources.includes("TrackDescriptor("));
-  assert.ok(component.includes("Approve & render locally"));
-  assert.ok(component.includes("Process audio on your computer."));
-  assert.ok(component.includes("Analysis: paired computer · Planning: Ensemblis · Final render: paired computer"));
+  assert.ok(component.includes("Your audio stays on this computer."));
+  assert.ok(component.includes("Render mix on this computer"));
+  assert.ok(component.includes("one paired computer"));
   assert.ok(component.includes("candidateRefs"));
   assert.ok(component.includes("Replan edits"));
+  assert.ok(component.includes("<WorkflowStepper"));
 });
 
 test("local renderer reuses canonical MixPlan DSP and double-checks frozen recording fingerprints", async () => {

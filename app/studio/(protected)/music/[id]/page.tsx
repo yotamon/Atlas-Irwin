@@ -12,6 +12,7 @@ import { ObjectHeader } from "@/components/studio/object-header";
 import { ProcessingState } from "@/components/studio/processing-state";
 import { StemIntelligencePanel } from "@/components/studio/stem-intelligence-panel";
 import { TrackPreview } from "@/components/studio/track-preview";
+import { ObjectActionBar, type ObjectAction } from "@/components/studio/ux-v4-widgets";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
@@ -241,7 +242,17 @@ export default async function TrackWorkspacePage({
   const hooks = Array.isArray(musicMap.hook_candidates) ? musicMap.hook_candidates.length : 0;
   const bpm = typeof musicMap.bpm === "number" && Number.isFinite(musicMap.bpm) ? Math.round(musicMap.bpm) : null;
   const mastering = masteringStatus(vaultTrack.audio_profile);
-  const createHref = href(`/studio/create?intent=asset&track=${vaultTrack.id}`);
+  const createHref = href(`/studio/create?intent=asset&track=${releaseTrack?.id ?? vaultTrack.id}`);
+  const mixTrackId = releaseTrack?.id ?? vaultTrack.linked_track_id;
+  const mixHref = href(mixTrackId ? `/studio/music/automix?track=${mixTrackId}` : "/studio/music/automix");
+  const objectActions: ObjectAction[] = !vaultTrack.audio_url
+    ? [{ label: "Add master", href: href("/studio/music/import"), primary: true }]
+    : [
+        ...(analysis.hasMusicMap && !analysis.isActive ? [{ label: "Create", href: createHref, primary: true }] : []),
+        { label: "Master", href: "#mastering", primary: !analysis.hasMusicMap },
+        { label: "Mix", href: mixHref },
+        ...(release ? [{ label: "Open release", href: href(`/studio/releases/${release.id}`) }] : []),
+      ];
   const tabs = [
     { label: "Overview", href: "#overview", active: true },
     { label: "Intelligence", href: "#intelligence" },
@@ -271,15 +282,7 @@ export default async function TrackWorkspacePage({
           ...(bpm ? [{ label: "Tempo", value: `${bpm} BPM` }] : []),
           ...(mastering ? [{ label: "Mastering", value: mastering }] : []),
         ]}
-        actions={release
-          ? <Link className="button primary" href={href(`/studio/releases/${release.id}`)}>Open release</Link>
-          : !vaultTrack.audio_url
-            ? <Link className="button primary" href={href("/studio/music/import")}>Add master</Link>
-            : analysisNeedsRecovery
-              ? <Link className="button primary" href="#analysis-recovery">Retry intelligence</Link>
-              : analysis.hasMusicMap && !analysis.isActive
-                ? <Link className="button primary" href={createHref}>Create from this track</Link>
-                : undefined}
+        actions={<ObjectActionBar actions={analysisNeedsRecovery ? [{ label: "Retry intelligence", href: "#analysis-recovery", primary: true }, ...objectActions.filter((action) => action.label !== "Create")] : objectActions} />}
         tabs={tabs}
       />
 

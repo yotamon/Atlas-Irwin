@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useRef, useState } from "react";
 import { ArtistSwitcher } from "./artist-switcher";
+import { CommandPalette } from "./command-palette";
 import { Dialog } from "./dialog";
 import { studioIcons } from "./icons";
 import {
@@ -65,6 +66,8 @@ export function StudioMobileNavigation({ artistId, artists }: StudioMobileNaviga
           </Link>
         );
       })}
+
+      <CommandPalette artistId={artistId} variant="mobile" />
 
       <button
         ref={triggerRef}
