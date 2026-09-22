@@ -27,7 +27,7 @@ export default async function AutoMixPage() {
     <div className="studio-v2-page automix-workspace-page">
       <PageHeader
         title="DJ & Mixes"
-        description={`Plan, audition, revise and render professional sets from ${artist.artistName}'s catalog or a paired local DJ library.`}
+        description={`Plan, audition and revise in Studio. For a paired local DJ library, audio analysis and final AutoMix rendering stay on the connected computer.`}
         action={<Link className="button" href={href("/studio/music")}>Back to music</Link>}
       />
       <DjIntelligencePanel artistId={artist.artistId} />
