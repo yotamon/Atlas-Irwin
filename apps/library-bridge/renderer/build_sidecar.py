@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import math
 import os
 import platform
 import shutil
 import struct
 import subprocess
 import sys
+import tempfile
+import wave
 from pathlib import Path
 
 SIDECAR_NAME = "ensemblis-bridge-sidecar"
@@ -91,6 +95,63 @@ def assert_target_binary_architecture(path: Path, target_triple: str) -> None:
         )
 
 
+def assert_analysis_smoke(binary: Path, target_triple: str) -> None:
+    if target_triple != "aarch64-pc-windows-msvc":
+        return
+
+    with tempfile.TemporaryDirectory(prefix="ensemblis-arm64-analysis-") as temporary:
+        root = Path(temporary)
+        source = root / "smoke.wav"
+        result_path = root / "analysis.json"
+        sample_rate = 44_100
+        duration_seconds = 8
+        beat_seconds = 0.5
+
+        with wave.open(str(source), "wb") as output:
+            output.setnchannels(2)
+            output.setsampwidth(2)
+            output.setframerate(sample_rate)
+            frames = bytearray()
+            for index in range(sample_rate * duration_seconds):
+                time_seconds = index / sample_rate
+                base = (
+                    0.16 * math.sin(2 * math.pi * 261.6256 * time_seconds)
+                    + 0.10 * math.sin(2 * math.pi * 329.6276 * time_seconds)
+                    + 0.07 * math.sin(2 * math.pi * 391.9954 * time_seconds)
+                )
+                beat_phase = time_seconds % beat_seconds
+                click = 0.60 * math.exp(-beat_phase * 35) * math.sin(
+                    2 * math.pi * 90 * time_seconds
+                )
+                value = max(-1.0, min(1.0, base + click))
+                sample = int(value * 32767)
+                frames.extend(struct.pack("<hh", sample, sample))
+            output.writeframes(frames)
+
+        fingerprint = f"sha256:{hashlib.sha256(source.read_bytes()).hexdigest()}"
+        subprocess.run(
+            [
+                str(binary),
+                "analyze",
+                "--source",
+                str(source),
+                "--fingerprint",
+                fingerprint,
+                "--result",
+                str(result_path),
+            ],
+            check=True,
+            timeout=180,
+        )
+        payload = json.loads(result_path.read_text(encoding="utf-8"))
+        if payload.get("version") != "ensemblis.library-bridge.analysis-payload.v1":
+            raise RuntimeError("Windows ARM64 analyzer smoke test returned an unsupported contract")
+        if payload.get("recordingFingerprint") != fingerprint:
+            raise RuntimeError("Windows ARM64 analyzer smoke test changed recording identity")
+        if not isinstance(payload.get("planningEvidence"), dict):
+            raise RuntimeError("Windows ARM64 analyzer smoke test produced no planning evidence")
+
+
 def build(target_triple: str, ffmpeg_binary: Path | None = None) -> Path:
     assert_native_host(target_triple)
 
@@ -167,6 +228,8 @@ def build(target_triple: str, ffmpeg_binary: Path | None = None) -> Path:
     ffmpeg_version = str(runtime_payload.get("ffmpegVersion") or "")
     if not ffmpeg_version.startswith("ffmpeg version "):
         raise RuntimeError("sidecar runtime check could not execute FFmpeg")
+
+    assert_analysis_smoke(target, target_triple)
     return target
 
 
