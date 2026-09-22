@@ -7,7 +7,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import type { Json } from "@/types/database";
 
 const SANDBOX_NAME = "atlas-free-content-factory";
-const SANDBOX_TIMEOUT_MS = 55 * 1000;
+const SANDBOX_TIMEOUT_MS = 55 * 1000;\nconst SANDBOX_SNAPSHOT_EXPIRATION_MS = 7 * 24 * 60 * 60 * 1000;
 const OUTPUT_SECONDS = 15;
 const BUCKET = "public-media";
 const DAILY_RENDER_LIMIT = 2;
