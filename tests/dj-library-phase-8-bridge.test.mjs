@@ -102,6 +102,11 @@ test("Studio makes automatic browser connection primary while preserving explici
   assert.ok(component.includes("Connect to Ensemblis"));
   assert.ok(component.includes("Manual connection"));
   assert.ok(component.includes("Your music stays local"));
+  assert.ok(component.includes("Local Engine"));
+  assert.ok(component.includes("Audio analysis"));
+  assert.ok(component.includes("Set planning"));
+  assert.ok(component.includes("AutoMix render"));
+  assert.ok(component.includes("Browser = control surface."));
   assert.ok(component.includes("Offline license"));
   assert.ok(component.includes('/api/studio/dj-library/license'));
   assert.ok(page.includes("<LibraryBridgePanel"));
@@ -155,6 +160,8 @@ test("local Set Builder uses the canonical planner while keeping audio on one pa
   assert.ok(worker.includes('execution_targets == {"device"}'));
   assert.ok(deviceSources.includes("TrackDescriptor("));
   assert.ok(component.includes("Approve & render locally"));
+  assert.ok(component.includes("Process audio on your computer."));
+  assert.ok(component.includes("Analysis: local · Planning: Ensemblis · Final render: local"));
   assert.ok(component.includes("candidateRefs"));
   assert.ok(component.includes("Replan edits"));
 });
