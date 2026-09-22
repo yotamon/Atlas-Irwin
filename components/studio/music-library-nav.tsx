@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 
-export function MusicLibraryNav({ artistId, active }: { artistId: string; active: "tracks" | "releases" }) {
+export function MusicLibraryNav({ artistId, active }: { artistId: string; active: "tracks" | "releases" | "mixes" }) {
   return (
     <nav className="release-work-subnav music-library-nav" aria-label="Music library">
       <Link
@@ -17,6 +17,13 @@ export function MusicLibraryNav({ artistId, active }: { artistId: string; active
         className={active === "releases" ? "is-active" : undefined}
       >
         Releases
+      </Link>
+      <Link
+        href={ensemblisArtistHref("/studio/music?view=mixes", artistId)}
+        aria-current={active === "mixes" ? "page" : undefined}
+        className={active === "mixes" ? "is-active" : undefined}
+      >
+        Mixes
       </Link>
     </nav>
   );

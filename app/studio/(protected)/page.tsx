@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { CommandPalette } from "@/components/studio/command-palette";
+import { ContinueWidget } from "@/components/studio/ux-v4-widgets";
 import {
   CalmState,
   DecisionQueue,
@@ -15,11 +17,27 @@ import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { decisionSeverityLabel } from "@/lib/studio/decision-language";
 import { needsYouTone } from "@/lib/studio/needs-you";
 import { formatOperatingDateTime } from "@/lib/studio/operating-preferences";
+import type { AutoMixJob } from "@/types/automix-database";
 
 function decisionTone(value: string): SemanticTone {
   if (value === "important") return "danger";
   if (value === "warning") return "attention";
   return "neutral";
+}
+
+function mixTone(status: AutoMixJob["status"]): SemanticTone {
+  if (status === "completed") return "success";
+  if (status === "failed") return "danger";
+  if (status === "planned" || status === "queued" || status === "running") return "accent";
+  return "neutral";
+}
+
+function mixStatus(status: AutoMixJob["status"]) {
+  if (status === "completed") return "Ready";
+  if (status === "failed") return "Needs attention";
+  if (status === "cancelled") return "Cancelled";
+  if (status === "planned") return "Planning";
+  return "Working";
 }
 
 export default async function TodayPage() {
@@ -33,6 +51,8 @@ export default async function TodayPage() {
   const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
   const {
     activeRelease,
+    latestTrack,
+    latestMix,
     primaryMission,
     needsYou,
     topDecision,
@@ -116,15 +136,61 @@ export default async function TodayPage() {
     ...managerPlan.map((item) => ({ ...item, activity: "Planned" })),
   ].filter((item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index).slice(0, 6);
   const contextCount = remainingDecisions.length + handling.length + comingUp.length;
+  const continueCount = (activeRelease ? 1 : 0) + (latestMix ? 1 : 0) + (latestTrack ? 1 : 0);
 
   return (
     <Page className="ensemblis-today-page">
       <PageHeader
         eyebrow="Artist operating view"
         title="Today"
-        description={`One clear next move for ${artist.artistName}. Background work stays collapsed until you want it.`}
-        action={<Link className="button ghost" href={href("/studio/settings/artist")}>Working profile</Link>}
+        description={`Start, continue or decide what matters for ${artist.artistName}.`}
       />
+
+      <CommandPalette artistId={artist.artistId} variant="launcher" />
+
+      {continueCount ? (
+        <section className="today-v4-continue" aria-labelledby="today-v4-continue-heading">
+          <SectionHeading
+            id="today-v4-continue-heading"
+            eyebrow="Pick up where you left off"
+            title="Continue"
+            compact
+          />
+          <div className="en-continue-grid">
+            {activeRelease ? (
+              <ContinueWidget
+                eyebrow="Release Mission"
+                title={activeRelease.title}
+                detail={primaryMission?.summary || "Open the release and continue from its current state."}
+                status={primaryMission?.label || "Active"}
+                tone={primaryMission?.status === "blocked" ? "danger" : primaryMission?.status === "needs_attention" ? "attention" : "accent"}
+                href={href(`/studio/releases/${activeRelease.id}`)}
+              />
+            ) : null}
+            {latestTrack ? (
+              <ContinueWidget
+                eyebrow="Track"
+                title={latestTrack.title}
+                detail={latestTrack.status.replaceAll("_", " ")}
+                status="Music"
+                tone="neutral"
+                href={href(`/studio/music/${latestTrack.id}`)}
+                actionLabel="Open"
+              />
+            ) : null}
+            {latestMix ? (
+              <ContinueWidget
+                eyebrow="DJ mix"
+                title={latestMix.name}
+                detail={`${latestMix.trackCount} tracks · ~${Math.max(1, Math.round(latestMix.durationMs / 60_000))} min`}
+                status={mixStatus(latestMix.status)}
+                tone={mixTone(latestMix.status)}
+                href={latestMix.href}
+              />
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
       <PriorityHero
         eyebrow={topDecision

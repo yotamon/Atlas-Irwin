@@ -1169,6 +1169,7 @@ Related documents:
 
 - `docs/ensemblis-design-system.md` remains the visual-system authority.
 - `docs/ensemblis-product-roadmap.md` remains the product execution roadmap.
+- `docs/ensemblis-ux-v4-route-inventory.md` is the CI-enforced ownership/discoverability inventory for protected Studio routes.
 - `docs/ensemblis-ux-architecture-v3.md` is historical/superseded.
 - `docs/ux-audit-remediation.md` records completed remediation and remains historical evidence.
 

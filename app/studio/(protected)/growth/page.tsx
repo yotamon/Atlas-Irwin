@@ -112,7 +112,7 @@ export default async function GrowthPage({ searchParams }: { searchParams: Promi
         </details>
       ) : null}
 
-      {view === "overview" ? <>
+      {view === "overview" ? <div className="growth-v4-overview">
         <section className="growth-polish-north-star" aria-label="Current audience evidence">
           <div><span className="section-label">Audience evidence</span><strong>{funnel.listeners.toLocaleString()}</strong><small>listeners in the connected performance window</small></div>
           <div><strong>{funnel.saves.toLocaleString()}</strong><span>saves</span></div>
@@ -160,7 +160,7 @@ export default async function GrowthPage({ searchParams }: { searchParams: Promi
           <summary><strong>Advanced growth tools</strong><span>Planning controls, paid experiments and detailed learning evidence</span></summary>
           <div className="actions"><Link className="button" href={href("/studio/growth/paid")}>Paid experiments</Link><Link className="button" href={href("/studio/learn")}>Learnings</Link><Link className="button" href={href("/studio/campaigns")}>Campaigns</Link><Link className="button" href={href("/studio/calendar")}>Calendar</Link><Link className="button" href={href("/studio/growth?view=portfolio")}>Portfolio diagnostics</Link></div>
         </details>
-      </> : null}
+      </div> : null}
 
       {view === "opportunities" ? <section className="v2-section growth-polish-view-section" id="opportunities">
         <div className="v2-section-heading"><div><span className="section-label">Evidence-backed opportunities</span><h2>What may be worth doing next</h2></div></div>

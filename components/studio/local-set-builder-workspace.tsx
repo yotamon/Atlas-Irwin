@@ -5,7 +5,6 @@ import {
   FiArrowDown,
   FiArrowUp,
   FiCheck,
-  FiCpu,
   FiGitBranch,
   FiHardDrive,
   FiLock,
@@ -16,6 +15,7 @@ import {
   FiX,
   FiZap,
 } from "react-icons/fi";
+import { WorkflowStepper } from "@/components/studio/ux-v4-widgets";
 import type {
   AutoMixEnergyProfile,
   AutoMixJob,
@@ -96,6 +96,16 @@ const VARIANTS: Array<{ id: Variant; label: string; note: string }> = [
   { id: "recommended", label: "Recommended", note: "Balanced musical route" },
   { id: "adventurous", label: "Adventurous", note: "Bolder legal choices" },
 ];
+type WorkflowStage = "music" | "intent" | "build" | "review" | "render";
+
+const WORKFLOW_STEPS: Array<{ id: WorkflowStage; label: string }> = [
+  { id: "music", label: "Music" },
+  { id: "intent", label: "Intent" },
+  { id: "build", label: "Build" },
+  { id: "review", label: "Review" },
+  { id: "render", label: "Render" },
+];
+
 const PURPOSES: Array<{ id: AutoMixPurpose; label: string }> = [
   { id: "booking", label: "Booking mix" },
   { id: "soundcloud", label: "SoundCloud" },
@@ -171,9 +181,10 @@ function responseError(body: unknown, fallback: string) {
   return typeof value === "string" ? value : fallback;
 }
 
-export function LocalSetBuilderWorkspace({ artistId, artistName }: { artistId: string; artistName: string }) {
+export function LocalSetBuilderWorkspace({ artistId, artistName, initialMixId }: { artistId: string; artistName: string; initialMixId?: string }) {
   const [library, setLibrary] = useState<LibraryTrack[]>([]);
   const [jobs, setJobs] = useState<JobView[]>([]);
+  const [stage, setStage] = useState<WorkflowStage>(() => initialMixId ? "review" : "music");
   const [selected, setSelected] = useState<string[]>([]);
   const [currentJobId, setCurrentJobId] = useState("");
   const [name, setName] = useState(`${artistName} Local Set Plan`);
@@ -230,7 +241,11 @@ export function LocalSetBuilderWorkspace({ artistId, artistName }: { artistId: s
   const selectedDevice = readyTracks.find((track) => selected.includes(track.id))?.deviceId ?? "";
   const planJobs = useMemo(() => jobs.filter((job) => executionMode(job) === "plan_only"), [jobs]);
   const renderJobs = useMemo(() => jobs.filter((job) => executionMode(job) === "approved_render"), [jobs]);
+  const requestedJob = initialMixId
+    ? planJobs.find((job) => String(lineage(job).root_job_id ?? job.id) === initialMixId)
+    : null;
   const currentJob = planJobs.find((job) => job.id === currentJobId)
+    ?? requestedJob
     ?? planJobs.find((job) => job.status === "completed")
     ?? planJobs[0]
     ?? null;
@@ -252,6 +267,7 @@ export function LocalSetBuilderWorkspace({ artistId, artistName }: { artistId: s
   const replacements = readyTracks.filter((track) => track.deviceId === planDeviceId && !snapshotLibraryIds.includes(track.id));
   const latestRender = renderJobs[0] ?? null;
   const canEdit = Boolean(currentJob?.status === "completed" && currentPlan && currentOrder.length >= 2);
+  const workflowStage: WorkflowStage = stage === "build" && currentPlan && currentJob?.status === "completed" ? "review" : stage;
 
   function selectTrack(track: LibraryTrack) {
     if (!track.planningReady) return;
@@ -276,6 +292,7 @@ export function LocalSetBuilderWorkspace({ artistId, artistName }: { artistId: s
 
   async function createPlan() {
     if (selected.length < 2) return;
+    setStage("build");
     setBusy("create"); setError("");
     try {
       const ids = selected.map(candidateId);
@@ -396,6 +413,7 @@ export function LocalSetBuilderWorkspace({ artistId, artistName }: { artistId: s
 
   async function render() {
     if (!currentJob) return;
+    setStage("render");
     setBusy("render"); setError("");
     try {
       await post({ action: "render", parentJobId: currentJob.id });
@@ -406,23 +424,34 @@ export function LocalSetBuilderWorkspace({ artistId, artistName }: { artistId: s
 
   return (
     <section className={styles.builder} aria-label="Local Set Builder">
-      <header className={styles.hero}>
-        <div>
-          <span className="section-label">Local Set Builder · local audio execution</span>
-          <h2>Control it in Studio.<br /><em>Process audio on your computer.</em></h2>
-          <p>The browser is the control surface. Your paired Ensemblis desktop app analyzes local tracks and renders the approved AutoMix on your processor; Set Intelligence plans from path-free musical evidence.</p>
-        </div>
-        <div className={styles.contract}>
-          <FiCpu />
-          <span>Where the work happens</span>
-          <strong>Audio analysis → paired computer</strong>
-          <strong>Set planning → Ensemblis</strong>
-          <strong>AutoMix render → paired computer</strong>
-          <small>Original audio and local file paths stay on the paired computer.</small>
-        </div>
-      </header>
+      <WorkflowStepper
+        steps={WORKFLOW_STEPS.map((step) => ({
+          ...step,
+          complete: step.id === "music"
+            ? selected.length >= 2
+            : step.id === "intent"
+              ? Boolean(currentJob)
+              : step.id === "build"
+                ? Boolean(currentPlan)
+                : step.id === "review"
+                  ? Boolean(latestRender)
+                  : latestRender?.status === "completed",
+          disabled: step.id === "intent"
+            ? selected.length < 2 && !currentPlan
+            : step.id === "build"
+              ? !currentJob
+              : step.id === "review" || step.id === "render"
+                ? !currentPlan
+                : false,
+        }))}
+        current={workflowStage}
+        onSelect={setStage}
+      />
 
-      <div className={styles.setup}>
+      {workflowStage === "music" || workflowStage === "intent" ? <div className={styles.setup} data-workflow-stage={workflowStage}>
+        {workflowStage === "music" ? <div className="v2-section-heading"><div><span className="section-label">1 / Music</span><h2>Choose the tracks you want in the mix.</h2><p>Pick at least two planning-ready tracks from one connected computer.</p></div></div> : null}
+        {workflowStage === "intent" ? <div className="v2-section-heading"><div><span className="section-label">2 / Intent</span><h2>What kind of set are we making?</h2><p>Choose the musical intent. Ensemblis handles the planning details.</p></div></div> : null}
+        {workflowStage === "intent" ? <>
         <div className={styles.fields}>
           <label><span>Plan name</span><input value={name} onChange={(event) => setName(event.target.value)} maxLength={120} /></label>
           <label><span>Purpose</span><select value={purpose} onChange={(event) => { const next = event.target.value as AutoMixPurpose; setPurpose(next); if (next === "journey") setAllowOmissions(false); }}>{PURPOSES.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select></label>
@@ -432,8 +461,10 @@ export function LocalSetBuilderWorkspace({ artistId, artistName }: { artistId: s
           <label><span>Local output</span><select value={format} onChange={(event) => setFormat(event.target.value as AutoMixOutputFormat)}><option value="mp3">320 kbps MP3</option><option value="wav">WAV</option></select></label>
         </div>
         <div className={styles.variantRail}>{VARIANTS.map((item) => <button key={item.id} type="button" className={variant === item.id ? styles.variantActive : ""} onClick={() => setVariant(item.id)}><strong>{item.label}</strong><small>{item.note}</small></button>)}</div>
-        <label className={styles.curate}><input type="checkbox" checked={purpose === "journey" ? false : allowOmissions} disabled={purpose === "journey"} onChange={(event) => setAllowOmissions(event.target.checked)} /><span>Let Set Intelligence curate weaker candidates</span></label>
+        <label className={styles.curate}><input type="checkbox" checked={purpose === "journey" ? false : allowOmissions} disabled={purpose === "journey"} onChange={(event) => setAllowOmissions(event.target.checked)} /><span>Let Ensemblis leave out weaker candidates when it improves the set</span></label>
+        </> : null}
 
+        {workflowStage === "music" ? <>
         <div className={styles.libraryHeading}>
           <div><span className="section-label">Local candidates</span><strong>{selected.length} selected · {readyTracks.length} planning-ready</strong></div>
           {selectedDevice ? <small><FiHardDrive /> Selection locked to one paired computer</small> : null}
@@ -451,12 +482,18 @@ export function LocalSetBuilderWorkspace({ artistId, artistName }: { artistId: s
           {!loading && !readyTracks.length ? <div className={styles.empty}><FiHardDrive /><strong>No planning-ready local tracks yet.</strong><span>Open Ensemblis desktop, connect this computer, choose a music folder, and let local analysis finish. Studio receives path-free musical evidence only.</span></div> : null}
           {loading ? <div className={styles.empty}><FiRefreshCw className={styles.spin} /><span>Loading local library evidence…</span></div> : null}
         </div>
-        <div className={styles.createBar}><div><strong>Local audio stays on your computer.</strong><small>Analysis: paired computer · Planning: Ensemblis · Final render: paired computer</small></div><button className="button button-primary" type="button" disabled={selected.length < 2 || Boolean(busy)} onClick={() => void createPlan()}>{busy === "create" ? <FiRefreshCw /> : <FiZap />} Build Set Plan from local tracks</button></div>
-      </div>
+        </> : null}
+        <div className={styles.createBar}>
+          {workflowStage === "music" ? <><div><strong>{selected.length >= 2 ? "Music selected." : "Choose at least two tracks."}</strong><small>Your audio stays on this computer.</small></div><button className="button button-primary" type="button" disabled={selected.length < 2} onClick={() => setStage("intent")}>Continue to intent →</button></> : null}
+          {workflowStage === "intent" ? <><button className="button" type="button" onClick={() => setStage("music")}>← Back</button><button className="button button-primary" type="button" disabled={selected.length < 2 || Boolean(busy)} onClick={() => void createPlan()}>{busy === "create" ? <FiRefreshCw /> : <FiZap />} Build my set</button></> : null}
+        </div>
+      </div> : null}
 
       {error ? <div className={styles.error} role="alert"><FiX /><span>{error}</span></div> : null}
 
-      <div className={styles.workspace}>
+      {workflowStage === "build" ? <div className={styles.stage}><div className={styles.blank}><FiRefreshCw className={styles.spin} /><span className="section-label">3 / Build</span><h3>{currentJob?.status === "failed" ? "This set needs attention." : "Ensemblis is building the set."}</h3><p>{currentJob?.error || "Shaping the route and checking every handoff. You can leave this page and come back."}</p>{currentJob?.status === "failed" ? <button className="button" type="button" onClick={() => setStage("intent")}>Review intent</button> : null}</div></div> : null}
+
+      {workflowStage === "review" ? <div className={styles.workspace}>
         <aside className={styles.revisions}><span className="section-label">Revisions</span>{planJobs.map((job) => { const plan = planFromJob(job); const revision = Number(lineage(job).revision ?? 1); return <button type="button" key={job.id} className={job.id === currentJob?.id ? styles.revisionActive : ""} onClick={() => setCurrentJobId(job.id)}><span>v{revision}</span><strong>{plan?.plan_variant ?? "recommended"}</strong><small>{status(job.status)} · {planHash(plan).slice(0, 7) || "planning"}</small></button>; })}{!planJobs.length ? <small>No local plans yet.</small> : null}</aside>
         <div className={styles.stage}>
           {!currentJob ? <div className={styles.blank}><FiShuffle /><h3>Choose local recordings and build a verified route.</h3><p>The route will be planned in the cloud from path-free evidence, then rendered only on the paired computer.</p></div>
@@ -467,14 +504,14 @@ export function LocalSetBuilderWorkspace({ artistId, artistName }: { artistId: s
                   <div className={styles.routeTrack}><span className={styles.routeIndex}>{String(index + 1).padStart(2, "0")}</span><div><strong>{track.title || "Untitled"}</strong><small>{track.playback_bpm ? `${track.playback_bpm.toFixed(1)} BPM` : "tempo preserved"}{track.key?.camelot ? ` · ${track.key.camelot}` : ""}{locked ? " · locked" : ""}</small></div><div className={styles.tools}><button type="button" onClick={() => toggleLock(trackId)} title={locked ? "Unlock position" : "Lock position"}>{locked ? <FiLock /> : <FiUnlock />}</button><button type="button" disabled={index === 0} onClick={() => move(index, -1)}><FiArrowUp /></button><button type="button" disabled={index === effectiveOrder.length - 1} onClick={() => move(index, 1)}><FiArrowDown /></button>{currentJob.purpose !== "journey" && replacements.length ? <select aria-label={`Replace ${track.title}`} defaultValue="" onChange={(event) => { const id = event.target.value; event.currentTarget.value = ""; if (id) void replace(trackId, id); }}><option value="">Replace…</option>{replacements.map((item) => <option value={item.id} key={item.id}>{item.metadata.title}</option>)}</select> : null}{currentJob.purpose !== "journey" ? <button type="button" disabled={currentOrder.length <= 2} onClick={() => void exclude(trackId)} title="Exclude"><FiX /></button> : null}</div></div>
                   {transition ? <div className={styles.transition}><span className={transition.risk_flags?.length ? styles.riskDot : styles.safeDot} /><div><strong>{technique(transition.technique)}</strong><small>{transition.beatmatch ? `${transition.bars ?? 0} bars · beatmatched` : "phrase-safe"} · confidence {percent(transition.confidence)}</small></div><div className={styles.metrics}><span>Fit <b>{percent(transition.score)}</b></span><span>Harmonic <b>{percent(transition.metrics?.harmonic)}</b></span><span>Stretch <b>{typeof transition.metrics?.stretch_delta === "number" ? `${(transition.metrics.stretch_delta * 100).toFixed(1)}%` : "—"}</b></span></div></div> : null}
                 </li>; })}</ol>
-                <div className={styles.decisions}><div><strong>Freeze only what you approve.</strong><small>The paired computer receives this exact MixPlan hash and re-verifies every recording before DSP.</small></div><div><button className="button" type="button" disabled={!canEdit || Boolean(busy) || !dirty} onClick={() => void derive("reorder_and_lock")}><FiShuffle /> Replan edits</button><button className="button" type="button" disabled={!canEdit || Boolean(busy)} onClick={() => void alternatives()}><FiGitBranch /> Compare</button><button className="button button-primary" type="button" disabled={!canEdit || dirty || Boolean(busy) || Boolean(renderJobs.find((job) => ACTIVE.has(job.status)))} onClick={() => void render()}>{busy === "render" ? <FiRefreshCw /> : <FiPlay />} Approve & render locally</button></div></div>
+                <div className={styles.decisions}><div><strong>Freeze only what you approve.</strong><small>The paired computer receives this exact MixPlan hash and re-verifies every recording before DSP.</small></div><div><button className="button" type="button" disabled={!canEdit || Boolean(busy) || !dirty} onClick={() => void derive("reorder_and_lock")}><FiShuffle /> Replan edits</button><button className="button" type="button" disabled={!canEdit || Boolean(busy)} onClick={() => void alternatives()}><FiGitBranch /> Compare</button><button className="button button-primary" type="button" disabled={!canEdit || dirty || Boolean(busy)} onClick={() => setStage("render")}><FiPlay /> Continue to render →</button></div></div>
               </>}
         </div>
-      </div>
+      </div> : null}
 
-      {comparisonIds.length ? <div className={styles.comparisons}>{comparisonIds.map((id) => { const job = planJobs.find((item) => item.id === id); const plan = planFromJob(job); return <article key={id}><span className="section-label">{plan?.plan_variant ?? "variant"}</span><strong>{job ? status(job.status) : "Queued"}</strong><small>{percent(plan?.quality_summary?.mean_confidence)} confidence · {plan?.quality_summary?.risky_transition_count ?? "—"} risky handoffs</small><button className="button" type="button" disabled={!job || job.status !== "completed"} onClick={() => job && setCurrentJobId(job.id)}>Open plan</button></article>; })}</div> : null}
+      {workflowStage === "review" && comparisonIds.length ? <div className={styles.comparisons}>{comparisonIds.map((id) => { const job = planJobs.find((item) => item.id === id); const plan = planFromJob(job); return <article key={id}><span className="section-label">{plan?.plan_variant ?? "variant"}</span><strong>{job ? status(job.status) : "Queued"}</strong><small>{percent(plan?.quality_summary?.mean_confidence)} confidence · {plan?.quality_summary?.risky_transition_count ?? "—"} risky handoffs</small><button className="button" type="button" disabled={!job || job.status !== "completed"} onClick={() => job && setCurrentJobId(job.id)}>Open plan</button></article>; })}</div> : null}
 
-      {latestRender ? <div className={styles.renderStatus}><div><span className="section-label">Device render</span><h3>{ACTIVE.has(latestRender.status) ? "Your paired computer is executing the frozen MixPlan." : latestRender.status === "completed" ? "The approved local mix is ready on your computer." : "The local render needs attention."}</h3><p>{latestRender.error || (latestRender.status === "completed" ? "The output stayed device-local. Open the Library Bridge to export the rendered file." : "No source path or local audio is being transferred to Ensemblis.")}</p></div><strong>{status(latestRender.status)}</strong></div> : null}
+      {workflowStage === "render" ? <div className={styles.renderStatus}><div><span className="section-label">5 / Render</span><h3>{latestRender ? ACTIVE.has(latestRender.status) ? "Rendering on your computer." : latestRender.status === "completed" ? "Your mix is ready." : "The render needs attention." : "Ready to render."}</h3><p>{latestRender?.error || (latestRender?.status === "completed" ? "The final file stayed on your connected computer." : currentPlan ? `${currentTracks.length} tracks · ${duration(currentPlan.estimated_duration_ms)} · Ensemblis will render this exact approved route.` : "Review the set before rendering.")}</p></div><div className={styles.decisions}><button className="button" type="button" disabled={Boolean(latestRender && ACTIVE.has(latestRender.status))} onClick={() => setStage("review")}>← Review set</button>{!latestRender || latestRender.status === "failed" || latestRender.status === "cancelled" ? <button className="button button-primary" type="button" disabled={!canEdit || dirty || Boolean(busy)} onClick={() => void render()}>{busy === "render" ? <FiRefreshCw /> : <FiPlay />} Render mix on this computer</button> : <strong>{status(latestRender.status)}</strong>}</div></div> : null}
     </section>
   );
 }

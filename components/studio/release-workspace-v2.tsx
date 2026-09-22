@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { MediaUploader } from "@/components/studio/media-uploader";
 import { ObjectHeader } from "@/components/studio/object-header";
+import { ObjectActionBar, type ObjectAction } from "@/components/studio/ux-v4-widgets";
 import { ReleaseForm } from "@/components/studio/release-form";
 import { ReleaseTracklist } from "@/components/studio/release-tracklist";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
@@ -10,7 +11,6 @@ import type { ContentItem, MetricSnapshot, Release, Track } from "@/types/databa
 import type { VaultTrack } from "@/types/growth-database";
 
 const STAGES = ["overview", "content", "promotion", "distribution", "results"] as const;
-const RELEASE_WORK_SECTIONS = ["Content", "Promotion", "Distribution"] as const;
 type Stage = (typeof STAGES)[number];
 type CampaignSummary = { id:string; name:string; status:string; mode:string; objective:string; primary_kpi:string } | null;
 type PlaybookTask = { id:string; title:string; status:string; priority:string; due_at:string | null };
@@ -60,7 +60,6 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
   const renderTime = new Date(renderedAt);
   const lifecycle = releaseLifecycle({ releaseDate: release.release_date, status: release.status, isArchived: release.is_archived }, renderTime);
   const activeStage = normalizeStage(stage);
-  const releaseWorkActive = activeStage === "content" || activeStage === "promotion" || activeStage === "distribution";
   const now = renderTime.getTime();
   const planned = contentItems.filter((item) => item.scheduled_at && item.status !== "Published" && Date.parse(item.scheduled_at) >= now - 3_600_000).sort((a,b) => Date.parse(a.scheduled_at!) - Date.parse(b.scheduled_at!));
   const scheduled = contentItems.filter((item) => item.status === "Scheduled");
@@ -85,13 +84,23 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
   });
   const missionAttention = [...mission.blockers, ...mission.recommendations];
   const nextMissionItem = missionAttention[0] ?? mission.optional[0] ?? null;
+  const createHref = href(`/studio/create?release=${release.id}`);
+  const releaseActions: ObjectAction[] = [
+    nextMissionItem
+      ? { label: nextMissionItem.title, href: href(nextMissionItem.href), primary: true }
+      : { label: "Create next asset", href: createHref, primary: true },
+    ...(nextMissionItem?.href === `/studio/create?release=${release.id}` ? [] : [{ label: "Create", href: createHref }]),
+    { label: "Promotion", href: href(`/studio/releases/${release.id}?stage=promotion`) },
+  ];
   const streams = total(metrics, "streams");
   const listeners = total(metrics, "listeners");
   const saves = total(metrics, "saves");
   const playlistAdds = total(metrics, "playlist_adds");
   const topTabs = [
     { label: "Overview", href: href(`/studio/releases/${release.id}?stage=overview`), active: activeStage === "overview" },
-    { label: "Release work", href: href(`/studio/releases/${release.id}?stage=promotion`), active: releaseWorkActive },
+    { label: "Creative", href: href(`/studio/releases/${release.id}?stage=content`), active: activeStage === "content" },
+    { label: "Promotion", href: href(`/studio/releases/${release.id}?stage=promotion`), active: activeStage === "promotion" },
+    { label: "Distribution", href: href(`/studio/releases/${release.id}?stage=distribution`), active: activeStage === "distribution" },
     { label: "Results", href: href(`/studio/releases/${release.id}?stage=results`), active: activeStage === "results" },
   ];
 
@@ -104,6 +113,7 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
       subtitle={`${release.release_type} · ${shortDate(release.release_date)}`}
       imageUrl={release.artwork_url}
       imageAlt={release.cover_alt || `${release.title} artwork`}
+      actions={<ObjectActionBar actions={releaseActions} />}
       facts={[
         { label: "Mission", value: mission.label },
         { label: "Needs attention", value: missionAttention.length },
@@ -112,13 +122,6 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
       ]}
       tabs={topTabs}
     />
-
-    {releaseWorkActive ? <nav className="release-work-subnav" aria-label="Release work">
-      {RELEASE_WORK_SECTIONS.map((label) => {
-        const value = label.toLowerCase() as "content" | "promotion" | "distribution";
-        return <Link key={label} href={href(`/studio/releases/${release.id}?stage=${value}`)} aria-current={activeStage === value ? "page" : undefined} className={activeStage === value ? "is-active" : undefined}>{label}</Link>;
-      })}
-    </nav> : null}
 
     {activeStage === "overview" ? <div className="release-mission-overview">
       <ReleaseTracklist releaseId={release.id} artistId={artistId} tracks={tracks} vaultTracks={vaultTracks} />
