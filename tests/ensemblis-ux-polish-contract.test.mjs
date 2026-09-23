@@ -217,7 +217,7 @@ test("campaign workspace uses Ensemblis chrome without Atlas-era editorial styli
   assert.equal(css.includes("heroCard::after"), false, "decorative orbit styling should not define Campaign hierarchy");
 });
 
-test("Production keeps the selected creative dominant and technical controls secondary", async () => {
+test("Creative Assets keeps the selected creative dominant and technical controls secondary", async () => {
   const css = await source("app/studio/production-polish.css");
   assert.ok(css.includes(".v2-production-layout"));
   assert.ok(css.includes(".v2-production-editor"));
@@ -240,7 +240,7 @@ test("Create starts from approved Moments but asks for a deliverable instead of 
     "Other ways to create",
     "Add or create music",
     "Start a release",
-    "Continue production",
+    "Continue creative assets",
     "Direct a longer video",
   ]) assert.ok(create.includes(snippet), `deliverable-first Create is missing ${snippet}`);
   for (const view of ["overview", "opportunities", "performance", "portfolio"]) assert.ok(grow.includes(view));
