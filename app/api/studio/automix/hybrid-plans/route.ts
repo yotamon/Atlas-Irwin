@@ -15,6 +15,7 @@ import {
   jsonByteLength,
 } from "@/lib/dj-library/device-server";
 import { resolveArtistContext } from "@/lib/studio/artist-context";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import type {
   AutoMixEnergyProfile,
   AutoMixJob,
@@ -343,7 +344,7 @@ export async function POST(request: Request) {
         .map((track) => String(track.track_id ?? ""))
         .filter((id) => parent.snapshot.catalogTrackIds.includes(id));
       const catalogRows = selectedCatalogIds.length
-        ? await supabase.from("tracks").select("id,title,audio_url").eq("owner_id", user.id).eq("artist_id", artist.artistId).in("id", selectedCatalogIds)
+        ? await asArtistScopedMusicClient(supabase).from("tracks").select("id,title,audio_url").eq("owner_id", user.id).eq("artist_id", artist.artistId).in("id", selectedCatalogIds)
         : { data: [], error: null };
       if (catalogRows.error || (catalogRows.data?.length ?? 0) !== selectedCatalogIds.length) throw new Error("A catalog master selected by this hybrid MixPlan is unavailable.");
       const catalogById = new Map((catalogRows.data ?? []).map((track) => [track.id, track]));
