@@ -34,7 +34,7 @@ Primary workspaces remain **Today / Music / Grow**. Create is a global action. L
 | /studio/distribution/operations | Release | Operations specialist | Distribution advanced | Provider operations only |
 | /studio/create | Global Create | Action launcher | Create + object actions | General outcome launcher |
 | /studio/content | Create | Compatibility surface | Create advanced | Fold normal work into Creative Assets |
-| /studio/production | Create | Creative work queue | Object Create / Continue | Creative Asset work |
+| /studio/production | Create | Creative Asset workspace (compatibility URL) | Object Create / Continue | Creative Assets, not a separate Production mental model |
 | /studio/video | Create | Video workflow | Create / Release | Guided Video Director |
 | /studio/video/[id] | Create | Video project object | Video / Continue | Creative Asset object |
 | /studio/growth | Grow | Primary workspace | Primary nav | Recommended action / opportunities / audience / performance |

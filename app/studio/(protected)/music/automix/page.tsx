@@ -9,11 +9,11 @@ import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 export default async function AutoMixPage({
   searchParams,
 }: {
-  searchParams: Promise<{ source?: string; track?: string; mix?: string }>;
+  searchParams: Promise<{ source?: string; track?: string | string[]; mix?: string; artist?: string }>;
 }) {
   const params = await searchParams;
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveActiveArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user, params.artist);
   const music = asArtistScopedMusicClient(supabase);
   const tracks = await music
     .from("tracks")
@@ -23,9 +23,14 @@ export default async function AutoMixPage({
     .order("created_at", { ascending: true });
   if (tracks.error) throw new Error(tracks.error.message);
   const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
+  const initialTrackIds = (Array.isArray(params.track) ? params.track : params.track ? [params.track] : [])
+    .filter((trackId, index, all) => Boolean(trackId) && all.indexOf(trackId) === index)
+    .slice(0, 20);
   const initialSource = params.source === "local" || params.source === "catalog"
     ? params.source
-    : undefined;
+    : initialTrackIds.length
+      ? "catalog"
+      : undefined;
 
   return (
     <div className="studio-v2-page automix-workspace-page en-automix-v4-page">
@@ -40,7 +45,7 @@ export default async function AutoMixPage({
         artistName={artist.artistName}
         tracks={tracks.data ?? []}
         initialSource={initialSource}
-        initialTrackId={params.track}
+        initialTrackIds={initialTrackIds}
         initialMixId={params.mix}
       />
     </div>
