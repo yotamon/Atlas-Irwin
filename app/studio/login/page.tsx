@@ -1,11 +1,12 @@
 import { EnsemblisMark } from "@/components/ensemblis-logo";
 import { ENSEMBLIS_PRODUCT } from "@/lib/ensemblis-product";
 import { signInStudio } from "../login-actions";
+import { studioReturnPath } from "@/lib/auth/studio-return-path";
 
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; next?: string }>;
 }) {
   const params = await searchParams;
 
@@ -22,6 +23,7 @@ export default async function LoginPage({
         <h1>{ENSEMBLIS_PRODUCT.promise}</h1>
         <p>{ENSEMBLIS_PRODUCT.positioning}</p>
         <form action={signInStudio}>
+          <input type="hidden" name="next" value={studioReturnPath(params.next)} />
           <label>
             Email
             <input

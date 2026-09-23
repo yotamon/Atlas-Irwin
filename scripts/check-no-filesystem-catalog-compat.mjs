@@ -1,0 +1,94 @@
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import path from "node:path";
+
+const root = process.cwd();
+const retiredFiles = [
+  "lib/catalog/legacy-media.ts",
+  "lib/releases.ts",
+  "app/studio/actions.ts",
+];
+const retiredScripts = [
+  "import-legacy-releases.mjs",
+  "import-public-releases.mjs",
+  "migrate-media-to-public.mjs",
+];
+const runtimeRoots = ["app", "components", "lib", "types"];
+const extensions = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]);
+const retiredImportEnv = "STUDIO_IMPORT_ADMIN_EMAIL";
+
+function walk(directory) {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const target = path.join(directory, entry.name);
+    return entry.isDirectory() ? walk(target) : [target];
+  });
+}
+
+function importsRetiredStudioActions(file, source) {
+  const retiredModule = path.resolve(root, "app/studio/actions");
+  const importPattern = /(?:from\s+|import\()\s*["']([^"']+)["']/g;
+  for (const match of source.matchAll(importPattern)) {
+    const specifier = match[1];
+    if (specifier === "@/app/studio/actions") return true;
+    if (!specifier.startsWith(".")) continue;
+    if (path.resolve(path.dirname(file), specifier) === retiredModule) return true;
+  }
+  return false;
+}
+
+const violations = [];
+
+for (const relativePath of retiredFiles) {
+  if (existsSync(path.join(root, relativePath))) {
+    violations.push(`${relativePath}: retired compatibility file still exists`);
+  }
+}
+
+for (const runtimeRoot of runtimeRoots) {
+  const directory = path.join(root, runtimeRoot);
+  if (!existsSync(directory)) continue;
+
+  for (const file of walk(directory)) {
+    if (!extensions.has(path.extname(file))) continue;
+    const relativePath = path.relative(root, file).split(path.sep).join("/");
+    if (relativePath === "lib/releases/types.ts") continue;
+
+    const source = readFileSync(file, "utf8");
+    if (/public[\\/]+releases/i.test(source)) {
+      violations.push(`${relativePath}: references retired public/releases runtime storage`);
+    }
+    if (/resolveLegacyCanvasVideoUrl/.test(source)) {
+      violations.push(`${relativePath}: references retired Canvas fallback`);
+    }
+    if (/(?:from|import\()[^\n]*["']@\/lib\/releases["']/.test(source)) {
+      violations.push(`${relativePath}: imports retired filesystem catalog reader`);
+    }
+    if (/\bpublic_release_path\b/.test(source)) {
+      violations.push(`${relativePath}: references retired releases.public_release_path`);
+    }
+    if (importsRetiredStudioActions(file, source)) {
+      violations.push(`${relativePath}: imports retired owner-only Studio action monolith`);
+    }
+  }
+}
+
+const packageJson = readFileSync(path.join(root, "package.json"), "utf8");
+for (const script of retiredScripts) {
+  if (packageJson.includes(script)) {
+    violations.push(`package.json: references retired script ${script}`);
+  }
+}
+
+for (const relativePath of [".env.example", "scripts/seed-studio.mjs"]) {
+  const file = path.join(root, relativePath);
+  if (existsSync(file) && readFileSync(file, "utf8").includes(retiredImportEnv)) {
+    violations.push(`${relativePath}: references retired import owner environment variable`);
+  }
+}
+
+if (violations.length) {
+  console.error("Legacy runtime compatibility check failed:");
+  for (const violation of violations) console.error(`- ${violation}`);
+  process.exit(1);
+}
+
+console.log("Legacy runtime compatibility check passed.");

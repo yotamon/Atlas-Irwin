@@ -66,7 +66,8 @@ test("Today is a thin Manager renderer over one canonical operating snapshot", a
   assert.ok(today.includes('href={href("/studio/needs-you")}'));
   assert.ok(today.includes("needsYouTone(item)"));
   assert.ok(today.includes("Recommended next move"));
-  assert.ok(today.includes('topDecision.severity === "required" ? "Required" : "Needs attention"'));
+  assert.ok(today.includes("decisionSeverityLabel(topDecision.severity)"));
+  assert.equal(today.includes('topDecision.severity === "required" ? "Required" : "Needs attention"'), false, "Today must use the shared decision vocabulary rather than reimplementing severity copy");
   assert.ok(today.includes("Ensemblis is handling"));
   assert.equal(today.includes("Artist operating mode"), false, "configuration belongs to Settings, not the everyday manager loop");
   assert.equal(today.includes('from("releases")'), false, "Today page should not own cross-domain data fan-out");

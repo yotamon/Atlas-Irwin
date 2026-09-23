@@ -5,9 +5,11 @@ import {
   importSpotifyAlbum,
   saveSpotifyArtist,
   syncSpotifyCatalog,
-} from "@/app/studio/actions";
+} from "@/app/studio/external-actions";
 import { EmptyState, Field, FormatTime, PageHeader, Panel, Status, Submit } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { hasSpotifyEnv } from "@/lib/studio/spotify";
 
 type PulseItem = {
@@ -33,16 +35,22 @@ export default async function SpotifyPage({
     error?: string;
   }>;
 }) {
-  const { supabase } = await requireStudioAdmin();
+  const { supabase, user } = await requireStudioAdmin();
+  const artistContext = await resolveActiveArtistContext(supabase, user);
+  const music = asArtistScopedMusicClient(supabase);
   const params = await searchParams;
   const configured = hasSpotifyEnv();
   const [{ data: account }, { data: albums }, { data: tracks }, { data: playlists }, { data: releases }] =
     await Promise.all([
-      supabase.from("spotify_accounts").select("*").maybeSingle(),
-      supabase.from("spotify_albums").select("*").order("release_date", { ascending: false }),
-      supabase.from("spotify_tracks").select("*").order("album_spotify_id").order("disc_number").order("track_number"),
-      supabase.from("spotify_playlists").select("*").order("synced_at", { ascending: false }),
-      supabase.from("releases").select("id,title,spotify_url"),
+      supabase.from("spotify_accounts").select("*").eq("owner_id", user.id).maybeSingle(),
+      supabase.from("spotify_albums").select("*").eq("owner_id", user.id).order("release_date", { ascending: false }),
+      supabase.from("spotify_tracks").select("*").eq("owner_id", user.id).order("album_spotify_id").order("disc_number").order("track_number"),
+      supabase.from("spotify_playlists").select("*").eq("owner_id", user.id).order("synced_at", { ascending: false }),
+      music
+        .from("releases")
+        .select("id,title,spotify_url")
+        .eq("owner_id", user.id)
+        .eq("artist_id", artistContext.artistId),
     ]);
   const releaseBySpotifyUrl = new Map(
     (releases ?? []).filter((release) => release.spotify_url).map((release) => [release.spotify_url, release]),
@@ -75,21 +83,12 @@ export default async function SpotifyPage({
       <PageHeader
         title="Spotify"
         description="Artist catalog, release imports, listener pulse, and campaign playlists through Spotify Web API."
-        action={
-          configured && !account ? (
-            <a className="button primary" href="/studio/spotify/connect">Connect Spotify</a>
-          ) : null
-        }
+        action={configured && !account ? <a className="button primary" href="/studio/spotify/connect">Connect Spotify</a> : null}
       />
-      {statusMessage && (
-        <div className={params.error ? "auth-message form-error" : "auth-message"}>{statusMessage}</div>
-      )}
+      {statusMessage && <div className={params.error ? "auth-message form-error" : "auth-message"}>{statusMessage}</div>}
       {!configured && (
         <Panel title="Configuration required" className="feature">
-          <p>
-            Add <code>SPOTIFY_CLIENT_ID</code> and <code>SPOTIFY_CLIENT_SECRET</code>, then register the exact
-            redirect URI <code>/studio/spotify/callback</code> in your Spotify app.
-          </p>
+          <p>Add <code>SPOTIFY_CLIENT_ID</code> and <code>SPOTIFY_CLIENT_SECRET</code>, then register the exact redirect URI <code>/studio/spotify/callback</code> in your Spotify app.</p>
         </Panel>
       )}
       {configured && account ? (
@@ -100,21 +99,15 @@ export default async function SpotifyPage({
                 {account.image_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img className="spotify-artwork" src={account.image_url} alt="" />
-                ) : (
-                  <div className="empty-orbit" />
-                )}
+                ) : <div className="empty-orbit" />}
                 <div>
                   <h2>{account.display_name}</h2>
-                  <p>
-                    {account.profile_url ? <a href={account.profile_url} target="_blank" rel="noreferrer">Open on Spotify</a> : "Spotify account"}
-                  </p>
+                  <p>{account.profile_url ? <a href={account.profile_url} target="_blank" rel="noreferrer">Open on Spotify</a> : "Spotify account"}</p>
                   <small>Last synced: {account.last_synced_at ? new Date(account.last_synced_at).toLocaleString() : "Not synced yet"}</small>
                 </div>
               </div>
               <div className="form-actions">
-                {account.artist_id ? (
-                  <form action={syncSpotifyCatalog}><Submit>Sync Spotify</Submit></form>
-                ) : null}
+                {account.artist_id ? <form action={syncSpotifyCatalog}><Submit>Sync Spotify</Submit></form> : null}
                 <form action={disconnectSpotifyAccount}><button className="text-button">Disconnect</button></form>
               </div>
             </Panel>
@@ -126,7 +119,7 @@ export default async function SpotifyPage({
             </Panel>
           </div>
 
-          <Panel title="Atlas Irwin artist profile" className="feature">
+          <Panel title={`${artistContext.artistName} artist profile`} className="feature">
             {account.artist_id ? (
               <div className="soundcloud-profile">
                 {account.artist_image_url ? (
@@ -139,13 +132,9 @@ export default async function SpotifyPage({
                   <small>Artist ID: {account.artist_id}</small>
                 </div>
               </div>
-            ) : (
-              <p>Paste the Atlas Irwin artist link from Spotify. Studio verifies it against the API before saving it.</p>
-            )}
+            ) : <p>Paste the active artist link from Spotify. Studio verifies it against the API before saving it.</p>}
             <form action={saveSpotifyArtist} className="studio-form compact-form">
-              <Field label="Spotify artist URL, URI, or ID">
-                <input name="artist" defaultValue={account.artist_url ?? account.artist_id ?? ""} required />
-              </Field>
+              <Field label="Spotify artist URL, URI, or ID"><input name="artist" defaultValue={account.artist_url ?? account.artist_id ?? ""} required /></Field>
               <Submit>{account.artist_id ? "Change artist" : "Verify artist"}</Submit>
             </form>
           </Panel>
@@ -164,20 +153,18 @@ export default async function SpotifyPage({
                         <td>{album.release_date ?? "—"}</td>
                         <td>{album.total_tracks}</td>
                         <td>{release ? <Link href={`/studio/releases/${release.id}`}><Status>{release.title}</Status></Link> : "Not imported"}</td>
-                        <td>{release ? null : <form action={importSpotifyAlbum}><input type="hidden" name="id" value={album.id} /><button className="text-button">Import release</button></form>}</td>
+                        <td>{release ? null : <form action={importSpotifyAlbum}><input type="hidden" name="artist_id" value={artistContext.artistId} /><input type="hidden" name="id" value={album.id} /><button className="text-button">Import release</button></form>}</td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
-            ) : (
-              <EmptyState title="No Spotify catalog synced" body="Verify the artist profile, then sync to pull releases and tracks into Studio." />
-            )}
+            ) : <EmptyState title="No Spotify catalog synced" body="Verify the artist profile, then sync to pull releases and tracks into Studio." />}
           </Panel>
 
           {tracks?.length ? (
             <Panel title="Create a campaign playlist" className="feature">
-              <p>Create a deliberate Spotify playlist from synced Atlas tracks. Nothing is published until you submit this form.</p>
+              <p>Create a deliberate Spotify playlist from synced Spotify tracks. Nothing is published until you submit this form.</p>
               <form action={createCampaignPlaylist} className="studio-form">
                 <div className="form-grid">
                   <Field label="Playlist name"><input name="name" required /></Field>
@@ -200,10 +187,10 @@ export default async function SpotifyPage({
 
           <div className="studio-grid">
             <Panel title="Your listening pulse" className="feature">
-              <p><small>Medium-term affinity from the connected Spotify account—not Spotify for Artists audience analytics.</small></p>
+              <p><small>Medium-term affinity from the connected Spotify account, not Spotify for Artists audience analytics.</small></p>
               <div className="spotify-pulse-grid">
                 <div><h3>Top artists</h3>{topArtists.map((item, index) => <a key={item.id ?? index} href={item.external_urls?.spotify} target="_blank" rel="noreferrer"><span>{index + 1}</span>{item.name}</a>)}</div>
-                <div><h3>Top tracks</h3>{topTracks.map((item, index) => <a key={item.id ?? index} href={item.external_urls?.spotify} target="_blank" rel="noreferrer"><span>{index + 1}</span><span>{item.name}<small>{item.artists?.map((artist) => artist.name).filter(Boolean).join(", ")}</small></span></a>)}</div>
+                <div><h3>Top tracks</h3>{topTracks.map((item, index) => <a key={item.id ?? index} href={item.external_urls?.spotify} target="_blank" rel="noreferrer"><span>{index + 1}</span><span>{item.name}<small>{item.artists?.map((itemArtist) => itemArtist.name).filter(Boolean).join(", ")}</small></span></a>)}</div>
               </div>
             </Panel>
             <Panel title="Connected playlists">

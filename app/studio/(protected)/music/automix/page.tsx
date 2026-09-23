@@ -1,45 +1,53 @@
 import Link from "next/link";
-import { AutoMixRenderRecovery } from "@/components/studio/automix-render-recovery";
-import { DjIntelligencePanel } from "@/components/studio/dj-intelligence-panel";
-import { LibraryBridgePanel } from "@/components/studio/library-bridge-panel";
-import { LocalSetBuilderWorkspace } from "@/components/studio/local-set-builder-workspace";
-import { RekordboxImportPanel } from "@/components/studio/rekordbox-import-panel";
-import { SetBuilderWorkspace } from "@/components/studio/set-builder-workspace";
+import { AutoMixWorkflow } from "@/components/studio/automix-workflow";
 import { PageHeader } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 
-export default async function AutoMixPage() {
+export default async function AutoMixPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ source?: string; track?: string | string[]; mix?: string; artist?: string }>;
+}) {
+  const params = await searchParams;
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveActiveArtistContext(supabase, user);
+  const artist = await resolveActiveArtistContext(supabase, user, params.artist);
   const music = asArtistScopedMusicClient(supabase);
-  const tracks = await music.from("tracks")
+  const tracks = await music
+    .from("tracks")
     .select("id,title,release_id,audio_url,is_primary")
     .eq("owner_id", user.id)
     .eq("artist_id", artist.artistId)
     .order("created_at", { ascending: true });
   if (tracks.error) throw new Error(tracks.error.message);
   const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
+  const initialTrackIds = (Array.isArray(params.track) ? params.track : params.track ? [params.track] : [])
+    .filter((trackId, index, all) => Boolean(trackId) && all.indexOf(trackId) === index)
+    .slice(0, 20);
+  const initialSource = params.source === "local" || params.source === "catalog"
+    ? params.source
+    : initialTrackIds.length
+      ? "catalog"
+      : undefined;
 
   return (
-    <div className="studio-v2-page automix-workspace-page">
+    <div className="studio-v2-page automix-workspace-page en-automix-v4-page">
       <PageHeader
-        title="DJ & Mixes"
-        description={`Plan, audition, revise and render professional sets from ${artist.artistName}'s catalog or a paired local DJ library.`}
-        action={<Link className="button" href={href("/studio/music")}>Back to music</Link>}
+        eyebrow="Mix"
+        title="AutoMix"
+        description="Choose the music, shape the set, review the transitions, then render the version you approve."
+        action={<Link className="button" href={href("/studio/music?view=mixes")}>Back to mixes</Link>}
       />
-      <DjIntelligencePanel artistId={artist.artistId} />
-      <LibraryBridgePanel artistId={artist.artistId} />
-      <RekordboxImportPanel artistId={artist.artistId} />
-      <LocalSetBuilderWorkspace artistId={artist.artistId} artistName={artist.artistName} />
-      <SetBuilderWorkspace
+      <AutoMixWorkflow
         artistId={artist.artistId}
         artistName={artist.artistName}
         tracks={tracks.data ?? []}
+        initialSource={initialSource}
+        initialTrackIds={initialTrackIds}
+        initialMixId={params.mix}
       />
-      <AutoMixRenderRecovery artistId={artist.artistId} />
     </div>
   );
 }

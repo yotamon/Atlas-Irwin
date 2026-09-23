@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MEDIA_WORKER_PROCESSOR_BY_JOB } from "@/lib/platform/processors";
 
 export const MEDIA_WORKER_CONTRACT_VERSION = 1 as const;
 export const MEDIA_WORKER_CONTRACT_PAYLOAD_KEY = "__ensemblis_media_worker_contract_version";
@@ -15,6 +16,7 @@ export const MEDIA_WORKER_JOB_TYPES = [
   "master_audio",
   "finish_social_video",
   "render_automix",
+  "render_automix_preview",
 ] as const;
 
 export type MediaWorkerJobType = typeof MEDIA_WORKER_JOB_TYPES[number];
@@ -28,6 +30,10 @@ export const mediaWorkerCallbackSchema = z.object({
 });
 
 export type MediaWorkerCallback = z.infer<typeof mediaWorkerCallbackSchema>;
+
+export function mediaWorkerProcessorId(jobType: MediaWorkerJobType) {
+  return MEDIA_WORKER_PROCESSOR_BY_JOB[jobType];
+}
 
 export function withMediaWorkerContractVersion(payload: Record<string, unknown>) {
   return {

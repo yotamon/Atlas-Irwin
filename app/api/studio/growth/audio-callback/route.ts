@@ -4,6 +4,10 @@ import {
   MEDIA_WORKER_CALLBACK_HASH_KEY,
   scheduleMediaWorkerSandboxCleanup,
 } from "@/lib/media-worker/sandbox";
+import {
+  reconcileCanonicalTrackIntelligence,
+  type CanonicalTrackReconciliation,
+} from "@/lib/music-intelligence/reconcile-canonical-track";
 import { sanitizeMusicIntelligenceMap } from "@/lib/music-intelligence/sanitize";
 import { createServiceClient } from "@/lib/supabase/service";
 import { asGrowthClient } from "@/lib/studio/growth-db";
@@ -52,6 +56,77 @@ function json(value: unknown) {
 }
 function scheduleCleanup() {
   after(scheduleMediaWorkerSandboxCleanup());
+}
+function followUpStatus(result: CanonicalTrackReconciliation) {
+  if (result.lyrics.state === "failed" || result.stems.state === "failed") return "needs_attention" as const;
+  if (result.lyrics.state === "needs_input" || result.stems.state === "needs_input") return "needs_input" as const;
+  if (result.stems.state === "processing") return "waiting" as const;
+  return "completed" as const;
+}
+function scheduleCanonicalFollowUp(input: {
+  vaultTrackId: string;
+  trackId: string;
+  ownerId: string;
+  requestId: string | null;
+  audioUrl: string;
+}) {
+  after(async () => {
+    const client = createServiceClient();
+    const growth = asGrowthClient(client);
+
+    async function persist(state: Record<string, unknown>) {
+      const current = await growth.from("track_vault")
+        .select("analysis")
+        .eq("id", input.vaultTrackId)
+        .eq("owner_id", input.ownerId)
+        .maybeSingle();
+      if (current.error) throw new Error(current.error.message);
+      if (!current.data) return;
+      const currentAnalysis = record(current.data.analysis);
+      const currentRequestId = typeof currentAnalysis.request_id === "string" ? currentAnalysis.request_id : null;
+      if (input.requestId && currentRequestId !== input.requestId) return;
+      const update = await growth.from("track_vault").update({
+        analysis: json({ ...currentAnalysis, ingestion_follow_up: state }),
+      }).eq("id", input.vaultTrackId).eq("owner_id", input.ownerId);
+      if (update.error) throw new Error(update.error.message);
+    }
+
+    try {
+      const result = await reconcileCanonicalTrackIntelligence({
+        client,
+        trackId: input.trackId,
+        expectedOwnerId: input.ownerId,
+        expectedAudioUrl: input.audioUrl,
+      });
+      await persist({
+        status: followUpStatus(result),
+        track_id: result.trackId,
+        release_id: result.releaseId,
+        completed_at: new Date().toISOString(),
+        lyrics: result.lyrics,
+        stems: result.stems,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      try {
+        await persist({
+          status: "needs_attention",
+          track_id: input.trackId,
+          completed_at: new Date().toISOString(),
+          message,
+        });
+      } catch (persistError) {
+        console.error("[music-ingestion] could not persist follow-up failure", {
+          trackId: input.trackId,
+          error: persistError instanceof Error ? persistError.message : String(persistError),
+        });
+      }
+      console.error("[music-ingestion] canonical follow-up failed", {
+        trackId: input.trackId,
+        error: message,
+      });
+    }
+  });
 }
 
 function topHook(musicMap: Record<string, unknown>) {
@@ -198,6 +273,7 @@ export async function POST(request: Request) {
   const semanticStructure = analysisMeta.semantic_structure === true;
   const confidence = clamp(number(confidenceMeta.overall, track.analysis_confidence || 0.55), 0, 1);
   const bpm = typeof musicMap.bpm === "number" ? musicMap.bpm : null;
+  const followUpRequestedAt = new Date().toISOString();
 
   const { error } = await growth.from("track_vault").update({
     duration_seconds: durationSeconds,
@@ -212,7 +288,7 @@ export async function POST(request: Request) {
       ...withoutCallbackCredential(currentAnalysis),
       status: "completed",
       request_id: callbackRequestId,
-      completed_at: new Date().toISOString(),
+      completed_at: followUpRequestedAt,
       source: "media_worker",
       runtime: "vercel_sandbox",
       music_intelligence_version: number(musicMap.version, 3),
@@ -241,9 +317,29 @@ export async function POST(request: Request) {
         short_form_potential: shortFormPotential,
         release_readiness: releaseReadiness,
       },
+      ingestion_follow_up: track.linked_track_id
+        ? {
+            status: "queued",
+            track_id: track.linked_track_id,
+            requested_at: followUpRequestedAt,
+          }
+        : {
+            status: "skipped",
+            reason: "unreleased",
+            completed_at: followUpRequestedAt,
+          },
     }),
   }).eq("id", track.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (track.linked_track_id && track.audio_url) {
+    scheduleCanonicalFollowUp({
+      vaultTrackId: track.id,
+      trackId: track.linked_track_id,
+      ownerId: track.owner_id,
+      requestId: callbackRequestId,
+      audioUrl: track.audio_url,
+    });
+  }
   scheduleCleanup();
   return NextResponse.json({ ok: true });
 }

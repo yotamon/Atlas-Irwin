@@ -1,0 +1,13 @@
+# Windows ARM64 binary dependency profile for the packaged Ensemblis sidecar.
+# These packages must resolve from win_arm64 or platform-neutral wheels.
+# Source-built exceptions (soxr, imageio-ffmpeg and python-stretch) are installed
+# explicitly by CI before this file is resolved.
+PyInstaller==6.22.2
+numpy==2.5.3
+scipy==1.18.1
+numba==0.67.0
+llvmlite==0.49.0
+scikit-learn==1.9.1
+librosa==0.11.0
+soundfile==0.14.0
+pyloudnorm==0.2.0

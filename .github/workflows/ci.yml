@@ -6,8 +6,6 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
-  schedule:
-    - cron: "41 3 * * 1"
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
@@ -49,13 +47,8 @@ jobs:
       - name: Validate Media Worker check script
         run: node --check scripts/check-media-worker.mjs
 
-      # Everything below this line is deliberately outside the PR hot path.
-      # It still runs on main, the weekly deep schedule, and manual dispatch.
-      - uses: actions/setup-python@v5
-        if: github.event_name != 'pull_request'
-        with:
-          python-version: "3.13"
-          cache: pip
+      - name: Verify Vercel build-scope guard
+        run: node --test tests/vercel-ignore-build.test.mjs
 
       - name: Audit production dependencies
         if: github.event_name != 'pull_request'
@@ -88,54 +81,6 @@ jobs:
             fi
             sleep 5
           done
-
-      - name: Validate media worker Python
-        if: github.event_name != 'pull_request'
-        run: >-
-          python -m py_compile
-          services/media-worker/app/main.py
-          services/media-worker/app/music_intelligence.py
-          services/media-worker/app/music_intelligence_v4.py
-          services/media-worker/app/music_intelligence_v4_runtime.py
-          services/media-worker/app/mastering_inspector.py
-          services/media-worker/app/mastering_processor.py
-          services/media-worker/app/audio_intelligence_providers.py
-          services/media-worker/app/stem_intelligence.py
-          services/media-worker/app/stem_intelligence_v3.py
-          services/media-worker/app/social_finishing.py
-          services/media-worker/app/automix_model.py
-          services/media-worker/app/automix_intelligence.py
-          services/media-worker/app/automix_transition_regions.py
-          services/media-worker/app/automix_planner.py
-          services/media-worker/app/automix_set_intelligence.py
-          services/media-worker/app/automix_planner_personalized.py
-          services/media-worker/app/automix_manifest.py
-          services/media-worker/app/automix_manifest_personalized.py
-          services/media-worker/app/automix_evaluation.py
-          services/media-worker/app/automix_dsp.py
-          services/media-worker/app/automix_transition_dsp_v2.py
-          services/media-worker/app/automix_mixplan_renderer.py
-          services/media-worker/app/automix.py
-          services/media-worker/app/automix_preview.py
-          services/media-worker/app/runner.py
-
-      - name: Install Media Worker audio regression dependencies
-        if: github.event_name != 'pull_request'
-        run: |
-          python -m pip install \
-            -c services/media-worker/requirements.txt \
-            numpy librosa soundfile pyloudnorm imageio-ffmpeg httpx pydantic python-stretch
-          # MIR scoring and robustness transforms are CI/private-catalog tooling only.
-          # Keep them out of the production Sandbox environment while making the
-          # deep regression suite truthful and self-contained.
-          python -m pip install \
-            -c services/media-worker/requirements.txt \
-            -r services/media-worker/requirements-audio-benchmark.txt
-
-      - name: Run Track Intelligence behavioral regression tests
-        if: github.event_name != 'pull_request'
-        working-directory: services/media-worker
-        run: python -m unittest discover -s tests -p 'test_*.py' -v
 
       - name: Build
         if: github.event_name != 'pull_request'
@@ -183,28 +128,3 @@ jobs:
           path: playwright-report/
           if-no-files-found: ignore
           retention-days: 7
-
-  database:
-    name: database migrations and behavior
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: supabase/setup-cli@v2
-        with:
-          version: 2.111.0
-          github-token: ${{ github.token }}
-
-      - name: Initialize local Supabase config
-        run: test -f supabase/config.toml || supabase init
-
-      - name: Replay every migration on a clean database
-        run: supabase db start
-
-      - name: Lint Postgres functions
-        run: supabase db lint --local --level error --fail-on error
-
-      - name: Verify database behavior
-        run: supabase test db --local

@@ -18,10 +18,12 @@ export function ReleaseForm({
   release,
   releaseDateLocked = false,
   artistName,
+  artistId,
 }: {
   release?: Release;
   releaseDateLocked?: boolean;
   artistName?: string;
+  artistId: string;
 }) {
   const subject = artistName || "this artist";
   const [state, formAction] = useActionState(saveReleaseV2WithState, EMPTY_ACTION_FORM_STATE);
@@ -29,6 +31,7 @@ export function ReleaseForm({
 
   return (
     <form action={formAction} className="studio-form studio-release-form-v2">
+      <input type="hidden" name="artist_id" value={artistId} />
       <input type="hidden" name="id" value={release?.id} />
       {releaseDateLocked ? <input type="hidden" name="release_date" value={release?.release_date ?? ""} /> : null}
 
@@ -86,7 +89,6 @@ export function ReleaseForm({
           <Field label="YouTube URL" error={error("youtube_url")}><input type="url" name="youtube_url" aria-invalid={Boolean(error("youtube_url")) || undefined} defaultValue={release?.youtube_url ?? ""} /></Field>
           <Field label="Smart link URL" error={error("smart_link_url")}><input type="url" name="smart_link_url" aria-invalid={Boolean(error("smart_link_url")) || undefined} defaultValue={release?.smart_link_url ?? ""} /></Field>
           <Field label="Public slug"><input name="public_slug" defaultValue={release?.public_slug ?? ""} /></Field>
-          <Field label="Public release path" wide><input name="public_release_path" defaultValue={release?.public_release_path ?? ""} /></Field>
           <Field label="Release story" wide><textarea name="story" rows={5} defaultValue={release?.story ?? ""} /></Field>
           <Field label="Private notes" wide><textarea name="notes" rows={4} defaultValue={release?.notes ?? ""} /></Field>
         </FormGrid>

@@ -40,8 +40,8 @@ test("primary decision surfaces use the shared Required / Needs attention / Clea
     read("app/studio/(protected)/releases/[id]/distribution/release-distribution-artist-view.tsx"),
     read("app/studio/(protected)/growth/paid/page.tsx"),
   ]);
-  assert.match(today, /Required|Needs attention|Clear/);
-  assert.match(needsYou, /Needs attention|Clear|Blocked/);
+  assert.match(today, /Required|Needs attention|Clear|decisionSeverityLabel/);
+  assert.match(needsYou, /Needs attention|Clear|Blocked|decisionSeverityLabel/);
   assert.match(distribution, /Needs you/i);
   assert.match(paid, /Needs You|approval|Stop/i);
 });
@@ -56,4 +56,82 @@ test("provider and specialist complexity stays behind advanced disclosure on art
   assert.match(grow, /<details[\s\S]*Advanced growth tools/);
   assert.match(release, /Advanced campaign controls/);
   assert.match(release, /Advanced view/);
+});
+
+test("Ensemblis has one shared artist-facing decision vocabulary", async () => {
+  const language = await read("lib/studio/decision-language.ts");
+
+  for (const label of [
+    "Blocked",
+    "Needs attention",
+    "On track",
+    "Required",
+    "Needs You",
+    "Recommended",
+    "Optional",
+    "Working",
+    "Planned",
+    "Prepared",
+    "Assist",
+    "Prepare",
+    "Run",
+    "Strong evidence",
+    "Supported by evidence",
+    "Preliminary evidence",
+    "Recent evidence",
+    "Current evidence",
+    "Older evidence",
+  ]) assert.ok(language.includes(`"${label}"`), `Shared language is missing ${label}`);
+
+  for (const helper of [
+    "decisionSeverityLabel",
+    "missionStateLabel",
+    "missionAttentionLabel",
+    "workPostureLabel",
+    "autonomyModeLabel",
+    "autonomyBehaviorLabel",
+    "evidenceConfidenceLabel",
+    "evidenceFreshnessLabel",
+  ]) assert.ok(language.includes(helper), `Shared language is missing ${helper}`);
+});
+
+test("Today and Needs You render semantic labels rather than internal severity values", async () => {
+  const [today, needsYou] = await Promise.all([
+    read("app/studio/(protected)/page.tsx"),
+    read("app/studio/(protected)/needs-you/page.tsx"),
+  ]);
+
+  assert.match(today, /decisionSeverityLabel\(topDecision\.severity\)/);
+  assert.match(today, /decisionSeverityLabel\(item\.severity\)/);
+  assert.match(needsYou, /decisionSeverityLabel\(entry\.severity\)/);
+  assert.doesNotMatch(needsYou, /\$\{entry\.category\} · \$\{entry\.severity\}/);
+});
+
+test("Artist Memory explains confidence and freshness without pseudo-precise percentages", async () => {
+  const memory = await read("app/studio/(protected)/memory/page.tsx");
+
+  assert.match(memory, /evidenceConfidenceLabel/);
+  assert.match(memory, /evidenceFreshnessLabel/);
+  assert.match(memory, /Evidence: \{confidence\(item\)\}/);
+  assert.match(memory, /Freshness:/);
+  assert.doesNotMatch(memory, /Math\.round\(item\.confidence\.score \* 100\)/);
+  assert.doesNotMatch(memory, /% \$\{item\.confidence\.label\}/);
+});
+
+test("Autonomy settings reuse the shared Assist Prepare Run vocabulary", async () => {
+  const autonomy = await read("app/studio/(protected)/settings/autonomy/page.tsx");
+
+  assert.match(autonomy, /autonomyModeLabel/);
+  assert.doesNotMatch(autonomy, /function modeLabel/);
+  assert.match(autonomy, /Working, Prepared, or Needs You/);
+});
+
+test("default Release Mission copy stays artist-facing", async () => {
+  const mission = await read("lib/studio/release-mission.ts");
+
+  assert.match(mission, /missionStateLabel/);
+  assert.match(mission, /Promotion plan needs attention/);
+  assert.doesNotMatch(mission, /Campaign engine needs repair/);
+  assert.doesNotMatch(mission, /Campaign Brain/);
+  assert.doesNotMatch(mission, /scheduled at a provider/);
 });

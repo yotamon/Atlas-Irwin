@@ -9,7 +9,7 @@ import {
   syncSoundCloud,
   syncSoundCloudMetrics,
   uploadTrackToSoundCloud,
-} from "@/app/studio/actions";
+} from "@/app/studio/external-actions";
 import {
   EmptyState,
   Field,
@@ -20,6 +20,8 @@ import {
   Submit,
 } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
+import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { hasSoundCloudEnv } from "@/lib/studio/soundcloud";
 import { isUnmatchedExternal, suggestTrackMatches } from "@/lib/studio/reconciliation";
 
@@ -37,20 +39,20 @@ export default async function SoundCloudPage({
   }>;
 }) {
   const { supabase, user } = await requireStudioAdmin();
+  const artist = await resolveActiveArtistContext(supabase, user);
+  const music = asArtistScopedMusicClient(supabase);
   const params = await searchParams;
   const configured = hasSoundCloudEnv();
   const [{ data: account }, { data: tracks }, { data: playlists }, { data: releases }] =
     await Promise.all([
-      supabase.from("soundcloud_accounts").select("*").maybeSingle(),
-      supabase
-        .from("soundcloud_tracks")
-        .select("*")
-        .order("synced_at", { ascending: false }),
-      supabase
-        .from("soundcloud_playlists")
-        .select("*")
-        .order("synced_at", { ascending: false }),
-      supabase.from("releases").select("id,title"),
+      supabase.from("soundcloud_accounts").select("*").eq("owner_id", user.id).maybeSingle(),
+      supabase.from("soundcloud_tracks").select("*").eq("owner_id", user.id).order("synced_at", { ascending: false }),
+      supabase.from("soundcloud_playlists").select("*").eq("owner_id", user.id).order("synced_at", { ascending: false }),
+      music
+        .from("releases")
+        .select("id,title")
+        .eq("owner_id", user.id)
+        .eq("artist_id", artist.artistId),
     ]);
 
   const releaseById = new Map((releases ?? []).map((release) => [release.id, release]));
@@ -77,9 +79,7 @@ export default async function SoundCloudPage({
       )}
       {!configured && (
         <Panel title="Configuration required" className="feature">
-          <p>
-            Add SoundCloud OAuth env vars and register `/studio/soundcloud/callback`.
-          </p>
+          <p>Add SoundCloud OAuth env vars and register `/studio/soundcloud/callback`.</p>
         </Panel>
       )}
       {configured && account ? (
@@ -89,77 +89,52 @@ export default async function SoundCloudPage({
               <h2>{account.username}</h2>
               <small>
                 Last synced:{" "}
-                {account.last_synced_at
-                  ? new Date(account.last_synced_at).toLocaleString()
-                  : "Not synced yet"}
+                {account.last_synced_at ? new Date(account.last_synced_at).toLocaleString() : "Not synced yet"}
               </small>
               <div className="form-actions">
-                <form action={syncSoundCloud}>
-                  <Submit>Sync catalog</Submit>
-                </form>
-                <form action={syncSoundCloudMetrics}>
-                  <button className="button">Sync metrics</button>
-                </form>
-                <form action={disconnectSoundCloudAccount}>
-                  <button className="text-button">Disconnect</button>
-                </form>
+                <form action={syncSoundCloud}><Submit>Sync catalog</Submit></form>
+                <form action={syncSoundCloudMetrics}><input type="hidden" name="artist_id" value={artist.artistId} /><button className="button">Sync metrics</button></form>
+                <form action={disconnectSoundCloudAccount}><button className="text-button">Disconnect</button></form>
               </div>
             </Panel>
             <Panel title="Reconciliation queue">
-              <div className="metric-row">
-                <span>Unmatched tracks</span>
-                <strong>{unmatched.length}</strong>
-              </div>
-              <div className="metric-row">
-                <span>Linked tracks</span>
-                <strong>{(tracks ?? []).filter((track) => track.linked_track_id).length}</strong>
-              </div>
+              <div className="metric-row"><span>Unmatched tracks</span><strong>{unmatched.length}</strong></div>
+              <div className="metric-row"><span>Linked tracks</span><strong>{(tracks ?? []).filter((track) => track.linked_track_id).length}</strong></div>
             </Panel>
           </div>
 
           <Panel title="Unmatched external tracks" className="feature">
             {unmatched.length ? (
               <table className="studio-table">
-                <thead>
-                  <tr>
-                    <th>Track</th>
-                    <th>Suggested matches</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
+                <thead><tr><th>Track</th><th>Suggested matches</th><th>Actions</th></tr></thead>
                 <tbody>
                   {await Promise.all(
                     unmatched.slice(0, 12).map(async (track) => {
-                      const suggestions = await suggestTrackMatches(supabase, user.id, {
-                        title: track.title,
-                        durationSeconds: track.duration
-                          ? Math.round(track.duration / 1000)
-                          : null,
-                      });
+                      const suggestions = await suggestTrackMatches(
+                        supabase,
+                        user.id,
+                        artist.artistId,
+                        {
+                          title: track.title,
+                          durationSeconds: track.duration ? Math.round(track.duration / 1000) : null,
+                        },
+                      );
                       return (
                         <tr key={track.id}>
+                          <td><strong>{track.title}</strong><br /><small>{track.permalink_url}</small></td>
                           <td>
-                            <strong>{track.title}</strong>
-                            <br />
-                            <small>{track.permalink_url}</small>
-                          </td>
-                          <td>
-                            {suggestions.length ? (
-                              suggestions.map((match) => (
-                                <form action={linkExternalSoundCloudTrack} key={match.trackId}>
-                                  <input type="hidden" name="external_id" value={track.id} />
-                                  <input type="hidden" name="track_id" value={match.trackId} />
-                                  <button className="text-button">
-                                    Link to {match.trackTitle} ({match.score})
-                                  </button>
-                                </form>
-                              ))
-                            ) : (
-                              "No confident matches"
-                            )}
+                            {suggestions.length ? suggestions.map((match) => (
+                              <form action={linkExternalSoundCloudTrack} key={match.trackId}>
+                                <input type="hidden" name="artist_id" value={artist.artistId} />
+                                <input type="hidden" name="external_id" value={track.id} />
+                                <input type="hidden" name="track_id" value={match.trackId} />
+                                <button className="text-button">Link to {match.trackTitle} ({match.score})</button>
+                              </form>
+                            )) : "No confident matches"}
                           </td>
                           <td>
                             <form action={importSoundCloudTrack}>
+                              <input type="hidden" name="artist_id" value={artist.artistId} />
                               <input type="hidden" name="id" value={track.id} />
                               <button className="text-button">Create release</button>
                             </form>
@@ -182,44 +157,19 @@ export default async function SoundCloudPage({
           <Panel title="Synced tracks" className="feature">
             {tracks?.length ? (
               <table className="studio-table">
-                <thead>
-                  <tr>
-                    <th>Track</th>
-                    <th>Duration</th>
-                    <th>Plays</th>
-                    <th>Studio link</th>
-                  </tr>
-                </thead>
+                <thead><tr><th>Track</th><th>Duration</th><th>Plays</th><th>Studio link</th></tr></thead>
                 <tbody>
                   {tracks.map((track) => {
-                    const linkedRelease = track.linked_release_id
-                      ? releaseById.get(track.linked_release_id)
-                      : null;
+                    const linkedRelease = track.linked_release_id ? releaseById.get(track.linked_release_id) : null;
                     return (
                       <tr key={track.id}>
-                        <td>
-                          <a href={track.permalink_url} target="_blank" rel="noreferrer">
-                            <strong>{track.title}</strong>
-                          </a>
-                        </td>
-                        <td>
-                          <FormatTime
-                            seconds={
-                              track.duration ? Math.round(track.duration / 1000) : null
-                            }
-                          />
-                        </td>
+                        <td><a href={track.permalink_url} target="_blank" rel="noreferrer"><strong>{track.title}</strong></a></td>
+                        <td><FormatTime seconds={track.duration ? Math.round(track.duration / 1000) : null} /></td>
                         <td>{track.playback_count.toLocaleString()}</td>
                         <td>
                           {linkedRelease ? (
-                            <Link href={`/studio/releases/${linkedRelease.id}`}>
-                              <Status>{linkedRelease.title}</Status>
-                            </Link>
-                          ) : track.reconcile_status === "dismissed" ? (
-                            "Dismissed"
-                          ) : (
-                            "Unmatched"
-                          )}
+                            <Link href={`/studio/releases/${linkedRelease.id}`}><Status>{linkedRelease.title}</Status></Link>
+                          ) : track.reconcile_status === "dismissed" ? "Dismissed" : "Unmatched"}
                         </td>
                       </tr>
                     );
@@ -244,30 +194,20 @@ export default async function SoundCloudPage({
 
           <Panel title="Playlists" className="feature">
             {playlists?.length ? (
-              <table className="studio-table">
-                <tbody>
-                  {playlists.map((playlist) => (
-                    <tr key={playlist.id}>
-                      <td>
-                        <a href={playlist.permalink_url} target="_blank" rel="noreferrer">
-                          {playlist.title}
-                        </a>
-                      </td>
-                      <td>{playlist.track_count} tracks</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <EmptyState title="No playlists synced" body="Playlists appear after sync." />
-            )}
+              <table className="studio-table"><tbody>
+                {playlists.map((playlist) => (
+                  <tr key={playlist.id}>
+                    <td><a href={playlist.permalink_url} target="_blank" rel="noreferrer">{playlist.title}</a></td>
+                    <td>{playlist.track_count} tracks</td>
+                  </tr>
+                ))}
+              </tbody></table>
+            ) : <EmptyState title="No playlists synced" body="Playlists appear after sync." />}
           </Panel>
         </>
       ) : configured ? (
         <Panel title="Connect SoundCloud" className="feature">
-          <a className="button primary" href="/studio/soundcloud/connect">
-            Connect SoundCloud
-          </a>
+          <a className="button primary" href="/studio/soundcloud/connect">Connect SoundCloud</a>
         </Panel>
       ) : null}
     </>

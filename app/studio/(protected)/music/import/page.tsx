@@ -5,26 +5,17 @@ import { requireStudioAdmin } from "@/lib/auth/studio";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asGrowthClient } from "@/lib/studio/growth-db";
+import { describeMusicIngestionProgress } from "@/lib/studio/track-analysis-state";
 import { vaultAnalysisReadiness } from "@/lib/studio/vault-analysis";
 import type { VaultTrack } from "@/types/growth-database";
 
-function hasMusicMap(track: VaultTrack) {
-  return Boolean(
-    track.audio_profile
-    && typeof track.audio_profile === "object"
-    && !Array.isArray(track.audio_profile)
-    && Object.keys(track.audio_profile).length,
-  );
-}
-
-function analysisStatus(track: VaultTrack) {
-  if (hasMusicMap(track)) return "Understood";
-  if (!track.analysis || typeof track.analysis !== "object" || Array.isArray(track.analysis)) return "Preparing analysis";
-  const status = (track.analysis as Record<string, unknown>).status;
-  if (status === "queued" || status === "running") return "Understanding…";
-  if (status === "failed") return "Needs retry";
-  if (status === "unavailable") return "Analysis unavailable";
-  return track.audio_url ? "Preparing analysis" : "Needs master";
+function ingestionProgress(track: VaultTrack) {
+  return describeMusicIngestionProgress({
+    hasMaster: Boolean(track.audio_url),
+    analysisValue: track.analysis,
+    musicMapValue: track.audio_profile,
+    releaseBound: Boolean(track.linked_track_id || track.linked_release_id),
+  });
 }
 
 export default async function MusicImportPage({ searchParams }: { searchParams: Promise<{ onboarding?: string }> }) {
@@ -83,15 +74,18 @@ export default async function MusicImportPage({ searchParams }: { searchParams: 
         </div>
         {recent?.length ? (
           <div className="growth-vault-list">
-            {recent.map((track) => (
-              <Link className="growth-import-row" href={href(`/studio/music/${track.id}`)} key={track.id}>
-                <div>
-                  <strong>{track.title}</strong>
-                  <small>{track.status.replaceAll("_", " ")} · {analysisStatus(track)}</small>
-                </div>
-                <div><span>{hasMusicMap(track) ? "Structure and strongest moments ready" : "Automatic Track Intelligence"}</span></div>
-              </Link>
-            ))}
+            {recent.map((track) => {
+              const progress = ingestionProgress(track);
+              return (
+                <Link className="growth-import-row" href={href(`/studio/music/${track.id}`)} key={track.id}>
+                  <div>
+                    <strong>{track.title}</strong>
+                    <small>{track.status.replaceAll("_", " ")} · {progress.label} · {progress.progress}%</small>
+                  </div>
+                  <div><span>{progress.detail}</span></div>
+                </Link>
+              );
+            })}
           </div>
         ) : (
           <div className="v2-calm-state compact">

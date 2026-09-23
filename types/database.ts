@@ -35,7 +35,6 @@ export type Release = {
   artwork_url: string | null;
   cover_asset: string | null;
   public_slug: string | null;
-  public_release_path: string | null;
   story_answers: Json;
   release_identity: Json;
   readiness: Json;

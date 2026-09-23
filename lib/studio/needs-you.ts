@@ -11,8 +11,16 @@ export type NeedsYouSourceKind =
   | "publication"
   | "catalog_match"
   | "creative"
+  | "audience"
+  | "site"
   | "task"
   | "learning";
+
+export type NeedsYouTiming = {
+  deadlineAt: string | null;
+  freshnessAt: string | null;
+  label: string | null;
+};
 
 export type NeedsYouItem = {
   id: string;
@@ -24,26 +32,97 @@ export type NeedsYouItem = {
   priority: number;
   source: { kind: NeedsYouSourceKind; id: string | null };
   missionId: string | null;
+  timing: NeedsYouTiming;
 };
 
 export type NeedsYouProjectionInput = {
   activeReleaseId?: string | null;
+  activeReleaseDate?: string | null;
+  activeReleaseDateLabel?: string | null;
   activeMission?: ReleaseMissionState | null;
-  distributionDecisions?: Array<{ key: string; title: string; detail: string; severity: NeedsYouSeverity; releaseId: string }>;
-  paidGrowthDecisions?: Array<{ key: string; title: string; detail: string; severity: NeedsYouSeverity; href: string }>;
+  distributionDecisions?: Array<{
+    key: string;
+    title: string;
+    detail: string;
+    severity: NeedsYouSeverity;
+    releaseId: string;
+    deadlineAt?: string | null;
+    freshnessAt?: string | null;
+    timingLabel?: string | null;
+  }>;
+  paidGrowthDecisions?: Array<{
+    key: string;
+    title: string;
+    detail: string;
+    severity: NeedsYouSeverity;
+    href: string;
+    deadlineAt?: string | null;
+    freshnessAt?: string | null;
+    timingLabel?: string | null;
+  }>;
+  audienceDecisions?: Array<{
+    id: string;
+    title: string;
+    detail: string;
+    href: string;
+    deadlineAt?: string | null;
+    freshnessAt?: string | null;
+    timingLabel?: string | null;
+  }>;
+  siteDecisions?: Array<{
+    id: string;
+    title: string;
+    detail: string;
+    severity: NeedsYouSeverity;
+    href: string;
+    deadlineAt?: string | null;
+    freshnessAt?: string | null;
+    timingLabel?: string | null;
+  }>;
   workflowApprovalCount: number;
   outreachDraftCount: number;
-  manualReady: Array<{ id: string; platform: string; contentItemId?: string | null }>;
+  manualReady: Array<{
+    id: string;
+    platform: string;
+    contentItemId?: string | null;
+    scheduledAt?: string | null;
+    scheduledLabel?: string | null;
+  }>;
   unmatchedCount: number;
-  missingAssets: Array<{ id: string; title: string; platform: string; scheduledLabel?: string | null; releaseId?: string | null; requiresDecision?: boolean }>;
-  dueTasks: Array<{ id: string; title: string; priority: string; dueLabel?: string | null; requiresDecision?: boolean }>;
+  missingAssets: Array<{
+    id: string;
+    title: string;
+    platform: string;
+    scheduledAt?: string | null;
+    scheduledLabel?: string | null;
+    releaseId?: string | null;
+    requiresDecision?: boolean;
+  }>;
+  dueTasks: Array<{
+    id: string;
+    title: string;
+    priority: string;
+    dueAt?: string | null;
+    dueLabel?: string | null;
+    requiresDecision?: boolean;
+  }>;
   proposedLearningCount: number;
 };
 
 const SEVERITY_WEIGHT: Record<NeedsYouSeverity, number> = { required: 300, decision: 200, review: 100 };
+const EMPTY_TIMING: NeedsYouTiming = { deadlineAt: null, freshnessAt: null, label: null };
 
-function item(input: Omit<NeedsYouItem, "priority"> & { priority?: number }): NeedsYouItem {
-  return { ...input, priority: SEVERITY_WEIGHT[input.severity] + (input.priority ?? 0) };
+type NeedsYouItemInput = Omit<NeedsYouItem, "priority" | "timing"> & {
+  priority?: number;
+  timing?: Partial<NeedsYouTiming>;
+};
+
+function item(input: NeedsYouItemInput): NeedsYouItem {
+  return {
+    ...input,
+    priority: SEVERITY_WEIGHT[input.severity] + (input.priority ?? 0),
+    timing: { ...EMPTY_TIMING, ...(input.timing ?? {}) },
+  };
 }
 
 function dedupe(items: NeedsYouItem[]) {
@@ -56,12 +135,30 @@ function dedupe(items: NeedsYouItem[]) {
   });
 }
 
+function missionTiming(input: NeedsYouProjectionInput): Partial<NeedsYouTiming> {
+  return {
+    deadlineAt: input.activeReleaseDate ?? null,
+    label: input.activeReleaseDateLabel ? `Release ${input.activeReleaseDateLabel}` : null,
+  };
+}
+
 export function deriveNeedsYouQueue(input: NeedsYouProjectionInput): NeedsYouItem[] {
   const missionId = input.activeReleaseId ?? null;
   const queue: NeedsYouItem[] = [];
 
   for (const blocker of input.activeMission?.blockers ?? []) {
-    queue.push(item({ id: `mission:${blocker.key}`, category: "Release Mission", title: blocker.title, detail: blocker.detail, href: blocker.href, severity: "required", priority: 90, source: { kind: "mission", id: blocker.key }, missionId }));
+    queue.push(item({
+      id: `mission:${blocker.key}`,
+      category: "Release Mission",
+      title: blocker.title,
+      detail: blocker.detail,
+      href: blocker.href,
+      severity: "required",
+      priority: 90,
+      source: { kind: "mission", id: blocker.key },
+      missionId,
+      timing: missionTiming(input),
+    }));
   }
 
   // Do not hide later distribution blockers behind an arbitrary first-five cap.
@@ -77,6 +174,11 @@ export function deriveNeedsYouQueue(input: NeedsYouProjectionInput): NeedsYouIte
       priority: 85,
       source: { kind: "distribution", id: decision.key },
       missionId: decision.releaseId,
+      timing: {
+        deadlineAt: decision.deadlineAt ?? input.activeReleaseDate ?? null,
+        freshnessAt: decision.freshnessAt ?? null,
+        label: decision.timingLabel ?? input.activeReleaseDateLabel ?? null,
+      },
     }));
   }
 
@@ -91,6 +193,49 @@ export function deriveNeedsYouQueue(input: NeedsYouProjectionInput): NeedsYouIte
       priority: decision.severity === "required" ? 88 : 78,
       source: { kind: "paid_growth", id: decision.key },
       missionId,
+      timing: {
+        deadlineAt: decision.deadlineAt ?? null,
+        freshnessAt: decision.freshnessAt ?? null,
+        label: decision.timingLabel ?? null,
+      },
+    }));
+  }
+
+  for (const decision of (input.audienceDecisions ?? []).slice(0, 3)) {
+    queue.push(item({
+      id: `audience:${decision.id}`,
+      category: "Audience",
+      title: decision.title,
+      detail: decision.detail,
+      href: decision.href,
+      severity: "decision",
+      priority: 74,
+      source: { kind: "audience", id: decision.id },
+      missionId,
+      timing: {
+        deadlineAt: decision.deadlineAt ?? null,
+        freshnessAt: decision.freshnessAt ?? null,
+        label: decision.timingLabel ?? null,
+      },
+    }));
+  }
+
+  for (const decision of (input.siteDecisions ?? []).slice(0, 3)) {
+    queue.push(item({
+      id: `site:${decision.id}`,
+      category: "Site",
+      title: decision.title,
+      detail: decision.detail,
+      href: decision.href,
+      severity: decision.severity,
+      priority: decision.severity === "required" ? 82 : decision.severity === "decision" ? 68 : 42,
+      source: { kind: "site", id: decision.id },
+      missionId,
+      timing: {
+        deadlineAt: decision.deadlineAt ?? null,
+        freshnessAt: decision.freshnessAt ?? null,
+        label: decision.timingLabel ?? null,
+      },
     }));
   }
 
@@ -103,7 +248,21 @@ export function deriveNeedsYouQueue(input: NeedsYouProjectionInput): NeedsYouIte
   }
 
   for (const publication of input.manualReady.slice(0, 2)) {
-    queue.push(item({ id: `publication:${publication.id}`, category: "Ready for handoff", title: `${publication.platform} is prepared`, detail: "Everything is ready for the final manual publishing step.", href: publication.contentItemId ? `/studio/production?edit=${publication.contentItemId}` : "/studio/inbox", severity: "decision", priority: 60, source: { kind: "publication", id: publication.id }, missionId }));
+    queue.push(item({
+      id: `publication:${publication.id}`,
+      category: "Ready for handoff",
+      title: `${publication.platform} is prepared`,
+      detail: "Everything is ready for the final manual publishing step.",
+      href: publication.contentItemId ? `/studio/production?edit=${publication.contentItemId}` : "/studio/inbox",
+      severity: "decision",
+      priority: 60,
+      source: { kind: "publication", id: publication.id },
+      missionId,
+      timing: {
+        deadlineAt: publication.scheduledAt ?? null,
+        label: publication.scheduledLabel ?? null,
+      },
+    }));
   }
 
   if (input.unmatchedCount) {
@@ -117,14 +276,42 @@ export function deriveNeedsYouQueue(input: NeedsYouProjectionInput): NeedsYouIte
   const missionMissingAssets = new Set((input.activeMission?.recommendations ?? []).filter((recommendation) => recommendation.key.startsWith("asset:")).map((recommendation) => recommendation.title.replace(/^Finish\s+/i, "").toLowerCase()));
   for (const asset of decisionAssets.slice(0, 3)) {
     if (asset.releaseId === missionId && missionMissingAssets.has(asset.title.toLowerCase())) continue;
-    queue.push(item({ id: `creative:${asset.id}`, category: "Creative", title: `${asset.title} is waiting for your decision`, detail: `${asset.platform}${asset.scheduledLabel ? ` · ${asset.scheduledLabel}` : ""}`, href: `/studio/production?edit=${asset.id}`, severity: "review", priority: 40, source: { kind: "creative", id: asset.id }, missionId: asset.releaseId ?? missionId }));
+    queue.push(item({
+      id: `creative:${asset.id}`,
+      category: "Creative",
+      title: `${asset.title} is waiting for your decision`,
+      detail: `${asset.platform}${asset.scheduledLabel ? ` · ${asset.scheduledLabel}` : ""}`,
+      href: `/studio/production?edit=${asset.id}`,
+      severity: "review",
+      priority: 40,
+      source: { kind: "creative", id: asset.id },
+      missionId: asset.releaseId ?? missionId,
+      timing: {
+        deadlineAt: asset.scheduledAt ?? null,
+        label: asset.scheduledLabel ?? null,
+      },
+    }));
   }
 
   // Routine due work belongs in Today/release work, not in the judgment queue.
   // Future task sources can opt into this queue explicitly via requiresDecision,
   // but no generic task should manufacture artist attention by merely being due.
   for (const task of input.dueTasks.filter((task) => task.requiresDecision === true).slice(0, 3)) {
-    queue.push(item({ id: `task:${task.id}`, category: "Task decision", title: task.title, detail: task.dueLabel ? `${task.priority} · ${task.dueLabel}` : task.priority, href: missionId ? `/studio/releases/${missionId}` : "/studio/releases", severity: "review", priority: 30, source: { kind: "task", id: task.id }, missionId }));
+    queue.push(item({
+      id: `task:${task.id}`,
+      category: "Task decision",
+      title: task.title,
+      detail: task.dueLabel ? `${task.priority} · ${task.dueLabel}` : task.priority,
+      href: missionId ? `/studio/releases/${missionId}` : "/studio/releases",
+      severity: "review",
+      priority: 30,
+      source: { kind: "task", id: task.id },
+      missionId,
+      timing: {
+        deadlineAt: task.dueAt ?? null,
+        label: task.dueLabel ?? null,
+      },
+    }));
   }
 
   if (input.proposedLearningCount) {

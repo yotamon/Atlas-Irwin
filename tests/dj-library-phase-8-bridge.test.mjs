@@ -65,7 +65,11 @@ test("native bridge keeps filesystem authority in Rust and cloud DTOs path-free"
   assert.ok(scanner.includes("let source_track_id = seed.fingerprint.clone()"));
   assert.ok(network.includes("SYNC_TRACKS_PER_CHUNK: usize = 200"));
   assert.ok(network.includes("cloud did not commit the complete DJ-library revision"));
-  assert.ok(network.includes("Do not forward arbitrary anyhow/IO context"));
+  assert.ok(network.includes("fn public_job_error(error: &anyhow::Error) -> String"));
+  assert.ok(network.includes('"local device execution failed".to_string()'));
+  assert.ok(network.includes("Err(error) => failed(job, public_job_error(&error))"));
+  assert.equal(network.includes("failed(job, error.to_string())"), false);
+  assert.equal(network.includes("error: Some(error.to_string())"), false);
   assert.equal(network.includes("SUPABASE_SERVICE_ROLE_KEY"), false);
   assert.deepEqual(capabilities.permissions, ["core:default"]);
   assert.equal(JSON.stringify(capabilities).includes("fs:"), false);
@@ -84,20 +88,38 @@ test("native webview uses a strict local-only CSP without unsafe inline executio
   assert.equal(/<script(?![^>]*\bsrc=)/.test(html), false, "native HTML must not contain inline script blocks");
   assert.ok(html.includes('src="./app.js"'));
   assert.ok(html.includes('href="./app.css"'));
+  assert.ok(html.includes("Connect this computer as your Local Engine"));
+  assert.ok(html.includes("Local Engine ready"));
+  assert.ok(html.includes("Audio analysis"));
+  assert.ok(html.includes("Set planning"));
+  assert.ok(html.includes("AutoMix render"));
+  assert.ok(html.includes("Open Ensemblis Studio"));
 });
 
-test("Studio exposes explicit pairing and revocation without exposing credential hashes", async () => {
+test("Studio makes automatic browser connection primary while preserving explicit recovery, licensing and revocation", async () => {
   const route = await source("app/api/studio/dj-library/devices/route.ts");
   const component = await source("components/studio/library-bridge-panel.tsx");
   const page = await source("app/studio/(protected)/music/automix/page.tsx");
+  const workflow = await source("components/studio/automix-workflow.tsx");
 
   assert.ok(route.includes('action === "create_pairing"'));
   assert.ok(route.includes('action === "revoke"'));
   assert.equal(route.includes('select("*")'), false);
-  assert.ok(component.includes("Pair a computer"));
-  assert.ok(component.includes("Raw filesystem paths stay inside the native bridge"));
-  assert.ok(page.includes("<LibraryBridgePanel"));
-  assert.ok(page.includes("<LocalSetBuilderWorkspace"));
+  assert.ok(component.includes("Your connected computers"));
+  assert.ok(component.includes("Connect to Ensemblis"));
+  assert.ok(component.includes("Manual connection"));
+  assert.ok(component.includes("Your music stays local"));
+  assert.ok(component.includes("Local Engine"));
+  assert.ok(component.includes("Audio analysis"));
+  assert.ok(component.includes("Set planning"));
+  assert.ok(component.includes("AutoMix render"));
+  assert.ok(component.includes("Browser = control surface."));
+  assert.ok(component.includes("Offline license"));
+  assert.ok(component.includes('/api/studio/dj-library/license'));
+  assert.ok(page.includes("<AutoMixWorkflow"));
+  assert.ok(workflow.includes("<LibraryBridgePanel"));
+  assert.ok(workflow.includes("<LocalSetBuilderWorkspace"));
+  assert.ok(workflow.includes("DJ preferences & connection tools"));
 });
 
 test("Studio track discovery shares strict planning-readiness validation with the local planner", async () => {
@@ -146,9 +168,12 @@ test("local Set Builder uses the canonical planner while keeping audio on one pa
   assert.ok(worker.includes("device_source_fingerprints"));
   assert.ok(worker.includes('execution_targets == {"device"}'));
   assert.ok(deviceSources.includes("TrackDescriptor("));
-  assert.ok(component.includes("Approve & render locally"));
+  assert.ok(component.includes("Your audio stays on this computer."));
+  assert.ok(component.includes("Render mix on this computer"));
+  assert.ok(component.includes("one paired computer"));
   assert.ok(component.includes("candidateRefs"));
   assert.ok(component.includes("Replan edits"));
+  assert.ok(component.includes("<WorkflowStepper"));
 });
 
 test("local renderer reuses canonical MixPlan DSP and double-checks frozen recording fingerprints", async () => {
@@ -171,7 +196,7 @@ test("local renderer reuses canonical MixPlan DSP and double-checks frozen recor
   assert.equal(renderer.includes("download("), false, "local renderer must not upload or fetch local audio through cloud helpers");
 });
 
-test("desktop export only copies a reverified completed render from the trusted local workspace", async () => {
+test("desktop export stays a trusted native capability without leaking helper controls into onboarding", async () => {
   const exporter = await source("apps/library-bridge/src-tauri/src/export.rs");
   const native = await source("apps/library-bridge/src-tauri/src/lib.rs");
   const html = await source("apps/library-bridge/ui/index.html");
@@ -182,15 +207,16 @@ test("desktop export only copies a reverified completed render from the trusted 
   assert.ok(exporter.includes("fingerprint_file(&asset.source_path)? != asset.sha256"));
   assert.ok(exporter.includes("fs::copy(&asset.source_path"));
   assert.ok(native.includes("export_latest_render"));
-  assert.ok(html.includes("Export latest mix"));
-  assert.ok(js.includes('invoke("export_latest_render")'));
+  assert.equal(html.includes("Export latest mix"), false);
+  assert.equal(js.includes('invoke("export_latest_render")'), false);
 });
 
 test("release configuration declares pinned, version-checked Windows/macOS Tauri bundles", async () => {
   const release = JSON.parse(await source("apps/library-bridge/src-tauri/tauri.release.conf.json"));
   const builder = await source("apps/library-bridge/renderer/build_sidecar.py");
   const requirements = await source("apps/library-bridge/renderer/requirements.txt");
-  const workflow = await source(".github/workflows/library-bridge-ci.yml");
+  const releaseWorkflow = await source(".github/workflows/library-bridge-release.yml");
+  const prWorkflow = await source(".github/workflows/library-bridge-ci.yml");
 
   assert.deepEqual(release.bundle.externalBin, ["binaries/ensemblis-bridge-sidecar"]);
   assert.ok(builder.includes('rustc", "--print", "host-tuple"'));
@@ -198,8 +224,12 @@ test("release configuration declares pinned, version-checked Windows/macOS Tauri
   assert.ok(builder.includes("EXPECTED_VERSIONS"));
   assert.ok(builder.includes('f"{SIDECAR_NAME}-{target_triple}{extension}"'));
   assert.ok(requirements.includes("PyInstaller==6.22.2"));
-  assert.ok(workflow.includes("windows-latest"));
-  assert.ok(workflow.includes("macos-14"));
-  assert.ok(workflow.includes("@tauri-apps/cli@2.11.4"));
-  assert.ok(workflow.includes("--bundles ${{ matrix.bundle }}"));
+  assert.ok(releaseWorkflow.includes("workflow_dispatch:"));
+  assert.ok(releaseWorkflow.includes('"library-bridge-v*"'));
+  assert.ok(releaseWorkflow.includes("windows-latest"));
+  assert.ok(releaseWorkflow.includes("macos-14"));
+  assert.ok(releaseWorkflow.includes("@tauri-apps/cli@2.11.4"));
+  assert.ok(releaseWorkflow.includes("--bundles ${{ matrix.bundle }}"));
+  assert.equal(prWorkflow.includes("windows-latest"), false, "normal PR CI must not package desktop release bundles");
+  assert.equal(prWorkflow.includes("macos-14"), false, "normal PR CI must not package desktop release bundles");
 });

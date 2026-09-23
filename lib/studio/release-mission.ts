@@ -1,4 +1,5 @@
 import type { ReleaseLifecycle } from "@/lib/marketing/release-lifecycle";
+import { missionStateLabel, type MissionStateLabel } from "./decision-language";
 
 export type MissionAttention = "blocking" | "recommended" | "optional";
 
@@ -12,7 +13,7 @@ export type ReleaseMissionItem = {
 
 export type ReleaseMissionState = {
   status: "blocked" | "needs_attention" | "on_track" | "archived";
-  label: "Blocked" | "Needs attention" | "On track" | "Archived";
+  label: MissionStateLabel;
   summary: string;
   blockers: ReleaseMissionItem[];
   recommendations: ReleaseMissionItem[];
@@ -54,7 +55,7 @@ export function deriveReleaseMission(input: ReleaseMissionInput): ReleaseMission
   if (input.lifecycle === "archived") {
     return {
       status: "archived",
-      label: "Archived",
+      label: missionStateLabel("archived"),
       summary: "This release is archived, so Ensemblis is not manufacturing active Mission work for it.",
       blockers,
       recommendations,
@@ -96,8 +97,8 @@ export function deriveReleaseMission(input: ReleaseMissionInput): ReleaseMission
   if (!input.hasCampaign) {
     recommendations.push(item(
       "campaign",
-      "Campaign engine needs repair",
-      "Ensemblis normally prepares the campaign shell automatically. Inspect Campaign Brain only if self-healing cannot restore it.",
+      "Promotion plan needs attention",
+      "Ensemblis normally prepares the promotion plan automatically. If it cannot recover, open the specialist campaign tools.",
       "/studio/campaigns",
       "recommended",
     ));
@@ -137,7 +138,7 @@ export function deriveReleaseMission(input: ReleaseMissionInput): ReleaseMission
     optional.push(item(
       "provider-lock",
       "External publishing schedule is active",
-      `${input.providerScheduledCount} publication${input.providerScheduledCount === 1 ? " is" : "s are"} already scheduled at a provider. Ensemblis will protect that approved timing from drift.`,
+      `${input.providerScheduledCount} publication${input.providerScheduledCount === 1 ? " is" : "s are"} already scheduled externally. Ensemblis will protect that approved timing from drift.`,
       `${releaseHref}?stage=publish`,
       "optional",
     ));
@@ -147,7 +148,7 @@ export function deriveReleaseMission(input: ReleaseMissionInput): ReleaseMission
   if (blockers.length) {
     return {
       status: "blocked",
-      label: "Blocked",
+      label: missionStateLabel("blocked"),
       summary: `${blockers.length} required item${blockers.length === 1 ? " is" : "s are"} blocking this release mission.`,
       blockers,
       recommendations,
@@ -159,7 +160,7 @@ export function deriveReleaseMission(input: ReleaseMissionInput): ReleaseMission
   if (recommendations.length) {
     return {
       status: "needs_attention",
-      label: "Needs attention",
+      label: missionStateLabel("needs_attention"),
       summary: `${recommendations.length} useful next step${recommendations.length === 1 ? " is" : "s are"} left; Ensemblis can keep the rest moving.`,
       blockers,
       recommendations,
@@ -170,7 +171,7 @@ export function deriveReleaseMission(input: ReleaseMissionInput): ReleaseMission
 
   return {
     status: "on_track",
-    label: "On track",
+    label: missionStateLabel("on_track"),
     summary: "No required release decision is blocking progress right now.",
     blockers,
     recommendations,

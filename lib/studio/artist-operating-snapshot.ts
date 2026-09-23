@@ -9,9 +9,14 @@ import { createAutonomyServiceClient } from "@/lib/marketing/autonomy-db";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { releaseLifecycle } from "@/lib/marketing/release-lifecycle";
 import { loadPaidGrowthWorkspace, paidGrowthNeedsYou } from "@/lib/paid-growth/server";
+import { asSitesClient } from "@/lib/sites/db";
 import type { Database } from "@/types/database";
 import { deriveArtistMission } from "./artist-mission";
 import type { ArtistContext } from "./artist-context";
+import { deriveMomentMissionRecommendation } from "./moment-mission";
+import { asGrowthClient } from "./growth-db";
+import type { AutoMixDatabase, AutoMixJob } from "@/types/automix-database";
+import { asMomentsClient } from "./moments-db";
 import { asArtistScopedMusicClient } from "./music-db";
 import { deriveNeedsYouQueue } from "./needs-you";
 import {
@@ -82,6 +87,15 @@ function needsArtistJudgment(action: { action_type: string }) {
   return ARTIST_DECISION_ACTION_TYPES.has(action.action_type);
 }
 
+function automixRootJobId(job: AutoMixJob) {
+  const lineage = record(record(job.request_payload).plan_lineage);
+  return typeof lineage.root_job_id === "string" ? lineage.root_job_id : job.id;
+}
+
+function automixSource(job: AutoMixJob) {
+  return record(job.request_payload).execution_target === "device" ? "local" : "catalog";
+}
+
 function managerOwned(action: { payload: unknown }) {
   return record(action.payload).managerOwned === true;
 }
@@ -127,8 +141,12 @@ export async function loadArtistOperatingSnapshot({
 }) {
   const operational = asArtistScopedOperationalClient(db);
   const music = asArtistScopedMusicClient(db);
+  const moments = asMomentsClient(db);
+  const growth = asGrowthClient(db);
+  const automix = db as unknown as SupabaseClient<AutoMixDatabase>;
   const marketing = asMarketingClient(db);
   const autonomy = createAutonomyServiceClient();
+  const sites = asSitesClient(db);
   const preferencesPromise = loadWorkspaceOperatingPreferences(db, artist.workspaceId);
   const operatingContextPromise = loadArtistOperatingContext({ db, artist });
   const sevenDays = new Date(now);
@@ -142,6 +160,9 @@ export async function loadArtistOperatingSnapshot({
     operatingContext,
     releasesResult,
     tracksResult,
+    latestTrackResult,
+    latestMixResult,
+    momentsResult,
     campaignsResult,
     tasksResult,
     automationResult,
@@ -153,29 +174,37 @@ export async function loadArtistOperatingSnapshot({
     soundCloudPendingResult,
     spotifyPendingResult,
     outreachDraftsResult,
+    siteResult,
     paidWorkspace,
   ] = await Promise.all([
     preferencesPromise,
     operatingContextPromise,
     music.from("releases").select("id,title,release_date,active_release,artwork_url,cover_asset,primary_hook,smart_link_url,spotify_url,soundcloud_url,youtube_url,status,is_archived").eq("owner_id", userId).eq("artist_id", artist.artistId).order("updated_at", { ascending: false }),
-    music.from("tracks").select("id,release_id,audio_url,is_primary").eq("owner_id", userId).eq("artist_id", artist.artistId),
+    music.from("tracks").select("id,release_id,title,audio_url,is_primary").eq("owner_id", userId).eq("artist_id", artist.artistId),
+    growth.from("track_vault").select("id,title,status,updated_at").eq("owner_id", userId).eq("artist_id", artist.artistId).neq("status", "archived").order("updated_at", { ascending: false }).limit(1),
+    automix.from("automix_jobs").select("*").eq("owner_id", userId).eq("artist_id", artist.artistId).neq("status", "cancelled").order("updated_at", { ascending: false }).limit(1),
+    moments.from("moments").select("*").eq("owner_id", userId).eq("artist_id", artist.artistId).in("state", ["proposed", "approved"]).limit(100),
     marketing.from("campaigns").select("id,release_id,status").eq("owner_id", userId).eq("artist_id", artist.artistId).not("status", "eq", "archived"),
     operational.from("tasks").select("id,title,due_at,priority,status").eq("owner_id", userId).eq("artist_id", artist.artistId).not("status", "in", '("Done","Skipped")').order("due_at", { ascending: true }).limit(30),
     marketing.from("automation_jobs").select("id,campaign_id,job_type,status,approval_status,run_after").eq("owner_id", userId).eq("artist_id", artist.artistId).not("status", "in", '("completed","failed","cancelled")').order("run_after", { ascending: true }).limit(40),
     marketing.from("publication_jobs").select("id,campaign_id,content_item_id,platform,status,approval_status,scheduled_at").eq("owner_id", userId).eq("artist_id", artist.artistId).not("status", "in", '("published","failed","cancelled")').order("scheduled_at", { ascending: true }).limit(40),
     marketing.from("content_items").select("id,title,platform,status,asset_url,scheduled_at,release_id").eq("owner_id", userId).eq("artist_id", artist.artistId).not("status", "eq", "Archived").order("scheduled_at", { ascending: true }).limit(100),
     marketing.from("marketing_learnings").select("id,status").eq("owner_id", userId).eq("artist_id", artist.artistId).eq("status", "proposed").limit(20),
-    autonomy.from("next_best_actions").select("id,title,rationale,action_type,score,status,source_type,payload").eq("owner_id", userId).eq("artist_id", artist.artistId).eq("status", "proposed").order("score", { ascending: false }).limit(8),
+    autonomy.from("next_best_actions").select("id,title,rationale,action_type,score,status,source_type,payload,expires_at").eq("owner_id", userId).eq("artist_id", artist.artistId).eq("status", "proposed").order("score", { ascending: false }).limit(8),
     autonomy.from("next_best_actions").select("id,title,rationale,action_type,status,source_type,payload,updated_at").eq("owner_id", userId).eq("artist_id", artist.artistId).eq("status", "completed").eq("source_type", "artist_operating_profile").gte("updated_at", sevenDaysAgo.toISOString()).order("updated_at", { ascending: false }).limit(6),
     db.from("soundcloud_tracks").select("id,linked_track_id").eq("owner_id", userId).eq("reconcile_status", "pending"),
     db.from("spotify_tracks").select("id,linked_track_id").eq("owner_id", userId).eq("reconcile_status", "pending"),
     marketing.from("outreach_messages").select("id").eq("owner_id", userId).eq("artist_id", artist.artistId).is("sent_at", null).eq("response_status", "Draft"),
+    sites.from("artist_sites").select("id,state,draft_version_id,published_version_id,updated_at").eq("artist_id", artist.artistId).maybeSingle(),
     loadPaidGrowthWorkspace({ db, ownerId: userId, artistId: artist.artistId }),
   ]);
 
   const firstError = [
     releasesResult,
     tracksResult,
+    latestTrackResult,
+    latestMixResult,
+    momentsResult,
     campaignsResult,
     tasksResult,
     automationResult,
@@ -187,11 +216,23 @@ export async function loadArtistOperatingSnapshot({
     soundCloudPendingResult,
     spotifyPendingResult,
     outreachDraftsResult,
+    siteResult,
   ].find((result) => result.error)?.error;
   if (firstError) throw new Error(firstError.message);
 
   const releases = releasesResult.data ?? [];
   const tracks = tracksResult.data ?? [];
+  const latestTrack = (latestTrackResult.data ?? [])[0] ?? null;
+  const latestMixJob = (latestMixResult.data ?? [])[0] ?? null;
+  const latestMix = latestMixJob ? {
+    id: automixRootJobId(latestMixJob),
+    name: latestMixJob.name,
+    status: latestMixJob.status,
+    trackCount: latestMixJob.track_ids.length,
+    durationMs: latestMixJob.target_duration_ms,
+    href: href(`/studio/music/automix?mix=${encodeURIComponent(automixRootJobId(latestMixJob))}&source=${automixSource(latestMixJob)}`),
+  } : null;
+  const momentRows = momentsResult.data ?? [];
   const campaigns = campaignsResult.data ?? [];
   const content = contentResult.data ?? [];
   const automation = automationResult.data ?? [];
@@ -204,6 +245,13 @@ export async function loadArtistOperatingSnapshot({
     ?? releases.find((release) => release.release_date && release.release_date >= now.toISOString().slice(0, 10))
     ?? releases[0]
     ?? null;
+  const momentRecommendation = deriveMomentMissionRecommendation({
+    moments: momentRows,
+    tracks: tracks.map((track) => ({ id: track.id, release_id: track.release_id, title: track.title })),
+    releases: releases.map((release) => ({ id: release.id, title: release.title })),
+    primaryGoal: operatingContext.profile.primaryGoal,
+    preferredReleaseId: activeRelease?.id ?? null,
+  });
 
   const workflowApprovalCount = automation.filter((job) => job.status === "awaiting_approval" || job.approval_status === "pending").length
     + publications.filter((job) => job.status === "awaiting_approval" || job.approval_status === "pending").length;
@@ -213,6 +261,56 @@ export async function loadArtistOperatingSnapshot({
   const proposedLearningCount = learningsResult.data?.length ?? 0;
   const dueTasks = (tasksResult.data ?? []).filter((task) => task.due_at && new Date(task.due_at) <= sevenDays);
   const outreachDraftCount = outreachDraftsResult.data?.length ?? 0;
+
+  const site = siteResult.data ?? null;
+  const siteDecisions: NonNullable<Parameters<typeof deriveNeedsYouQueue>[0]["siteDecisions"]> = [];
+  if (site) {
+    const domainsResult = await sites
+      .from("artist_site_domains")
+      .select("id,hostname,verification_status,ssl_status,is_primary,last_checked_at")
+      .eq("site_id", site.id)
+      .order("is_primary", { ascending: false })
+      .order("created_at", { ascending: true });
+    if (domainsResult.error) throw new Error(domainsResult.error.message);
+
+    const domains = domainsResult.data ?? [];
+    const primaryDomain = domains.find((domain) => domain.is_primary) ?? null;
+    const readyDomains = domains.filter((domain) => domain.verification_status === "verified" && domain.ssl_status === "active");
+
+    if (site.draft_version_id && site.draft_version_id !== site.published_version_id) {
+      siteDecisions.push({
+        id: `publish-draft:${site.id}`,
+        title: "Review site changes",
+        detail: "A private site draft is ready. Preview the artist-facing result and publish only if it is right.",
+        severity: "review",
+        href: "/studio/sites",
+        freshnessAt: site.updated_at,
+        timingLabel: "Private draft ready",
+      });
+    }
+
+    if (primaryDomain && (primaryDomain.verification_status !== "verified" || primaryDomain.ssl_status !== "active")) {
+      siteDecisions.push({
+        id: `domain:${primaryDomain.id}`,
+        title: `Finish connecting ${primaryDomain.hostname}`,
+        detail: "This domain is not fully verified and secure yet. Complete the remaining connection step before relying on it publicly.",
+        severity: site.state === "published" ? "required" : "decision",
+        href: "/studio/sites",
+        freshnessAt: primaryDomain.last_checked_at,
+        timingLabel: "Domain connection needs attention",
+      });
+    } else if (site.state === "published" && !primaryDomain && readyDomains.length) {
+      siteDecisions.push({
+        id: `primary-domain:${site.id}`,
+        title: "Choose the site's primary domain",
+        detail: "A verified domain is ready, but the public site does not yet have a primary hostname.",
+        severity: "decision",
+        href: "/studio/sites",
+        freshnessAt: readyDomains[0]?.last_checked_at ?? site.updated_at,
+        timingLabel: "Verified domain ready",
+      });
+    }
+  }
 
   const activeReleaseContentIds = new Set(activeRelease ? content.filter((item) => item.release_id === activeRelease.id).map((item) => item.id) : []);
   const activeProviderScheduledCount = publications.filter((job) => job.content_item_id && activeReleaseContentIds.has(job.content_item_id) && String(job.status) === "provider_scheduled").length;
@@ -232,23 +330,49 @@ export async function loadArtistOperatingSnapshot({
 
   const needsYou = deriveNeedsYouQueue({
     activeReleaseId: activeRelease?.id ?? null,
+    activeReleaseDate: activeRelease?.release_date ?? null,
+    activeReleaseDateLabel: activeRelease?.release_date ? formatOperatingDate(activeRelease.release_date, preferences) : null,
     activeMission,
     distributionDecisions: activeRelease ? (activeDistribution?.decisions ?? []).map((decision) => ({ key: decision.key, title: decision.title, detail: decision.detail, severity: decision.severity, releaseId: activeRelease.id })) : [],
     paidGrowthDecisions: paidGrowthNeedsYou(paidWorkspace.cards),
+    audienceDecisions: nextActions
+      .filter((action) => action.action_type === "reply_to_listener")
+      .map((action) => ({
+        id: action.id,
+        title: action.title,
+        detail: action.rationale,
+        href: "/studio/audience",
+        deadlineAt: action.expires_at,
+        timingLabel: action.expires_at ? `Reply window · ${formatOperatingDateTime(action.expires_at, preferences)}` : null,
+      })),
+    siteDecisions,
     workflowApprovalCount,
     outreachDraftCount,
-    manualReady: manualReady.map((job) => ({ id: job.id, platform: job.platform, contentItemId: job.content_item_id })),
+    manualReady: manualReady.map((job) => ({
+      id: job.id,
+      platform: job.platform,
+      contentItemId: job.content_item_id,
+      scheduledAt: job.scheduled_at,
+      scheduledLabel: job.scheduled_at ? formatOperatingDateTime(job.scheduled_at, preferences) : null,
+    })),
     unmatchedCount: unmatched,
     missingAssets: missingAssets.map((item) => ({
       id: item.id,
       title: item.title,
       platform: item.platform,
+      scheduledAt: item.scheduled_at,
       scheduledLabel: item.scheduled_at ? formatOperatingDate(item.scheduled_at, preferences) : null,
       releaseId: item.release_id,
     })),
-    dueTasks: dueTasks.map((task) => ({ id: task.id, title: task.title, priority: task.priority, dueLabel: task.due_at ? dateDistance(task.due_at, now) : null })),
+    dueTasks: dueTasks.map((task) => ({
+      id: task.id,
+      title: task.title,
+      priority: task.priority,
+      dueAt: task.due_at,
+      dueLabel: task.due_at ? dateDistance(task.due_at, now) : null,
+    })),
     proposedLearningCount,
-  }).slice(0, 7);
+  });
 
   const working: OperatingWorkingItem[] = [
     ...automation.filter((job) => job.status === "queued" || job.status === "running").map((job) => ({
@@ -296,9 +420,17 @@ export async function loadArtistOperatingSnapshot({
     releaseMission: activeMission,
     proposedActions: nextActions,
     completedActions: completedManagerActions,
+    momentRecommendation,
   });
   const managerPlan: OperatingManagerPlanItem[] = [
-    ...working.map((item) => ({ ...item })),
+    ...working.slice(0, momentRecommendation ? 4 : 5).map((item) => ({ ...item })),
+    ...(momentRecommendation ? [{
+      id: `manager-${momentRecommendation.id}`,
+      title: momentRecommendation.title,
+      detail: momentRecommendation.detail,
+      status: "Planned" as const,
+      href: href(momentRecommendation.href),
+    }] : []),
     ...completedManagerActions.slice(0, 2).map((action) => ({
       id: `manager-completed-${action.id}`,
       title: action.title,
@@ -337,7 +469,10 @@ export async function loadArtistOperatingSnapshot({
     operatingContext,
     strategy,
     activeRelease,
+    latestTrack,
+    latestMix,
     activeMission,
+    momentRecommendation,
     primaryMission,
     needsYou,
     topDecision: needsYou[0] ?? null,

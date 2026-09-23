@@ -171,7 +171,9 @@ test("production Media Worker remains self-bootstrapping, zero-idle and Sandbox-
   assert.ok(bridge.includes('MEDIA_WORKER_PYTHON_VERSION = "3.13.14"'));
   assert.ok(bridge.includes("resources: { vcpus: 4 }"));
   assert.ok(bridge.includes("persistent: true"));
-  assert.ok(bridge.includes("keepLastSnapshots: { count: 1 }"));
+  assert.ok(bridge.includes("snapshotExpiration: MEDIA_WORKER_SNAPSHOT_EXPIRATION_MS"));
+  assert.ok(bridge.includes("expiration: MEDIA_WORKER_SNAPSHOT_EXPIRATION_MS"));
+  assert.ok(bridge.includes("deleteEvicted: true"));
   assert.ok(bridge.includes("detached: true"));
   assert.ok(bridge.includes("MEDIA_WORKER_CALLBACK_HASH_KEY"));
   assert.ok(bridge.includes("atlas-media-worker-${environmentName()}"));

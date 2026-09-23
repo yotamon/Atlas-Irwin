@@ -27,6 +27,32 @@ on:
       - "tests/music-intelligence.test.mjs"
       - "tests/strongest-moments-context.test.mjs"
       - ".github/workflows/audio-intelligence-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "services/media-worker/app/music_intelligence*.py"
+      - "services/media-worker/app/strongest_moments.py"
+      - "services/media-worker/app/moment_rhythm.py"
+      - "services/media-worker/app/mastering_inspector.py"
+      - "services/media-worker/app/mastering_processor.py"
+      - "services/media-worker/app/stem_intelligence*.py"
+      - "services/media-worker/app/audio_intelligence_providers.py"
+      - "services/media-worker/app/automix*.py"
+      - "services/media-worker/app/runner.py"
+      - "services/media-worker/benchmarks/**"
+      - "services/media-worker/tests/test_*.py"
+      - "services/media-worker/requirements*.txt"
+      - "lib/media-worker/**"
+      - "lib/automix/**"
+      - "lib/music-intelligence/**"
+      - "lib/mastering/**"
+      - "lib/lyrics-intelligence/**"
+      - "scripts/evaluate-track-intelligence.mjs"
+      - "supabase/migrations/*audio*intelligence*.sql"
+      - "supabase/migrations/*automix*.sql"
+      - "tests/music-intelligence.test.mjs"
+      - "tests/strongest-moments-context.test.mjs"
+      - ".github/workflows/audio-intelligence-ci.yml"
   workflow_dispatch:
 
 concurrency:

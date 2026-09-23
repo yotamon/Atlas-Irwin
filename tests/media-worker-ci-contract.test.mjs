@@ -2,32 +2,36 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-test("deep main CI installs and compiles every Active Mastering and AutoMix runtime dependency", async () => {
-  const ci = await readFile(".github/workflows/ci.yml", "utf8");
+test("deep audio CI installs and compiles every Active Mastering and AutoMix runtime dependency", async () => {
   const audioCi = await readFile(".github/workflows/audio-intelligence-ci.yml", "utf8");
   const requirements = await readFile("services/media-worker/requirements.txt", "utf8");
 
   assert.ok(requirements.includes("httpx==0.28.1"));
   assert.ok(requirements.includes("pydantic==2.11.7"));
   assert.ok(requirements.includes("python-stretch==0.3.1"));
-  assert.ok(ci.includes("services/media-worker/app/mastering_processor.py"));
-  assert.ok(ci.includes("services/media-worker/app/automix_intelligence.py"));
-  assert.ok(ci.includes("services/media-worker/app/automix_dsp.py"));
-  assert.ok(ci.includes("numpy librosa soundfile pyloudnorm imageio-ffmpeg httpx pydantic python-stretch"));
+  assert.ok(audioCi.includes("services/media-worker/app/mastering_processor.py"));
   assert.ok(audioCi.includes("services/media-worker/app/automix_intelligence.py"));
+  assert.ok(audioCi.includes("services/media-worker/app/automix_dsp.py"));
+  assert.ok(audioCi.includes("numpy==2.2.6"));
+  assert.ok(audioCi.includes("librosa==0.11.0"));
+  assert.ok(audioCi.includes("soundfile==0.13.1"));
+  assert.ok(audioCi.includes("pyloudnorm==0.1.1"));
+  assert.ok(audioCi.includes("imageio-ffmpeg==0.6.0"));
+  assert.ok(audioCi.includes("httpx==0.28.1"));
+  assert.ok(audioCi.includes("pydantic==2.11.7"));
   assert.ok(audioCi.includes("python-stretch==0.3.1"));
 });
 
 test("deep audio regressions install benchmark-only dependencies without bloating production runtime", async () => {
-  const ci = await readFile(".github/workflows/ci.yml", "utf8");
+  const audioCi = await readFile(".github/workflows/audio-intelligence-ci.yml", "utf8");
   const benchmark = await readFile("services/media-worker/requirements-audio-benchmark.txt", "utf8");
   const production = await readFile("services/media-worker/requirements.txt", "utf8");
   const sandbox = await readFile("lib/media-worker/sandbox.ts", "utf8");
 
   assert.ok(benchmark.includes("mir-eval==0.8.2"));
   assert.ok(benchmark.includes("audiomentations==0.43.1"));
-  assert.ok(ci.includes("-r services/media-worker/requirements-audio-benchmark.txt"));
-  assert.ok(ci.includes("Run Track Intelligence behavioral regression tests"));
+  assert.ok(audioCi.includes("-r services/media-worker/requirements-audio-benchmark.txt"));
+  assert.ok(audioCi.includes("Run complete Media Worker behavioral regression suite"));
 
   assert.ok(!production.includes("mir-eval"));
   assert.ok(!production.includes("audiomentations"));

@@ -6,8 +6,10 @@ import { Sandbox } from "@vercel/sandbox";
 export const MEDIA_WORKER_CALLBACK_HASH_KEY = "__atlas_callback_token_sha256";
 const MEDIA_WORKER_RUNTIME_VERSION = 12;
 const MEDIA_WORKER_BOOTSTRAP_VERSION = 10;
+const MEDIA_WORKER_SANDBOX_GENERATION = 1;
 const MEDIA_WORKER_PYTHON_VERSION = "3.13.14";
 const MEDIA_WORKER_SANDBOX_IMAGE = "vercel/sandbox/universal@sha256:0e3e3617e824397f170fc7c43ccaa565dd7ac36518e83ead3d41e077cd9f6ec7";
+const MEDIA_WORKER_SNAPSHOT_EXPIRATION_MS = 7 * 24 * 60 * 60 * 1000;
 const HOBBY_MAX_SANDBOX_MS = 45 * 60 * 1000;
 const WORKDIR = "/workspace/atlas-media-worker";
 const LOCKDIR = "/tmp/atlas-media-worker.lock";
@@ -36,7 +38,10 @@ function mediaWorkerAudioProfile() {
 }
 
 export function mediaWorkerSandboxName() {
-  return `atlas-media-worker-${environmentName()}-v${MEDIA_WORKER_RUNTIME_VERSION}`;
+  // Keep the sandbox identity stable across ordinary worker releases so each release does not
+  // create another multi-GB snapshot lineage. Bump the generation only for an incompatible
+  // base image/runtime migration that intentionally needs a fresh persistent filesystem.
+  return `atlas-media-worker-${environmentName()}-g${MEDIA_WORKER_SANDBOX_GENERATION}`;
 }
 
 function sourceRevision() {
@@ -55,9 +60,15 @@ export function mediaWorkerReadiness() {
     runtime: "vercel_sandbox" as const,
     sandboxName: mediaWorkerSandboxName(),
     sandboxImage: MEDIA_WORKER_SANDBOX_IMAGE,
+    sandboxGeneration: MEDIA_WORKER_SANDBOX_GENERATION,
     pythonVersion: MEDIA_WORKER_PYTHON_VERSION,
     workerVersion: MEDIA_WORKER_RUNTIME_VERSION,
     bootstrapVersion: MEDIA_WORKER_BOOTSTRAP_VERSION,
+    snapshotRetention: {
+      count: 1,
+      expirationMs: MEDIA_WORKER_SNAPSHOT_EXPIRATION_MS,
+      deleteEvicted: true,
+    },
     optionalAudioProfiles: {
       beatThisShadow: audio.beatThisEnabled,
       basicPitchExternal: audio.basicPitchEnabled,
@@ -80,11 +91,16 @@ async function commandError(command: { stderr: () => Promise<string> }) {
 
 function sandboxDispatchError(error: unknown) {
   const detail = error instanceof Error ? error.message : String(error);
-  if (/quota|limit|billing|payment|resource|429|hobby/i.test(detail)) {
+  if (/quota|limit|billing|payment|required|resource|402|429|hobby/i.test(detail)) {
     return "Vercel Hobby Sandbox quota is unavailable right now. Atlas did not use a paid fallback. Try again after the free quota resets.";
   }
   if (/already processing|worker is busy/i.test(detail)) return detail;
   return `Vercel Sandbox dispatch failed: ${detail}`;
+}
+
+function sandboxGoneError(error: unknown) {
+  const detail = error instanceof Error ? error.message : String(error);
+  return /(?:status code\s*)?410\b|SANDBOX_STOPPED|SNAPSHOT_NOT_FOUND/i.test(detail);
 }
 
 export async function getMediaWorkerSandbox() {
@@ -97,12 +113,18 @@ export async function getMediaWorkerSandbox() {
     resources: { vcpus: 4 },
     timeout: HOBBY_MAX_SANDBOX_MS,
     persistent: true,
-    keepLastSnapshots: { count: 1 },
+    snapshotExpiration: MEDIA_WORKER_SNAPSHOT_EXPIRATION_MS,
+    keepLastSnapshots: {
+      count: 1,
+      expiration: MEDIA_WORKER_SNAPSHOT_EXPIRATION_MS,
+      deleteEvicted: true,
+    },
     tags: {
       app: "atlas-irwin",
       role: "media-worker",
       environment: environmentName(),
       version: String(MEDIA_WORKER_RUNTIME_VERSION),
+      generation: String(MEDIA_WORKER_SANDBOX_GENERATION),
     },
   });
 }
@@ -330,38 +352,54 @@ export async function dispatchMediaWorkerJob(input: {
   callbackUrl: string;
   callbackToken: string;
 }) {
-  let sandbox: Sandbox | null = null;
-  let locked = false;
-  try {
-    sandbox = await getMediaWorkerSandbox();
-    await acquireWorkerLock(sandbox);
-    locked = true;
+  let recoveredGoneSandbox = false;
 
-    const requestPath = `/tmp/atlas-worker-${input.jobId.replace(/[^a-zA-Z0-9_-]/g, "-")}.json`;
-    await sandbox.writeFiles([{
-      path: requestPath,
-      content: JSON.stringify({
-        job_id: input.jobId,
-        job_type: input.jobType,
-        payload: input.payload,
-        callback_url: input.callbackUrl,
-        callback_token: input.callbackToken,
-      }),
-    }]);
+  for (;;) {
+    let sandbox: Sandbox | null = null;
+    let locked = false;
+    try {
+      sandbox = await getMediaWorkerSandbox();
+      await acquireWorkerLock(sandbox);
+      locked = true;
 
-    const command = await sandbox.runCommand({
-      cmd: "bash",
-      args: ["-lc", detachedWorkerScript(requestPath)],
-      detached: true,
-    });
-    if (command.exitCode !== null && command.exitCode !== 0) {
-      throw new Error((await commandError(command)) || "Could not start the Media Worker runner.");
+      const requestPath = `/tmp/atlas-worker-${input.jobId.replace(/[^a-zA-Z0-9_-]/g, "-")}.json`;
+      await sandbox.writeFiles([{
+        path: requestPath,
+        content: JSON.stringify({
+          job_id: input.jobId,
+          job_type: input.jobType,
+          payload: input.payload,
+          callback_url: input.callbackUrl,
+          callback_token: input.callbackToken,
+        }),
+      }]);
+
+      const command = await sandbox.runCommand({
+        cmd: "bash",
+        args: ["-lc", detachedWorkerScript(requestPath)],
+        detached: true,
+      });
+      if (command.exitCode !== null && command.exitCode !== 0) {
+        throw new Error((await commandError(command)) || "Could not start the Media Worker runner.");
+      }
+      return { sandboxName: mediaWorkerSandboxName() };
+    } catch (error) {
+      if (sandbox && locked) await releaseWorkerLock(sandbox);
+
+      // Persistent Sandbox sessions can become unrecoverable after their retained snapshot expires
+      // or the backing session is already gone. Vercel reports these states as HTTP 410. Recreate
+      // the same stable sandbox identity once, then let normal bootstrap rebuild its environment.
+      // Never loop or create a versioned fallback lineage: one retry protects both correctness and
+      // Hobby storage/compute usage.
+      if (sandbox && !recoveredGoneSandbox && sandboxGoneError(error)) {
+        recoveredGoneSandbox = true;
+        await sandbox.delete().catch(() => undefined);
+        continue;
+      }
+
+      if (sandbox) await sandbox.stop().catch(() => undefined);
+      throw new Error(sandboxDispatchError(error));
     }
-    return { sandboxName: mediaWorkerSandboxName() };
-  } catch (error) {
-    if (sandbox && locked) await releaseWorkerLock(sandbox);
-    if (sandbox) await sandbox.stop().catch(() => undefined);
-    throw new Error(sandboxDispatchError(error));
   }
 }
 

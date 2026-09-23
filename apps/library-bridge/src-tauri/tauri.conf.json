@@ -1,9 +1,11 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Ensemblis Library Bridge",
-  "version": "0.1.0",
+  "productName": "Ensemblis",
+  "version": "0.2.0",
   "identifier": "com.ensemblis.library-bridge",
   "build": {
+    "beforeDevCommand": "node build-platform-core.mjs",
+    "beforeBuildCommand": "node build-platform-core.mjs",
     "frontendDist": "../ui"
   },
   "app": {
@@ -11,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Ensemblis Library Bridge",
+        "title": "Ensemblis",
         "width": 920,
         "height": 720,
         "minWidth": 720,

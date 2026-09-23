@@ -13,9 +13,10 @@ test("TypeScript uses the modern compilation baseline without resolver safety ha
   assert.deepEqual(tsconfig.compilerOptions.paths, { "@/*": ["./*"] });
 });
 
-test("catalog mutations enter through the artist-scoped canonical facade", () => {
+test("catalog mutations enter through the active artist-scoped canonical facade", () => {
   const facade = source("app/studio/catalog-actions.ts");
-  assert.match(facade, /resolveDefaultArtistContext/);
+  assert.match(facade, /resolveActiveArtistContext/);
+  assert.doesNotMatch(facade, /resolveDefaultArtistContext/);
   assert.match(facade, /assertActiveArtistTargets/);
   assert.match(facade, /\.eq\("artist_id", artist\.artistId\)/);
   assert.match(facade, /from "\.\/catalog-actions-internal"/);

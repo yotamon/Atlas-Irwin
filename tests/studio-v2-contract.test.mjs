@@ -191,7 +191,8 @@ test("release workspace is one Mission object with tracks visible before release
   const workspace = await readFile("components/studio/release-workspace-v2.tsx", "utf8");
   const tracklist = await readFile("components/studio/release-tracklist.tsx", "utf8");
   const mission = await readFile("lib/studio/release-mission.ts", "utf8");
-  for (const facet of ["Overview", "Release work", "Content", "Promotion", "Distribution", "Results"]) assert.ok(workspace.includes(facet), `release workspace lost ${facet}`);
+  for (const facet of ["Overview", "Creative", "Promotion", "Distribution", "Results"]) assert.ok(workspace.includes(`label: "${facet}"`), `release workspace lost direct ${facet} facet`);
+  assert.equal(workspace.includes("Release work"), false, "V4 must not hide release facets behind a Release work tab");
   assert.equal(workspace.includes('{ label: "Music", href:'), false, "Release must not hide tracks behind a duplicate Music tab");
   for (const alias of ['stage === "music"', 'stage === "plan"', 'stage === "create"', 'stage === "publish"', 'stage === "learn"']) assert.ok(workspace.includes(alias), `release compatibility lost ${alias}`);
   assert.ok(workspace.includes("<ReleaseTracklist"));
@@ -203,8 +204,9 @@ test("release workspace is one Mission object with tracks visible before release
   assert.ok(workspace.includes("/studio/video?release="));
   assert.ok(workspace.includes("Release Mission"));
   assert.ok(workspace.includes("deriveReleaseMission"));
-  assert.ok(mission.includes('label: "Blocked"'));
-  assert.ok(mission.includes('label: "On track"'));
+  assert.ok(mission.includes('missionStateLabel("blocked")'));
+  assert.ok(mission.includes('missionStateLabel("on_track")'));
+  assert.equal(mission.includes('label: "Blocked"'), false, "Release Mission must use the shared state language helper");
   assert.equal(workspace.includes("Workflow readiness"), false);
 });
 

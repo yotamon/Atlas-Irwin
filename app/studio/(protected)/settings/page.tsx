@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { signOut } from "@/app/studio/actions";
+import { signOut } from "@/app/studio/login-actions";
 import { Page, PageHeader, Section } from "@/components/studio/ui";
 import { ensemblisAiGatewayConfigured } from "@/lib/ai/gateway";
 import { requireStudioAdmin } from "@/lib/auth/studio";

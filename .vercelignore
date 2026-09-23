@@ -1,0 +1,13 @@
+# Keep agent workspaces and generated diagnostics out of source uploads.
+# Runtime source, build scripts, tests used by tooling, and lockfiles remain available.
+.agent/
+.agents/
+.claude/
+.codex/
+.gemini/
+coverage/
+playwright-report/
+test-results/
+*.log
+*.tsbuildinfo
+docs/font-vendor-materials/

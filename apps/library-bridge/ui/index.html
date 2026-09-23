@@ -3,51 +3,127 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Ensemblis Library Bridge</title>
+  <meta name="theme-color" content="#080a0e" />
+  <title>Ensemblis</title>
   <link rel="stylesheet" href="./app.css" />
+  <link rel="stylesheet" href="./advanced.css" />
 </head>
 <body>
-<main>
-  <header>
-    <span class="eyebrow">Ensemblis / Native bridge</span>
-    <h1>Your DJ library stays on this computer.</h1>
-    <p>The bridge sends path-free musical/library evidence to Ensemblis and resolves media locally only when a frozen job needs it.</p>
-  </header>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand" aria-label="Ensemblis">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span class="brand-name">Ensemblis</span>
+      </div>
+      <div class="topbar-actions">
+        <span id="connection-pill" class="status-pill neutral"><span class="status-dot"></span><span>Checking</span></span>
+        <button id="settings" class="icon-button" type="button" aria-label="Settings" title="Settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.3a3.3 3.3 0 1 0 0-6.6 3.3 3.3 0 0 0 0 6.6Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.86 2.86-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21h-4v-.1A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.86-2.86.06-.06A1.7 1.7 0 0 0 4.2 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H2.4v-4h.1A1.7 1.7 0 0 0 4.2 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06L6.66 3.8l.06.06A1.7 1.7 0 0 0 8.6 4.2a1.7 1.7 0 0 0 1-.6A1.7 1.7 0 0 0 10 2.5v-.1h4v.1a1.7 1.7 0 0 0 1 1.7 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.86 2.86-.06.06A1.7 1.7 0 0 0 19.4 8.6a1.7 1.7 0 0 0 .6 1 1.7 1.7 0 0 0 1.1.4h.1v4h-.1a1.7 1.7 0 0 0-1.7 1Z"/></svg>
+        </button>
+      </div>
+    </header>
 
-  <section>
-    <div>
-      <span class="eyebrow">Pair this device</span>
-      <p>Create a pairing code in Ensemblis Studio, then claim it here. The resulting device credential is stored in your operating system credential vault.</p>
-    </div>
-    <div class="row">
-      <input id="api" value="https://atlasirwin.com" aria-label="Ensemblis API base URL" />
-      <input id="code" placeholder="Pairing code" aria-label="Pairing code" autocomplete="off" />
-      <button id="pair" class="primary">Pair</button>
-      <button id="unpair">Unpair</button>
-    </div>
-  </section>
+    <main class="stage" aria-live="polite">
+      <section id="view-loading" class="flow-view active" aria-label="Loading Ensemblis">
+        <div class="hero-visual compact" aria-hidden="true"><div class="pulse-core"></div></div>
+        <div class="copy centered"><span class="eyebrow">Getting ready</span><h1>Opening Ensemblis…</h1><p>Checking your secure connection and local music access.</p></div>
+      </section>
 
-  <section>
-    <div class="stats">
-      <div class="stat"><small>Connection</small><strong id="paired">Checking…</strong></div>
-      <div class="stat"><small>Local sources</small><strong id="sources">0</strong></div>
-      <div class="stat"><small>Pending sync</small><strong id="pending">0</strong></div>
-      <div class="stat"><small>Local intelligence</small><strong id="intelligence">Checking…</strong></div>
-    </div>
-    <div class="row">
-      <button id="add" class="primary">Choose music folder</button>
-      <button id="sync">Sync changes</button>
-      <button id="jobs">Check device jobs</button>
-      <button id="export">Export latest mix</button>
-      <button id="refresh">Refresh status</button>
-    </div>
-  </section>
+      <section id="view-connect" class="flow-view" aria-label="Connect to Ensemblis">
+        <div class="hero-visual" aria-hidden="true"><div class="device-card"><span class="device-screen"></span><span class="device-base"></span></div><div class="connection-line"><i></i><i></i><i></i></div><div class="cloud-orb"><span class="brand-mark small"><span></span><span></span><span></span></span></div></div>
+        <div class="copy centered wide"><span class="eyebrow">One-time setup</span><h1>Connect this computer as your Local Engine</h1><p>Studio stays in your browser. This app keeps audio processing on this computer while your original files and folder locations stay private.</p></div>
+        <div class="primary-actions centered-actions"><button id="connect" class="button primary large" type="button">Connect to Ensemblis</button><p class="privacy-note"><span aria-hidden="true">⌁</span> Your music files stay on this computer.</p></div>
+      </section>
 
-  <section>
-    <span class="eyebrow">Activity</span>
-    <div id="log" role="status">Ready.</div>
-  </section>
-</main>
-<script src="./app.js" defer></script>
+      <section id="view-connecting" class="flow-view" aria-label="Finish connecting in browser">
+        <div class="hero-visual compact browser-visual" aria-hidden="true"><div class="browser-window"><span></span><span></span><span></span><div class="browser-check">✓</div></div></div>
+        <div class="copy centered wide"><span class="eyebrow">Almost there</span><h1>Finish connecting in your browser</h1><p>We opened Ensemblis securely in your default browser. Approve this computer there, then come back here.</p></div>
+        <div class="progress-line indeterminate" aria-hidden="true"><span></span></div>
+      </section>
+
+      <section id="view-library" class="flow-view" aria-label="Choose music folder">
+        <div class="hero-visual folder-visual" aria-hidden="true"><div class="folder-shape"><span class="music-note">♪</span></div></div>
+        <div class="copy centered wide"><span class="eyebrow success-text">Connected</span><h1>Where do you keep your music?</h1><p>Choose your main music folder. Ensemblis will prepare it locally and keep up with changes automatically.</p></div>
+        <div class="primary-actions centered-actions"><button id="choose-folder" class="button primary large" type="button">Choose music folder</button><p class="secondary-note">You can add more folders whenever you want.</p></div>
+      </section>
+
+      <section id="view-preparing" class="flow-view" aria-label="Preparing music library">
+        <div class="hero-visual compact scan-visual" aria-hidden="true"><div class="scan-disc"><span></span></div></div>
+        <div class="copy centered wide"><span class="eyebrow">Local Engine · analyzing here</span><h1>Understanding your music</h1><p id="preparing-copy">Ensemblis is securely scanning and analyzing the selected folder on this computer.</p></div>
+        <div class="progress-card"><div class="progress-meta"><strong id="preparing-status">Preparing music…</strong><span>Local processing</span></div><div class="progress-line indeterminate"><span></span></div><p>You can keep using your computer. Larger libraries may take a little while the first time.</p></div>
+      </section>
+
+      <section id="view-ready" class="flow-view" aria-label="Music connected">
+        <div class="ready-heading"><div class="ready-icon" aria-hidden="true">✓</div><div><span class="eyebrow success-text">Local Engine ready</span><h1>This computer is ready for local audio processing</h1><p>Use Ensemblis Studio in your browser to choose tracks and shape sets. This desktop app analyzes local audio and renders approved AutoMixes on this computer.</p></div></div>
+        <div class="execution-grid" aria-label="Where processing happens">
+          <article class="execution-card"><span>Audio analysis</span><strong>This computer</strong></article>
+          <article class="execution-card"><span>Set planning</span><strong>Ensemblis Studio</strong></article>
+          <article class="execution-card"><span>AutoMix render</span><strong>This computer</strong></article>
+        </div>
+        <div class="summary-grid">
+          <article class="summary-card"><span class="summary-icon" aria-hidden="true">♪</span><div><strong id="track-count">0</strong><span>tracks ready</span></div></article>
+          <article class="summary-card"><span class="summary-icon" aria-hidden="true">⌂</span><div><strong id="source-count">0</strong><span id="source-label">music folders</span></div></article>
+          <article class="summary-card"><span class="summary-icon" aria-hidden="true">↗</span><div><strong id="sync-label">Up to date</strong><span>Ensemblis sync</span></div></article>
+        </div>
+        <div id="runtime-warning" class="inline-warning" hidden><span aria-hidden="true">!</span><div><strong>Local analysis needs attention</strong><p>Basic library access still works, but advanced local processing is unavailable. Open Settings for details.</p></div></div>
+        <div class="ready-actions"><button id="open-studio" class="button primary" type="button">Open Ensemblis Studio</button><button id="add-folder" class="button secondary" type="button">Add another folder</button></div>
+        <p class="background-note">You can close this window. The Local Engine keeps running quietly in the background for Studio.</p>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+  </div>
+
+  <dialog id="advanced" class="settings-dialog">
+    <form method="dialog" class="settings-shell">
+      <div class="settings-header"><div><span class="eyebrow">Ensemblis</span><h2>Settings</h2></div><button class="icon-button" value="close" aria-label="Close settings" title="Close">×</button></div>
+
+      <section class="settings-section">
+        <h3>Background</h3>
+        <label class="toggle-row"><span><strong>Start Ensemblis with your computer</strong><small>Keeps your music available without opening the app manually.</small></span><input id="autostart" type="checkbox" role="switch" /></label>
+      </section>
+
+      <section class="settings-section">
+        <h3>Studio license</h3>
+        <p class="section-copy">Signed capabilities are verified on this computer. A perpetual Studio license keeps eligible local capabilities available offline.</p>
+        <div class="settings-status-grid"><div><span>License</span><strong id="advanced-license">Checking…</strong></div><div><span>Entitlement</span><strong id="advanced-entitlement">Checking…</strong></div></div>
+        <div id="capabilities" class="capability-list" aria-live="polite"></div>
+        <div class="settings-actions"><button id="license-refresh" class="button secondary compact" type="button">Refresh license</button><button id="license-import" class="button secondary compact" type="button">Import signed license</button></div>
+      </section>
+
+      <section class="settings-section">
+        <h3>Execution preferences</h3>
+        <p class="section-copy">These guide the shared Compute Router. Privacy and spend switches are hard constraints.</p>
+        <div class="advanced-grid">
+          <label><span>Preference</span><select id="policy-preference"><option value="automatic">Automatic</option><option value="prefer_local">Prefer local</option><option value="prefer_cloud">Prefer cloud</option></select></label>
+          <label class="policy-toggle"><input type="checkbox" id="policy-never-upload" /><span><strong>Never upload audio</strong><small>Raw audio stays local unless it already exists in cloud storage.</small></span></label>
+          <label class="policy-toggle"><input type="checkbox" id="policy-paid" /><span><strong>Allow paid compute</strong><small>Required for paid cloud processors.</small></span></label>
+          <label class="policy-toggle"><input type="checkbox" id="policy-cloud-fallback" /><span><strong>Cloud fallback</strong><small>Use cloud only when an eligible preferred target cannot run.</small></span></label>
+        </div>
+        <div class="settings-actions"><button id="policy-save" class="button secondary compact" type="button">Save execution preferences</button></div>
+      </section>
+
+      <section class="settings-section">
+        <div class="settings-header"><div><h3>Optional local models</h3><p class="section-copy">Only compatible, capability-authorized, checksum-verified model packs can be installed.</p></div><button id="models-refresh" class="button secondary compact" type="button">Refresh</button></div>
+        <div id="models" class="model-list"><p class="settings-inline-note">Refresh to see compatible model packs for this computer.</p></div>
+      </section>
+
+      <section class="settings-section">
+        <h3>Status</h3>
+        <div class="settings-status-grid"><div><span>Studio connection</span><strong id="advanced-connection">Checking…</strong></div><div><span>Local Engine</span><strong id="advanced-intelligence">Checking…</strong></div><div><span>Changes waiting to sync</span><strong id="advanced-pending">0</strong></div><div><span>Version</span><strong>0.2.0</strong></div></div>
+        <div class="settings-actions"><button id="sync-now" class="button secondary compact" type="button">Sync now</button><button id="check-jobs" class="button secondary compact" type="button">Check for work</button></div>
+      </section>
+
+      <details class="advanced-details">
+        <summary>Advanced connection options</summary>
+        <div class="advanced-body"><p>Use this only if browser connection is unavailable or you are testing a development server.</p><label>Ensemblis server<input id="api" value="https://atlasirwin.com" autocomplete="url" /></label><label>One-time pairing code<input id="code" placeholder="XXXX-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false" /></label><button id="pair-manually" class="button secondary compact" type="button">Connect manually</button></div>
+      </details>
+
+      <section class="settings-section danger-zone"><div><h3>Disconnect this computer</h3><p>Stops this computer from syncing with your Ensemblis workspace. Your local music is not deleted.</p></div><button id="unpair" class="button danger compact" type="button">Disconnect</button></section>
+    </form>
+  </dialog>
+
+  <script src="./platform-core.js" defer></script>
+  <script src="./app.js" defer></script>
 </body>
 </html>

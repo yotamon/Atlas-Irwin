@@ -8,14 +8,26 @@ on:
       - "app/api/dj-library/device/**"
       - "app/api/studio/automix/device-plans/**"
       - "app/api/studio/dj-library/**"
+      - "app/api/studio/projects/**"
       - "components/studio/library-bridge-panel*"
       - "components/studio/local-set-builder-workspace*"
+      - "contracts/**"
       - "lib/automix/source-candidates.ts"
       - "lib/automix/source-contract.ts"
       - "lib/dj-library/**"
+      - "lib/media-worker/contract.ts"
+      - "lib/platform/**"
+      - "lib/project-sync/**"
       - "types/dj-library-bridge-database.ts"
+      - "types/project-sync-database.ts"
       - "supabase/migrations/*dj_library*"
+      - "supabase/migrations/*ensemblis_project*"
       - "tests/dj-library-phase-8-bridge.test.mjs"
+      - "tests/library-bridge-platform-core.test.mjs"
+      - "tests/local-first-*.test.mjs"
+      - "tests/project-sync-*.test.mjs"
+      - "docs/adr/**"
+      - "docs/architecture/local-first-*.md"
       - "docs/dj-library-set-intelligence-development-plan.md"
       - ".github/workflows/library-bridge-ci.yml"
   push:
@@ -25,17 +37,36 @@ on:
       - "app/api/dj-library/device/**"
       - "app/api/studio/automix/device-plans/**"
       - "app/api/studio/dj-library/**"
+      - "app/api/studio/projects/**"
       - "components/studio/library-bridge-panel*"
       - "components/studio/local-set-builder-workspace*"
+      - "contracts/**"
       - "lib/automix/source-candidates.ts"
       - "lib/automix/source-contract.ts"
       - "lib/dj-library/**"
+      - "lib/media-worker/contract.ts"
+      - "lib/platform/**"
+      - "lib/project-sync/**"
+      - "types/dj-library-bridge-database.ts"
+      - "types/project-sync-database.ts"
       - "supabase/migrations/*dj_library*"
+      - "supabase/migrations/*ensemblis_project*"
       - "tests/dj-library-phase-8-bridge.test.mjs"
+      - "tests/library-bridge-platform-core.test.mjs"
+      - "tests/local-first-*.test.mjs"
+      - "tests/project-sync-*.test.mjs"
+      - "docs/adr/**"
+      - "docs/architecture/local-first-*.md"
+      - "docs/dj-library-set-intelligence-development-plan.md"
       - ".github/workflows/library-bridge-ci.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: library-bridge-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   bridge-contract:
@@ -46,11 +77,21 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Install pinned TypeScript test runtime
+        run: npm install --ignore-scripts --no-save --package-lock=false typescript@5.9.3
+      - name: Build desktop platform core from canonical TypeScript
+        run: node apps/library-bridge/build-platform-core.mjs
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - name: Library Bridge product/privacy contracts
-        run: node --test tests/dj-library-phase-8-bridge.test.mjs
+        run: >-
+          node --test
+          tests/dj-library-phase-8-bridge.test.mjs
+          tests/library-bridge-platform-core.test.mjs
+          tests/local-first-platform.test.mjs
+          tests/local-first-native-contract.test.mjs
+          tests/project-sync-server-contract.test.mjs
       - name: Validate local sidecar Python
         run: >-
           python -m py_compile
@@ -58,6 +99,8 @@ jobs:
           apps/library-bridge/renderer/bridge_renderer.py
           apps/library-bridge/renderer/bridge_sidecar.py
           apps/library-bridge/renderer/build_sidecar.py
+          apps/library-bridge/renderer/prepare_native_ffmpeg.py
+          apps/library-bridge/renderer/verify_windows_arm64_python.py
           services/media-worker/app/automix_device_sources.py
 
   native-contract:
@@ -90,48 +133,3 @@ jobs:
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Rust tests
         run: cargo test --all-targets
-
-  release-bundle:
-    name: release bundle (${{ matrix.label }})
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            label: Windows
-            bundle: nsis
-          - os: macos-14
-            label: macOS
-            bundle: app
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-          cache-dependency-path: apps/library-bridge/renderer/requirements.txt
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - name: Install Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: "1.88.0"
-          cache-workspaces: apps/library-bridge/src-tauri
-      - name: Install pinned local sidecar dependencies
-        run: python -m pip install -r apps/library-bridge/renderer/requirements.txt
-      - name: Build and verify target-native sidecar
-        run: python apps/library-bridge/renderer/build_sidecar.py
-      - name: Build Tauri release bundle
-        working-directory: apps/library-bridge
-        run: npx --yes @tauri-apps/cli@2.11.4 build --config src-tauri/tauri.release.conf.json --bundles ${{ matrix.bundle }}
-      - name: Upload unsigned validation bundle
-        uses: actions/upload-artifact@v4
-        with:
-          name: ensemblis-library-bridge-${{ matrix.label }}-${{ github.sha }}
-          path: apps/library-bridge/src-tauri/target/release/bundle/**
-          if-no-files-found: error
-          retention-days: 7

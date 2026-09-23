@@ -17,6 +17,23 @@ test("public artist site and private Studio keep distinct indexing contracts", a
   await expect(page.getByRole("heading", { name: "Access denied" })).toBeVisible();
 });
 
+test("Ensemblis marketing prototype is isolated, noindex, and interactive", async ({ page }) => {
+  const response = await page.goto("/ensemblis-preview");
+  expect(response?.ok()).toBeTruthy();
+
+  await expect(page.getByRole("heading", { name: /Your music\.\s*Understood\./i })).toBeVisible();
+  await expect(page.getByText("CONCEPT FIXTURE", { exact: true })).toBeVisible();
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/i);
+
+  const energyTab = page.getByRole("tab", { name: "energy" });
+  await energyTab.click();
+  await expect(energyTab).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByText("Peak movement · 01:14 → 01:27", { exact: true })).toBeVisible();
+
+  await expect(page.getByText("Visual prototype only · no audio playback yet", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /You made\s*the music\./i })).toBeVisible();
+});
+
 test("contact validation is traceable without invoking email delivery", async ({ request }) => {
   const traceId = "e2e-contact-validation-0001";
   const response = await request.post("/api/contact", {

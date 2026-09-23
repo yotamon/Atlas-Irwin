@@ -183,7 +183,7 @@ test("Media Library uses signed resumable TUS above 6 MB without expanding stora
   assert.equal(Boolean(packageJson.dependencies?.["wavesurfer.js"]), false);
 });
 
-test("release workspace keeps tracks first and release workflow secondary", async () => {
+test("release workspace keeps tracks first and exposes V4 facets directly", async () => {
   const release = await source("components/studio/release-workspace-v2.tsx");
   const releasePage = await source("app/studio/(protected)/releases/[id]/page.tsx");
   const mission = await source("lib/studio/release-mission.ts");
@@ -198,7 +198,8 @@ test("release workspace keeps tracks first and release workflow secondary", asyn
   assert.ok(release.includes("Advanced view"));
   assert.ok(mission.includes('attention: "blocking"'));
   assert.ok(mission.includes('status: "on_track"'));
-  for (const stage of ["Overview", "Release work", "Content", "Promotion", "Distribution", "Results"]) assert.ok(release.includes(stage), `release object lost ${stage}`);
+  for (const stage of ["Overview", "Creative", "Promotion", "Distribution", "Results"]) assert.ok(release.includes(`label: "${stage}"`), `release object lost direct ${stage} facet`);
+  assert.equal(release.includes("Release work"), false, "V4 must not hide normal release facets behind Release work");
   assert.equal(release.includes('{ label: "Music", href:'), false, "release must not hide tracks behind a duplicate Music tab");
   for (const alias of ['stage === "music"', 'stage === "plan"', 'stage === "create"', 'stage === "publish"', 'stage === "learn"']) assert.ok(release.includes(alias), `legacy release alias lost ${alias}`);
   assert.ok(releasePage.includes('stage === "create" ? <MomentReviewPanel'));
@@ -216,7 +217,7 @@ test("campaign workspace uses Ensemblis chrome without Atlas-era editorial styli
   assert.equal(css.includes("heroCard::after"), false, "decorative orbit styling should not define Campaign hierarchy");
 });
 
-test("Production keeps the selected creative dominant and technical controls secondary", async () => {
+test("Creative Assets keeps the selected creative dominant and technical controls secondary", async () => {
   const css = await source("app/studio/production-polish.css");
   assert.ok(css.includes(".v2-production-layout"));
   assert.ok(css.includes(".v2-production-editor"));
@@ -239,7 +240,7 @@ test("Create starts from approved Moments but asks for a deliverable instead of 
     "Other ways to create",
     "Add or create music",
     "Start a release",
-    "Continue production",
+    "Continue creative assets",
     "Direct a longer video",
   ]) assert.ok(create.includes(snippet), `deliverable-first Create is missing ${snippet}`);
   for (const view of ["overview", "opportunities", "performance", "portfolio"]) assert.ok(grow.includes(view));
