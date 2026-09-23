@@ -89,6 +89,7 @@ export function MusicWorkspaceOverview({
   const importHref = ensemblisArtistHref("/studio/music/import", artistId);
   const generateHref = ensemblisArtistHref("/studio/music?view=generate", artistId);
   const automixHref = ensemblisArtistHref("/studio/music/automix", artistId);
+  const mixableCatalogTracks = tracks.filter((track) => Boolean(track.audio_url));
   const trackHref = (trackId: string) => ensemblisArtistHref(`/studio/music/${trackId}`, artistId);
   const createHref = (trackId: string) => ensemblisArtistHref(`/studio/create?intent=asset&track=${trackId}`, artistId);
 
@@ -111,26 +112,46 @@ export function MusicWorkspaceOverview({
           <Link href={ensemblisArtistHref("/studio/releases", artistId)}>Browse releases</Link>
         </div>
         {tracks.length ? (
-          <div className="v2-inbox music-catalog-track-list">
-            {tracks.map((track) => {
-              const vault = vaultByTrack.get(track.id) ?? null;
-              const release = releaseById.get(track.release_id);
-              const hasMaster = Boolean(track.audio_url || vault?.audio_url);
-              const exactHref = trackHref(vault?.id ?? track.id);
-              const progress = vault ? ingestionProgress(vault) : null;
-              return (
-                <Link className="v2-inbox-item music-catalog-track-row" href={exactHref} key={track.id}>
-                  <span className="music-track-rank">{String(track.track_number ?? track.display_order + 1).padStart(2, "0")}</span>
-                  <span className="music-track-copy">
-                    <strong>{track.title}{track.version ? ` · ${track.version}` : ""}</strong>
-                    <small>{release?.title ?? "Release"} · {progress?.detail ?? (hasMaster ? "Master needs track-level intelligence" : "Master needed")}</small>
-                  </span>
-                  <Status tone={!hasMaster || progress?.phase === "needs_attention" ? "attention" : "success"}>{progress?.label ?? (hasMaster ? "Master ready" : "Needs master")}</Status>
-                  <b aria-hidden>→</b>
-                </Link>
-              );
-            })}
-          </div>
+          <form className="music-catalog-mix-form" action="/studio/music/automix" method="get">
+            <input type="hidden" name="artist" value={artistId} />
+            <input type="hidden" name="source" value="catalog" />
+            <div className="v2-inbox music-catalog-track-list">
+              {tracks.map((track) => {
+                const vault = vaultByTrack.get(track.id) ?? null;
+                const release = releaseById.get(track.release_id);
+                const hasMaster = Boolean(track.audio_url || vault?.audio_url);
+                const mixReady = Boolean(track.audio_url);
+                const exactHref = trackHref(vault?.id ?? track.id);
+                const progress = vault ? ingestionProgress(vault) : null;
+                return (
+                  <div className="v2-inbox-item music-catalog-track-row" key={track.id}>
+                    <label className="music-catalog-mix-select">
+                      <input
+                        type="checkbox"
+                        name="track"
+                        value={track.id}
+                        disabled={!mixReady}
+                        aria-label={mixReady ? `Select ${track.title} for a mix` : `${track.title} is not ready for AutoMix`}
+                      />
+                      <span className="music-track-rank">{String(track.track_number ?? track.display_order + 1).padStart(2, "0")}</span>
+                      <span className="music-track-copy">
+                        <strong>{track.title}{track.version ? ` · ${track.version}` : ""}</strong>
+                        <small>{release?.title ?? "Release"} · {mixReady ? "Ready for AutoMix" : progress?.detail ?? (hasMaster ? "Catalog master still syncing" : "Master needed")}</small>
+                      </span>
+                    </label>
+                    <Status tone={!hasMaster || progress?.phase === "needs_attention" ? "attention" : "success"}>{progress?.label ?? (hasMaster ? "Master ready" : "Needs master")}</Status>
+                    <Link className="music-row-link" href={exactHref}>Open →</Link>
+                  </div>
+                );
+              })}
+            </div>
+            {mixableCatalogTracks.length >= 2 ? (
+              <div className="music-catalog-mix-actions">
+                <span>Select the mastered tracks you want, then start with that exact pool.</span>
+                <button className="button primary" type="submit">Mix selected tracks</button>
+              </div>
+            ) : null}
+          </form>
         ) : (
           <div className="v2-calm-state compact"><strong>No catalog tracks yet.</strong><p>Add a release or keep working with unreleased masters below.</p></div>
         )}
@@ -244,8 +265,8 @@ export function MusicWorkspaceOverview({
           <p>Create a professional DJ mix from mastered catalog tracks, add more music, or generate a new draft when AI is part of this artist&apos;s process.</p>
         </div>
         <div className="actions">
-          {tracks.filter((track) => Boolean(track.audio_url || vaultByTrack.get(track.id)?.audio_url)).length >= 2 ? <Link className="button primary" href={automixHref}>Create DJ mix</Link> : null}
-          <Link className={tracks.filter((track) => Boolean(track.audio_url || vaultByTrack.get(track.id)?.audio_url)).length >= 2 ? "button" : "button primary"} href={addHref}>Add music</Link>
+          {mixableCatalogTracks.length >= 2 ? <Link className="button primary" href={automixHref}>Create DJ mix</Link> : null}
+          <Link className={mixableCatalogTracks.length >= 2 ? "button" : "button primary"} href={addHref}>Add music</Link>
           <Link className="button" href={generateHref}>Create with AI</Link>
         </div>
       </section>
