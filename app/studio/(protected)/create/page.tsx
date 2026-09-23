@@ -66,6 +66,11 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
   const directionMoments = requestedMoments.length ? requestedMoments : curation.curated;
   const directions = recommendCreativeDirections({ moments: directionMoments, activeReleaseId: activeRelease?.id ?? null });
   const sourceHierarchy = creativeSourceHierarchy(operatingContext.profile);
+  const backAction = requestedTrack
+    ? { href: href(`/studio/music/${requestedTrack.id}`), label: "Back to track" }
+    : params.release && activeRelease
+      ? { href: href(`/studio/releases/${activeRelease.id}`), label: "Back to release" }
+      : null;
 
   const otherStartingPoints = [
     {
@@ -76,7 +81,7 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
       href: href("/studio/music?view=add"),
     },
     { title: "Start a release", description: "Create the release identity before campaign creative exists.", href: href("/studio/releases/new") },
-    { title: "Continue production", description: "Open work that is already in progress.", href: href("/studio/production") },
+    { title: "Continue creative assets", description: "Open creative assets that are already in progress.", href: href("/studio/production") },
     {
       title: "Direct a longer video",
       description: operatingContext.profile.aiPolicy.visualsAllowed
@@ -91,7 +96,7 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
       <PageHeader
         title="Create"
         description="Choose the deliverable. Ensemblis chooses the strongest musical source and carries the artist context with it."
-        action={requestedTrack ? <Link className="button" href={href(`/studio/music/${requestedTrack.id}`)}>Back to track</Link> : undefined}
+        action={backAction ? <Link className="button" href={backAction.href}>{backAction.label}</Link> : undefined}
       />
 
       {activeRelease ? (
@@ -101,7 +106,7 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
             <strong>{activeRelease.title}</strong>
             <small>{requestedMoment ? `${requestedTrack?.title || "Track"} · ${requestedMoment.label}` : requestedTrack ? requestedTrack.title : "Best approved musical Moments"}</small>
           </div>
-          <Link href={href(`/studio/releases/${activeRelease.id}?stage=music#moments`)}>Review source Moments</Link>
+          <Link href={href(`/studio/releases/${activeRelease.id}?stage=create#moments`)}>Review source Moments</Link>
         </section>
       ) : null}
 
