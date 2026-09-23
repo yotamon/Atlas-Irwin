@@ -107,7 +107,9 @@ fn checked_remote_url(value: &str) -> anyhow::Result<(Url, std::net::SocketAddr)
     if url.scheme() != "https" {
         anyhow::bail!("hybrid catalog sources require HTTPS");
     }
-    let host = url.host_str().context("hybrid catalog source host is missing")?;
+    let host = url
+        .host_str()
+        .context("hybrid catalog source host is missing")?;
     if host.eq_ignore_ascii_case("localhost") || host.to_ascii_lowercase().ends_with(".internal") {
         anyhow::bail!("hybrid catalog source host is not public");
     }
@@ -145,7 +147,9 @@ fn download_verified_catalog_media(
     let mut current = source_url.to_string();
     for _ in 0..MAX_REMOTE_REDIRECTS {
         let (url, address) = checked_remote_url(&current)?;
-        let host = url.host_str().context("hybrid catalog source host is missing")?;
+        let host = url
+            .host_str()
+            .context("hybrid catalog source host is missing")?;
         let client = remote_client(host, address)?;
         let mut response = client.get(url.clone()).send()?;
         if response.status().is_redirection() {
@@ -391,7 +395,8 @@ fn prepare_v2(
             )?;
             let expected_fingerprint = string(expected, "recording_fingerprint")?;
             if !fingerprint(expected_fingerprint)
-                || item.get("recordingFingerprint").and_then(Value::as_str) != Some(expected_fingerprint)
+                || item.get("recordingFingerprint").and_then(Value::as_str)
+                    != Some(expected_fingerprint)
             {
                 anyhow::bail!("hybrid candidate does not match frozen content identity");
             }
@@ -404,7 +409,8 @@ fn prepare_v2(
                     let source_id = string(item, "sourceId")?;
                     let source_track_id = string(item, "sourceTrackId")?;
                     if expected.get("source_id").and_then(Value::as_str) != Some(source_id)
-                        || expected.get("source_track_id").and_then(Value::as_str) != Some(source_track_id)
+                        || expected.get("source_track_id").and_then(Value::as_str)
+                            != Some(source_track_id)
                     {
                         anyhow::bail!("hybrid device candidate source identity mismatch");
                     }
@@ -412,13 +418,16 @@ fn prepare_v2(
                 }
                 "cloud" => {
                     if expected.get("execution_target").and_then(Value::as_str) != Some("cloud")
-                        || expected.get("source_kind").and_then(Value::as_str) != Some("artist_catalog")
+                        || expected.get("source_kind").and_then(Value::as_str)
+                            != Some("artist_catalog")
                     {
                         anyhow::bail!("hybrid catalog candidate provenance target mismatch");
                     }
                     let source_url = string(item, "sourceUrl")?;
                     if expected.get("audio_url").and_then(Value::as_str) != Some(source_url) {
-                        anyhow::bail!("hybrid catalog candidate canonical URL changed after planning");
+                        anyhow::bail!(
+                            "hybrid catalog candidate canonical URL changed after planning"
+                        );
                     }
                     download_verified_catalog_media(source_url, expected_fingerprint, &temp, index)?
                 }
@@ -429,7 +438,12 @@ fn prepare_v2(
                     .get(candidate_id)
                     .context("hybrid candidate is not present in the frozen MixPlan")?,
             )?;
-            rendered.push(rendered_track(item, plan_record, path, expected_fingerprint)?);
+            rendered.push(rendered_track(
+                item,
+                plan_record,
+                path,
+                expected_fingerprint,
+            )?);
         }
         Ok(rendered)
     })();
@@ -442,9 +456,15 @@ fn prepare_v2(
     }
 }
 
-pub fn prepare_render_request(db: &BridgeDb, payload: &Value) -> anyhow::Result<PreparedRenderRequest> {
+pub fn prepare_render_request(
+    db: &BridgeDb,
+    payload: &Value,
+) -> anyhow::Result<PreparedRenderRequest> {
     let root = record(payload)?;
-    let version = root.get("version").and_then(Value::as_str).unwrap_or_default();
+    let version = root
+        .get("version")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
     if version != RENDER_JOB_VERSION && version != HYBRID_RENDER_JOB_VERSION {
         anyhow::bail!("unsupported local MixPlan render job contract");
     }
