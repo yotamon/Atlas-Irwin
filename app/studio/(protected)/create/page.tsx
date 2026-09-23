@@ -155,7 +155,7 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
                   <details className="create-evidence-details">
                     <summary>Why this source?</summary>
                     <p>{evidence || "Selected from the strongest complete musical passages for this release."}</p>
-                    <small>{release?.title || "Release"} · musical evidence stays attached through production.</small>
+                    <small>{release?.title || "Release"} · musical evidence stays attached to the creative asset.</small>
                   </details>
                 </article>
               );
