@@ -37,3 +37,34 @@ test("Paid Growth exposes bounded memory as supporting context without spend aut
   assert.doesNotMatch(page, /budget_ceiling_usd[^\n]*growthMemory/);
   assert.doesNotMatch(page, /approvePaidGrowthExperiment\(growthMemory/);
 });
+
+test("bounded consumer loader fails soft and keeps briefs bounded", async () => {
+  const loader = await read("lib/artist-memory/consumer-context.ts");
+  assert.match(loader, /export async function loadBoundedArtistMemoryContext/);
+  assert.match(loader, /maxCharacters\?: number/);
+  assert.match(loader, /1_800/);
+  assert.match(loader, /catch/);
+  assert.match(loader, /return null;/);
+  assert.match(loader, /must never become a new availability/);
+});
+
+test("Moment ranking consumes memory rank-only without double counting calibration", async () => {
+  const ranker = await read("lib/artist-memory/moment-ranking.ts");
+  assert.match(ranker, /export function rankMomentsWithArtistMemory/);
+  assert.match(ranker, /kind === "moment_calibration"\) continue;/);
+  assert.match(ranker, /Math\.min\(0\.04, /);
+  assert.match(ranker, /Math\.max\(-0\.04, /);
+  assert.match(ranker, /NEGATIVE_TERMS/);
+});
+
+test("video director and campaign planning honor their maximum effects", async () => {
+  const video = await read("lib/video-director/context.ts");
+  assert.match(video, /loadBoundedArtistMemoryContext/);
+  assert.match(video, /consumer: "video_director"/);
+  assert.match(video, /maxEffect === "brief_only"/);
+
+  const campaign = await read("lib/marketing/ai.ts");
+  assert.match(campaign, /loadBoundedArtistMemoryContext/);
+  assert.match(campaign, /consumer: "campaign_planning"/);
+  assert.match(campaign, /maxEffect === "suggest_only"/);
+});
