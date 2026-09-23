@@ -36,14 +36,14 @@ export function AutoMixWorkflow({
   artistName,
   tracks,
   initialSource,
-  initialTrackId,
+  initialTrackIds,
   initialMixId,
 }: {
   artistId: string;
   artistName: string;
   tracks: TrackOption[];
   initialSource?: Source;
-  initialTrackId?: string;
+  initialTrackIds?: string[];
   initialMixId?: string;
 }) {
   const [source, setSource] = useState<Source | null>(initialSource ?? null);
@@ -135,7 +135,7 @@ export function AutoMixWorkflow({
           artistId={artistId}
           artistName={artistName}
           tracks={tracks}
-          initialTrackIds={initialTrackId ? [initialTrackId] : undefined}
+          initialTrackIds={initialTrackIds}
           initialMixId={initialMixId}
         />
       )}
