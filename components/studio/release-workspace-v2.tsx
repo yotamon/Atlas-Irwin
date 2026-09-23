@@ -167,7 +167,7 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
       <div className="v2-create-grid release-deliverable-grid">
         <Link className="v2-create-card" href={href(`/studio/create?release=${release.id}`)}><span className="section-label">Fast social creative</span><h2>Reels, lyric cuts and visual loops</h2><p>Choose the deliverable. Ensemblis picks the strongest musical source.</p><strong>Open Create →</strong></Link>
         <Link className="v2-create-card" href={href(`/studio/video?release=${release.id}`)}><span className="section-label">Longer motion</span><h2>Video Director</h2><p>Build a coherent music-video world when the release needs more than a social cut.</p><strong>Direct video →</strong></Link>
-        <Link className="v2-create-card" href={href(`/studio/production?release=${release.id}`)}><span className="section-label">In progress</span><h2>Production</h2><p>Refine and approve only assets already connected to this release.</p><strong>Open production →</strong></Link>
+        <Link className="v2-create-card" href={href(`/studio/production?release=${release.id}`)}><span className="section-label">In progress</span><h2>Creative assets</h2><p>Refine and approve only assets already connected to this release.</p><strong>Open creative assets →</strong></Link>
       </div>
       <section className="release-content-status">
         <div><strong>{contentItems.length}</strong><span>content items</span></div>
@@ -193,7 +193,7 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
         <article><span>Music distribution</span><strong>DSP delivery</strong><small>Readiness, rights, provenance, stores and delivery status</small><Link href={href(`/studio/releases/${release.id}/distribution`)}>Open delivery →</Link></article>
         <article><span>Listening destination</span><strong>{[release.spotify_url,release.soundcloud_url,release.youtube_url].filter(Boolean).length}/3 linked</strong><small>Spotify, SoundCloud and YouTube</small><Link href={href(`/studio/releases/${release.id}?view=advanced&tab=music`)}>Manage destinations →</Link></article>
         <article><span>Artist web</span><strong>{release.publish_state === "live" ? "Live" : "Not live"}</strong><small>Public catalog and release presence</small><Link href={href(`/studio/releases/${release.id}?view=advanced&tab=website`)}>Website controls →</Link></article>
-        <article><span>Campaign publishing</span><strong>{releaseDateLocked ? `${providerScheduledCount} scheduled` : `${scheduled.length} ready`}</strong><small>{missingAsset.length ? `${missingAsset.length} still need assets` : "No asset blocker detected"}</small><Link href={href(`/studio/production?release=${release.id}`)}>Open production →</Link></article>
+        <article><span>Campaign publishing</span><strong>{releaseDateLocked ? `${providerScheduledCount} scheduled` : `${scheduled.length} ready`}</strong><small>{missingAsset.length ? `${missingAsset.length} still need assets` : "No asset blocker detected"}</small><Link href={href(`/studio/production?release=${release.id}`)}>Open creative assets →</Link></article>
       </div>
     </section> : null}
 
