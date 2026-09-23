@@ -344,13 +344,12 @@ A Release remains a hero object / Mission.
 Default facets:
 
 - Overview
-- Music
 - Creative
 - Promotion
 - Distribution
 - Results
 
-The release header remains visible while moving between facets.
+Music stays visible in Overview and is not hidden behind a duplicate Release-level Music tab. The release header remains visible while moving between facets.
 
 The user should never need to leave the Release object to understand normal release work.
 
@@ -1052,7 +1051,7 @@ Deliver:
 - Release Object Header;
 - consistent release facets;
 - Create action sheet/launcher from Track, Moment and Release;
-- production items represented as Creative Assets;
+- production items represented to the artist as Creative Assets; the compatibility URL may remain while the visible object language is Creative Assets;
 - specialist provider settings moved to inspectors;
 - distribution stays inside Release context.
 
