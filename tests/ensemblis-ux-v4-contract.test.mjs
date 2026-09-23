@@ -62,6 +62,47 @@ test("global object search includes resumable Mix objects", async () => {
   assert.ok(search.includes("mixSource(mix)"));
 });
 
+
+test("catalog tracks can start one Mix with an explicit selected pool", async () => {
+  const music = await source("components/studio/music-workspace-overview.tsx");
+  const page = await source("app/studio/(protected)/music/automix/page.tsx");
+  const workflow = await source("components/studio/automix-workflow.tsx");
+
+  assert.ok(music.includes('name="track"'));
+  assert.ok(music.includes("Mix selected tracks"));
+  assert.ok(music.includes('name="source" value="catalog"'));
+  assert.ok(page.includes("track?: string | string[]"));
+  assert.ok(page.includes("initialTrackIds"));
+  assert.ok(page.includes('initialTrackIds.length\n      ? "catalog"'));
+  assert.ok(workflow.includes("initialTrackIds?: string[]"));
+  assert.ok(workflow.includes("initialTrackIds={initialTrackIds}"));
+});
+
+test("Create and Creative Assets preserve their object context", async () => {
+  const create = await source("app/studio/(protected)/create/page.tsx");
+  const production = await source("app/studio/(protected)/production/page.tsx");
+  const release = await source("components/studio/release-workspace-v2.tsx");
+
+  assert.ok(create.includes('label: "Back to release"'));
+  assert.ok(create.includes("?stage=create#moments"));
+  assert.equal(create.includes("?stage=music#moments"), false);
+  assert.ok(production.includes('title="Creative Assets"'));
+  assert.ok(production.includes("Back to release"));
+  assert.ok(release.includes("<h2>Creative assets</h2>"));
+  assert.ok(release.includes("Open creative assets →"));
+  assert.equal(release.includes("<h2>Production</h2>"), false);
+});
+
+test("Grow is action-first in semantic document order, not only visual order", async () => {
+  const grow = await source("app/studio/(protected)/growth/page.tsx");
+  const css = await source("app/studio/design-system/workflows.css");
+
+  assert.ok(grow.indexOf("growth-command-grid") < grow.indexOf("growth-polish-north-star"));
+  assert.ok(grow.indexOf("growth-command-grid") < grow.indexOf("Advanced data controls"));
+  assert.equal(css.includes(".growth-v4-overview .growth-command-grid { order:"), false);
+  assert.equal(css.includes(".growth-v4-overview .growth-polish-north-star { order:"), false);
+});
+
 test("V4 widgets remain compositions on top of the canonical Design System", async () => {
   const widgets = await source("components/studio/ux-v4-widgets.tsx");
   const css = await source("app/studio/design-system/workflows.css");
