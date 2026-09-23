@@ -202,7 +202,7 @@ export default async function ProductionPage({
       />
 
       <section className="v2-status-grid">
-        <article><strong>{creative.length}</strong><span>needs creative input</span><small>Draft or in production</small></article>
+        <article><strong>{creative.length}</strong><span>needs creative input</span><small>Draft or being made</small></article>
         <article><strong>{ready.length}</strong><span>ready</span><small>Creative and asset complete</small></article>
         <article><strong>{scheduled.length}</strong><span>scheduled</span><small>Publication approval or time</small></article>
         <article><strong>{recentlyPublished.length}</strong><span>recently published</span><small>Ready to learn from</small></article>
