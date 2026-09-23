@@ -13,6 +13,7 @@ import {
 } from "@/app/studio/marketing-creative-actions";
 import { Field, PageHeader, Status, Submit } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { loadCreativeReferenceContext } from "@/lib/marketing/creative-context";
 import { AI_PRICING_AS_OF, CREATIVE_PRESETS } from "@/lib/marketing/creative-provider-catalog";
 import { creativeProviderReadiness } from "@/lib/marketing/creative-providers";
@@ -89,6 +90,7 @@ export default async function ProductionPage({
   const params = await searchParams;
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveDefaultArtistContext(supabase, user);
+  const href = (value: string) => ensemblisArtistHref(value, artist.artistId);
   const music = asArtistScopedMusicClient(supabase);
   const marketing = asMomentAwareMarketingClient(supabase);
   const momentsDb = asMomentsClient(supabase);
@@ -191,9 +193,12 @@ export default async function ProductionPage({
   return (
     <div className="studio-v2-page">
       <PageHeader
-        title="Production"
-        description={`Ensemblis turns approved ${artist.artistName} musical Moments into traceable campaign creative, then keeps the provider route and price visible before any paid generation.`}
-        action={<Link className="button" href="/studio/content">Advanced Content Lab</Link>}
+        title="Creative Assets"
+        description={`Create, refine and approve the media connected to ${artist.artistName}. Musical source and release context stay attached automatically.`}
+        action={<div className="actions">
+          {selectedRelease ? <Link className="button" href={href(`/studio/releases/${selectedRelease}?stage=content`)}>Back to release</Link> : null}
+          <Link className="button" href={href("/studio/content")}>Advanced Content Lab</Link>
+        </div>}
       />
 
       <section className="v2-status-grid">
@@ -218,12 +223,12 @@ export default async function ProductionPage({
                 </Link>
               ))}
             </div>
-          ) : <div className="v2-calm-state compact"><strong>No production queue yet.</strong><p>Create one item or let a release campaign create the starter timeline.</p></div>}
+          ) : <div className="v2-calm-state compact"><strong>No creative assets yet.</strong><p>Create an asset from music or let a release Mission prepare the first useful deliverable.</p></div>}
         </section>
 
         <section className="v2-section v2-production-editor">
           <div className="v2-section-heading">
-            <div><span className="section-label">{editing ? "Edit" : "Create"}</span><h2>{editing ? editing.title : "New content moment"}</h2></div>
+            <div><span className="section-label">{editing ? "Creative asset" : "Create"}</span><h2>{editing ? editing.title : "New creative asset"}</h2></div>
             {editing ? <Status>{editing.status}</Status> : null}
           </div>
 
@@ -256,7 +261,7 @@ export default async function ProductionPage({
             <section className="studio-panel feature">
               <div className="panel-head">
                 <div>
-                  <span className="section-label">Ensemblis Creative Engine</span>
+                  <span className="section-label">Creative generation</span>
                   <h2>Generate cohesive media</h2>
                   <p>Choose the outcome-level quality preset. Ensemblis handles provider and model routing, but shows the exact route and expected spend before you approve it.</p>
                 </div>
