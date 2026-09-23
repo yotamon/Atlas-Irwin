@@ -14,6 +14,8 @@ import type { Database } from "@/types/database";
 import { deriveArtistMission } from "./artist-mission";
 import type { ArtistContext } from "./artist-context";
 import { deriveMomentMissionRecommendation } from "./moment-mission";
+import { asGrowthClient } from "./growth-db";
+import type { AutoMixDatabase, AutoMixJob } from "@/types/automix-database";
 import { asMomentsClient } from "./moments-db";
 import { asArtistScopedMusicClient } from "./music-db";
 import { deriveNeedsYouQueue } from "./needs-you";
@@ -85,6 +87,15 @@ function needsArtistJudgment(action: { action_type: string }) {
   return ARTIST_DECISION_ACTION_TYPES.has(action.action_type);
 }
 
+function automixRootJobId(job: AutoMixJob) {
+  const lineage = record(record(job.request_payload).plan_lineage);
+  return typeof lineage.root_job_id === "string" ? lineage.root_job_id : job.id;
+}
+
+function automixSource(job: AutoMixJob) {
+  return record(job.request_payload).execution_target === "device" ? "local" : "catalog";
+}
+
 function managerOwned(action: { payload: unknown }) {
   return record(action.payload).managerOwned === true;
 }
@@ -131,6 +142,8 @@ export async function loadArtistOperatingSnapshot({
   const operational = asArtistScopedOperationalClient(db);
   const music = asArtistScopedMusicClient(db);
   const moments = asMomentsClient(db);
+  const growth = asGrowthClient(db);
+  const automix = db as unknown as SupabaseClient<AutoMixDatabase>;
   const marketing = asMarketingClient(db);
   const autonomy = createAutonomyServiceClient();
   const sites = asSitesClient(db);
@@ -147,6 +160,8 @@ export async function loadArtistOperatingSnapshot({
     operatingContext,
     releasesResult,
     tracksResult,
+    latestTrackResult,
+    latestMixResult,
     momentsResult,
     campaignsResult,
     tasksResult,
@@ -166,6 +181,8 @@ export async function loadArtistOperatingSnapshot({
     operatingContextPromise,
     music.from("releases").select("id,title,release_date,active_release,artwork_url,cover_asset,primary_hook,smart_link_url,spotify_url,soundcloud_url,youtube_url,status,is_archived").eq("owner_id", userId).eq("artist_id", artist.artistId).order("updated_at", { ascending: false }),
     music.from("tracks").select("id,release_id,title,audio_url,is_primary").eq("owner_id", userId).eq("artist_id", artist.artistId),
+    growth.from("track_vault").select("id,title,status,updated_at").eq("owner_id", userId).eq("artist_id", artist.artistId).neq("status", "archived").order("updated_at", { ascending: false }).limit(1),
+    automix.from("automix_jobs").select("*").eq("owner_id", userId).eq("artist_id", artist.artistId).neq("status", "cancelled").order("updated_at", { ascending: false }).limit(1),
     moments.from("moments").select("*").eq("owner_id", userId).eq("artist_id", artist.artistId).in("state", ["proposed", "approved"]).limit(100),
     marketing.from("campaigns").select("id,release_id,status").eq("owner_id", userId).eq("artist_id", artist.artistId).not("status", "eq", "archived"),
     operational.from("tasks").select("id,title,due_at,priority,status").eq("owner_id", userId).eq("artist_id", artist.artistId).not("status", "in", '("Done","Skipped")').order("due_at", { ascending: true }).limit(30),
@@ -185,6 +202,8 @@ export async function loadArtistOperatingSnapshot({
   const firstError = [
     releasesResult,
     tracksResult,
+    latestTrackResult,
+    latestMixResult,
     momentsResult,
     campaignsResult,
     tasksResult,
@@ -203,6 +222,16 @@ export async function loadArtistOperatingSnapshot({
 
   const releases = releasesResult.data ?? [];
   const tracks = tracksResult.data ?? [];
+  const latestTrack = (latestTrackResult.data ?? [])[0] ?? null;
+  const latestMixJob = (latestMixResult.data ?? [])[0] ?? null;
+  const latestMix = latestMixJob ? {
+    id: automixRootJobId(latestMixJob),
+    name: latestMixJob.name,
+    status: latestMixJob.status,
+    trackCount: latestMixJob.track_ids.length,
+    durationMs: latestMixJob.target_duration_ms,
+    href: href(`/studio/music/automix?mix=${encodeURIComponent(automixRootJobId(latestMixJob))}&source=${automixSource(latestMixJob)}`),
+  } : null;
   const momentRows = momentsResult.data ?? [];
   const campaigns = campaignsResult.data ?? [];
   const content = contentResult.data ?? [];
@@ -440,6 +469,8 @@ export async function loadArtistOperatingSnapshot({
     operatingContext,
     strategy,
     activeRelease,
+    latestTrack,
+    latestMix,
     activeMission,
     momentRecommendation,
     primaryMission,

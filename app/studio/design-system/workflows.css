@@ -530,3 +530,404 @@
     grid-row: 1 / 4;
   }
 }
+
+/* UX V4 · intent, object and workflow compositions */
+.studio-root .ensemblis-action-launcher-trigger {
+  width: 100%;
+  min-height: 5.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--en-space-4);
+  padding: var(--en-space-4) var(--en-space-5);
+  border: 1px solid var(--en-line-strong);
+  border-radius: var(--en-radius-lg);
+  background: var(--en-surface);
+  color: var(--en-ink);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--en-duration-fast) var(--en-ease-standard),
+    transform var(--en-duration-fast) var(--en-ease-standard);
+}
+
+.studio-root .ensemblis-action-launcher-trigger:hover {
+  border-color: var(--en-accent);
+  transform: translateY(-1px);
+}
+
+.studio-root .ensemblis-action-launcher-copy {
+  display: grid;
+  gap: var(--en-space-1);
+}
+.studio-root .ensemblis-action-launcher-copy small {
+  color: var(--en-muted);
+  font-size: var(--en-text-xs);
+}
+
+.studio-root .ensemblis-action-launcher-copy strong {
+  font-size: var(--en-text-lg);
+  font-weight: var(--en-weight-semibold);
+}
+
+.studio-root .ensemblis-action-launcher-trigger kbd {
+  white-space: nowrap;
+  color: var(--en-muted);
+  font: inherit;
+  font-size: var(--en-text-xs);
+}
+
+.studio-root .en-continue-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--en-space-3);
+}
+
+.studio-root .en-continue-widget {
+  min-width: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--en-space-4);
+  padding: var(--en-space-4);
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-md);
+  background: var(--en-surface);
+  color: inherit;
+  text-decoration: none;
+}
+.studio-root .en-continue-widget:hover {
+  border-color: var(--en-line-strong);
+}
+
+.studio-root .en-continue-widget-copy,
+.studio-root .en-continue-widget-side {
+  display: grid;
+  gap: var(--en-space-1);
+}
+
+.studio-root .en-continue-widget-copy small,
+.studio-root .en-continue-widget-copy span {
+  color: var(--en-muted);
+}
+
+.studio-root .en-continue-widget-copy strong {
+  font-size: var(--en-text-md);
+}
+
+.studio-root .en-continue-widget-side {
+  flex: 0 0 auto;
+  justify-items: end;
+  align-content: space-between;
+}
+
+.studio-root .en-continue-widget-side b {
+  font-size: var(--en-text-xs);
+  font-weight: var(--en-weight-semibold);
+}
+
+.studio-root .en-object-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--en-space-3);
+  flex-wrap: wrap;
+}
+.studio-root .en-object-action-primary,
+.studio-root .en-object-action-more {
+  display: flex;
+  align-items: center;
+  gap: var(--en-space-2);
+  flex-wrap: wrap;
+}
+
+.studio-root .en-insight-widget,
+.studio-root .en-connection-widget {
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-md);
+  background: var(--en-surface);
+}
+
+.studio-root .en-insight-widget {
+  display: grid;
+  gap: var(--en-space-1);
+  padding: var(--en-space-4);
+}
+
+.studio-root .en-insight-widget > span,
+.studio-root .en-insight-widget > small,
+.studio-root .en-connection-widget small,
+.studio-root .en-connection-widget span {
+  color: var(--en-muted);
+}
+
+.studio-root .en-connection-widget {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--en-space-3);
+  padding: var(--en-space-4);
+}
+.studio-root .en-connection-widget > span {
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 999px;
+  background: var(--en-muted);
+}
+
+.studio-root .en-connection-widget > span.is-connected {
+  background: var(--en-mint);
+}
+
+.studio-root .en-connection-widget > div {
+  min-width: 0;
+  display: grid;
+  gap: var(--en-space-1);
+}
+
+.studio-root .en-connection-widget-action {
+  justify-self: end;
+}
+
+@media (max-width: 760px) {
+  .studio-root .en-continue-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .studio-root .ensemblis-action-launcher-trigger {
+    min-height: 4.5rem;
+    padding: var(--en-space-3) var(--en-space-4);
+  }
+
+  .studio-root .en-connection-widget {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .studio-root .en-connection-widget-action {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
+.studio-root .en-automix-source-step,
+.studio-root .en-automix-workflow {
+  display: grid;
+  gap: var(--en-section-gap);
+}
+
+.studio-root .en-automix-source-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--en-space-4);
+}
+
+.studio-root .en-automix-source-card {
+  min-height: 13rem;
+  display: grid;
+  align-content: space-between;
+  gap: var(--en-space-3);
+  padding: var(--en-space-6);
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-lg);
+  background: var(--en-surface);
+  color: var(--en-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.studio-root .en-automix-source-card:hover:not(:disabled) {
+  border-color: var(--en-accent);
+  background: var(--en-surface-raised);
+}
+.studio-root .en-automix-source-card:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.studio-root .en-automix-source-card > span,
+.studio-root .en-automix-source-card > small {
+  color: var(--en-muted);
+}
+
+.studio-root .en-automix-source-card > strong {
+  font-size: var(--en-text-xl);
+}
+
+.studio-root .en-automix-source-card > b {
+  color: var(--en-accent);
+  font-size: var(--en-text-sm);
+}
+
+.studio-root .en-automix-workflow-context {
+  display: grid;
+  gap: var(--en-space-3);
+}
+
+.studio-root .en-automix-advanced-stack {
+  display: grid;
+  gap: var(--en-space-6);
+  margin-top: var(--en-space-4);
+}
+
+.studio-root .today-v4-continue {
+  display: grid;
+  gap: var(--en-space-3);
+}
+
+.studio-root .en-mix-library {
+  display: grid;
+  gap: var(--en-space-4);
+}
+
+@media (max-width: 760px) {
+  .studio-root .en-automix-source-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .studio-root .en-automix-source-card {
+    min-height: 10rem;
+    padding: var(--en-space-4);
+  }
+}
+
+.studio-root .en-workflow-stepper {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--en-space-2);
+}
+
+.studio-root .en-workflow-stepper button {
+  min-width: 0;
+  min-height: 3.25rem;
+  display: flex;
+  align-items: center;
+  gap: var(--en-space-2);
+  padding: var(--en-space-2) var(--en-space-3);
+  border: 0;
+  border-bottom: 1px solid var(--en-line);
+  background: transparent;
+  color: var(--en-muted);
+  text-align: left;
+  cursor: pointer;
+}
+
+.studio-root .en-workflow-stepper button > span {
+  width: 1.65rem;
+  height: 1.65rem;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 1px solid var(--en-line-strong);
+  border-radius: var(--en-radius-pill);
+  font-size: var(--en-text-xs);
+}
+
+.studio-root .en-workflow-stepper button.is-active {
+  border-bottom-color: var(--en-accent);
+  color: var(--en-ink);
+}
+
+.studio-root .en-workflow-stepper button.is-active > span,
+.studio-root .en-workflow-stepper button.is-complete > span {
+  border-color: var(--en-accent);
+  color: var(--en-accent);
+}
+
+.studio-root .en-workflow-stepper button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+@media (max-width: 760px) {
+  .studio-root .en-workflow-stepper {
+    display: flex;
+    overflow-x: auto;
+  }
+
+  .studio-root .en-workflow-stepper button {
+    min-width: 7.5rem;
+  }
+}
+
+@media (max-width: 900px) {
+  .studio-root .ensemblis-command-mobile-trigger,
+  .studio-root .ensemblis-mobile-more-trigger {
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 0.28rem;
+    min-height: var(--en-control-lg);
+    padding: 0.35rem;
+    border: 0;
+    border-radius: var(--en-radius-sm);
+    background: transparent;
+    color: var(--en-muted);
+    font: inherit;
+    font-size: var(--en-text-2xs);
+    font-weight: var(--en-weight-semibold);
+    cursor: pointer;
+  }
+
+  .studio-root .ensemblis-command-mobile-trigger[aria-expanded="true"],
+  .studio-root .ensemblis-command-mobile-trigger:focus-visible,
+  .studio-root .ensemblis-mobile-more-trigger[aria-expanded="true"] {
+    background: var(--en-accent-soft);
+    color: var(--en-ink);
+  }
+
+  .studio-root .ensemblis-mobile-search-icon {
+    font-size: 1.2rem;
+    line-height: 1;
+  }
+}
+
+.studio-root .growth-v4-overview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--en-section-gap);
+}
+
+
+.studio-root .music-catalog-mix-form {
+  display: grid;
+  gap: var(--en-space-3);
+}
+
+.studio-root .music-catalog-mix-select {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--en-space-3);
+  cursor: pointer;
+}
+
+.studio-root .music-catalog-mix-select input {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  accent-color: var(--en-accent);
+}
+
+.studio-root .music-catalog-mix-select:has(input:disabled) {
+  cursor: not-allowed;
+}
+
+.studio-root .music-catalog-mix-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--en-space-4);
+  padding: var(--en-space-3) 0;
+  border-bottom: 1px solid var(--en-line);
+}
+
+.studio-root .music-catalog-mix-actions span {
+  color: var(--en-muted);
+  font-size: var(--en-text-sm);
+}
+
+@media (max-width: 620px) {
+  .studio-root .music-catalog-mix-actions {
+    display: grid;
+    align-items: start;
+  }
+}

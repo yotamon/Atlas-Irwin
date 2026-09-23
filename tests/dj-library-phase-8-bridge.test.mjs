@@ -88,12 +88,19 @@ test("native webview uses a strict local-only CSP without unsafe inline executio
   assert.equal(/<script(?![^>]*\bsrc=)/.test(html), false, "native HTML must not contain inline script blocks");
   assert.ok(html.includes('src="./app.js"'));
   assert.ok(html.includes('href="./app.css"'));
+  assert.ok(html.includes("Connect this computer as your Local Engine"));
+  assert.ok(html.includes("Local Engine ready"));
+  assert.ok(html.includes("Audio analysis"));
+  assert.ok(html.includes("Set planning"));
+  assert.ok(html.includes("AutoMix render"));
+  assert.ok(html.includes("Open Ensemblis Studio"));
 });
 
 test("Studio makes automatic browser connection primary while preserving explicit recovery, licensing and revocation", async () => {
   const route = await source("app/api/studio/dj-library/devices/route.ts");
   const component = await source("components/studio/library-bridge-panel.tsx");
   const page = await source("app/studio/(protected)/music/automix/page.tsx");
+  const workflow = await source("components/studio/automix-workflow.tsx");
 
   assert.ok(route.includes('action === "create_pairing"'));
   assert.ok(route.includes('action === "revoke"'));
@@ -102,10 +109,17 @@ test("Studio makes automatic browser connection primary while preserving explici
   assert.ok(component.includes("Connect to Ensemblis"));
   assert.ok(component.includes("Manual connection"));
   assert.ok(component.includes("Your music stays local"));
+  assert.ok(component.includes("Local Engine"));
+  assert.ok(component.includes("Audio analysis"));
+  assert.ok(component.includes("Set planning"));
+  assert.ok(component.includes("AutoMix render"));
+  assert.ok(component.includes("Browser = control surface."));
   assert.ok(component.includes("Offline license"));
   assert.ok(component.includes('/api/studio/dj-library/license'));
-  assert.ok(page.includes("<LibraryBridgePanel"));
-  assert.ok(page.includes("<LocalSetBuilderWorkspace"));
+  assert.ok(page.includes("<AutoMixWorkflow"));
+  assert.ok(workflow.includes("<LibraryBridgePanel"));
+  assert.ok(workflow.includes("<LocalSetBuilderWorkspace"));
+  assert.ok(workflow.includes("DJ preferences & connection tools"));
 });
 
 test("Studio track discovery shares strict planning-readiness validation with the local planner", async () => {
@@ -154,9 +168,12 @@ test("local Set Builder uses the canonical planner while keeping audio on one pa
   assert.ok(worker.includes("device_source_fingerprints"));
   assert.ok(worker.includes('execution_targets == {"device"}'));
   assert.ok(deviceSources.includes("TrackDescriptor("));
-  assert.ok(component.includes("Approve & render locally"));
+  assert.ok(component.includes("Your audio stays on this computer."));
+  assert.ok(component.includes("Render mix on this computer"));
+  assert.ok(component.includes("one paired computer"));
   assert.ok(component.includes("candidateRefs"));
   assert.ok(component.includes("Replan edits"));
+  assert.ok(component.includes("<WorkflowStepper"));
 });
 
 test("local renderer reuses canonical MixPlan DSP and double-checks frozen recording fingerprints", async () => {

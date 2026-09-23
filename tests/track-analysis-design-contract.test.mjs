@@ -34,7 +34,8 @@ test("active ingestion is automatic and recovery remains explicit", async () => 
   const source = await readFile(trackPagePath, "utf8");
 
   assert.ok(source.includes("<AnalysisAutoRefresh active={analysis.isActive || ingestionActive} />"));
-  assert.match(source, /analysisNeedsRecovery\s*\? <Link className="button primary" href="#analysis-recovery">Retry intelligence<\/Link>/);
+  assert.ok(source.includes('analysisNeedsRecovery ? [{ label: "Retry intelligence", href: "#analysis-recovery", primary: true }'));
+  assert.ok(source.includes("<ObjectActionBar"));
   assert.ok(source.includes("analysis.isActive || ingestionActive ? ("));
   assert.match(source, /Normal ingestion is automatic/);
   assert.match(source, /Start a fresh Track Intelligence pass here only when you intentionally want to refresh or repair the current result/);

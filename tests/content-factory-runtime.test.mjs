@@ -22,3 +22,11 @@ test("database-side content factory caller outlives bootstrap without mutating p
   assert.match(migration, /atlas_marketing_cron_secret/);
   assert.doesNotMatch(migration, /generation_runs|campaign_ai_spend|ai_control_settings|publication_jobs/i);
 });
+
+
+test("free content factory bounds persistent snapshot retention", () => {
+  const source = read("lib/marketing/free-content-factory.ts");
+  assert.match(source, /SANDBOX_SNAPSHOT_EXPIRATION_MS\s*=\s*7 \* 24 \* 60 \* 60 \* 1000/);
+  assert.match(source, /snapshotExpiration:\s*SANDBOX_SNAPSHOT_EXPIRATION_MS/);
+  assert.match(source, /keepLastSnapshots:\s*\{[\s\S]*count:\s*1,[\s\S]*expiration:\s*SANDBOX_SNAPSHOT_EXPIRATION_MS,[\s\S]*deleteEvicted:\s*true/);
+});

@@ -45,3 +45,17 @@ test("Media Worker uses the current managed Sandbox lifecycle", () => {
     "do not pin the worker to a retired managed-image digest",
   );
 });
+
+test("Media Worker recovers one stale persistent sandbox without creating a new lineage", () => {
+  assert.match(sandbox, /function sandboxGoneError\(error: unknown\)/);
+  assert.match(sandbox, /410\\b\|SANDBOX_STOPPED\|SNAPSHOT_NOT_FOUND/);
+  assert.match(sandbox, /let recoveredGoneSandbox = false;/);
+  assert.match(sandbox, /!recoveredGoneSandbox && sandboxGoneError\(error\)/);
+  assert.match(sandbox, /await sandbox\.delete\(\)\.catch\(\(\) => undefined\);/);
+  assert.match(sandbox, /recoveredGoneSandbox = true;/);
+});
+
+test("Media Worker classifies Hobby quota responses without a paid fallback", () => {
+  assert.match(sandbox, /402\|429\|hobby/i);
+  assert.match(sandbox, /Atlas did not use a paid fallback/);
+});

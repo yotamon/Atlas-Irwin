@@ -31,7 +31,7 @@
 
       <section id="view-connect" class="flow-view" aria-label="Connect to Ensemblis">
         <div class="hero-visual" aria-hidden="true"><div class="device-card"><span class="device-screen"></span><span class="device-base"></span></div><div class="connection-line"><i></i><i></i><i></i></div><div class="cloud-orb"><span class="brand-mark small"><span></span><span></span><span></span></span></div></div>
-        <div class="copy centered wide"><span class="eyebrow">One-time setup</span><h1>Connect your music to Ensemblis</h1><p>Let Ensemblis work with the music on this computer while your original files and folder locations stay private.</p></div>
+        <div class="copy centered wide"><span class="eyebrow">One-time setup</span><h1>Connect this computer as your Local Engine</h1><p>Studio stays in your browser. This app keeps audio processing on this computer while your original files and folder locations stay private.</p></div>
         <div class="primary-actions centered-actions"><button id="connect" class="button primary large" type="button">Connect to Ensemblis</button><p class="privacy-note"><span aria-hidden="true">⌁</span> Your music files stay on this computer.</p></div>
       </section>
 
@@ -49,20 +49,25 @@
 
       <section id="view-preparing" class="flow-view" aria-label="Preparing music library">
         <div class="hero-visual compact scan-visual" aria-hidden="true"><div class="scan-disc"><span></span></div></div>
-        <div class="copy centered wide"><span class="eyebrow">Preparing your library</span><h1>Understanding your music</h1><p id="preparing-copy">Ensemblis is securely scanning and analyzing the selected folder on this computer.</p></div>
+        <div class="copy centered wide"><span class="eyebrow">Local Engine · analyzing here</span><h1>Understanding your music</h1><p id="preparing-copy">Ensemblis is securely scanning and analyzing the selected folder on this computer.</p></div>
         <div class="progress-card"><div class="progress-meta"><strong id="preparing-status">Preparing music…</strong><span>Local processing</span></div><div class="progress-line indeterminate"><span></span></div><p>You can keep using your computer. Larger libraries may take a little while the first time.</p></div>
       </section>
 
       <section id="view-ready" class="flow-view" aria-label="Music connected">
-        <div class="ready-heading"><div class="ready-icon" aria-hidden="true">✓</div><div><span class="eyebrow success-text">Ready</span><h1>Your music is connected</h1><p>Ensemblis is watching your library and keeping everything ready in the background.</p></div></div>
+        <div class="ready-heading"><div class="ready-icon" aria-hidden="true">✓</div><div><span class="eyebrow success-text">Local Engine ready</span><h1>This computer is ready for local audio processing</h1><p>Use Ensemblis Studio in your browser to choose tracks and shape sets. This desktop app analyzes local audio and renders approved AutoMixes on this computer.</p></div></div>
+        <div class="execution-grid" aria-label="Where processing happens">
+          <article class="execution-card"><span>Audio analysis</span><strong>This computer</strong></article>
+          <article class="execution-card"><span>Set planning</span><strong>Ensemblis Studio</strong></article>
+          <article class="execution-card"><span>AutoMix render</span><strong>This computer</strong></article>
+        </div>
         <div class="summary-grid">
           <article class="summary-card"><span class="summary-icon" aria-hidden="true">♪</span><div><strong id="track-count">0</strong><span>tracks ready</span></div></article>
           <article class="summary-card"><span class="summary-icon" aria-hidden="true">⌂</span><div><strong id="source-count">0</strong><span id="source-label">music folders</span></div></article>
           <article class="summary-card"><span class="summary-icon" aria-hidden="true">↗</span><div><strong id="sync-label">Up to date</strong><span>Ensemblis sync</span></div></article>
         </div>
         <div id="runtime-warning" class="inline-warning" hidden><span aria-hidden="true">!</span><div><strong>Local analysis needs attention</strong><p>Basic library access still works, but advanced local processing is unavailable. Open Settings for details.</p></div></div>
-        <div class="ready-actions"><button id="open-studio" class="button primary" type="button">Open Ensemblis</button><button id="add-folder" class="button secondary" type="button">Add another folder</button></div>
-        <p class="background-note">You can close this window. Ensemblis will keep running quietly in the background.</p>
+        <div class="ready-actions"><button id="open-studio" class="button primary" type="button">Open Ensemblis Studio</button><button id="add-folder" class="button secondary" type="button">Add another folder</button></div>
+        <p class="background-note">You can close this window. The Local Engine keeps running quietly in the background for Studio.</p>
       </section>
     </main>
 
@@ -105,7 +110,7 @@
 
       <section class="settings-section">
         <h3>Status</h3>
-        <div class="settings-status-grid"><div><span>Connection</span><strong id="advanced-connection">Checking…</strong></div><div><span>Local processing</span><strong id="advanced-intelligence">Checking…</strong></div><div><span>Changes waiting to sync</span><strong id="advanced-pending">0</strong></div><div><span>Version</span><strong>0.2.0</strong></div></div>
+        <div class="settings-status-grid"><div><span>Studio connection</span><strong id="advanced-connection">Checking…</strong></div><div><span>Local Engine</span><strong id="advanced-intelligence">Checking…</strong></div><div><span>Changes waiting to sync</span><strong id="advanced-pending">0</strong></div><div><span>Version</span><strong>0.2.0</strong></div></div>
         <div class="settings-actions"><button id="sync-now" class="button secondary compact" type="button">Sync now</button><button id="check-jobs" class="button secondary compact" type="button">Check for work</button></div>
       </section>
 

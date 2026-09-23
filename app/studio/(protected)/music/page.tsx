@@ -1,4 +1,6 @@
 import Link from "next/link";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { MixLibrary } from "@/components/studio/mix-library";
 import { MusicGenerator } from "@/components/studio/music-generator";
 import { MusicLibraryNav } from "@/components/studio/music-library-nav";
 import { MusicWorkspaceOverview } from "@/components/studio/music-workspace-overview";
@@ -11,6 +13,7 @@ import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asGrowthClient } from "@/lib/studio/growth-db";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
+import type { AutoMixDatabase } from "@/types/automix-database";
 
 export default async function MusicPage({
   searchParams,
@@ -20,9 +23,33 @@ export default async function MusicPage({
   const { view } = await searchParams;
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveActiveArtistContext(supabase, user);
+  const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
+
+  if (view === "mixes") {
+    const automix = supabase as unknown as SupabaseClient<AutoMixDatabase>;
+    const jobs = await automix
+      .from("automix_jobs")
+      .select("*")
+      .eq("owner_id", user.id)
+      .eq("artist_id", artist.artistId)
+      .order("updated_at", { ascending: false })
+      .limit(60);
+    if (jobs.error) throw new Error(jobs.error.message);
+    return (
+      <div className="studio-v2-page music-workspace-page">
+        <PageHeader
+          title="Music"
+          description={`Tracks, releases and mixes for ${artist.artistName}.`}
+          action={<Link className="button primary" href={href("/studio/music/automix")}>New mix</Link>}
+        />
+        <MusicLibraryNav artistId={artist.artistId} active="mixes" />
+        <MixLibrary artistId={artist.artistId} jobs={jobs.data ?? []} />
+      </div>
+    );
+  }
+
   const operatingContext = await loadArtistOperatingContext({ db: supabase, artist });
   const aiMusicAllowed = operatingContext.profile.aiPolicy.musicAllowed;
-  const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
 
   if (view === "add") {
     return (

@@ -17,6 +17,7 @@ import {
   FiX,
   FiZap,
 } from "react-icons/fi";
+import { WorkflowStepper } from "@/components/studio/ux-v4-widgets";
 import type {
   AutoMixEnergyProfile,
   AutoMixJob,
@@ -105,6 +106,8 @@ type SetBuilderWorkspaceProps = {
   artistId: string;
   artistName: string;
   tracks: TrackOption[];
+  initialTrackIds?: string[];
+  initialMixId?: string;
 };
 
 type DraftState = {
@@ -117,6 +120,16 @@ type PreviewState = {
   jobId: string;
   items: Record<number, PreviewView>;
 };
+
+type WorkflowStage = "music" | "intent" | "build" | "review" | "render";
+
+const WORKFLOW_STEPS: Array<{ id: WorkflowStage; label: string }> = [
+  { id: "music", label: "Music" },
+  { id: "intent", label: "Intent" },
+  { id: "build", label: "Build" },
+  { id: "review", label: "Review" },
+  { id: "render", label: "Render" },
+];
 
 const ACTIVE = new Set<AutoMixJob["status"]>(["planned", "queued", "running"]);
 const PREVIEW_ACTIVE = new Set<AutoMixTransitionPreview["status"]>(["planned", "queued", "running"]);
@@ -264,9 +277,12 @@ function previewStatus(preview: PreviewView | undefined) {
   }[preview.status];
 }
 
-export function SetBuilderWorkspace({ artistId, artistName, tracks }: SetBuilderWorkspaceProps) {
+export function SetBuilderWorkspace({ artistId, artistName, tracks, initialTrackIds, initialMixId }: SetBuilderWorkspaceProps) {
   const available = useMemo(() => tracks.filter((track) => Boolean(track.audio_url)).slice(0, 20), [tracks]);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>(() =>
+    (initialTrackIds ?? []).filter((id) => tracks.some((track) => track.id === id && Boolean(track.audio_url))).slice(0, 20),
+  );
+  const [stage, setStage] = useState<WorkflowStage>(() => initialMixId ? "review" : "music");
   const [name, setName] = useState(`${artistName} Set Plan`);
   const [purpose, setPurpose] = useState<AutoMixPurpose>("booking");
   const [energyProfile, setEnergyProfile] = useState<AutoMixEnergyProfile>("dynamic");
@@ -336,7 +352,11 @@ export function SetBuilderWorkspace({ artistId, artistName, tracks }: SetBuilder
     return () => window.clearInterval(timer);
   }, [builderJobs, loadJobs]);
 
+  const requestedJob = initialMixId
+    ? planJobs.find((job) => String(lineageFromJob(job).root_job_id ?? job.id) === initialMixId)
+    : null;
   const currentJob = planJobs.find((job) => job.id === currentJobId)
+    ?? requestedJob
     ?? planJobs.find((job) => job.status === "completed")
     ?? planJobs[0]
     ?? null;
@@ -405,6 +425,7 @@ export function SetBuilderWorkspace({ artistId, artistName, tracks }: SetBuilder
   const canEdit = Boolean(currentJob && currentJob.status === "completed" && currentPlan && currentTrackIds.length >= 2);
   const activeRender = renderJobs.find((job) => ACTIVE.has(job.status));
   const latestRender = renderJobs[0] ?? null;
+  const workflowStage: WorkflowStage = stage === "build" && currentPlan && currentJob?.status === "completed" ? "review" : stage;
 
   function toggleCandidate(trackId: string) {
     setSelectedIds((current) => current.includes(trackId)
@@ -428,6 +449,7 @@ export function SetBuilderWorkspace({ artistId, artistName, tracks }: SetBuilder
       setError("Choose at least two mastered candidates before planning the set.");
       return;
     }
+    setStage("build");
     setBusy("create");
     setError("");
     try {
@@ -613,6 +635,7 @@ export function SetBuilderWorkspace({ artistId, artistName, tracks }: SetBuilder
 
   async function approveRender() {
     if (!currentJob) return;
+    setStage("render");
     setBusy("render");
     setError("");
     try {
@@ -652,29 +675,38 @@ export function SetBuilderWorkspace({ artistId, artistName, tracks }: SetBuilder
 
   return (
     <section className={styles.builder} aria-label="Set Builder">
-      <header className={styles.builderHero}>
-        <div>
-          <span className="section-label">Set Intelligence / plan first</span>
-          <h2>Program the set.<br /><em>Approve the performance.</em></h2>
-          <p>
-            Ensemblis now separates musical planning from rendering. Build a verified route, audition handoffs,
-            lock decisions, compare alternatives and render only the MixPlan you approve.
-          </p>
-        </div>
-        <div className={styles.heroContract}>
-          <span>Contract</span>
-          <strong>Plan → Review → Revise → Render</strong>
-          <small>No edit bypasses the canonical DJ planner or its safety constraints.</small>
-        </div>
-      </header>
+      <WorkflowStepper
+        steps={WORKFLOW_STEPS.map((step) => ({
+          ...step,
+          complete: step.id === "music"
+            ? selectedIds.length >= 2
+            : step.id === "intent"
+              ? Boolean(currentJob)
+              : step.id === "build"
+                ? Boolean(currentPlan)
+                : step.id === "review"
+                  ? Boolean(latestRender)
+                  : latestRender?.status === "completed",
+          disabled: step.id === "intent"
+            ? selectedIds.length < 2 && !currentPlan
+            : step.id === "build"
+              ? !currentJob
+              : step.id === "review" || step.id === "render"
+                ? !currentPlan
+                : false,
+        }))}
+        current={workflowStage}
+        onSelect={setStage}
+      />
 
-      <div className={styles.setupGrid}>
+      {workflowStage === "music" || workflowStage === "intent" ? <div className={styles.setupGrid}>
         <aside className={styles.setupIntro}>
-          <span className="section-label">01 / Brief</span>
-          <h3>Give the engine room to think.</h3>
-          <p>Choose a candidate pool, not a forced playlist. The plan can curate weaker material while preserving your hard choices.</p>
+          <span className="section-label">{workflowStage === "music" ? "1 / Music" : "2 / Intent"}</span>
+          <h3>{workflowStage === "music" ? "Choose the music." : "Shape the set."}</h3>
+          <p>{workflowStage === "music" ? "Select at least two mastered tracks. You can choose a pool and let Ensemblis curate the final route." : "Choose purpose, length and energy. Technical planning stays automatic."}</p>
         </aside>
         <div className={styles.setupBody}>
+          {workflowStage === "intent" ? <>
           <div className={styles.fields}>
             <label className="field"><span>Plan name</span><input value={name} maxLength={120} onChange={(event) => setName(event.target.value)} /></label>
             <label className="field"><span>Purpose</span><select value={purpose} onChange={(event) => { const next = event.target.value as AutoMixPurpose; setPurpose(next); if (next === "journey") setAllowOmissions(false); }}>{PURPOSES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
@@ -693,7 +725,9 @@ export function SetBuilderWorkspace({ artistId, artistName, tracks }: SetBuilder
               </button>
             ))}
           </div>
+          </> : null}
 
+          {workflowStage === "music" ? <>
           <div className={styles.catalogHeader}>
             <div><span className="section-label">Candidate pool</span><strong>{selectedIds.length} / {available.length} mastered tracks</strong></div>
             <div className={styles.inlineActions}>
@@ -713,20 +747,21 @@ export function SetBuilderWorkspace({ artistId, artistName, tracks }: SetBuilder
                 </button>
               );
             })}
-            {!available.length ? <p className={styles.empty}>Add at least two canonical masters to use Set Builder.</p> : null}
+            {!available.length ? <p className={styles.empty}>Add at least two canonical masters to make a mix.</p> : null}
           </div>
+          </> : null}
           <div className={styles.planCta}>
-            <div><strong>Planning is non-destructive.</strong><small>No mix file is rendered until you approve a verified revision.</small></div>
-            <button className="button button-primary" type="button" disabled={busy === "create" || selectedIds.length < 2} onClick={() => void createPlan()}>
-              {busy === "create" ? <FiRefreshCw aria-hidden /> : <FiZap aria-hidden />} Build verified plan
-            </button>
+            {workflowStage === "music" ? <><div><strong>{selectedIds.length >= 2 ? "Music selected." : "Choose at least two tracks."}</strong><small>Nothing is rendered yet.</small></div><button className="button button-primary" type="button" disabled={selectedIds.length < 2} onClick={() => setStage("intent")}>Continue to intent →</button></> : null}
+            {workflowStage === "intent" ? <><button className="button" type="button" onClick={() => setStage("music")}>← Back</button><button className="button button-primary" type="button" disabled={busy === "create" || selectedIds.length < 2} onClick={() => void createPlan()}>{busy === "create" ? <FiRefreshCw aria-hidden /> : <FiZap aria-hidden />} Build my set</button></> : null}
           </div>
         </div>
-      </div>
+      </div> : null}
 
       {error ? <div className={styles.error} role="alert"><FiX aria-hidden /><span>{error}</span></div> : null}
 
-      <div className={styles.workspaceGrid}>
+      {workflowStage === "build" ? <div className={styles.planStage}><div className={styles.blankPlan}><FiRefreshCw className={styles.spin} aria-hidden /><span className="section-label">3 / Build</span><h3>{currentJob?.status === "failed" ? "This set needs attention." : "Ensemblis is building the set."}</h3><p>{currentJob?.error || "Shaping the route, energy arc and transitions. You can leave this page and come back."}</p>{currentJob?.status === "failed" ? <button className="button" type="button" onClick={() => setStage("intent")}>Review intent</button> : null}</div></div> : null}
+
+      {workflowStage === "review" ? <div className={styles.workspaceGrid}>
         <aside className={styles.revisions}>
           <div className={styles.revisionsHeading}>
             <span className="section-label">02 / Revisions</span>
@@ -875,15 +910,15 @@ export function SetBuilderWorkspace({ artistId, artistName, tracks }: SetBuilder
                 </div>
                 <div>
                   <button className="button" type="button" disabled={!canEdit || Boolean(busy)} onClick={() => void generateAlternatives()}>{busy === "alternatives" ? <FiRefreshCw aria-hidden /> : <FiGitBranch aria-hidden />} Compare alternatives</button>
-                  <button className="button button-primary" type="button" disabled={!canEdit || Boolean(busy) || draftDirty || Boolean(activeRender)} onClick={() => void approveRender()}>{busy === "render" || activeRender ? <FiRefreshCw aria-hidden /> : <FiPlay aria-hidden />} Approve & render</button>
+                  <button className="button button-primary" type="button" disabled={!canEdit || Boolean(busy) || draftDirty} onClick={() => setStage("render")}><FiPlay aria-hidden /> Continue to render →</button>
                 </div>
               </section>
             </>
           )}
         </div>
-      </div>
+      </div> : null}
 
-      {comparisonIds.length ? (
+      {workflowStage === "review" && comparisonIds.length ? (
         <section className={styles.comparison}>
           <div className={styles.comparisonHeading}>
             <div><span className="section-label">03 / Alternatives</span><h3>Same brief. Three legal interpretations.</h3></div>
@@ -912,16 +947,17 @@ export function SetBuilderWorkspace({ artistId, artistName, tracks }: SetBuilder
         </section>
       ) : null}
 
-      {latestRender ? (
+      {workflowStage === "render" ? (
         <section className={styles.renderStatus}>
           <div>
-            <span className="section-label">Approved performance</span>
-            <h3>{ACTIVE.has(latestRender.status) ? "Rendering the frozen MixPlan." : latestRender.status === "completed" ? "The approved mix is ready." : "Approved render needs attention."}</h3>
-            <p>{latestRender.error || "The renderer is executing the approved source windows, transitions and automation without replanning."}</p>
+            <span className="section-label">5 / Render</span>
+            <h3>{latestRender ? ACTIVE.has(latestRender.status) ? "Rendering the approved set." : latestRender.status === "completed" ? "Your mix is ready." : "The render needs attention." : "Ready to render."}</h3>
+            <p>{latestRender?.error || (latestRender ? "The renderer is executing the approved route without replanning." : currentPlan ? `${currentTracks.length} tracks · ${formatDuration(currentPlan.estimated_duration_ms)} · this exact verified plan will be rendered.` : "Review the set first.")}</p>
           </div>
           <div className={styles.renderAction}>
-            <strong>{statusLabel(latestRender.status)}</strong>
-            {latestRender.output?.public_url ? <a className="button button-primary" href={latestRender.output.public_url} target="_blank" rel="noreferrer">Open rendered mix</a> : null}
+            <button className="button" type="button" disabled={Boolean(activeRender)} onClick={() => setStage("review")}>← Review set</button>
+            {!latestRender || latestRender.status === "failed" || latestRender.status === "cancelled" ? <button className="button button-primary" type="button" disabled={!canEdit || Boolean(busy) || draftDirty || Boolean(activeRender)} onClick={() => void approveRender()}>{busy === "render" || activeRender ? <FiRefreshCw aria-hidden /> : <FiPlay aria-hidden />} Render mix</button> : <strong>{statusLabel(latestRender.status)}</strong>}
+            {latestRender?.output?.public_url ? <a className="button button-primary" href={latestRender.output.public_url} target="_blank" rel="noreferrer">Open rendered mix</a> : null}
           </div>
         </section>
       ) : null}

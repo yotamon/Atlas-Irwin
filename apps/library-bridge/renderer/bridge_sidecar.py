@@ -3,11 +3,20 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import platform
 import re
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+
+
+def _configure_windows_arm64_numba() -> None:
+    # LLVM's native Windows ARM64 scheduling model can abort Numba JIT compilation on
+    # Snapdragon X systems. Generic AArch64 keeps JIT enabled while avoiding that host-
+    # specific scheduler path. Configure it before importing librosa/Numba transitively.
+    if sys.platform.startswith("win") and platform.machine().strip().lower() in {"arm64", "aarch64"}:
+        os.environ.setdefault("NUMBA_CPU_NAME", "generic")
 
 
 def _configure_packaged_ffmpeg() -> None:
@@ -20,6 +29,7 @@ def _configure_packaged_ffmpeg() -> None:
         os.environ["IMAGEIO_FFMPEG_EXE"] = str(candidate)
 
 
+_configure_windows_arm64_numba()
 _configure_packaged_ffmpeg()
 
 import imageio_ffmpeg  # noqa: E402
