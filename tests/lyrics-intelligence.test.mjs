@@ -263,7 +263,8 @@ test("Marketing, stems, lyrics and master audio share one creative context inste
   assert.ok(marketingAi.includes("enrichMarketingContextWithLyrics"));
   assert.ok(marketingAi.includes("lyricsIntelligence"));
   assert.ok(marketingAi.includes("trackCreativeIntelligence"));
-  assert.ok(marketingAi.includes("marketing-v4-creative-graph"));
+  assert.ok(marketingAi.includes("marketing-v5-bounded-memory"));
+  assert.ok(marketingAi.includes("marketing-control-v3-creative-graph"));
   assert.ok(marketingAi.includes("shared cross-modal timeline"));
   assert.ok(marketingAi.includes("Quote only excerpts explicitly supplied with mayQuote=true"));
 });
