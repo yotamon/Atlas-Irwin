@@ -106,6 +106,10 @@ Every dispatched payload carries `__ensemblis_media_worker_contract_version`. Un
 
 See `docs/catalog-architecture.md`.
 
+### Interaction architecture
+
+`docs/ensemblis-ux-architecture-v4.md` is the canonical artist-facing interaction model. It defines the three primary workspaces, object/action/workflow mental model, Action Launcher, product widgets, progressive disclosure, inspectors and the compatibility-safe migration plan. `docs/ensemblis-ux-v4-route-inventory.md` owns the current route-to-workspace/discoverability classification. New capabilities need a natural intent or contextual discovery path; route existence alone is not sufficient UX discoverability.
+
 ### Design system
 
 `app/studio/design-system/` is the canonical Ensemblis visual/interaction system. Base UI-backed controls in `components/studio/form-controls.tsx` own behavior-heavy select/switch/tooltip interaction. Do not recreate those primitives per feature.
@@ -139,6 +143,8 @@ See `docs/adr/README.md` for decisions that explain why the current boundaries e
 - Multi-artist tenancy: `docs/ensemblis-multi-artist-architecture.md`
 - Catalog/media lineage: `docs/catalog-architecture.md`
 - Product roadmap: `docs/ensemblis-product-roadmap.md`
+- Interaction architecture: `docs/ensemblis-ux-architecture-v4.md`
+- UX route inventory: `docs/ensemblis-ux-v4-route-inventory.md`
 - Design system: `docs/ensemblis-design-system.md`
 - Audio intelligence: `docs/audio-intelligence-v4.md`
 - AI control plane: `docs/ai-control-plane.md`

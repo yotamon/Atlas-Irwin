@@ -1,12 +1,14 @@
 use crate::{
     credentials::{device_credential, store_device_credential},
     db::BridgeDb,
+    entitlements::{self, EntitlementPublicKey},
     execution::{prepare_render_request, public_render_result, resolve_verified_media},
     model::{CloudTrackDelta, DeviceJob, DeviceJobResult, PairResponse, SyncEnvelope},
     sidecar,
 };
 use anyhow::Context;
 use reqwest::blocking::{Client, Response};
+use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{path::Path, time::Duration};
 use url::Url;
@@ -14,11 +16,20 @@ use url::Url;
 const SYNC_TRACKS_PER_CHUNK: usize = 200;
 const SYNC_MAX_BODY_BYTES: usize = 1_750_000;
 const SYNC_MAX_CHUNKS: usize = 1000;
+const ENTITLEMENT_RESPONSE_VERSION: &str = "ensemblis.desktop-entitlement-response.v1";
 
 #[derive(Debug)]
 struct ExecutedJob {
     public: DeviceJobResult,
     local_result: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct EntitlementResponse {
+    version: String,
+    token: String,
+    public_key: EntitlementPublicKey,
 }
 
 fn api_url(base: &str, path: &str) -> anyhow::Result<String> {
@@ -48,6 +59,40 @@ fn require_success(response: Response) -> anyhow::Result<Response> {
 
 fn auth_header() -> anyhow::Result<String> {
     device_credential()?.context("this Library Bridge is not paired")
+}
+
+pub fn refresh_device_entitlement(db: &BridgeDb, allow_initial_trust: bool) -> anyhow::Result<()> {
+    let api_base = db
+        .get_setting("api_base_url")?
+        .context("Bridge API is not configured")?;
+    let device_id = db
+        .get_setting("device_id")?
+        .filter(|value| !value.is_empty())
+        .context("Library Bridge device identity is missing")?;
+    let credential = auth_header()?;
+    let response = require_success(
+        client()?
+            .get(api_url(&api_base, "/api/dj-library/device/entitlement")?)
+            .bearer_auth(credential)
+            .send()?,
+    )?;
+    let issued: EntitlementResponse = response.json()?;
+    if issued.version != ENTITLEMENT_RESPONSE_VERSION {
+        anyhow::bail!("unsupported desktop entitlement response contract");
+    }
+    if entitlements::trust_key_is_pinned(db)? {
+        entitlements::store_refreshed_entitlement(
+            db,
+            &issued.public_key,
+            &issued.token,
+            &device_id,
+        )?;
+    } else if allow_initial_trust {
+        entitlements::store_pairing_entitlement(db, &issued.public_key, &issued.token, &device_id)?;
+    } else {
+        anyhow::bail!("desktop entitlement trust key is not pinned");
+    }
+    Ok(())
 }
 
 pub fn claim_pairing(
@@ -248,7 +293,6 @@ fn public_job_error(error: &anyhow::Error) -> String {
     } else if message.contains("MixPlan") || message.contains("render") {
         "approved local MixPlan validation failed".to_string()
     } else {
-        // Do not forward arbitrary anyhow/IO context because it can contain a filesystem path.
         "local device execution failed".to_string()
     }
 }
@@ -304,12 +348,21 @@ fn execute_render_mixplan(
     sidecar_binary: Option<&Path>,
     work_root: &Path,
 ) -> ExecutedJob {
+    let device_id = db
+        .get_setting("device_id")
+        .ok()
+        .flatten()
+        .filter(|value| !value.is_empty());
+    if !entitlements::has_capability(db, device_id.as_deref(), "local.processing") {
+        return failed(
+            job,
+            "local processing capability is required for rendering".to_string(),
+        );
+    }
     let Some(binary) = sidecar_binary.filter(|path| path.is_file()) else {
         return failed(job, "local audio renderer is unavailable".to_string());
     };
     let operation = (|| -> anyhow::Result<(Value, Value)> {
-        // prepare_render_request resolves every source binding and hashes the actual bytes again
-        // before any DSP begins. Paths enter only the local sidecar request and never the cloud job.
         let request = prepare_render_request(db, &job.payload)?;
         let local = sidecar::render(binary, work_root, &request)?;
         let public = public_render_result(&local)?;
@@ -365,8 +418,6 @@ pub fn poll_and_execute_jobs(
         serde_json::from_value(body.get("jobs").cloned().unwrap_or_else(|| json!([])))?;
     let mut completed = 0;
     for job in jobs {
-        // Device jobs are idempotent by cloud identity. A stale claim after a crash is allowed to
-        // execute again; exact source hashing and MixPlan hashing keep retries deterministic.
         db.remember_job(&job.id, &job.idempotency_key, &job.job_type, &job.payload)?;
         let executed = execute_job(db, &job, sidecar_binary, work_root);
         let local_status = if executed.public.status == "completed" {
@@ -385,12 +436,33 @@ pub fn poll_and_execute_jobs(
 mod tests {
     use super::*;
     use crate::model::{DEVICE_SYNC_VERSION, SourceDelta, SyncEnvelope, TrackMetadata};
+    use tempfile::tempdir;
 
     #[test]
     fn production_transport_rejects_plain_http() {
         assert!(api_url("http://ensemblis.example", "/api/test").is_err());
         assert!(api_url("https://ensemblis.example", "/api/test").is_ok());
         assert!(api_url("http://localhost:3000", "/api/test").is_ok());
+    }
+
+    #[test]
+    fn render_device_job_requires_local_processing_entitlement() {
+        let directory = tempdir().unwrap();
+        let db = BridgeDb::new(directory.path().join("bridge.sqlite3")).unwrap();
+        let job = DeviceJob {
+            version: crate::model::DEVICE_JOB_VERSION.to_string(),
+            id: "job_1".to_string(),
+            idempotency_key: "idem_1".to_string(),
+            job_type: "render_mixplan".to_string(),
+            source_revision: None,
+            payload: json!({}),
+        };
+        let executed = execute_job(&db, &job, None, directory.path());
+        assert_eq!(executed.public.status, "failed");
+        assert_eq!(
+            executed.public.error.as_deref(),
+            Some("local processing capability is required for rendering")
+        );
     }
 
     #[test]
@@ -453,6 +525,11 @@ mod tests {
         };
         let chunks = sync_chunk_bodies(&envelope).unwrap();
         assert!(chunks.len() > 1);
-        assert!(chunks.iter().all(|chunk| serde_json::to_vec(chunk).unwrap().len() <= SYNC_MAX_BODY_BYTES + 4096));
+        assert!(
+            chunks.iter().all(|chunk| serde_json::to_vec(chunk)
+                .unwrap()
+                .len()
+                <= SYNC_MAX_BODY_BYTES + 4096)
+        );
     }
 }

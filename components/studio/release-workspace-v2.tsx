@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { MediaUploader } from "@/components/studio/media-uploader";
 import { ObjectHeader } from "@/components/studio/object-header";
+import { ObjectActionBar, type ObjectAction } from "@/components/studio/ux-v4-widgets";
 import { ReleaseForm } from "@/components/studio/release-form";
 import { ReleaseTracklist } from "@/components/studio/release-tracklist";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
@@ -10,7 +11,6 @@ import type { ContentItem, MetricSnapshot, Release, Track } from "@/types/databa
 import type { VaultTrack } from "@/types/growth-database";
 
 const STAGES = ["overview", "content", "promotion", "distribution", "results"] as const;
-const RELEASE_WORK_SECTIONS = ["Content", "Promotion", "Distribution"] as const;
 type Stage = (typeof STAGES)[number];
 type CampaignSummary = { id:string; name:string; status:string; mode:string; objective:string; primary_kpi:string } | null;
 type PlaybookTask = { id:string; title:string; status:string; priority:string; due_at:string | null };
@@ -60,7 +60,6 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
   const renderTime = new Date(renderedAt);
   const lifecycle = releaseLifecycle({ releaseDate: release.release_date, status: release.status, isArchived: release.is_archived }, renderTime);
   const activeStage = normalizeStage(stage);
-  const releaseWorkActive = activeStage === "content" || activeStage === "promotion" || activeStage === "distribution";
   const now = renderTime.getTime();
   const planned = contentItems.filter((item) => item.scheduled_at && item.status !== "Published" && Date.parse(item.scheduled_at) >= now - 3_600_000).sort((a,b) => Date.parse(a.scheduled_at!) - Date.parse(b.scheduled_at!));
   const scheduled = contentItems.filter((item) => item.status === "Scheduled");
@@ -85,13 +84,23 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
   });
   const missionAttention = [...mission.blockers, ...mission.recommendations];
   const nextMissionItem = missionAttention[0] ?? mission.optional[0] ?? null;
+  const createHref = href(`/studio/create?release=${release.id}`);
+  const releaseActions: ObjectAction[] = [
+    nextMissionItem
+      ? { label: nextMissionItem.title, href: href(nextMissionItem.href), primary: true }
+      : { label: "Create next asset", href: createHref, primary: true },
+    ...(nextMissionItem?.href === `/studio/create?release=${release.id}` ? [] : [{ label: "Create", href: createHref }]),
+    { label: "Promotion", href: href(`/studio/releases/${release.id}?stage=promotion`) },
+  ];
   const streams = total(metrics, "streams");
   const listeners = total(metrics, "listeners");
   const saves = total(metrics, "saves");
   const playlistAdds = total(metrics, "playlist_adds");
   const topTabs = [
     { label: "Overview", href: href(`/studio/releases/${release.id}?stage=overview`), active: activeStage === "overview" },
-    { label: "Release work", href: href(`/studio/releases/${release.id}?stage=promotion`), active: releaseWorkActive },
+    { label: "Creative", href: href(`/studio/releases/${release.id}?stage=content`), active: activeStage === "content" },
+    { label: "Promotion", href: href(`/studio/releases/${release.id}?stage=promotion`), active: activeStage === "promotion" },
+    { label: "Distribution", href: href(`/studio/releases/${release.id}?stage=distribution`), active: activeStage === "distribution" },
     { label: "Results", href: href(`/studio/releases/${release.id}?stage=results`), active: activeStage === "results" },
   ];
 
@@ -104,6 +113,7 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
       subtitle={`${release.release_type} · ${shortDate(release.release_date)}`}
       imageUrl={release.artwork_url}
       imageAlt={release.cover_alt || `${release.title} artwork`}
+      actions={<ObjectActionBar actions={releaseActions} />}
       facts={[
         { label: "Mission", value: mission.label },
         { label: "Needs attention", value: missionAttention.length },
@@ -112,13 +122,6 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
       ]}
       tabs={topTabs}
     />
-
-    {releaseWorkActive ? <nav className="release-work-subnav" aria-label="Release work">
-      {RELEASE_WORK_SECTIONS.map((label) => {
-        const value = label.toLowerCase() as "content" | "promotion" | "distribution";
-        return <Link key={label} href={href(`/studio/releases/${release.id}?stage=${value}`)} aria-current={activeStage === value ? "page" : undefined} className={activeStage === value ? "is-active" : undefined}>{label}</Link>;
-      })}
-    </nav> : null}
 
     {activeStage === "overview" ? <div className="release-mission-overview">
       <ReleaseTracklist releaseId={release.id} artistId={artistId} tracks={tracks} vaultTracks={vaultTracks} />
@@ -149,7 +152,7 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
       <details className="v2-advanced-disclosure release-source-details" id="release-details">
         <summary>Release details</summary>
         <p className="v2-muted-copy">Canonical facts Ensemblis uses across distribution, content and promotion.</p>
-        <ReleaseForm release={release} releaseDateLocked={releaseDateLocked} />
+        <ReleaseForm release={release} releaseDateLocked={releaseDateLocked} artistId={artistId} />
       </details>
 
       <details className="v2-advanced-disclosure release-specialist-tools">
@@ -164,7 +167,7 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
       <div className="v2-create-grid release-deliverable-grid">
         <Link className="v2-create-card" href={href(`/studio/create?release=${release.id}`)}><span className="section-label">Fast social creative</span><h2>Reels, lyric cuts and visual loops</h2><p>Choose the deliverable. Ensemblis picks the strongest musical source.</p><strong>Open Create →</strong></Link>
         <Link className="v2-create-card" href={href(`/studio/video?release=${release.id}`)}><span className="section-label">Longer motion</span><h2>Video Director</h2><p>Build a coherent music-video world when the release needs more than a social cut.</p><strong>Direct video →</strong></Link>
-        <Link className="v2-create-card" href={href(`/studio/production?release=${release.id}`)}><span className="section-label">In progress</span><h2>Production</h2><p>Refine and approve only assets already connected to this release.</p><strong>Open production →</strong></Link>
+        <Link className="v2-create-card" href={href(`/studio/production?release=${release.id}`)}><span className="section-label">In progress</span><h2>Creative assets</h2><p>Refine and approve only assets already connected to this release.</p><strong>Open creative assets →</strong></Link>
       </div>
       <section className="release-content-status">
         <div><strong>{contentItems.length}</strong><span>content items</span></div>
@@ -190,7 +193,7 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
         <article><span>Music distribution</span><strong>DSP delivery</strong><small>Readiness, rights, provenance, stores and delivery status</small><Link href={href(`/studio/releases/${release.id}/distribution`)}>Open delivery →</Link></article>
         <article><span>Listening destination</span><strong>{[release.spotify_url,release.soundcloud_url,release.youtube_url].filter(Boolean).length}/3 linked</strong><small>Spotify, SoundCloud and YouTube</small><Link href={href(`/studio/releases/${release.id}?view=advanced&tab=music`)}>Manage destinations →</Link></article>
         <article><span>Artist web</span><strong>{release.publish_state === "live" ? "Live" : "Not live"}</strong><small>Public catalog and release presence</small><Link href={href(`/studio/releases/${release.id}?view=advanced&tab=website`)}>Website controls →</Link></article>
-        <article><span>Campaign publishing</span><strong>{releaseDateLocked ? `${providerScheduledCount} scheduled` : `${scheduled.length} ready`}</strong><small>{missingAsset.length ? `${missingAsset.length} still need assets` : "No asset blocker detected"}</small><Link href={href(`/studio/production?release=${release.id}`)}>Open production →</Link></article>
+        <article><span>Campaign publishing</span><strong>{releaseDateLocked ? `${providerScheduledCount} scheduled` : `${scheduled.length} ready`}</strong><small>{missingAsset.length ? `${missingAsset.length} still need assets` : "No asset blocker detected"}</small><Link href={href(`/studio/production?release=${release.id}`)}>Open creative assets →</Link></article>
       </div>
     </section> : null}
 

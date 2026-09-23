@@ -1,4 +1,4 @@
-use crate::{db::BridgeDb, scanner};
+use crate::{db::BridgeDb, entitlements, scanner};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -143,6 +143,15 @@ fn ensure_watches(
     }
 }
 
+fn local_processing_enabled(db: &BridgeDb) -> bool {
+    let device_id = db
+        .get_setting("device_id")
+        .ok()
+        .flatten()
+        .filter(|value| !value.is_empty());
+    entitlements::has_capability(db, device_id.as_deref(), "local.processing")
+}
+
 fn scan_with_available_intelligence(
     db: &BridgeDb,
     source: &WatchedSource,
@@ -151,7 +160,7 @@ fn scan_with_available_intelligence(
     let result = match intelligence
         .sidecar_binary
         .as_deref()
-        .filter(|binary| binary.is_file())
+        .filter(|binary| binary.is_file() && local_processing_enabled(db))
     {
         Some(binary) => scanner::scan_source_with_sidecar(
             db,
@@ -177,8 +186,6 @@ fn reconcile(
     intelligence: &LocalIntelligence,
 ) {
     for source in snapshot_sources(sources) {
-        // A missing/unmounted drive is not interpreted as track deletion. The last synchronized
-        // cloud evidence remains intact until the root becomes available and reconciliation succeeds.
         if !source.root_path.is_dir() {
             continue;
         }
@@ -197,7 +204,6 @@ fn spawn_event_reconciler(
         .name("ensemblis-library-watch".to_string())
         .spawn(move || {
             while event_rx.recv().is_ok() {
-                // Coalesce bursts from copies, tag writes and rename sequences before hashing again.
                 while event_rx.recv_timeout(EVENT_DEBOUNCE).is_ok() {}
                 ensure_watches(&watcher, &sources);
                 reconcile(&db, &sources, &intelligence);

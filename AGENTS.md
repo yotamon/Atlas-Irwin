@@ -23,6 +23,8 @@ Common routes:
 - Multi-artist tenancy -> `docs/ensemblis-multi-artist-architecture.md`
 - Catalog / media lineage -> `docs/catalog-architecture.md`
 - Product roadmap -> `docs/ensemblis-product-roadmap.md`
+- Artist-facing UX / interaction architecture -> `docs/ensemblis-ux-architecture-v4.md`
+- Studio route ownership / discoverability -> `docs/ensemblis-ux-v4-route-inventory.md`
 - Design system -> `docs/ensemblis-design-system.md`
 - Audio intelligence -> `docs/audio-intelligence-v4.md`
 - AI control plane -> `docs/ai-control-plane.md`

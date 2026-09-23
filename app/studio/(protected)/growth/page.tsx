@@ -101,26 +101,7 @@ export default async function GrowthPage({ searchParams }: { searchParams: Promi
         {growthTabs.map((tab) => <Link className={tab.active ? "active" : ""} href={tab.href} key={tab.label}>{tab.label}</Link>)}
       </nav>
 
-      {(view === "overview" || view === "opportunities") ? (
-        <details className="v2-advanced-disclosure">
-          <summary>Advanced data controls</summary>
-          <p className="v2-muted-copy">These controls are for an immediate manual refresh, not a routine step in the growth workflow.</p>
-          <div className="actions">
-            {view === "overview" ? <form action={generateGrowthPlan}><button className="button" type="submit">Refresh recommendations now</button></form> : null}
-            {view === "opportunities" ? <form action={refreshGrowthOpportunities}><button className="button" type="submit">Re-scan evidence now</button></form> : null}
-          </div>
-        </details>
-      ) : null}
-
-      {view === "overview" ? <>
-        <section className="growth-polish-north-star" aria-label="Current audience evidence">
-          <div><span className="section-label">Audience evidence</span><strong>{funnel.listeners.toLocaleString()}</strong><small>listeners in the connected performance window</small></div>
-          <div><strong>{funnel.saves.toLocaleString()}</strong><span>saves</span></div>
-          <div><strong>{funnel.follows.toLocaleString()}</strong><span>follows</span></div>
-          <div><strong>{funnel.playlistAdds.toLocaleString()}</strong><span>playlist adds</span></div>
-          <div><strong>{funnel.linkClicks.toLocaleString()}</strong><span>owned-link clicks</span></div>
-        </section>
-
+      {view === "overview" ? <div className="growth-v4-overview">
         <div className="growth-command-grid">
           <article className="v2-section growth-recommendation">
             <div className="v2-section-heading"><div><span className="section-label">Recommended next release</span><h2>{topCandidate ? topCandidate.track.title : "No release candidate needs promotion"}</h2></div></div>
@@ -136,6 +117,14 @@ export default async function GrowthPage({ searchParams }: { searchParams: Promi
             {diagnosis ? <><div className="growth-rate-compare"><div><strong>{percent(diagnosis.actual)}</strong><span>observed</span></div><div><strong>{percent(diagnosis.target)}</strong><span>working benchmark</span></div></div><p>{diagnosis.diagnosis}</p><div className="growth-action-note"><strong>Do next</strong><span>{diagnosis.action}</span></div><Link className="growth-inline-link" href={href("/studio/growth?view=performance")}>Inspect evidence →</Link></> : <div className="v2-calm-state compact"><strong>No clear bottleneck yet.</strong><p>Ensemblis waits for enough performance evidence before recommending a growth action.</p></div>}
           </article>
         </div>
+
+        <section className="growth-polish-north-star" aria-label="Current audience evidence">
+          <div><span className="section-label">Audience evidence</span><strong>{funnel.listeners.toLocaleString()}</strong><small>listeners in the connected performance window</small></div>
+          <div><strong>{funnel.saves.toLocaleString()}</strong><span>saves</span></div>
+          <div><strong>{funnel.follows.toLocaleString()}</strong><span>follows</span></div>
+          <div><strong>{funnel.playlistAdds.toLocaleString()}</strong><span>playlist adds</span></div>
+          <div><strong>{funnel.linkClicks.toLocaleString()}</strong><span>owned-link clicks</span></div>
+        </section>
 
         <section className="v2-section growth-polish-plan-preview">
           <div className="v2-section-heading"><div><span className="section-label">Release system</span><h2>What is already in motion</h2></div><Link href={href("/studio/calendar")}>Open calendar</Link></div>
@@ -160,7 +149,7 @@ export default async function GrowthPage({ searchParams }: { searchParams: Promi
           <summary><strong>Advanced growth tools</strong><span>Planning controls, paid experiments and detailed learning evidence</span></summary>
           <div className="actions"><Link className="button" href={href("/studio/growth/paid")}>Paid experiments</Link><Link className="button" href={href("/studio/learn")}>Learnings</Link><Link className="button" href={href("/studio/campaigns")}>Campaigns</Link><Link className="button" href={href("/studio/calendar")}>Calendar</Link><Link className="button" href={href("/studio/growth?view=portfolio")}>Portfolio diagnostics</Link></div>
         </details>
-      </> : null}
+      </div> : null}
 
       {view === "opportunities" ? <section className="v2-section growth-polish-view-section" id="opportunities">
         <div className="v2-section-heading"><div><span className="section-label">Evidence-backed opportunities</span><h2>What may be worth doing next</h2></div></div>
@@ -173,6 +162,17 @@ export default async function GrowthPage({ searchParams }: { searchParams: Promi
         {diagnosis ? <div className="growth-action-note growth-performance-diagnosis"><strong>Current constraint</strong><span>{diagnosis.diagnosis} {diagnosis.action}</span></div> : null}
         <div className="actions"><Link className="button primary" href={href("/studio/growth/paid")}>Run a bounded paid experiment</Link><Link className="button" href={href("/studio/sites/smart-links")}>Inspect owned attribution</Link></div>
       </section> : null}
+
+      {(view === "overview" || view === "opportunities") ? (
+        <details className="v2-advanced-disclosure">
+          <summary>Advanced data controls</summary>
+          <p className="v2-muted-copy">These controls are for an immediate manual refresh, not a routine step in the growth workflow.</p>
+          <div className="actions">
+            {view === "overview" ? <form action={generateGrowthPlan}><button className="button" type="submit">Refresh recommendations now</button></form> : null}
+            {view === "opportunities" ? <form action={refreshGrowthOpportunities}><button className="button" type="submit">Re-scan evidence now</button></form> : null}
+          </div>
+        </details>
+      ) : null}
 
       {view === "portfolio" ? <>
         <section className="v2-section growth-polish-view-section" id="portfolio-diagnostics">

@@ -7,10 +7,19 @@ import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 
 type Command = {
   label: string;
-  group: "Go to" | "Create" | "Tools";
+  group: "Do" | "Go to" | "Create" | "Tools";
   keywords: string;
+  description: string;
   href: string;
 };
+
+const INTENT_STOP_WORDS = new Set(["i", "me", "my", "want", "to", "a", "an", "the", "please", "can", "you", "help", "with"]);
+
+function commandMatches(command: Command, query: string) {
+  const haystack = `${command.label} ${command.group} ${command.keywords} ${command.description}`.toLowerCase();
+  const tokens = query.toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length > 1 && !INTENT_STOP_WORDS.has(token));
+  return tokens.length ? tokens.every((token) => haystack.includes(token)) : haystack.includes(query.toLowerCase());
+}
 
 type ObjectSearchResult = {
   id: string;
@@ -20,8 +29,16 @@ type ObjectSearchResult = {
   href: string;
 };
 
-export function CommandPalette({ artistId }: { artistId: string }) {
+export function CommandPalette({
+  artistId,
+  variant = "compact",
+}: {
+  artistId: string;
+  variant?: "compact" | "launcher" | "mobile";
+}) {
   const [open, setOpen] = useState(false);
+  const launcher = variant === "launcher";
+  const mobile = variant === "mobile";
   const [query, setQuery] = useState("");
   const [objectResults, setObjectResults] = useState<ObjectSearchResult[]>([]);
   const [searchingObjects, setSearchingObjects] = useState(false);
@@ -31,27 +48,35 @@ export function CommandPalette({ artistId }: { artistId: string }) {
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const resultsRef = useRef<HTMLDivElement | null>(null);
   const commands = useMemo<Command[]>(() => [
-    { label: "Today", group: "Go to", keywords: "home next action needs you working", href: ensemblisArtistHref("/studio", artistId) },
-    { label: "Music", group: "Go to", keywords: "tracks vault intelligence stems lyrics", href: ensemblisArtistHref("/studio/music", artistId) },
-    { label: "Releases", group: "Go to", keywords: "catalog upcoming live release", href: ensemblisArtistHref("/studio/releases", artistId) },
-    { label: "Grow", group: "Go to", keywords: "growth performance opportunities campaigns audience", href: ensemblisArtistHref("/studio/growth", artistId) },
-    { label: "Library", group: "Go to", keywords: "media assets images video audio", href: ensemblisArtistHref("/studio/library", artistId) },
-    { label: "Sites", group: "Go to", keywords: "website domains pages", href: ensemblisArtistHref("/studio/sites", artistId) },
-    { label: "Create", group: "Create", keywords: "creative content generate", href: ensemblisArtistHref("/studio/create", artistId) },
-    { label: "New release", group: "Create", keywords: "release create add", href: ensemblisArtistHref("/studio/releases/new", artistId) },
-    { label: "Generate music", group: "Create", keywords: "music lab ai track draft", href: ensemblisArtistHref("/studio/music?view=generate", artistId) },
-    { label: "Video Director", group: "Create", keywords: "video music video motion", href: ensemblisArtistHref("/studio/video", artistId) },
-    { label: "Campaigns", group: "Tools", keywords: "campaign marketing content growth", href: ensemblisArtistHref("/studio/campaigns", artistId) },
-    { label: "Audience", group: "Tools", keywords: "comments messages replies community growth", href: ensemblisArtistHref("/studio/audience", artistId) },
-    { label: "Distribution", group: "Tools", keywords: "dsp delivery stores releases", href: ensemblisArtistHref("/studio/distribution", artistId) },
-    { label: "Connections", group: "Tools", keywords: "spotify instagram tiktok youtube accounts settings", href: ensemblisArtistHref("/studio/connections", artistId) },
-    { label: "Settings", group: "Tools", keywords: "preferences ai brand", href: ensemblisArtistHref("/studio/settings", artistId) },
+    { label: "Make a DJ mix", group: "Do", keywords: "automix auto mix dj set mix tracks rekordbox local library", description: "Choose music, shape the set, review transitions and render.", href: ensemblisArtistHref("/studio/music/automix", artistId) },
+    { label: "Add music", group: "Do", keywords: "upload import master track song audio", description: "Bring a mastered track or release into Music.", href: ensemblisArtistHref("/studio/music?view=add", artistId) },
+    { label: "Connect my music library", group: "Do", keywords: "computer desktop rekordbox local folder library bridge pair", description: "Pair this computer and use local music without uploading it.", href: ensemblisArtistHref("/studio/connect-library-bridge", artistId) },
+    { label: "Prepare a release", group: "Do", keywords: "new release distribute distribution release mission", description: "Start a release and keep its music, creative and distribution together.", href: ensemblisArtistHref("/studio/releases/new", artistId) },
+    { label: "Create from my music", group: "Do", keywords: "create content asset video artwork social moment", description: "Start from the strongest musical source and choose an outcome.", href: ensemblisArtistHref("/studio/create", artistId) },
+    { label: "Today", group: "Go to", keywords: "home next action needs you working", description: "Start, continue or decide.", href: ensemblisArtistHref("/studio", artistId) },
+    { label: "Music", group: "Go to", keywords: "tracks releases mixes vault intelligence stems lyrics", description: "Tracks, releases and mixes.", href: ensemblisArtistHref("/studio/music", artistId) },
+    { label: "Releases", group: "Go to", keywords: "catalog upcoming live release", description: "Open release Missions.", href: ensemblisArtistHref("/studio/releases", artistId) },
+    { label: "Grow", group: "Go to", keywords: "growth performance opportunities campaigns audience", description: "Opportunities, audience and performance.", href: ensemblisArtistHref("/studio/growth", artistId) },
+    { label: "Library", group: "Go to", keywords: "media assets images video audio", description: "Reusable media assets.", href: ensemblisArtistHref("/studio/library", artistId) },
+    { label: "Sites", group: "Go to", keywords: "website domains pages smart links", description: "Owned artist destinations.", href: ensemblisArtistHref("/studio/sites", artistId) },
+    { label: "Create", group: "Create", keywords: "creative content generate", description: "Choose a deliverable from musical context.", href: ensemblisArtistHref("/studio/create", artistId) },
+    { label: "New release", group: "Create", keywords: "release create add", description: "Create a new release Mission.", href: ensemblisArtistHref("/studio/releases/new", artistId) },
+    { label: "Generate music", group: "Create", keywords: "music lab ai track draft", description: "Create a music draft when the artist allows AI music.", href: ensemblisArtistHref("/studio/music?view=generate", artistId) },
+    { label: "Video Director", group: "Create", keywords: "video music video motion", description: "Direct a longer-form music video.", href: ensemblisArtistHref("/studio/video", artistId) },
+    { label: "Campaigns", group: "Tools", keywords: "campaign marketing content growth", description: "Inspect specialist campaign work.", href: ensemblisArtistHref("/studio/campaigns", artistId) },
+    { label: "Audience", group: "Tools", keywords: "comments messages replies community growth", description: "Inspect audience relationships.", href: ensemblisArtistHref("/studio/audience", artistId) },
+    { label: "Distribution", group: "Tools", keywords: "dsp delivery stores releases", description: "Inspect distribution operations.", href: ensemblisArtistHref("/studio/distribution", artistId) },
+    { label: "Connections", group: "Tools", keywords: "spotify instagram tiktok youtube accounts settings", description: "Manage connected services.", href: ensemblisArtistHref("/studio/connections", artistId) },
+    { label: "Settings", group: "Tools", keywords: "preferences ai brand", description: "Artist and workspace preferences.", href: ensemblisArtistHref("/studio/settings", artistId) },
   ], [artistId]);
 
   const normalized = query.trim().toLowerCase();
   const filtered = normalized
-    ? commands.filter((command) => `${command.label} ${command.group} ${command.keywords}`.toLowerCase().includes(normalized))
+    ? commands.filter((command) => commandMatches(command, normalized))
     : commands;
+  const visibleGroups: ReadonlyArray<Command["group"]> = !normalized && (launcher || mobile)
+    ? ["Do"]
+    : ["Do", "Go to", "Create", "Tools"];
 
   const close = useCallback(() => {
     setOpen(false);
@@ -163,14 +188,31 @@ export function CommandPalette({ artistId }: { artistId: string }) {
       <button
         ref={triggerRef}
         type="button"
-        className="ensemblis-command-trigger"
-        aria-label="Search Ensemblis. Command or Control K"
+        className={launcher ? "ensemblis-action-launcher-trigger" : mobile ? "ensemblis-command-mobile-trigger" : "ensemblis-command-trigger"}
+        aria-label={launcher ? "Tell Ensemblis what you want to do" : "Search Ensemblis. Command or Control K"}
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={openPalette}
       >
-        <span>Search</span>
-        <kbd>⌘/Ctrl K</kbd>
+        {launcher ? (
+          <>
+            <span className="ensemblis-action-launcher-copy">
+              <small>What do you want to do?</small>
+              <strong>Search or tell Ensemblis what you need…</strong>
+            </span>
+            <kbd>⌘/Ctrl K</kbd>
+          </>
+        ) : mobile ? (
+          <>
+            <span className="ensemblis-mobile-search-icon" aria-hidden>⌕</span>
+            <span>Search</span>
+          </>
+        ) : (
+          <>
+            <span>Search</span>
+            <kbd>⌘/Ctrl K</kbd>
+          </>
+        )}
       </button>
 
       <BaseDialog.Root
@@ -187,7 +229,7 @@ export function CommandPalette({ artistId }: { artistId: string }) {
               initialFocus={inputRef}
               finalFocus={triggerRef}
             >
-              <BaseDialog.Title className="sr-only">Search Ensemblis</BaseDialog.Title>
+              <BaseDialog.Title className="sr-only">What do you want to do in Ensemblis?</BaseDialog.Title>
               <div className="ensemblis-command-search">
                 <input
                   ref={inputRef}
@@ -202,7 +244,7 @@ export function CommandPalette({ artistId }: { artistId: string }) {
                       focusResult("last");
                     }
                   }}
-                  placeholder="Search tracks, releases, campaigns, content or actions…"
+                  placeholder="Try “make a DJ mix”, “add music”, or search for a track…"
                   aria-label="Search commands and artist objects"
                   aria-controls="ensemblis-command-results"
                 />
@@ -231,7 +273,7 @@ export function CommandPalette({ artistId }: { artistId: string }) {
                     ))}
                   </div>
                 ) : null}
-                {(["Go to", "Create", "Tools"] as const).map((group) => {
+                {visibleGroups.map((group) => {
                   const groupCommands = filtered.filter((command) => command.group === group);
                   if (!groupCommands.length) return null;
                   return (
@@ -240,7 +282,7 @@ export function CommandPalette({ artistId }: { artistId: string }) {
                       {groupCommands.map((command) => (
                         <Link data-command-result href={command.href} key={`${group}-${command.label}`} onClick={close} onKeyDown={onResultKeyDown}>
                           <strong>{command.label}</strong>
-                          <small>{command.keywords.split(" ").slice(0, 3).join(" · ")}</small>
+                          <small>{command.description}</small>
                           <b aria-hidden>↵</b>
                         </Link>
                       ))}

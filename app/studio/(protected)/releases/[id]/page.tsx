@@ -100,6 +100,7 @@ export default async function ReleaseDetail({
     {tab === "campaign" ? <ReleaseCampaignBridge campaign={snapshot.campaign} /> : null}
     <ReleaseCockpit
       release={snapshot.release}
+      artistId={artist.artistId}
       tracks={snapshot.tracks}
       placement={snapshot.placement}
       mediaLinks={snapshot.mediaLinks}

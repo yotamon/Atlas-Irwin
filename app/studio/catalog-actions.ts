@@ -2,10 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { z } from "zod";
 import { requireStudioAdmin } from "@/lib/auth/studio";
-import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
+import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { revalidatePublicCatalog } from "@/lib/studio/catalog";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
+import { linkSoundCloudTrack, suggestTrackMatches } from "@/lib/studio/reconciliation";
 import * as actions from "./catalog-actions-internal";
 
 function formValue(form: FormData, key: string) {
@@ -14,7 +16,8 @@ function formValue(form: FormData, key: string) {
 
 async function assertActiveArtistTargets(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
-  const artist = await resolveDefaultArtistContext(supabase, user);
+  const requestedArtistId = formValue(form, "artist_id") || undefined;
+  const artist = await resolveActiveArtistContext(supabase, user, requestedArtistId);
   const db = asArtistScopedMusicClient(supabase);
 
   const releaseIds = new Set(
@@ -33,6 +36,7 @@ async function assertActiveArtistTargets(form: FormData) {
       .from("releases")
       .select("id")
       .eq("id", releaseId)
+      .eq("owner_id", user.id)
       .eq("artist_id", artist.artistId)
       .maybeSingle();
     if (error) throw new Error(error.message);
@@ -44,6 +48,7 @@ async function assertActiveArtistTargets(form: FormData) {
       .from("tracks")
       .select("id,release_id")
       .eq("id", trackId)
+      .eq("owner_id", user.id)
       .eq("artist_id", artist.artistId)
       .maybeSingle();
     if (error) throw new Error(error.message);
@@ -62,24 +67,12 @@ async function guarded<T>(form: FormData, action: (form: FormData) => Promise<T>
   return action(form);
 }
 
-/**
- * Treat release-readiness failures as expected validation, not runtime errors.
- *
- * The canonical publish action deliberately enforces readiness and throws when
- * blockers remain. When invoked from a Server Action form that expected error
- * would otherwise trip the Studio error boundary. Intercept only that known
- * validation case and send the editor back to the readiness panel. Unexpected
- * failures still propagate normally so they remain observable in Vercel.
- */
 export async function publishRelease(form: FormData) {
   await assertActiveArtistTargets(form);
   try {
     return await actions.publishRelease(form);
   } catch (error) {
-    if (
-      error instanceof Error &&
-      error.message.startsWith("Release is not ready to publish:")
-    ) {
+    if (error instanceof Error && error.message.startsWith("Release is not ready to publish:")) {
       const releaseId = String(form.get("release_id") ?? "").trim();
       const destination = releaseId
         ? `/studio/releases/${encodeURIComponent(releaseId)}?tab=overview&publish=blocked#readiness`
@@ -163,7 +156,13 @@ export async function setActiveRelease(form: FormData) {
 }
 
 export async function linkExternalSoundCloudTrack(form: FormData) {
-  return guarded(form, actions.linkExternalSoundCloudTrack);
+  const { supabase, user, artist } = await assertActiveArtistTargets(form);
+  const externalId = z.uuid().parse(formValue(form, "external_id"));
+  const trackId = z.uuid().parse(formValue(form, "track_id"));
+  await linkSoundCloudTrack(supabase, user.id, artist.artistId, externalId, trackId);
+  revalidatePath("/studio/soundcloud");
+  revalidatePath("/studio");
+  redirect("/studio/soundcloud?linked=1");
 }
 
 export async function dismissSoundCloudTrack(form: FormData) {
@@ -175,15 +174,146 @@ export async function dismissSpotifyTrack(form: FormData) {
 }
 
 export async function linkExternalSpotifyTrack(form: FormData) {
-  return guarded(form, actions.linkExternalSpotifyTrack);
+  const { supabase, user, artist, db } = await assertActiveArtistTargets(form);
+  const externalId = z.uuid().parse(formValue(form, "external_id"));
+  const trackId = z.uuid().parse(formValue(form, "track_id"));
+
+  const [{ data: external, error: externalError }, { data: track, error: trackError }] = await Promise.all([
+    supabase
+      .from("spotify_tracks")
+      .select("*")
+      .eq("id", externalId)
+      .eq("owner_id", user.id)
+      .single(),
+    db
+      .from("tracks")
+      .select("id,release_id")
+      .eq("id", trackId)
+      .eq("owner_id", user.id)
+      .eq("artist_id", artist.artistId)
+      .single(),
+  ]);
+  if (externalError || !external) throw new Error(externalError?.message || "Spotify track not found.");
+  if (trackError || !track) throw new Error(trackError?.message || "Catalog track not found for the active artist.");
+
+  const { error: updateError } = await db
+    .from("tracks")
+    .update({ spotify_url: external.spotify_url })
+    .eq("id", trackId)
+    .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId);
+  if (updateError) throw new Error(updateError.message);
+
+  const { error: idError } = await db.from("track_external_ids").upsert({
+    owner_id: user.id,
+    artist_id: artist.artistId,
+    track_id: trackId,
+    provider: "spotify",
+    external_id: external.spotify_id,
+    external_url: external.spotify_url,
+    raw_metadata: external.raw_track,
+    synced_at: new Date().toISOString(),
+  }, { onConflict: "track_id,provider" });
+  if (idError) throw new Error(idError.message);
+
+  if (external.isrc) {
+    const { error: isrcError } = await db.from("track_external_ids").upsert({
+      owner_id: user.id,
+      artist_id: artist.artistId,
+      track_id: trackId,
+      provider: "isrc",
+      external_id: external.isrc,
+      external_url: null,
+      raw_metadata: {},
+      synced_at: new Date().toISOString(),
+    }, { onConflict: "track_id,provider" });
+    if (isrcError) throw new Error(isrcError.message);
+  }
+
+  const { error: reconcileError } = await supabase
+    .from("spotify_tracks")
+    .update({
+      linked_track_id: trackId,
+      linked_release_id: track.release_id,
+      reconcile_status: "linked",
+      reconciled_at: new Date().toISOString(),
+    })
+    .eq("id", externalId)
+    .eq("owner_id", user.id);
+  if (reconcileError) throw new Error(reconcileError.message);
+
+  revalidatePath("/studio/spotify");
+  revalidatePath("/studio/data-health");
+  revalidatePath(`/studio/releases/${track.release_id}`);
 }
 
 export async function createTrackFromSpotify(form: FormData) {
-  return guarded(form, actions.createTrackFromSpotify);
+  const { supabase, user, artist, db } = await assertActiveArtistTargets(form);
+  const externalId = z.uuid().parse(formValue(form, "external_id"));
+  const releaseId = z.uuid().parse(formValue(form, "release_id"));
+  const { data: external, error } = await supabase
+    .from("spotify_tracks")
+    .select("*")
+    .eq("id", externalId)
+    .eq("owner_id", user.id)
+    .single();
+  if (error || !external) throw new Error(error?.message || "Spotify track not found.");
+
+  const { data: track, error: insertError } = await db
+    .from("tracks")
+    .insert({
+      owner_id: user.id,
+      artist_id: artist.artistId,
+      release_id: releaseId,
+      title: external.name,
+      duration: Math.round(external.duration_ms / 1000),
+      spotify_url: external.spotify_url,
+      display_order: z.coerce.number().int().nonnegative().parse(formValue(form, "display_order") || "0"),
+      is_primary: false,
+      notes: `Linked from Spotify ${external.spotify_id}`,
+    })
+    .select("id")
+    .single();
+  if (insertError) throw new Error(insertError.message);
+
+  const linked = new FormData();
+  linked.set("artist_id", artist.artistId);
+  linked.set("external_id", externalId);
+  linked.set("track_id", track.id);
+  await linkExternalSpotifyTrack(linked);
 }
 
 export async function createTrackFromSoundCloud(form: FormData) {
-  return guarded(form, actions.createTrackFromSoundCloud);
+  const { supabase, user, artist, db } = await assertActiveArtistTargets(form);
+  const externalId = z.uuid().parse(formValue(form, "external_id"));
+  const releaseId = z.uuid().parse(formValue(form, "release_id"));
+  const { data: external, error } = await supabase
+    .from("soundcloud_tracks")
+    .select("*")
+    .eq("id", externalId)
+    .eq("owner_id", user.id)
+    .single();
+  if (error || !external) throw new Error(error?.message || "SoundCloud track not found.");
+
+  const { data: track, error: insertError } = await db
+    .from("tracks")
+    .insert({
+      owner_id: user.id,
+      artist_id: artist.artistId,
+      release_id: releaseId,
+      title: external.title,
+      duration: external.duration ? Math.round(external.duration / 1000) : null,
+      soundcloud_url: external.permalink_url,
+      is_primary: false,
+      notes: `Linked from SoundCloud ${external.soundcloud_id}`,
+    })
+    .select("id")
+    .single();
+  if (insertError) throw new Error(insertError.message);
+
+  await linkSoundCloudTrack(supabase, user.id, artist.artistId, externalId, track.id);
+  revalidatePath("/studio/soundcloud");
+  redirect(`/studio/releases/${releaseId}?tab=tracks`);
 }
 
 export async function moveTrack(form: FormData) {
@@ -191,7 +321,19 @@ export async function moveTrack(form: FormData) {
 }
 
 export async function getSoundCloudMatchSuggestions(form: FormData) {
-  return guarded(form, actions.getSoundCloudMatchSuggestions);
+  const { supabase, user, artist } = await assertActiveArtistTargets(form);
+  const id = z.uuid().parse(formValue(form, "id"));
+  const { data: external, error } = await supabase
+    .from("soundcloud_tracks")
+    .select("*")
+    .eq("id", id)
+    .eq("owner_id", user.id)
+    .single();
+  if (error || !external) throw new Error(error?.message || "SoundCloud track not found.");
+  return suggestTrackMatches(supabase, user.id, artist.artistId, {
+    title: external.title,
+    durationSeconds: external.duration ? Math.round(external.duration / 1000) : null,
+  });
 }
 
 export async function uploadReleaseMedia(form: FormData) {

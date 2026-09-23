@@ -54,10 +54,11 @@ test("local DSP analyzes a verified immutable snapshot instead of mutable source
   assert.equal(analyzer.includes("_standardize(source, wav)"), false);
 });
 
-test("portable project boundary is directory-based, strict, durable and path-free", async () => {
-  const [project, database, html, js] = await Promise.all([
+test("portable project boundary stays native, durable and path-free without leaking into setup UX", async () => {
+  const [project, database, native, html, js] = await Promise.all([
     source("apps/library-bridge/src-tauri/src/project.rs"),
     source("apps/library-bridge/src-tauri/src/db.rs"),
+    source("apps/library-bridge/src-tauri/src/lib.rs"),
     source("apps/library-bridge/ui/index.html"),
     source("apps/library-bridge/ui/app.js"),
   ]);
@@ -72,19 +73,81 @@ test("portable project boundary is directory-based, strict, durable and path-fre
   assert.equal(project.includes("pub fn bind_recording("), false);
   assert.ok(database.includes("project_recording_bindings"));
   assert.ok(database.includes("package_path text not null unique"));
-  assert.ok(html.includes(".ensemble lives with you"));
-  assert.ok(js.includes('invoke("create_local_project"'));
-  assert.ok(js.includes('invoke("open_local_project"'));
-  assert.ok(js.includes('invoke("choose_and_prepare_project_recording"'));
-  assert.ok(js.includes('invoke("save_local_project_mutation"'));
-  assert.ok(js.includes("platformCore.createProjectMutation"));
-  assert.ok(js.includes("platformCore.applyProjectMutation"));
-  assert.ok(js.includes('operation: "recording.add"'));
-  assert.ok(js.includes("entityId: recording.id"));
-  assert.equal(js.includes('invoke("save_local_project"'), false);
-  assert.equal(js.includes('invoke("choose_and_bind_project_recording"'), false);
+  for (const command of [
+    "create_local_project",
+    "open_local_project",
+    "choose_and_prepare_project_recording",
+    "save_local_project_mutation",
+  ]) {
+    assert.ok(native.includes(command), `native project capability must preserve ${command}`);
+    assert.equal(js.includes(`invoke(\"${command}\"`), false, `${command} must not leak into setup UI`);
+  }
+  assert.equal(html.includes(".ensemble lives with you"), false);
+  assert.ok(html.includes("Connect this computer as your Local Engine"));
+  assert.ok(html.includes("Choose music folder"));
+  assert.ok(html.includes("This computer is ready for local audio processing"));
   assert.equal(js.includes("packagePath"), false);
   assert.equal(js.includes("filePath"), false);
+});
+
+test("browser pairing is loopback-only, state-bound and hides one-time codes from normal UX", async () => {
+  const [pairing, returnPath, connectPage, connectUi, appJs, cargo] = await Promise.all([
+    source("apps/library-bridge/src-tauri/src/browser_pairing.rs"),
+    source("lib/auth/studio-return-path.ts"),
+    source("app/studio/connect-library-bridge/page.tsx"),
+    source("components/studio/library-bridge-connect.tsx"),
+    source("apps/library-bridge/ui/app.js"),
+    source("apps/library-bridge/src-tauri/Cargo.toml"),
+  ]);
+
+  assert.ok(pairing.includes('TcpListener::bind("127.0.0.1:0")'));
+  assert.ok(pairing.includes('append_pair("state", state)'));
+  assert.ok(pairing.includes('url.path() != "/callback"'));
+  assert.ok(pairing.includes("state.as_deref() != Some(expected_state)"));
+  assert.ok(returnPath.includes('callback.hostname !== "127.0.0.1"'));
+  assert.ok(returnPath.includes('callback.protocol !== "http:"'));
+  assert.ok(returnPath.includes('callback.pathname !== "/callback"'));
+  assert.ok(returnPath.includes("BRIDGE_STATE_RE"));
+  assert.ok(connectPage.includes("studioReturnPath(requested)"));
+  assert.ok(connectUi.includes('action: "create_pairing"'));
+  assert.ok(connectUi.includes("callbackWith(callbackUrl, state, { code })"));
+  assert.equal(connectUi.includes("navigator.clipboard"), false);
+  assert.ok(appJs.includes('invoke("begin_browser_pairing"'));
+  assert.ok(cargo.includes('tauri-plugin-opener = "2"'));
+});
+
+test("desktop agent automates maintenance while preserving signed licensing and advanced controls", async () => {
+  const [native, html, js, cargo] = await Promise.all([
+    source("apps/library-bridge/src-tauri/src/lib.rs"),
+    source("apps/library-bridge/ui/index.html"),
+    source("apps/library-bridge/ui/app.js"),
+    source("apps/library-bridge/src-tauri/Cargo.toml"),
+  ]);
+
+  assert.ok(native.includes("start_background_maintenance"));
+  assert.ok(native.includes("BACKGROUND_MAINTENANCE_INTERVAL"));
+  assert.ok(native.includes("sync_pending_blocking"));
+  assert.ok(native.includes("poll_and_execute_jobs"));
+  assert.ok(native.includes("TrayIconBuilder"));
+  assert.ok(native.includes("prevent_close"));
+  assert.ok(native.includes("autostart_status"));
+  assert.ok(native.includes("set_autostart"));
+  assert.ok(native.includes("refresh_device_entitlement(&db, true)"));
+  assert.ok(native.includes("clear_trust(&state.db)"));
+  assert.ok(cargo.includes('tauri-plugin-autostart = "2"'));
+  assert.ok(cargo.includes('features = ["tray-icon"]'));
+  assert.ok(html.includes("Advanced connection options"));
+  assert.ok(html.includes("Start Ensemblis with your computer"));
+  assert.ok(html.includes("Execution preferences"));
+  assert.ok(html.includes("Optional local models"));
+  assert.ok(js.includes('invoke("sync_pending"'));
+  assert.ok(js.includes('invoke("poll_device_jobs"'));
+  assert.ok(js.includes('invoke("refresh_desktop_entitlement"'));
+  assert.ok(js.includes('invoke("set_execution_policy"'));
+  assert.ok(js.includes('invoke("refresh_model_catalog"'));
+  assert.equal(html.includes("Check device jobs"), false);
+  assert.equal(html.includes("Pending sync"), false);
+  assert.equal(html.includes("Local intelligence"), false);
 });
 
 test("analysis payload schema is strict and versioned", async () => {
@@ -99,7 +162,8 @@ test("analysis payload schema is strict and versioned", async () => {
 });
 
 test("release validation includes fully native Windows ARM64 audio runtime", async () => {
-  const [workflow, sidecarBuilder, ffmpegBuilder, sidecar, armRequirements, armVerifier] = await Promise.all([
+  const [workflow, prWorkflow, sidecarBuilder, ffmpegBuilder, sidecar, armRequirements, armVerifier] = await Promise.all([
+    source(".github/workflows/library-bridge-release.yml"),
     source(".github/workflows/library-bridge-ci.yml"),
     source("apps/library-bridge/renderer/build_sidecar.py"),
     source("apps/library-bridge/renderer/prepare_native_ffmpeg.py"),
@@ -108,6 +172,8 @@ test("release validation includes fully native Windows ARM64 audio runtime", asy
     source("apps/library-bridge/renderer/verify_windows_arm64_python.py"),
   ]);
 
+  assert.ok(workflow.includes("workflow_dispatch:"));
+  assert.ok(workflow.includes('"library-bridge-v*"'));
   assert.ok(workflow.includes("runs-on: windows-11-arm"));
   assert.ok(workflow.includes('python-version: "3.14"'));
   assert.ok(workflow.includes("architecture: arm64"));
@@ -124,6 +190,7 @@ test("release validation includes fully native Windows ARM64 audio runtime", asy
   assert.ok(workflow.includes("Verify Windows ARM64 application executable"));
   assert.ok(workflow.includes("--verify-binary apps/library-bridge/src-tauri/target/aarch64-pc-windows-msvc/release/ensemblis-library-bridge.exe"));
   assert.ok(workflow.includes("target/aarch64-pc-windows-msvc/release/bundle/**"));
+  assert.equal(prWorkflow.includes("windows-11-arm"), false, "normal PR CI must not package Windows ARM64 release bundles");
 
   for (const pin of [
     "PyInstaller==6.22.2",

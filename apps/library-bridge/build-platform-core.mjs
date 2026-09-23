@@ -14,6 +14,11 @@ const modules = [
   ["./recordings", "lib/platform/recordings.ts"],
   ["./projects", "lib/platform/projects.ts"],
   ["./sync", "lib/platform/sync.ts"],
+  ["./runtime", "lib/platform/runtime.ts"],
+  ["./entitlements", "lib/platform/entitlements.ts"],
+  ["./processors", "lib/platform/processors.ts"],
+  ["./tasks", "lib/platform/tasks.ts"],
+  ["./compute-router", "lib/platform/compute-router.ts"],
 ];
 
 function compile(relativePath) {
@@ -43,7 +48,7 @@ function compile(relativePath) {
 }
 
 const output = [
-  "// GENERATED FILE. Source of truth: lib/platform/{recordings,projects,sync}.ts",
+  "// GENERATED FILE. Source of truth: lib/platform/*.ts modules listed by build-platform-core.mjs",
   "// Regenerate with: node apps/library-bridge/build-platform-core.mjs",
   "(() => {",
   "  'use strict';",
@@ -73,12 +78,22 @@ for (const [id, relativePath] of modules) {
 output.push(
   "  const projects = modules['./projects'];",
   "  const sync = modules['./sync'];",
+  "  const runtime = modules['./runtime'];",
+  "  const entitlements = modules['./entitlements'];",
+  "  const processors = modules['./processors'];",
+  "  const tasks = modules['./tasks'];",
+  "  const router = modules['./compute-router'];",
   "  window.EnsemblisPlatformCore = Object.freeze({",
   "    createProjectManifest: projects.createProjectManifest,",
   "    parsePortableProjectManifest: projects.parsePortableProjectManifest,",
   "    createProjectMutation: sync.createProjectMutation,",
   "    applyProjectMutation: sync.applyProjectMutation,",
   "    projectMutationTarget: sync.projectMutationTarget,",
+  "    DEFAULT_EXECUTION_POLICY: runtime.DEFAULT_EXECUTION_POLICY,",
+  "    effectiveSignedCapabilities: entitlements.effectiveSignedCapabilities,",
+  "    processorDescriptor: processors.processorDescriptor,",
+  "    createRuntimeTask: tasks.createRuntimeTask,",
+  "    routeProcessor: router.routeProcessor,",
   "  });",
   "})();",
   "",
