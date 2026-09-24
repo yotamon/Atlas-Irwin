@@ -320,7 +320,7 @@ export default async function ProductionPage({
 
               {latestGeneration?.status === "running" ? (
                 <div className="form-actions">
-                  <span>Generation is in progress at {activeProvider?.label || latestGeneration.provider}. Completed assets are imported into Media Library with full cost and visual lineage.</span>
+                  <span>Generation is in progress at {activeProvider?.label || latestGeneration.provider}. Completed assets are saved to Library with full cost and visual lineage.</span>
                   {latestGeneration.provider_request_id ? (
                     <form action={refreshCreativeGeneration}>
                       <input type="hidden" name="artist_id" value={artist.artistId} />
@@ -343,7 +343,7 @@ export default async function ProductionPage({
                   <div className="media-card-body">
                     <span className="section-label">AI creative review</span>
                     <h3>{editing.approval_status === "approved" ? "Approved creative" : editing.approval_status === "rejected" ? "Rejected creative" : "Review before publishing"}</h3>
-                    <p>This asset is stored in the Media Library with its release artwork, artist-specific references, provider, model, cost and generation lineage.</p>
+                    <p>This asset is stored in Library with its release artwork, artist-specific references, provider, model, cost and generation lineage.</p>
                     {editing.approval_status === "pending" ? (
                       <div className="form-actions">
                         <form action={approveGeneratedCreative}><input type="hidden" name="artist_id" value={artist.artistId} /><input type="hidden" name="content_item_id" value={editing.id} /><button className="button primary" type="submit">Approve creative</button></form>
