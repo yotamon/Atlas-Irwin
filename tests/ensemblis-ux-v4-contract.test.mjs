@@ -118,6 +118,28 @@ test("compatibility routes do not recreate competing Studio mental models", asyn
   assert.ok(content.includes('href="/studio/create">Back to Create'));
 });
 
+test("artist-facing Studio does not expose retired product names", async () => {
+  const surfaces = await Promise.all([
+    source("app/studio/(protected)/tasks/page.tsx"),
+    source("app/studio/(protected)/media/page.tsx"),
+    source("app/studio/(protected)/brand/page.tsx"),
+    source("app/studio/(protected)/content/page.tsx"),
+    source("app/studio/(protected)/campaigns/page.tsx"),
+    source("app/studio/(protected)/campaigns/[id]/page.tsx"),
+    source("app/studio/(protected)/settings/social/[platform]/page.tsx"),
+    source("components/studio/release-campaign-bridge.tsx"),
+    source("components/studio/music-generator.tsx"),
+  ]);
+  const artistFacing = surfaces.join("\n");
+
+  for (const retired of ["Command Center", "Media Library", "Music Lab", "Campaign Brain"]) {
+    assert.equal(artistFacing.includes(retired), false, `retired Studio product name returned: ${retired}`);
+  }
+  assert.ok(artistFacing.includes("Advanced Content Lab"));
+  assert.ok(artistFacing.includes("Advanced media controls"));
+  assert.ok(artistFacing.includes("Advanced brand system"));
+});
+
 test("V4 widgets remain compositions on top of the canonical Design System", async () => {
   const widgets = await source("components/studio/ux-v4-widgets.tsx");
   const css = await source("app/studio/design-system/workflows.css");
