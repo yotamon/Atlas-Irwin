@@ -62,11 +62,11 @@ export default async function CampaignsPage() {
   return (
     <div className={styles.shell}>
       <PageHeader
-        title="Campaign Brain"
-        description={`Plan ${artist.artistName} releases as experiments, approve the right creative, keep timing relative to release day, and feed real performance back into the next decision.`}
+        title="Campaigns"
+        description={`Advanced campaign experiments and automation for ${artist.artistName}. Normal promotion starts from a Release or Grow.`}
         action={
           <div className="actions">
-            <Link className="button" href="/studio/content">Content Lab</Link>
+            <Link className="button" href="/studio/growth">Back to Grow</Link><Link className="button" href="/studio/content">Advanced Content Lab</Link>
             <Link className="button" href="/studio/analytics">Analytics</Link>
           </div>
         }
@@ -119,7 +119,7 @@ export default async function CampaignsPage() {
             <div>
               <span className={styles.eyebrow}>No first-class campaign yet</span>
               <h2>Start with an objective</h2>
-              <p>{artist.artistName}&apos;s existing releases and content stay intact. Create a Campaign Brain record for the next release, then generate a strategy only when you explicitly choose to spend an AI call.</p>
+              <p>{artist.artistName}&apos;s existing releases and content stay intact. Create a campaign for the next release, then generate a strategy only when you explicitly choose to spend an AI call.</p>
             </div>
           </div>
         )}
