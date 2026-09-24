@@ -103,6 +103,21 @@ test("Grow is action-first in semantic document order, not only visual order", a
   assert.equal(css.includes(".growth-v4-overview .growth-polish-north-star { order:"), false);
 });
 
+test("compatibility routes do not recreate competing Studio mental models", async () => {
+  const tasks = await source("app/studio/(protected)/tasks/page.tsx");
+  const media = await source("app/studio/(protected)/media/page.tsx");
+  const brand = await source("app/studio/(protected)/brand/page.tsx");
+  const content = await source("app/studio/(protected)/content/page.tsx");
+
+  assert.equal(tasks.includes("Command Center"), false);
+  assert.ok(media.includes('title="Advanced media controls"'));
+  assert.ok(media.includes('href="/studio/library">Back to Library'));
+  assert.ok(brand.includes('title="Advanced brand system"'));
+  assert.ok(brand.includes('href="/studio/settings/brand">Back to Brand profile'));
+  assert.ok(content.includes('title="Advanced Content Lab"'));
+  assert.ok(content.includes('href="/studio/create">Back to Create'));
+});
+
 test("V4 widgets remain compositions on top of the canonical Design System", async () => {
   const widgets = await source("components/studio/ux-v4-widgets.tsx");
   const css = await source("app/studio/design-system/workflows.css");
