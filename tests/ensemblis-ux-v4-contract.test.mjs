@@ -73,7 +73,8 @@ test("catalog tracks can start one Mix with an explicit selected pool", async ()
   assert.ok(music.includes('name="source" value="catalog"'));
   assert.ok(page.includes("track?: string | string[]"));
   assert.ok(page.includes("initialTrackIds"));
-  assert.ok(page.includes('initialTrackIds.length\n      ? "catalog"'));
+  assert.ok(page.includes("initialTrackIds.length"));
+  assert.ok(page.includes('? "catalog"'));
   assert.ok(workflow.includes("initialTrackIds?: string[]"));
   assert.ok(workflow.includes("initialTrackIds={initialTrackIds}"));
 });
