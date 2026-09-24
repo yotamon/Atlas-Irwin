@@ -79,9 +79,9 @@ export default async function BrandPage() {
   return (
     <>
       <PageHeader
-        title="Brand system"
-        description={`The reusable creative guardrails and reference media behind every ${artist.artistName} release, campaign and generated asset.`}
-        action={<Link className="button" href="/studio/media">Open full Media Library</Link>}
+        title="Advanced brand system"
+        description={`Fine-grained brand rules and reference media for ${artist.artistName}. Normal brand editing lives in Settings → Brand profile.`}
+        action={<div className="actions"><Link className="button primary" href="/studio/settings/brand">Back to Brand profile</Link><Link className="button" href="/studio/library">Open Library</Link></div>}
       />
 
       <section className="studio-panel feature">
