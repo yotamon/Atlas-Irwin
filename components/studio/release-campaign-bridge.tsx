@@ -18,7 +18,7 @@ export function ReleaseCampaignBridge({
       <div className="section-head">
         <div>
           <span className="section-label">Campaign</span>
-          <h2>{campaign ? "First-class marketing system connected" : "Upgrade this release to Campaign Brain"}</h2>
+          <h2>{campaign ? "First-class marketing system connected" : "Prepare a campaign for this release"}</h2>
         </div>
         {campaign ? <Status>{campaign.status}</Status> : null}
       </div>
