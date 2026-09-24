@@ -582,7 +582,7 @@ export function MediaUploader({
         <button className="button primary" type="button" disabled={!items.length || busy || !hasPending} onClick={upload}>
           {actionLabel}
         </button>
-        {completed ? <span>{completed} of {items.length} ready</span> : <span>{releaseMasterMode ? trackScopedMaster ? "This upload changes only this song. Other tracks in the release keep their own masters and analysis." : "The previous master stays in Media Library history when you replace it." : musicIntakeMode ? "Each master stays reusable in Media Library. Track Intelligence starts automatically after upload." : vaultMode ? "Upload is reusable in Media Library; audio analysis does not spend an AI call." : contentItemId ? "Media will be attached to this content item." : "Media is published to the public asset library."}</span>}
+        {completed ? <span>{completed} of {items.length} ready</span> : <span>{releaseMasterMode ? trackScopedMaster ? "This upload changes only this song. Other tracks in the release keep their own masters and analysis." : "The previous master stays in Library history when you replace it." : musicIntakeMode ? "Each master stays reusable in Library. Track Intelligence starts automatically after upload." : vaultMode ? "Upload is reusable in Library; audio analysis does not spend an AI call." : contentItemId ? "Media will be attached to this content item." : "Media is published to the public asset library."}</span>}
       </div>
     </div>
   );
