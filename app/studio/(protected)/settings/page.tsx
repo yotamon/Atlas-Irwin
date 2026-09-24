@@ -6,7 +6,7 @@ import { requireStudioAdmin } from "@/lib/auth/studio";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 
-// Connections owns social_channel_accounts. Campaign Brain only plans for connected platforms.
+// Connections owns social_channel_accounts. Campaign planning only uses connected platforms.
 // The autonomy route remains href="/studio/settings/autonomy"; the artist-aware helper preserves context. Set autonomy rules here, not in provider plumbing.
 export default async function SettingsPage() {
   const { supabase, user } = await requireStudioAdmin();

@@ -93,9 +93,9 @@ export default async function MediaLibraryPage({ searchParams }: { searchParams:
   return (
     <>
       <PageHeader
-        title="Media Library"
-        description="Upload once, describe it clearly, and reuse it everywhere. This is the source of truth for artwork, motion, audio, campaign media, and future creative references."
-        action={<a className="button primary" href="#upload">Add media</a>}
+        title="Advanced media controls"
+        description="Inspect and maintain the underlying reusable media records. Normal browsing and reuse happens in Library."
+        action={<div className="actions"><Link className="button" href="/studio/library">Back to Library</Link><a className="button primary" href="#upload">Add media</a></div>}
       />
 
       <section className="media-overview" aria-label="Library summary">

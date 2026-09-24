@@ -274,14 +274,14 @@ export default async function CampaignWorkspacePage({
       {release ? (
         <section className={styles.panel}>
           <div className={styles.sectionHead}>
-            <div><span className={styles.eyebrow}>Production bridge</span><h2>Make the assets</h2></div>
-            <p>The campaign owns the marketing hypothesis. Music Lab, Video Director and Media Library remain specialist production tools.</p>
+            <div><span className={styles.eyebrow}>Creative tools</span><h2>Make the assets</h2></div>
+            <p>The campaign owns the marketing hypothesis. Music, Video Director and advanced media controls remain specialist tools.</p>
           </div>
           <div className={styles.inlineActions}>
-            <Link className="button" href="/studio/music">Open Music Lab</Link>
+            <Link className="button" href="/studio/music">Open Music</Link>
             <Link className="button primary" href={`/studio/releases/${release.id}?tab=video`}>Open Video Director</Link>
             <Link className="button" href={`/studio/releases/${release.id}?tab=media`}>Release media</Link>
-            <Link className="button" href="/studio/content">Content Lab</Link>
+            <Link className="button" href="/studio/content">Advanced Content Lab</Link>
           </div>
         </section>
       ) : null}

@@ -179,7 +179,7 @@ export default async function VisualBrandPage() {
                       ? `Generating · ${packCompleted}/${packRuns.length} ready`
                       : `${packCompleted}/${packRuns.length} generated${packFailed ? ` · ${packFailed} failed` : ""}`}
                 </strong>
-                <span>{packPrepared ? "This is one explicit spend approval for the whole pack. Image and monthly AI hard caps are checked again before the first provider submission." : "Completed images are saved in Media Library as Exploring references. Review them below before teaching them back into the next DNA version."}</span>
+                <span>{packPrepared ? "This is one explicit spend approval for the whole pack. Image and monthly AI hard caps are checked again before the first provider submission." : "Completed images are saved in Library as Exploring references. Review them below before teaching them back into the next DNA version."}</span>
               </div>
 
               <div className="media-grid" aria-label="Generated Visual Brand reference pack">

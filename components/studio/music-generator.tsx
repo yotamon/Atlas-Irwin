@@ -206,7 +206,7 @@ export function MusicGenerator({
 
       const registration = new FormData();
       const description = [
-        `Generated in Ensemblis Music Lab for ${artistName} with ${generation.provider} / ${generation.model}.`,
+        `Generated with Ensemblis for ${artistName} using ${generation.provider} / ${generation.model}.`,
         `Estimated generation cost: $${generation.cost.toFixed(2)}.`,
         `Prompt: ${generation.prompt.slice(0, 1500)}`,
       ].join("\n\n");

@@ -1,7 +1,7 @@
 # Ensemblis UX V4 Route Inventory
 
 **Status:** Canonical migration inventory
-**Reconciled:** 2026-09-23
+**Reconciled:** 2026-09-24
 **Source:** current protected Studio routes on main + UX V4 implementation branch
 
 ## Contract
@@ -15,13 +15,15 @@ Every protected route must have:
 
 Primary workspaces remain **Today / Music / Grow**. Create is a global action. Library, Sites and Settings are utilities. Everything else is contextual or specialist.
 
+Compatibility pages that remain full routes must identify themselves as **Advanced** or **Specialist** when rendered, link back to their canonical V4 owner, and must not reintroduce a competing product name.
+
 | Route | V4 owner | Role | Natural discovery | V4 target |
 | --- | --- | --- | --- | --- |
 | /studio | Today | Primary workspace | Primary nav | Start / continue / decide |
 | /studio/needs-you | Today | Decision queue | Today + global action | Contextual decisions |
 | /studio/inbox | Today | Specialist approvals | Needs You | Advanced approval history |
 | /studio/autopilot | Today | Compatibility projection | Today / Settings | Quiet autonomous status |
-| /studio/tasks | Today | Specialist operations | Today | Do not promote as primary work |
+| /studio/tasks | Today | Specialist operations | Today | Specialist task list; never a second command center |
 | /studio/music | Music | Primary workspace | Primary nav | Tracks / Releases / Mixes |
 | /studio/music/[id] | Music | Track object | Music + search | Canonical Track workspace |
 | /studio/music/import | Music | Intake workflow | Add music | Contextual workflow |
@@ -33,7 +35,7 @@ Primary workspaces remain **Today / Music / Grow**. Create is a global action. L
 | /studio/distribution | Release | Compatibility / specialist | Release → Distribution | Keep out of primary navigation |
 | /studio/distribution/operations | Release | Operations specialist | Distribution advanced | Provider operations only |
 | /studio/create | Global Create | Action launcher | Create + object actions | General outcome launcher |
-| /studio/content | Create | Compatibility surface | Create advanced | Fold normal work into Creative Assets |
+| /studio/content | Create | Compatibility surface | Create advanced | Advanced Content Lab; normal work stays in Create / Creative Assets |
 | /studio/production | Create | Creative Asset workspace (compatibility URL) | Object Create / Continue | Creative Assets, not a separate Production mental model |
 | /studio/video | Create | Video workflow | Create / Release | Guided Video Director |
 | /studio/video/[id] | Create | Video project object | Video / Continue | Creative Asset object |
@@ -52,7 +54,7 @@ Primary workspaces remain **Today / Music / Grow**. Create is a global action. L
 | /studio/outreach/[id] | Grow | Outreach object | Outreach / Needs You | Deep specialist object |
 | /studio/learn | Grow | Learning evidence | Results / Memory | Advanced evidence |
 | /studio/library | More | Utility workspace | More / search | Cross-workflow media library |
-| /studio/media | Library | Compatibility media surface | Library | Consolidate into Library |
+| /studio/media | Library | Compatibility media surface | Library | Advanced media controls; canonical object remains Library |
 | /studio/sites | More | Utility workspace | More / search | Owned destinations |
 | /studio/sites/smart-links | Sites | Smart-link specialist | Sites / Release | Contextual destination tool |
 | /studio/settings | Settings | Configuration home | More | Configuration only |
@@ -63,7 +65,7 @@ Primary workspaces remain **Today / Music / Grow**. Create is a global action. L
 | /studio/settings/brand/visual | Settings | Visual brand specialist | Brand settings | Advanced configuration |
 | /studio/settings/social/[platform] | Settings | Platform settings | Connections / Settings | Connection configuration |
 | /studio/connections | Settings | Integration utility | Launcher / Settings | Connection hub |
-| /studio/brand | Settings | Compatibility brand route | Settings | Migrate callers |
+| /studio/brand | Settings | Compatibility brand route | Settings | Advanced brand system; canonical editing remains Brand profile |
 | /studio/memory | Settings | Artist Memory | Settings / Why this? | Inspectable context |
 | /studio/data-health | Settings / Recovery | Technical recovery | Contextual blocker | Do not use as daily destination |
 | /studio/spotify | Settings | Provider specialist | Connections | Provider detail |

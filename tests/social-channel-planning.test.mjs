@@ -12,7 +12,7 @@ test("Studio exposes managed social connection routes", async () => {
   await Promise.all(socialRoutes.map((path) => access(path)));
   const settings = await readFile("app/studio/(protected)/settings/page.tsx", "utf8");
   assert.ok(settings.includes("social_channel_accounts"));
-  assert.ok(settings.includes("Campaign Brain only plans for connected platforms"));
+  assert.ok(settings.includes("Campaign planning only uses connected platforms"));
 });
 
 test("campaign planner treats connected channels as a hard boundary", async () => {

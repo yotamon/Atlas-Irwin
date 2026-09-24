@@ -106,7 +106,7 @@ export function DeliveryPanel({ data }: { data: VideoWorkspaceData }) {
       {data.project.status === "rendering" ? (
         <div className="video-processing-card">
           <span className="video-pulse" />
-          <div><strong>Rendering the master</strong><p>The job is durable. The worker uploads the finished video directly into Atlas Media Library.</p></div>
+          <div><strong>Rendering the master</strong><p>The job is durable. The worker uploads the finished video directly into Library.</p></div>
           <Link className="button" href={`/studio/video/${data.project.id}`}>Refresh</Link>
         </div>
       ) : null}

@@ -44,7 +44,7 @@ export default async function SocialConnectionPage({
     <div className="studio-v2-page">
       <PageHeader
         title={`${definition.label} connection`}
-        description={`Connect ${definition.label} for ${artist.artistName} so it can become an eligible Campaign Brain channel.`}
+        description={`Connect ${definition.label} for ${artist.artistName} so it can become an eligible campaign channel.`}
       />
 
       {query.connected === "1" ? (
@@ -75,7 +75,7 @@ export default async function SocialConnectionPage({
           <div className="panel">
             <p>{definition.description}</p>
             <p className="v2-muted-copy">
-              Until this account is connected, Campaign Brain will not create {definition.plannerPlatform} posting moments for {artist.artistName}.
+              Until this account is connected, Ensemblis will not create {definition.plannerPlatform} posting moments for {artist.artistName}.
             </p>
           </div>
         )}

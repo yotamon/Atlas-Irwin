@@ -65,7 +65,7 @@ export function ReleaseMasterAudioPanel({
 
         {!hasMaster ? (
           <>
-            <p className="v2-muted-copy">Upload the master for this track. Ensemblis will keep it with the release, add it to Media Library, and automatically map the track structure and strongest hook candidates for video and campaign creation.</p>
+            <p className="v2-muted-copy">Upload the master for this track. Ensemblis will keep it with the release, add it to Library, and automatically map the track structure and strongest hook candidates for video and campaign creation.</p>
             <MediaUploader releaseId={releaseId} trackId={primaryTrack?.id} defaultRole="master_audio" releaseMasterMode />
           </>
         ) : (
@@ -125,7 +125,7 @@ export function ReleaseMasterAudioPanel({
 
             <details className="workspace-drawer">
               <summary>Replace master audio</summary>
-              <p className="v2-muted-copy">The new file becomes this track&apos;s master and gets a fresh analysis. The previous asset remains in Media Library history instead of being deleted.</p>
+              <p className="v2-muted-copy">The new file becomes this track&apos;s master and gets a fresh analysis. The previous asset remains in Library history instead of being deleted.</p>
               <MediaUploader releaseId={releaseId} trackId={primaryTrack?.id} defaultRole="master_audio" releaseMasterMode />
             </details>
           </>

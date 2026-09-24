@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { CopyButton } from "@/components/studio/copy-button";
 import { Field, EmptyState, PageHeader, Status, Submit } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
@@ -33,7 +34,7 @@ export default async function ContentPage({ searchParams }: {
 
   return (
     <>
-      <PageHeader title="Content Lab" description={`Develop, refine, and stage every piece for ${artist.artistName} before it goes live.`} action={<div className="actions"><a className="button primary" href="#new">New content item</a></div>} />
+      <PageHeader title="Advanced Content Lab" description={`Specialist content editing for ${artist.artistName}. Normal creative work starts from Create or a Release.`} action={<div className="actions"><Link className="button" href="/studio/create">Back to Create</Link><a className="button primary" href="#new">New content item</a></div>} />
       <form className="studio-tabs">
         <select name="release"><option value="">All releases</option>{releases?.map((r) => <option key={r.id} value={r.id}>{r.title}</option>)}</select>
         <select name="platform"><option value="">All platforms</option>{PLATFORMS.map((x) => <option key={x}>{x}</option>)}</select>

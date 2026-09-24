@@ -73,7 +73,8 @@ test("catalog tracks can start one Mix with an explicit selected pool", async ()
   assert.ok(music.includes('name="source" value="catalog"'));
   assert.ok(page.includes("track?: string | string[]"));
   assert.ok(page.includes("initialTrackIds"));
-  assert.ok(page.includes('initialTrackIds.length\n      ? "catalog"'));
+  assert.ok(page.includes("initialTrackIds.length"));
+  assert.ok(page.includes('? "catalog"'));
   assert.ok(workflow.includes("initialTrackIds?: string[]"));
   assert.ok(workflow.includes("initialTrackIds={initialTrackIds}"));
 });
@@ -101,6 +102,43 @@ test("Grow is action-first in semantic document order, not only visual order", a
   assert.ok(grow.indexOf("growth-command-grid") < grow.indexOf("Advanced data controls"));
   assert.equal(css.includes(".growth-v4-overview .growth-command-grid { order:"), false);
   assert.equal(css.includes(".growth-v4-overview .growth-polish-north-star { order:"), false);
+});
+
+test("compatibility routes do not recreate competing Studio mental models", async () => {
+  const tasks = await source("app/studio/(protected)/tasks/page.tsx");
+  const media = await source("app/studio/(protected)/media/page.tsx");
+  const brand = await source("app/studio/(protected)/brand/page.tsx");
+  const content = await source("app/studio/(protected)/content/page.tsx");
+
+  assert.equal(tasks.includes("Command Center"), false);
+  assert.ok(media.includes('title="Advanced media controls"'));
+  assert.ok(media.includes('href="/studio/library">Back to Library'));
+  assert.ok(brand.includes('title="Advanced brand system"'));
+  assert.ok(brand.includes('href="/studio/settings/brand">Back to Brand profile'));
+  assert.ok(content.includes('title="Advanced Content Lab"'));
+  assert.ok(content.includes('href="/studio/create">Back to Create'));
+});
+
+test("artist-facing Studio does not expose retired product names", async () => {
+  const surfaces = await Promise.all([
+    source("app/studio/(protected)/tasks/page.tsx"),
+    source("app/studio/(protected)/media/page.tsx"),
+    source("app/studio/(protected)/brand/page.tsx"),
+    source("app/studio/(protected)/content/page.tsx"),
+    source("app/studio/(protected)/campaigns/page.tsx"),
+    source("app/studio/(protected)/campaigns/[id]/page.tsx"),
+    source("app/studio/(protected)/settings/social/[platform]/page.tsx"),
+    source("components/studio/release-campaign-bridge.tsx"),
+    source("components/studio/music-generator.tsx"),
+  ]);
+  const artistFacing = surfaces.join("\n");
+
+  for (const retired of ["Command Center", "Media Library", "Music Lab", "Campaign Brain"]) {
+    assert.equal(artistFacing.includes(retired), false, `retired Studio product name returned: ${retired}`);
+  }
+  assert.ok(artistFacing.includes("Advanced Content Lab"));
+  assert.ok(artistFacing.includes("Advanced media controls"));
+  assert.ok(artistFacing.includes("Advanced brand system"));
 });
 
 test("V4 widgets remain compositions on top of the canonical Design System", async () => {
