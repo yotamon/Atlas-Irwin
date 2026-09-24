@@ -61,7 +61,7 @@ export default async function TasksPage({
     <>
       <PageHeader
         title="Tasks"
-        description="Concrete workload behind the Command Center runway."
+        description="Manual tasks for specialist work that does not already belong to a Release, Mix or other guided workflow."
         action={
           <a className="button primary" href="#new">
             New task
@@ -114,7 +114,7 @@ export default async function TasksPage({
       {!tasks?.length ? (
         <EmptyState
           title="No tasks yet"
-          body="Capture the next concrete action so Command Center workload stays honest."
+          body="Use this specialist list only for work that does not already belong to an object or guided workflow."
           href="#new"
           label="Add a task"
         />
