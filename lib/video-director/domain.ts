@@ -103,6 +103,10 @@ export type VideoCreativeBrief = {
     description: string;
     rationale: string;
   } | null;
+  artist_memory: {
+    max_effect: "brief_only";
+    brief: string;
+  } | null;
 };
 
 export function parseVideoCreativeBrief(value: unknown): VideoCreativeBrief {
@@ -111,6 +115,9 @@ export function parseVideoCreativeBrief(value: unknown): VideoCreativeBrief {
     : {};
   const snapshot = record.concept_snapshot && typeof record.concept_snapshot === "object" && !Array.isArray(record.concept_snapshot)
     ? record.concept_snapshot as Record<string, unknown>
+    : null;
+  const artistMemory = record.artist_memory && typeof record.artist_memory === "object" && !Array.isArray(record.artist_memory)
+    ? record.artist_memory as Record<string, unknown>
     : null;
   return {
     note: typeof record.note === "string" ? record.note : "",
@@ -134,6 +141,15 @@ export function parseVideoCreativeBrief(value: unknown): VideoCreativeBrief {
           title: snapshot.title,
           description: snapshot.description,
           rationale: snapshot.rationale,
+        }
+      : null,
+    artist_memory: artistMemory
+      && artistMemory.max_effect === "brief_only"
+      && typeof artistMemory.brief === "string"
+      && artistMemory.brief.trim()
+      ? {
+          max_effect: "brief_only",
+          brief: artistMemory.brief,
         }
       : null,
   };

@@ -217,13 +217,13 @@ Shipped:
 
 ### Phase 1 - Personalization, owned growth and complete release operations
 
-#### P1.1 Structured Artist Memory - #51 - **Core foundation shipped; unified lifecycle still open**
-PRs #136 and #143 provide one inspectable Artist Memory projection over explicit identity, creative rules, Creative Memory and approved verified learnings, with source lineage and bounded consumers.
+#### P1.1 Structured Artist Memory - #51 - **Core foundation and bounded consumers shipped; unified lifecycle still open**
+PRs #136 and #143 provide one inspectable Artist Memory projection over explicit identity, creative rules, Creative Memory and approved verified learnings, with source lineage and bounded consumers. #261 lands the remaining major consumers — Moment ranking, Video Director brief context and campaign planning — behind one fail-soft bounded loader, with Growth and Create consuming through the same policies.
 
 Remaining exit work:
 - finish edit/disable/forget lifecycle without deleting canonical evidence;
 - make all strategic/autonomy/calibration sources converge on the same explicit memory contract;
-- make major strategy/creative consumers explain exactly which memory items affected the result;
+- make the remaining consumers (audience assistance) explain exactly which memory items affected the result;
 - close remaining source/supersession/consumer allowlist acceptance criteria in #51.
 
 #### P1.2 Smart Links, pre-save and first-party attribution - #52 - **Core shipped; capture/lifecycle completeness open**
@@ -516,7 +516,7 @@ A roadmap issue may remain open after its core foundation ships when the issue's
 | Moment calibration benchmark/evidence | P0 | **Complete** | #109 / #162 |
 | Closed-loop learning | P0 | **Complete** | #50 / #113 |
 | Adaptive Artist Operating System | P0 | **Core complete** | #153-#157 |
-| Structured Artist Memory | P1 | **Core foundation shipped; lifecycle open** | #51 / #136 / #143 |
+| Structured Artist Memory | P1 | **Core foundation + consumers shipped; lifecycle open** | #51 / #136 / #143 / #261 |
 | Smart links / pre-save / first-party attribution | P1 | **Core shipped; lifecycle/capture open** | #52 / #143 |
 | Paid Growth experiment engine | P1 | **Core shipped; provider completeness open** | #53 / #143 |
 | Autonomy contracts | P1 | **v1 shipped; boundary coverage open** | #57 / #138 |
@@ -533,7 +533,7 @@ A roadmap issue may remain open after its core foundation ships when the issue's
 The next work should close real last-mile gaps instead of opening another breadth program.
 
 1. **Broaden #108 Mission coverage** so non-release artist goals can become first-class semantic Mission projections over existing Growth, Scene, Audience and Distribution state.
-2. **Finish #51 Structured Artist Memory** lifecycle and consumer traceability so strategy/creative can explain exactly which bounded memories influenced a result, including the completed Moment calibration evidence from #162.
+2. **Finish #51 Structured Artist Memory** lifecycle (edit/disable/forget) and the remaining audience-assistance consumer; bounded consumer traceability for Moment ranking, Video Director and campaign planning has landed via #261, and Moment calibration evidence from #162 stays excluded from generalized ranking.
 3. **Finish #52 owned conversion/capture lifecycle** on top of existing Smart Links and Fan Graph without inferred identity or consent.
 4. **Finish #57 execution-boundary coverage** so every consequential external effect resolves/audits its active contract immediately before execution.
 5. **Finish #53 provider-complete Paid Growth** once #52/#57 last-mile contracts are closed.

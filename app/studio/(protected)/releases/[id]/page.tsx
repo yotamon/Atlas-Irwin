@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { loadBoundedArtistMemoryContext } from "@/lib/artist-memory/consumer-context";
+import { rankMomentsWithArtistMemory } from "@/lib/artist-memory/moment-ranking";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import {
@@ -52,6 +54,15 @@ export default async function ReleaseDetail({
     throw error;
   }
 
+  const momentMemory = await loadBoundedArtistMemoryContext({
+    db: supabase,
+    ownerId: user.id,
+    artistId: artist.artistId,
+    consumer: "moment_ranking",
+    maxCharacters: 1_200,
+  });
+  const rankedMoments = rankMomentsWithArtistMemory(snapshot.moments, momentMemory?.items ?? []);
+
   if (!advanced) {
     return <>
       <ReleaseWorkspaceV2
@@ -69,7 +80,7 @@ export default async function ReleaseDetail({
       />
       {stage === "create" ? <MomentReviewPanel
         releaseId={snapshot.release.id}
-        moments={snapshot.moments}
+        moments={rankedMoments}
         historicalMoments={snapshot.historicalMoments}
         rawCandidateCount={snapshot.rawMomentCount}
         suppressedCount={snapshot.suppressedMomentCount}
@@ -105,7 +116,7 @@ export default async function ReleaseDetail({
       unmatchedSpotify={snapshot.relevantSpotify}
       publicReleases={snapshot.publicReleases}
       videoProjects={snapshot.videoProjects}
-      moments={snapshot.moments}
+      moments={rankedMoments}
       tab={tab}
     />
   </>;
