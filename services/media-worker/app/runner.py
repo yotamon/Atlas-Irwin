@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 from . import main as worker_main
 from .automix import AutomixWorkerRequest, execute_automix
 from .automix_preview import AutomixPreviewWorkerRequest, execute_automix_preview
+from .free_content_factory import FreeComposerWorkerRequest, execute_free_composer
 from .mastering_processor import MasteringWorkerRequest, execute_mastering
 from .music_intelligence_v4_runtime import analyze_music as analyze_music_v4
 from .social_finishing import SocialWorkerRequest, execute_social
@@ -147,6 +148,7 @@ CONTRACT_JOB_TYPES = frozenset({
     "render_audio_scene",
     "master_audio",
     "finish_social_video",
+    "compose_free_social_asset",
     "render_automix",
     "render_automix_preview",
 })
@@ -178,6 +180,9 @@ def main() -> None:
         if payload.get("job_type") == "finish_social_video":
             request = SocialWorkerRequest.model_validate(payload)
             executor = execute_social
+        elif payload.get("job_type") == "compose_free_social_asset":
+            request = FreeComposerWorkerRequest.model_validate(payload)
+            executor = execute_free_composer
         elif payload.get("job_type") == "master_audio":
             request = MasteringWorkerRequest.model_validate(payload)
             executor = execute_mastering
