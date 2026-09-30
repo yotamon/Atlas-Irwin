@@ -63,7 +63,15 @@ Supabase security/performance advisors were rerun after the DDL. The known advis
 
 ## GitHub production environment
 
-The existing GitHub Environment `Production` now requires an explicit reviewer approval by repository owner `yotamon`.
+The existing GitHub Environment `Production` now requires an explicit reviewer approval by repository owner `yotamon` and permits deployments from the `main` branch only.
+
+Database Verification run `36789026170` on PR #266 proved the repository state on a clean GitHub runner:
+
+- migration-history guards: pass;
+- append-only migration-history validation: pass;
+- clean replay of all 147 canonical migrations: pass;
+- Postgres function lint: pass;
+- database behavior tests: pass.
 
 Environment deployment inputs:
 
