@@ -46,7 +46,8 @@ test("content factory uses automation_jobs and detached Sandbox execution with c
   assert.match(source, /automation_jobs/);
   assert.match(source, /idempotency_key/);
   assert.match(source, /generation_runs/);
-  assert.match(source, /detached:\s*true/);
+  assert.match(source, /dispatchMediaWorkerJob/);
+  assert.match(source, /compose_free_social_asset/);
   assert.match(source, /content-factory\/callback/);
   assert.match(source, /__atlas_callback_token_sha256|__ensemblis_callback_token_sha256/);
   assert.match(source, /run_after/);
