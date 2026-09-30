@@ -377,8 +377,9 @@ async function actionsForArtist(scope: AutonomyArtistScope) {
   return created;
 }
 
-export async function refreshNextBestActions(scope?: AutonomyArtistScope) {
-  const scopes = scope ? [scope] : await artistScopes();
+export async function refreshNextBestActions(scope?: AutonomyArtistScope, limit = 4) {
+  const allScopes = scope ? [scope] : await artistScopes();
+  const scopes = allScopes.slice(0, Math.max(1, Math.min(limit, 20)));
   const db = createAutonomyServiceClient();
   let proposed = 0;
   for (const artistScope of scopes) proposed += await actionsForArtist(artistScope);
