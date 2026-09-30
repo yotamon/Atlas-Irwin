@@ -12,21 +12,21 @@ Once a migration exists on `main`, its filename and SQL are immutable. Any corre
 
 ## Current status
 
-Production migration delivery is **not automated yet**.
+Production migration history is now **exactly canonical**. The normal production workflow is implemented in the repository but remains fail-closed until its two remaining protected deployment credentials are configured.
 
-The 2026-09-14 audit remains the historical forensic baseline, but production has advanced since it was written. A fresh read-only audit on 2026-10-01 found:
+The 2026-10-01 recovery completed the previously audited drift:
 
 - repository: 147 canonical migrations;
 - production history: 147 migration records;
-- 81 name-matched migrations retain tracking-only timestamp drift and must be canonicalized before exact-prefix deployment can be enabled;
-- one canonical migration remains genuinely absent from production: `20260819164000_marketing_creative_brand_media.sql`;
-- the migration's expected `media_asset_type` values `brand_reference`, `brand_logo` and `brand_motion_reference` are also absent, proving this is real SQL/schema drift rather than history-only drift;
-- one production-only Growth Engine recovery-history record remains: `operational_artist_scope_growth_engine_repair`;
-- the previously missing DJ Library, Project Sync and local-first migrations are now present remotely.
+- tracking-only timestamp drift: 0;
+- canonical-only migrations: 0;
+- production-only migrations: 0;
+- `20260819164000_marketing_creative_brand_media.sql` is applied;
+- `brand_reference`, `brand_logo`, and `brand_motion_reference` are present in `public.media_asset_type`.
 
-The original forensic procedure remains documented in `docs/production-database-recovery-2026-09-14.md`, but it must not be replayed as a nine-file recovery recipe. Use the live 2026-10-01 state and the production-readiness plan in `docs/superpowers/plans/2026-10-01-production-readiness-v1.md`.
+The complete before/after evidence is documented in `docs/production-database-recovery-2026-10-01.md`. The September document remains historical forensic context only.
 
-Do not enable normal production automation until the remaining real SQL gap and history divergence are reconciled and exact canonical parity has been proven.
+The GitHub Environment `Production` now requires explicit reviewer approval. `SUPABASE_PROJECT_ID` is configured there; `SUPABASE_ACCESS_TOKEN` and `SUPABASE_DB_PASSWORD` are still required before the workflow can perform a real deployment proof.
 
 ## Pre-merge protection
 

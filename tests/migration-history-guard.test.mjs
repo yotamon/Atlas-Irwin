@@ -272,6 +272,26 @@ test("strict recovery baseline fingerprints every remote timestamp and logical n
   assert.ok(errors.some((error) => error.includes("Remote migration history changed")));
 });
 
+test("production migration workflow is protected and fail-closed", () => {
+  const workflow = fs.readFileSync(
+    new URL("../.github/workflows/database-production.yml", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(workflow, /branches:\s*\[main\]/);
+  assert.match(workflow, /supabase\/migrations\/\*\*/);
+  assert.match(workflow, /environment:\s*Production/);
+  assert.match(workflow, /group:\s*production-supabase-migrations/);
+  assert.match(workflow, /cancel-in-progress:\s*false/);
+  assert.match(workflow, /version:\s*2\.111\.0/);
+  assert.match(workflow, /check-supabase-migration-parity\.mjs --allow-pending/);
+  assert.match(workflow, /supabase link --project-ref/);
+  assert.match(workflow, /supabase db push --dry-run/);
+  assert.match(workflow, /supabase db push --yes/);
+  assert.match(workflow, /check-supabase-migration-parity\.mjs[^\n]*$/m);
+  assert.doesNotMatch(workflow, /--include-all|migration repair|db reset --linked/);
+});
+
 test("latest production recovery baseline matches the 2026-10-01 audited drift", () => {
   const baseline = JSON.parse(
     fs.readFileSync(

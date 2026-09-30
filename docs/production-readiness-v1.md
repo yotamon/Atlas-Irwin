@@ -80,6 +80,8 @@ The audit that created #263 verified the following.
   - `brand_motion_reference`.
 - Production migration delivery is not yet automated.
 
+**Recovery update (2026-10-01):** the database recovery described above has now been completed. Production migration history is exactly canonical at 147/147, the three brand-media enum values are present, and the obsolete recovery-history row is gone. The steady-state workflow is implemented in the repository and the GitHub `Production` environment now requires reviewer approval. End-to-end workflow proof remains blocked only by the missing protected `SUPABASE_ACCESS_TOKEN` and `SUPABASE_DB_PASSWORD` environment secrets. See `docs/production-database-recovery-2026-10-01.md`.
+
 ### Runtime reliability
 
 Vercel production errors in the seven-day audit window included:

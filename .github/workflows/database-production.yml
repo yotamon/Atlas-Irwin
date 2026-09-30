@@ -1,0 +1,68 @@
+name: Production Database Migrations
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/migrations/**"
+
+concurrency:
+  group: production-supabase-migrations
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    name: deploy canonical migrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: Production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: supabase/setup-cli@v2
+        with:
+          version: 2.111.0
+          github-token: ${{ github.token }}
+
+      - name: Require production deployment credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD SUPABASE_PROJECT_ID; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing required Production environment secret: $name"
+              exit 1
+            fi
+          done
+
+      - name: Verify production is an exact canonical prefix
+        run: node scripts/check-supabase-migration-parity.mjs --allow-pending
+
+      - name: Link production project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_ID"
+
+      - name: Preview pending migrations
+        run: supabase db push --dry-run
+
+      - name: Deploy pending migrations once
+        run: supabase db push --yes
+
+      - name: Require exact post-deploy parity
+        run: node scripts/check-supabase-migration-parity.mjs
+
+      - name: Read back migration history
+        run: supabase migration list
