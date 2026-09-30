@@ -14,23 +14,18 @@ Once a migration exists on `main`, its filename and SQL are immutable. Any corre
 
 Production migration delivery is **not automated yet**.
 
-The 2026-09-14 production drift audit is complete. The live project is not yet canonically aligned, but the drift is now classified rather than unknown:
+The 2026-09-14 audit remains the historical forensic baseline, but production has advanced since it was written. A fresh read-only audit on 2026-10-01 found:
 
-- repository: 145 canonical migrations;
-- production history: 137 distinct migration names;
-- 136 production names have canonical logical-name counterparts;
-- one production-only Growth Engine recovery-history record exists;
-- nine canonical migrations are genuinely absent from production SQL/history;
-- two of those nine are historical interior gaps and seven form the pending tail;
-- no unexplained schema or executable-function behavior remains after the targeted audit.
+- repository: 147 canonical migrations;
+- production history: 147 migration records;
+- one canonical migration remains genuinely absent from production: `20260819164000_marketing_creative_brand_media.sql`;
+- the migration's expected `media_asset_type` values `brand_reference`, `brand_logo` and `brand_motion_reference` are also absent, proving this is real SQL/schema drift rather than history-only drift;
+- one production-only Growth Engine recovery-history record remains: `operational_artist_scope_growth_engine_repair`;
+- the previously missing DJ Library, Project Sync and local-first migrations are now present remotely.
 
-The exact one-time repair procedure and the nine-file dependency order are documented in:
+The original forensic procedure remains documented in `docs/production-database-recovery-2026-09-14.md`, but it must not be replayed as a nine-file recovery recipe. Use the live 2026-10-01 state and the production-readiness plan in `docs/superpowers/plans/2026-10-01-production-readiness-v1.md`.
 
-```text
-docs/production-database-recovery-2026-09-14.md
-```
-
-Do not enable normal production automation until that recovery has completed and exact canonical parity has been proven.
+Do not enable normal production automation until the remaining real SQL gap and history divergence are reconciled and exact canonical parity has been proven.
 
 ## Pre-merge protection
 
@@ -97,9 +92,9 @@ The GitHub connector used during repository maintenance cannot create or read Ac
 
 ## One-time recovery is not normal deployment
 
-The current production repair uses `supabase migration repair` for verified tracking-only drift and one reviewed `supabase db push --include-all` after a dry run proves that exactly the audited nine missing migrations would execute.
+The 2026-09-14 recovery used special handling for historical gaps. As of the 2026-10-01 audit, do not reuse the old nine-file `--include-all` procedure. Re-audit the live project and apply only the smallest reviewed recovery required for the remaining canonical SQL gap and history divergence.
 
-That is a **one-time recovery exception** because production currently contains historical gaps. The complete procedure is in `docs/production-database-recovery-2026-09-14.md`.
+Any `migration repair` remains a manual recovery-only action after schema readback proves tracking-only drift. It must never become part of the steady-state production workflow.
 
 After recovery:
 

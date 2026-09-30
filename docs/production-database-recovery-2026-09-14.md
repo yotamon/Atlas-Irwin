@@ -1,5 +1,7 @@
 # Production database recovery audit — 2026-09-14
 
+> **Historical forensic snapshot.** Do not replay this document as the current recovery recipe. Production advanced after this audit. The 2026-10-01 live audit in `docs/production-readiness-v1.md` found one remaining canonical SQL gap plus the production-only Growth Engine history record. Use `docs/production-database-migrations.md` and the production-readiness implementation plan for current recovery sequencing.
+
 This is the one-time recovery plan for Supabase production project `zhyjnpajlvwwbvuryeyv` before issue #146 can enable automatic production migration delivery.
 
 It is deliberately separate from the steady-state deployment contract in `docs/production-database-migrations.md`.

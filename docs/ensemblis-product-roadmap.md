@@ -6,7 +6,7 @@
 **Product:** Ensemblis  
 **Production reference artist:** Atlas Irwin  
 **Traditional/non-AI acceptance reference:** Cerebero Spinal  
-**Last reconciled:** 2026-09-23
+**Last reconciled:** 2026-10-01
 
 ## 1. North star
 
@@ -508,7 +508,8 @@ A roadmap issue may remain open after its core foundation ships when the issue's
 
 | Workstream | Priority | Status | Issue / PR |
 | --- | --- | --- | --- |
-| Roadmap / documentation | P0 | Living / reconciled 2026-09-06 | #60 / #47 |
+| Roadmap / documentation | P0 | Living / reconciled 2026-10-01 | #60 / #47 |
+| Production-grade launch readiness | P0 | **Active launch gate** | #263 / `docs/production-readiness-v1.md` |
 | Multi-artist architecture | P0 | **Complete** | #48 |
 | Moments / Best Moments | P0 | **Complete core** | #49 / #114 / #142 |
 | Manager / release Missions | P0 | **Core shipped; broader Mission coverage open** | #108 / #111 / #137 / #145 / #153-#157 |
@@ -530,7 +531,26 @@ A roadmap issue may remain open after its core foundation ships when the issue's
 
 ## 18. Immediate sequence
 
-The next work should close real last-mile gaps instead of opening another breadth program.
+The next work should close production-readiness and real last-mile gaps instead of opening another breadth program.
+
+### Launch-readiness gate
+
+Issue #263 and `docs/production-readiness-v1.md` are the canonical production-readiness program. Before broad public launch, sequence the P0 work as:
+
+1. restore exact production database parity and automate protected forward migration delivery;
+2. make Marketing / Content Factory / worker execution durable and independent of request timeouts or silently exhausted Sandbox quota;
+3. establish and exercise backup/restore, then upgrade PostgreSQL through the documented safety path;
+4. strengthen pre-merge production build checks and protected release delivery;
+5. add true authenticated critical-journey, tenant-isolation and recovery E2E;
+6. convert product-quality thresholds from example measurements into strict evidence-backed release gates;
+7. add actionable health, SLOs, alerts and incident/rollback runbooks;
+8. complete GDPR/account data lifecycle plus accurate Privacy/Terms/subprocessor launch surfaces.
+
+Detailed task order and acceptance evidence live in `docs/superpowers/plans/2026-10-01-production-readiness-v1.md`.
+
+### Product last mile
+
+Product work may proceed in parallel only where it does not destabilize the P0 launch-readiness sequence:
 
 1. **Broaden #108 Mission coverage** so non-release artist goals can become first-class semantic Mission projections over existing Growth, Scene, Audience and Distribution state.
 2. **Finish #51 Structured Artist Memory** lifecycle (edit/disable/forget) and the remaining audience-assistance consumer; bounded consumer traceability for Moment ranking, Video Director and campaign planning has landed via #261, and Moment calibration evidence from #162 stays excluded from generalized ranking.
