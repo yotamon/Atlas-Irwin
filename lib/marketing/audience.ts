@@ -280,8 +280,9 @@ async function draftPendingReplies(ownerId: string, artistId: string) {
   return drafted;
 }
 
-export async function syncAudienceInteractions(scope?: AudienceArtistScope) {
-  const scopes = scope ? [scope] : await artistScopesWithRecentPublications();
+export async function syncAudienceInteractions(scope?: AudienceArtistScope, limit = 3) {
+  const allScopes = scope ? [scope] : await artistScopesWithRecentPublications();
+  const scopes = allScopes.slice(0, Math.max(1, Math.min(limit, 10)));
   const client = createMarketingServiceClient();
   let imported = 0;
   let drafted = 0;
