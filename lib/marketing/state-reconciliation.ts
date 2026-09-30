@@ -17,13 +17,13 @@ function objectValue(value: Json): Record<string, Json | undefined> {
     : {};
 }
 
-export async function reconcileCampaignPhaseStates(now = new Date()) {
+export async function reconcileCampaignPhaseStates(now = new Date(), limit = 250) {
   const marketing = createMarketingServiceClient();
   const { data: phases, error } = await marketing.from("campaign_phases")
     .select("id,campaign_id,status,starts_at,ends_at")
     .in("status", ["planned", "active"])
     .order("starts_at", { ascending: true, nullsFirst: true })
-    .limit(250);
+    .limit(Math.max(1, Math.min(limit, 250)));
   if (error) throw new Error(error.message);
   if (!phases?.length) return { considered: 0, changed: 0, active: 0, skipped: 0, completed: 0 };
 
@@ -69,14 +69,14 @@ function contentAssetId(purpose: string) {
   return match?.[1] ?? null;
 }
 
-export async function reconcileOrphanedGenerationRuns() {
+export async function reconcileOrphanedGenerationRuns(limit = 100) {
   const marketing = createMarketingServiceClient();
   const { data: runs, error } = await marketing.from("generation_runs")
     .select("id,purpose,status,provider_request_id,metadata")
     .in("status", ["queued", "running"])
     .like("purpose", "content_asset:%")
     .order("created_at", { ascending: true })
-    .limit(100);
+    .limit(Math.max(1, Math.min(limit, 100)));
   if (error) throw new Error(error.message);
 
   const parsed = (runs ?? []).map((run) => ({ run, contentItemId: contentAssetId(run.purpose) })).filter((entry) => entry.contentItemId);
@@ -144,10 +144,15 @@ export async function ensureCampaignProductionQueues(limit = 12) {
   };
 }
 
-export async function reconcileMarketingState() {
-  const phases = await reconcileCampaignPhaseStates();
-  const orphanedGeneration = await reconcileOrphanedGenerationRuns();
-  const campaignQueues = await ensureCampaignProductionQueues();
-  const publicationApprovals = await ensureReadyContentPublicationApprovals();
+export async function reconcileMarketingState(options: {
+  phaseLimit?: number;
+  orphanLimit?: number;
+  campaignLimit?: number;
+  approvalLimit?: number;
+} = {}) {
+  const phases = await reconcileCampaignPhaseStates(new Date(), options.phaseLimit ?? 50);
+  const orphanedGeneration = await reconcileOrphanedGenerationRuns(options.orphanLimit ?? 25);
+  const campaignQueues = await ensureCampaignProductionQueues(options.campaignLimit ?? 4);
+  const publicationApprovals = await ensureReadyContentPublicationApprovals(options.approvalLimit ?? 10);
   return { phases, orphanedGeneration, campaignQueues, publicationApprovals };
 }
