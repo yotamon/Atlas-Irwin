@@ -17,8 +17,8 @@ test("free content factory cron schedules durable detached work inside a short r
 
   assert.match(factory, /free_content_factory_render/);
   assert.match(factory, /automation_jobs/);
-  assert.match(factory, /detached:\s*true/);
-  assert.match(factory, /ffmpeg-static@5\.2\.0/);
+  assert.match(factory, /dispatchMediaWorkerJob/);
+  assert.match(factory, /compose_free_social_asset/);
 });
 
 test("database-side content factory caller no longer depends on a long HTTP render window", () => {
