@@ -346,6 +346,7 @@ export async function dispatchMediaWorkerJob(input: {
     | "render_audio_scene"
     | "master_audio"
     | "finish_social_video"
+    | "compose_free_social_asset"
     | "render_automix"
     | "render_automix_preview";
   payload: Record<string, unknown>;
