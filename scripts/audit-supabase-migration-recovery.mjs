@@ -152,6 +152,14 @@ export function validateRecoveryBaseline({ local, remote, result, baseline, proj
       `Matched remote-name count changed: expected ${baseline.matchedRemoteNames}, got ${matchedRemoteNames}`,
     );
   }
+  if (
+    baseline.trackingOnlyCount !== undefined &&
+    Number(baseline.trackingOnlyCount) !== result.trackingOnly.length
+  ) {
+    errors.push(
+      `Tracking-only drift count changed: expected ${baseline.trackingOnlyCount}, got ${result.trackingOnly.length}`,
+    );
+  }
   if (JSON.stringify(expectedRemoteOnly) !== JSON.stringify(actualRemoteOnly)) {
     errors.push(
       `Remote-only set changed: expected [${expectedRemoteOnly.join(", ")}], got [${actualRemoteOnly.join(", ")}]`,

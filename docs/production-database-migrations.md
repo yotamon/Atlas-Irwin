@@ -18,6 +18,7 @@ The 2026-09-14 audit remains the historical forensic baseline, but production ha
 
 - repository: 147 canonical migrations;
 - production history: 147 migration records;
+- 81 name-matched migrations retain tracking-only timestamp drift and must be canonicalized before exact-prefix deployment can be enabled;
 - one canonical migration remains genuinely absent from production: `20260819164000_marketing_creative_brand_media.sql`;
 - the migration's expected `media_asset_type` values `brand_reference`, `brand_logo` and `brand_motion_reference` are also absent, proving this is real SQL/schema drift rather than history-only drift;
 - one production-only Growth Engine recovery-history record remains: `operational_artist_scope_growth_engine_repair`;

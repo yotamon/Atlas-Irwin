@@ -70,8 +70,10 @@ The audit that created #263 verified the following.
 - Local canonical migration count: 147.
 - Production migration-history count: 147.
 - Exact parity is not yet true:
+  - 81 name-matched migrations have tracking-only timestamp drift;
   - canonical `20260819164000_marketing_creative_brand_media.sql` is missing remotely;
   - production-only `operational_artist_scope_growth_engine_repair` remains.
+- The 81 timestamp mismatches are history-only drift whose schema effects were previously audited as present; they still must be canonicalized before steady-state exact-prefix deployment can be enabled.
 - The missing migration is not history-only drift. Its three `media_asset_type` enum values are absent in production:
   - `brand_reference`;
   - `brand_logo`;
