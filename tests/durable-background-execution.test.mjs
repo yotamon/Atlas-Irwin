@@ -23,9 +23,9 @@ test("background retry policy classifies quota and applies bounded exponential b
 
 test("marketing media queue persists and respects retry-not-before capacity backoff", () => {
   const source = read("lib/marketing/media-worker-queue.ts");
-  assert.match(source, /__ensemblis_retry_not_before/);
-  assert.match(source, /__ensemblis_last_error_class/);
-  assert.match(source, /retryNotBefore|retry_not_before/);
+  assert.match(source, /retryNotBefore/);
+  assert.match(source, /withRetryMetadata/);
+  assert.match(source, /clearRetryMetadata/);
   assert.match(source, /classifyBackgroundFailure/);
   assert.match(source, /retryDelayMs/);
   assert.match(source, /reason:\s*"backoff"/);
