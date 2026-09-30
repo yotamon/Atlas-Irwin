@@ -1,0 +1,18 @@
+{
+  "auditDate": "2026-10-01",
+  "projectRef": "zhyjnpajlvwwbvuryeyv",
+  "canonicalMigrationCount": 147,
+  "remoteMigrationCount": 147,
+  "remoteHistoryFingerprint": "bd00989736df08e877fd3d0019405ef13dfa1348e10263885db9275d1c1e43c3",
+  "matchedRemoteNames": 146,
+  "trackingOnlyCount": 81,
+  "expectedRemoteOnly": [
+    {
+      "version": "20260904014123",
+      "name": "operational_artist_scope_growth_engine_repair"
+    }
+  ],
+  "genuineMissingSql": [
+    "20260819164000_marketing_creative_brand_media"
+  ]
+}

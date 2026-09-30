@@ -186,6 +186,30 @@ test("strict recovery baseline accepts only the audited production shape", () =>
   );
 });
 
+test("strict recovery baseline detects tracking-only drift count changes", () => {
+  const local = [
+    { version: "100", name: "one" },
+    { version: "200", name: "two" },
+  ];
+  const remote = [
+    { version: "100", name: "one" },
+    { version: "250", name: "two" },
+  ];
+  const result = classifyMigrationRecovery(local, remote);
+  const baseline = {
+    projectRef: "project",
+    canonicalMigrationCount: 2,
+    remoteMigrationCount: 2,
+    matchedRemoteNames: 2,
+    trackingOnlyCount: 0,
+    expectedRemoteOnly: [],
+    genuineMissingSql: [],
+  };
+
+  const errors = validateRecoveryBaseline({ local, remote, result, baseline, projectRef: "project" });
+  assert.ok(errors.some((error) => error.includes("Tracking-only drift count changed")));
+});
+
 test("strict recovery baseline fails if production changes after the audit", () => {
   const local = [
     { version: "100", name: "one" },
@@ -248,18 +272,52 @@ test("strict recovery baseline fingerprints every remote timestamp and logical n
   assert.ok(errors.some((error) => error.includes("Remote migration history changed")));
 });
 
-test("latest production recovery baseline matches the canonical migration directory", () => {
+test("production migration workflow is protected and fail-closed", () => {
+  const workflow = fs.readFileSync(
+    new URL("../.github/workflows/database-production.yml", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(workflow, /branches:\s*\[main\]/);
+  assert.match(workflow, /supabase\/migrations\/\*\*/);
+  assert.match(workflow, /environment:\s*Production/);
+  assert.match(workflow, /group:\s*production-supabase-migrations/);
+  assert.match(workflow, /cancel-in-progress:\s*false/);
+  assert.match(workflow, /version:\s*2\.111\.0/);
+  assert.match(workflow, /check-supabase-migration-parity\.mjs --allow-pending/);
+  assert.match(workflow, /supabase link --project-ref/);
+  assert.match(workflow, /supabase db push --dry-run/);
+  assert.match(workflow, /supabase db push --yes/);
+  assert.match(workflow, /check-supabase-migration-parity\.mjs[^\n]*$/m);
+  assert.doesNotMatch(workflow, /--include-all|migration repair|db reset --linked/);
+});
+
+test("latest production recovery baseline matches the 2026-10-01 audited drift", () => {
   const baseline = JSON.parse(
     fs.readFileSync(
-      new URL("../scripts/fixtures/production-migration-recovery-2026-09-18.json", import.meta.url),
+      new URL("../scripts/fixtures/production-migration-recovery-2026-10-01.json", import.meta.url),
       "utf8",
     ),
   );
   const local = readLocalMigrations();
   const localIds = new Set(local.map((migration) => `${migration.version}_${migration.name}`));
 
-  assert.equal(local.length, baseline.canonicalMigrationCount);
+  assert.equal(local.length, 147);
+  assert.equal(baseline.auditDate, "2026-10-01");
+  assert.equal(baseline.canonicalMigrationCount, local.length);
+  assert.equal(baseline.remoteMigrationCount, 147);
+  assert.equal(baseline.matchedRemoteNames, 146);
+  assert.equal(baseline.trackingOnlyCount, 81);
   assert.match(baseline.remoteHistoryFingerprint, /^[0-9a-f]{64}$/);
+  assert.deepEqual(baseline.genuineMissingSql, [
+    "20260819164000_marketing_creative_brand_media",
+  ]);
+  assert.deepEqual(baseline.expectedRemoteOnly, [
+    {
+      version: "20260904014123",
+      name: "operational_artist_scope_growth_engine_repair",
+    },
+  ]);
   for (const migration of baseline.genuineMissingSql) {
     assert.ok(localIds.has(migration), `Audited missing migration is no longer canonical: ${migration}`);
   }

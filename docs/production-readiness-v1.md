@@ -70,13 +70,17 @@ The audit that created #263 verified the following.
 - Local canonical migration count: 147.
 - Production migration-history count: 147.
 - Exact parity is not yet true:
+  - 81 name-matched migrations have tracking-only timestamp drift;
   - canonical `20260819164000_marketing_creative_brand_media.sql` is missing remotely;
   - production-only `operational_artist_scope_growth_engine_repair` remains.
+- The 81 timestamp mismatches are history-only drift whose schema effects were previously audited as present; they still must be canonicalized before steady-state exact-prefix deployment can be enabled.
 - The missing migration is not history-only drift. Its three `media_asset_type` enum values are absent in production:
   - `brand_reference`;
   - `brand_logo`;
   - `brand_motion_reference`.
 - Production migration delivery is not yet automated.
+
+**Recovery update (2026-10-01):** the database recovery described above has now been completed. Production migration history is exactly canonical at 147/147, the three brand-media enum values are present, and the obsolete recovery-history row is gone. The steady-state workflow is implemented in the repository and the GitHub `Production` environment now requires reviewer approval. End-to-end workflow proof remains blocked only by the missing protected `SUPABASE_ACCESS_TOKEN` and `SUPABASE_DB_PASSWORD` environment secrets. See `docs/production-database-recovery-2026-10-01.md`.
 
 ### Runtime reliability
 
