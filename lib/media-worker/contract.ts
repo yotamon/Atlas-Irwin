@@ -15,6 +15,7 @@ export const MEDIA_WORKER_JOB_TYPES = [
   "render_audio_scene",
   "master_audio",
   "finish_social_video",
+  "compose_free_social_asset",
   "render_automix",
   "render_automix_preview",
 ] as const;
