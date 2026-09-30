@@ -7,6 +7,13 @@ import {
   MEDIA_WORKER_CALLBACK_HASH_KEY,
   mediaWorkerReadiness,
 } from "@/lib/media-worker/sandbox";
+import {
+  classifyBackgroundFailure,
+  clearRetryMetadata,
+  retryDelayMs,
+  retryNotBefore,
+  withRetryMetadata,
+} from "@/lib/media-worker/retry-policy.mjs";
 import { getSiteUrl } from "@/lib/site-url";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createMarketingServiceClient } from "./db";
@@ -37,11 +44,6 @@ function timestamp(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function busyError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return /already processing|worker is busy/i.test(message);
-}
-
 function withoutCredential(payload: Record<string, unknown>) {
   const clean = { ...payload };
   delete clean[MEDIA_WORKER_CALLBACK_HASH_KEY];
@@ -57,11 +59,16 @@ async function state(db: ReturnType<typeof client>, scope?: WorkerScope) {
   if (error) throw new Error(error.message);
   const planned: MarketingMediaJob[] = [];
   let active = false;
+  let deferred = 0;
+  const now = Date.now();
 
   for (const row of data ?? []) {
     const job = row as MarketingMediaJob;
-    const jobFilter = (mutation: ReturnType<typeof db.from>) => mutation;
     if (job.status === "planned") {
+      if (retryNotBefore(record(job.request_payload)) > now) {
+        deferred += 1;
+        continue;
+      }
       planned.push(job);
       continue;
     }
@@ -69,17 +76,20 @@ async function state(db: ReturnType<typeof client>, scope?: WorkerScope) {
     const age = lastActivity ? Date.now() - lastActivity : Number.POSITIVE_INFINITY;
     if (job.status === "queued" && !job.external_job_id && age > DISPATCH_CLAIM_MS) {
       const nextStatus = job.attempt_count >= job.max_attempts ? "failed" : "planned";
+      const cleanPayload = withoutCredential(record(job.request_payload));
+      const retryPayload = nextStatus === "planned"
+        ? withRetryMetadata(cleanPayload, "transient", Math.max(1, job.attempt_count))
+        : cleanPayload;
       const { error: recoverError } = await db.from("marketing_media_jobs").update({
         status: nextStatus,
-        request_payload: json(withoutCredential(record(job.request_payload))),
+        request_payload: json(retryPayload),
         external_job_id: null,
         error: nextStatus === "failed" ? "Marketing media dispatch repeatedly stalled before worker ownership was established." : null,
         started_at: null,
         completed_at: nextStatus === "failed" ? new Date().toISOString() : null,
       }).eq("id", job.id).eq("owner_id", job.owner_id).eq("artist_id", job.artist_id).eq("status", "queued").is("external_job_id", null);
-      void jobFilter;
       if (recoverError) throw new Error(recoverError.message);
-      if (nextStatus === "planned") planned.push({ ...job, status: "planned", external_job_id: null });
+      if (nextStatus === "planned") deferred += 1;
       continue;
     }
     if (lastActivity && age < STALE_JOB_MS) {
@@ -87,18 +97,26 @@ async function state(db: ReturnType<typeof client>, scope?: WorkerScope) {
       continue;
     }
     const nextStatus = job.attempt_count >= job.max_attempts ? "failed" : "planned";
+    const cleanPayload = withoutCredential(record(job.request_payload));
+    const retryPayload = nextStatus === "planned"
+      ? withRetryMetadata(cleanPayload, "transient", Math.max(1, job.attempt_count))
+      : cleanPayload;
     const { error: staleError } = await db.from("marketing_media_jobs").update({
       status: nextStatus,
-      request_payload: json(withoutCredential(record(job.request_payload))),
+      request_payload: json(retryPayload),
       external_job_id: null,
       error: nextStatus === "failed" ? "Marketing media job became stale before a terminal callback was received." : null,
       started_at: null,
       completed_at: nextStatus === "failed" ? new Date().toISOString() : null,
     }).eq("id", job.id).eq("owner_id", job.owner_id).eq("artist_id", job.artist_id).in("status", ["queued", "running"]);
     if (staleError) throw new Error(staleError.message);
-    if (nextStatus === "planned") planned.push({ ...job, status: "planned", external_job_id: null });
+    if (nextStatus === "planned") deferred += 1;
   }
-  return { active, planned: planned.sort((a, b) => timestamp(a.created_at) - timestamp(b.created_at)) };
+  return {
+    active,
+    deferred,
+    planned: planned.sort((a, b) => timestamp(a.created_at) - timestamp(b.created_at)),
+  };
 }
 
 async function freshUploadPayload(payload: Record<string, unknown>) {
@@ -132,7 +150,7 @@ async function freshUploadPayload(payload: Record<string, unknown>) {
 }
 
 async function dispatch(db: ReturnType<typeof client>, job: MarketingMediaJob) {
-  const requestPayload = withoutCredential(record(job.request_payload));
+  const requestPayload = clearRetryMetadata(withoutCredential(record(job.request_payload)));
   if (requestPayload.artist_id !== job.artist_id) throw new Error("Marketing media job payload does not match its artist lineage.");
   const credential = createMediaWorkerCallbackCredential();
   const { data: claimed, error: claimError } = await db.from("marketing_media_jobs").update({
@@ -145,7 +163,7 @@ async function dispatch(db: ReturnType<typeof client>, job: MarketingMediaJob) {
     completed_at: null,
   }).eq("id", job.id).eq("owner_id", job.owner_id).eq("artist_id", job.artist_id).eq("status", "planned").select("*").maybeSingle();
   if (claimError) throw new Error(claimError.message);
-  if (!claimed) return false;
+  if (!claimed) return { dispatched: false as const, errorClass: "busy" as const, terminal: false };
 
   try {
     const dispatchPayload = await freshUploadPayload(requestPayload);
@@ -160,24 +178,19 @@ async function dispatch(db: ReturnType<typeof client>, job: MarketingMediaJob) {
       .update({ external_job_id: result.sandboxName })
       .eq("id", claimed.id).eq("owner_id", claimed.owner_id).eq("artist_id", claimed.artist_id);
     if (updateError) throw new Error(updateError.message);
-    return true;
+    return { dispatched: true as const, errorClass: null, terminal: false };
   } catch (error) {
-    if (busyError(error)) {
-      await db.from("marketing_media_jobs").update({
-        status: "planned",
-        request_payload: json(requestPayload),
-        external_job_id: null,
-        error: null,
-      }).eq("id", claimed.id).eq("owner_id", claimed.owner_id).eq("artist_id", claimed.artist_id);
-      return false;
-    }
+    const errorClass = classifyBackgroundFailure(error);
     const message = error instanceof Error ? error.message : "Marketing Media Worker dispatch failed.";
-    const terminal = claimed.attempt_count >= claimed.max_attempts;
+    const terminal = errorClass === "terminal" || claimed.attempt_count >= claimed.max_attempts;
+    const retryPayload = terminal
+      ? requestPayload
+      : withRetryMetadata(requestPayload, errorClass, claimed.attempt_count);
     await db.from("marketing_media_jobs").update({
       status: terminal ? "failed" : "planned",
-      request_payload: json(requestPayload),
+      request_payload: json(retryPayload),
       external_job_id: null,
-      error: message,
+      error: terminal ? message : `${message} Retry delayed by ${retryDelayMs(errorClass, claimed.attempt_count)}ms.`,
       completed_at: terminal ? new Date().toISOString() : null,
     }).eq("id", claimed.id).eq("owner_id", claimed.owner_id).eq("artist_id", claimed.artist_id);
     if (terminal && claimed.generation_run_id) {
@@ -188,7 +201,7 @@ async function dispatch(db: ReturnType<typeof client>, job: MarketingMediaJob) {
         output: json({ ...output, stage: "finishing_failed", finishingError: message }),
       }).eq("id", claimed.generation_run_id).eq("owner_id", claimed.owner_id).eq("artist_id", claimed.artist_id);
     }
-    return false;
+    return { dispatched: false as const, errorClass, terminal };
   }
 }
 
@@ -198,7 +211,17 @@ export async function kickMarketingMediaWorkerQueue(scope?: WorkerScope) {
   const current = await state(db, scope);
   if (current.active) return { dispatched: false, reason: "busy" as const };
   const job = current.planned[0] ?? null;
-  if (!job) return { dispatched: false, reason: "empty" as const };
-  const dispatched = await dispatch(db, job);
-  return { dispatched, reason: dispatched ? "started" as const : "busy" as const, jobId: job.id };
+  if (!job) {
+    return current.deferred > 0
+      ? { dispatched: false, reason: "backoff" as const, deferred: current.deferred }
+      : { dispatched: false, reason: "empty" as const };
+  }
+  const result = await dispatch(db, job);
+  if (result.dispatched) return { dispatched: true, reason: "started" as const, jobId: job.id };
+  return {
+    dispatched: false,
+    reason: result.terminal ? "failed" as const : "backoff" as const,
+    errorClass: result.errorClass,
+    jobId: job.id,
+  };
 }
