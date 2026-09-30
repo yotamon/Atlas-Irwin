@@ -104,6 +104,14 @@ export const PROCESSOR_REGISTRY = {
     targets: { cloud: { supported: true, requiresNetwork: true, paidCompute: true, requiredEntitlement: "cloud.compute" } },
     privacy: { requiresRawAudio: false },
   }),
+  "media-worker.compose-free-social": descriptor({
+    id: "media-worker.compose-free-social",
+    processorVersion: "1",
+    inputKinds: ["recording", "asset"],
+    outputKinds: ["video.social"],
+    targets: { cloud: { supported: true, requiresNetwork: true, paidCompute: false } },
+    privacy: { requiresRawAudio: true },
+  }),
   "media-worker.render-automix": descriptor({
     id: "media-worker.render-automix",
     processorVersion: "1",
@@ -139,6 +147,7 @@ export const MEDIA_WORKER_PROCESSOR_BY_JOB = {
   render_audio_scene: "media-worker.render-audio-scene",
   master_audio: "media-worker.master-audio",
   finish_social_video: "media-worker.finish-social-video",
+  compose_free_social_asset: "media-worker.compose-free-social",
   render_automix: "media-worker.render-automix",
   render_automix_preview: "media-worker.render-automix-preview",
 } as const;
