@@ -3,6 +3,7 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import { channelAdapter } from "./channels";
 import { createMarketingServiceClient } from "./db";
+import { processFreeContentFactoryAutomationJob } from "./free-content-factory";
 import { aggregateMetrics, primarySignalValue } from "./domain";
 import { releaseRelativeTimestamp } from "./schedule";
 import type { Json } from "@/types/database";
@@ -475,6 +476,7 @@ async function collectMetricsJob(job: ScopedAutomationJob) {
 
 async function processJob(job: ScopedAutomationJob) {
   if (!job.artist_id) throw new Error("Automation job is missing artist scope.");
+  if (job.job_type === "free_content_factory_render") return processFreeContentFactoryAutomationJob(job);
   if (job.job_type === "evaluate_experiment") return evaluateExperimentJob(job);
   if (job.job_type === "generate_winner_derivatives") return generateWinnerDerivatives(job);
   if (job.job_type === "collect_metrics") return collectMetricsJob(job);
@@ -536,8 +538,13 @@ export async function runDueAutomationJobs(limit = 20, artistId?: string) {
   return { claimed: jobs?.length ?? 0, completed, failed };
 }
 
-export async function runMarketingAutomationCycle(artistId?: string) {
-  const processedEvents = await processMarketingEvents(50, artistId);
-  const jobs = await runDueAutomationJobs(20, artistId);
+export async function runMarketingAutomationCycle(
+  artistId?: string,
+  limits: { eventLimit?: number; jobLimit?: number } = {},
+) {
+  const eventLimit = Math.max(1, Math.min(limits.eventLimit ?? 10, 50));
+  const jobLimit = Math.max(1, Math.min(limits.jobLimit ?? 3, 20));
+  const processedEvents = await processMarketingEvents(eventLimit, artistId);
+  const jobs = await runDueAutomationJobs(jobLimit, artistId);
   return { processedEvents, ...jobs };
 }
