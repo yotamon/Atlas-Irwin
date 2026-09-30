@@ -262,6 +262,8 @@ The canonical next step is [`docs/ensemblis-ux-architecture-v4.md`](ensemblis-ux
 - preserve specialist capabilities and routes as implementation/advanced layers without making them the default mental model;
 - use AutoMix as the first reference migration from stacked specialist panels to Source → Intent → Build → Review → Render.
 
+The next reference vertical slice is [`docs/master-readiness-experience.md`](master-readiness-experience.md). It compresses Mastering Inspector, Active Mastering and Distribution audio checks into one canonical Track-centered journey: readiness decision → exact listening evidence → only relevant corrective action → loudness-matched verification → explicit approval → exact-track Distribution gate. The default UI must answer whether the current master is ready before exposing mastering presets or engineering meters.
+
 #### P1.6 Rebrand implementation / Atlas decoupling - #59 - **Complete**
 Ensemblis is the product identity. Atlas Irwin remains artist data/reference production content.
 
