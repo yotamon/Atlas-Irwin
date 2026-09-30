@@ -206,8 +206,9 @@ async function scanArtistBreakouts(ownerId: string, artistId: string) {
   return saved;
 }
 
-export async function refreshMarketingRadarIfDue(scope?: RadarArtist) {
-  const artists = scope ? [scope] : await youtubeArtists();
+export async function refreshMarketingRadarIfDue(scope?: RadarArtist, limit = 2) {
+  const allArtists = scope ? [scope] : await youtubeArtists();
+  const artists = allArtists.slice(0, Math.max(1, Math.min(limit, 10)));
   const client = createMarketingServiceClient();
   let scanned = 0;
   let opportunities = 0;
