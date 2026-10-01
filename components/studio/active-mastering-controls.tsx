@@ -257,22 +257,25 @@ export function ActiveMasteringControls({
   const latestActive = displayJobs.find((job) => ["planned", "queued", "running"].includes(job.status));
   const failed = displayJobs.find((job) => job.status === "failed");
   const activePreset = latestActive ? title(latestActive.preset) : null;
-  const masteringRecommended = readiness.primaryAction === "mastering_fix";
-  const sourceRepairRequired = readiness.status === "fix_required" && !readiness.findings.some((finding) => finding.masteringCanHelp);
+  const masteringRecommended = readiness.masterability === "streaming_safety_only" || readiness.primaryAction === "mastering_fix";
+  const sourceRepairRequired = readiness.masterability === "source_repair_required";
+  const mixReviewRecommended = readiness.masterability === "mix_review_recommended";
 
   return (
     <section className={styles.root} id="active-mastering" aria-label="Mastering options">
       <header className={styles.header}>
         <div>
           <span className="section-label">{latestActive ? "Mastering candidate" : "Optional mastering"}</span>
-          <h3>{latestActive ? "Ensemblis is preparing a verified alternative" : masteringRecommended ? "Add streaming headroom without changing the character" : sourceRepairRequired ? "Mastering is not the right fix for this blocker" : readiness.status === "ready" ? "The current master does not need corrective mastering" : "Master only when you want a deliberate change"}</h3>
+          <h3>{latestActive ? "Ensemblis is preparing a verified alternative" : masteringRecommended ? "Add streaming headroom without changing the character" : sourceRepairRequired ? "Mastering is not the right fix for this blocker" : mixReviewRecommended ? "Review the mix or source before mastering" : readiness.masterability === "ready_as_is" ? "The current master does not need corrective mastering" : "Master only when you want a deliberate change"}</h3>
           <p>{latestActive
             ? "The original stays untouched. Ensemblis will re-measure the rendered waveform before it can be approved."
             : masteringRecommended
               ? "The source-preserving path keeps loudness, tone and dynamics as close as possible while creating safer true-peak and codec headroom."
               : sourceRepairRequired
                 ? "Repair or replace the source first. Ensemblis will not present mastering as a cure for clipping, phase, timing or render problems it cannot safely restore."
-                : "Balanced, Punchy and Dynamic remain available as creative directions, but they are never required just because the tools exist."}</p>
+                : mixReviewRecommended
+                  ? "The waveform is distributable, but the current evidence points to a mix/source judgment rather than an automatic mastering correction."
+                  : "Balanced, Punchy and Dynamic remain available as creative directions, but they are never required just because the tools exist."}</p>
         </div>
         {latestActive ? <span className={styles.running}>{latestActive.status === "running" ? "Mastering…" : "Queued"}</span> : null}
       </header>
@@ -310,8 +313,8 @@ export function ActiveMasteringControls({
             </form>
           ) : (
             <div className={styles.calm}>
-              <strong>{sourceRepairRequired ? "Fix the source before creating a new master." : readiness.status === "ready" ? "Keep the current master unless you want a creative change." : "Listen to the findings before deciding whether to change the sound."}</strong>
-              <span>{sourceRepairRequired ? "A mastering render could hide symptoms without repairing the underlying audio." : "The original remains the canonical master until you explicitly approve a verified candidate."}</span>
+              <strong>{sourceRepairRequired ? "Fix the source before creating a new master." : mixReviewRecommended ? "Resolve the mix/source question before using mastering to change it." : readiness.masterability === "ready_as_is" ? "Keep the current master unless you want a creative change." : "Listen to the findings before deciding whether to change the sound."}</strong>
+              <span>{sourceRepairRequired ? "A mastering render could hide symptoms without repairing the underlying audio." : mixReviewRecommended ? readiness.masterabilityReason : "The original remains the canonical master until you explicitly approve a verified candidate."}</span>
             </div>
           )}
 
