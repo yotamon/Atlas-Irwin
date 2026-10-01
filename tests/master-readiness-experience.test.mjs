@@ -141,6 +141,9 @@ test("Active Mastering uses a bounded lossless storage envelope and never persis
   assert.match(processor, /upload_file\(upload_url, output, "audio\/flac"\)/);
   assert.match(jobs, /masteringOutputPath[\s\S]*?\.flac/);
   assert.match(callback, /mimeType = isFlac \? "audio\/flac" : "audio\/wav"/);
+  assert.match(callback, /asset_type: "master_audio"/);
+  assert.doesNotMatch(callback, /asset_type: "audio_master"/);
+  assert.match(callback, /\[mastering-callback\] completion failed/);
   assert.match(callback, /original_name:[\s\S]*?extension/);
   assert.match(controls, /Retry \{failed\.preset/);
   assert.doesNotMatch(controls, /Download 24-bit WAV/);
