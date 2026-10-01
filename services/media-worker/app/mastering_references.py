@@ -6,7 +6,8 @@ from typing import Any
 
 REFERENCE_INTELLIGENCE_SCHEMA = "ensemblis.mastering_references.v2"
 _MIN_AUTOMATIC_REFERENCES = 3
-_MIN_INFLUENCE_CONFIDENCE = 0.52
+_MIN_INFLUENCE_CONFIDENCE = 0.58
+_MIN_INFLUENCE_SIMILARITY = 0.62
 _MAX_SELECTED_REFERENCES = 5
 
 
@@ -267,7 +268,10 @@ def select_references(
     selected = ranked[:_MAX_SELECTED_REFERENCES]
     strong = [
         item for item in selected
-        if float(item["confidence"]) >= _MIN_INFLUENCE_CONFIDENCE
+        if (
+            float(item["confidence"]) >= _MIN_INFLUENCE_CONFIDENCE
+            and float(item["similarity"]) >= _MIN_INFLUENCE_SIMILARITY
+        )
     ]
     automatic = (
         len(reference_signatures) >= _MIN_AUTOMATIC_REFERENCES
