@@ -122,6 +122,7 @@ export async function POST(request: Request) {
 
   if (status === "failed") {
     const message = callbackError || "Active Mastering worker job failed.";
+    await cleanupUploadedMaster(service, requestPayload, result);
     const update = await db.from("track_mastering_jobs").update({
       status: "failed",
       request_payload: json(cleanRequestPayload(requestPayload)),
