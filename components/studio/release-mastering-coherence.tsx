@@ -28,7 +28,7 @@ export function ReleaseMasteringCoherence({
     const vault = byTrack.get(track.id);
     return vault
       ? [{
-          id: vault.id,
+          id: track.id,
           title: track.title,
           musicMap: vault.audio_profile,
         }]
@@ -71,7 +71,7 @@ export function ReleaseMasteringCoherence({
       {coherence.findings.length ? (
         <div className="v2-inbox">
           {coherence.findings.slice(0, 6).map((finding) => {
-            const vault = ordered.find((item) => item.id === finding.trackId);
+            const vault = byTrack.get(finding.trackId);
             return vault ? (
               <Link
                 className="v2-inbox-item"
