@@ -97,7 +97,7 @@ class MasteringEvaluationV2Test(unittest.TestCase):
         self.assertFalse(result["creative_pass"])
         failed_metrics = {item["metric"] for item in result["violations"]}
         self.assertIn("plr_loss_lu", failed_metrics)
-        self.assertIn("crest_factor_loss_db", failed_metrics)
+        self.assertIn("transient_crest_loss_db", failed_metrics)
         self.assertIn("stereo_correlation_delta", failed_metrics)
         self.assertIn("mono_fold_down_regression_db", failed_metrics)
         self.assertIn("estimated_limiter_gain_reduction_db", failed_metrics)
