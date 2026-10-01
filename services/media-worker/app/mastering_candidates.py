@@ -73,6 +73,61 @@ def build_candidate_family(target: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+def build_candidate_processing_plan(
+    base_plan: dict[str, Any],
+    role: str,
+) -> dict[str, Any]:
+    plan = deepcopy(base_plan)
+    plan["candidate_role"] = role
+
+    character = dict(_record(plan.get("character")))
+    character["enabled"] = bool(character.get("allowed")) and role == "recommended"
+    if role != "recommended":
+        character["reason"] = "bypassed_for_cleaner_candidate_variant"
+    plan["character"] = character
+
+    if role in {"more_dynamic", "conservative"}:
+        compression = dict(_record(plan.get("compression")))
+        compression.update({
+            "enabled": False,
+            "ratio": 1.0,
+            "reason": f"{role}_candidate_preserves_bus_dynamics",
+        })
+        plan["compression"] = compression
+
+        resonance = dict(_record(plan.get("resonance")))
+        resonance.update({
+            "enabled": False,
+            "moves": [],
+            "reason": f"{role}_candidate_bypasses_dynamic_resonance_control",
+        })
+        plan["resonance"] = resonance
+
+    if role == "conservative":
+        scaled_moves: list[dict[str, Any]] = []
+        for move in plan.get("eq_moves") or []:
+            if not isinstance(move, dict):
+                continue
+            gain = _number(move.get("gain_db"))
+            if gain is None:
+                continue
+            scaled = dict(move)
+            scaled["gain_db"] = round(gain * 0.65, 2)
+            scaled["reason"] = "conservative_candidate_reduced_tonal_move"
+            if abs(float(scaled["gain_db"])) >= 0.18:
+                scaled_moves.append(scaled)
+        plan["eq_moves"] = scaled_moves
+        tonal = dict(_record(plan.get("tonal")))
+        tonal["eq_moves"] = scaled_moves
+        tonal["total_eq_energy"] = round(
+            sum(abs(float(item["gain_db"])) for item in scaled_moves),
+            3,
+        )
+        plan["tonal"] = tonal
+
+    return plan
+
+
 def _damage_penalty(checks: dict[str, Any]) -> float:
     evaluation = _record(checks.get("change_budget"))
     rows = evaluation.get("checks")
