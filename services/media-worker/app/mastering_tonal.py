@@ -5,6 +5,15 @@ from typing import Any
 
 TONAL_PLAN_SCHEMA = "ensemblis.mastering_tonal.v2"
 
+_LEGACY_EQ_BANDS: dict[str, tuple[float, float]] = {
+    "sub_20_80": (55.0, 0.8),
+    "bass_80_180": (120.0, 0.9),
+    "low_mid_180_500": (320.0, 1.0),
+    "mid_500_2500": (1200.0, 1.0),
+    "presence_2500_6000": (4200.0, 1.0),
+    "air_6000_16000": (10500.0, 0.8),
+}
+
 _FINE_EQ_BANDS: dict[str, tuple[float, float]] = {
     "sub_20_40": (32.0, 0.9),
     "sub_40_80": (58.0, 0.9),
@@ -60,9 +69,11 @@ def build_tonal_plan(
     source_inspector: dict[str, Any],
     target: dict[str, Any],
     reference_bands: dict[str, float],
+    legacy_reference_bands: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     source_signature = _record(source_inspector.get("reference_signature"))
     source_fine = _record(source_signature.get("perceptual_envelope_db"))
+    source_broad = _record(source_signature.get("band_relative_db"))
     budget = _record(target.get("change_budget"))
     max_move = _number(budget.get("max_eq_move_db"))
     max_total = _number(budget.get("max_total_eq_energy"))
@@ -131,6 +142,28 @@ def build_tonal_plan(
             remaining -= abs(bounded)
             if len(moves) >= 7:
                 break
+    elif source_broad and legacy_reference_bands:
+        reference_resolution = "legacy_6_band"
+        remaining = max_total
+        for key, (frequency, q) in _LEGACY_EQ_BANDS.items():
+            source_value = _number(source_broad.get(key))
+            reference_value = _number(legacy_reference_bands.get(key))
+            if source_value is None or reference_value is None:
+                continue
+            gain = _clamp((reference_value - source_value) * 0.30, -max_move, max_move)
+            if key == "sub_20_80":
+                gain = min(0.0, gain)
+            if abs(gain) < 0.25 or remaining <= 0:
+                continue
+            gain = math.copysign(min(abs(gain), remaining), gain)
+            moves.append({
+                "band": key,
+                "frequency_hz": frequency,
+                "q": q,
+                "gain_db": round(gain, 2),
+                "reason": "legacy_trusted_reference_tonal_alignment",
+            })
+            remaining -= abs(gain)
     else:
         reference_resolution = "none"
 
