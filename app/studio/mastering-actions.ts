@@ -157,6 +157,13 @@ export async function keepOriginalMaster(form: FormData) {
   }
   const job = jobResult.data as TrackMasteringJob;
   const result = record(job.result_payload);
+  const existingDecision = record(result.artist_decision);
+  if (existingDecision.decision === "approved") {
+    throw new Error("This candidate was already approved as the canonical master. Mastering decisions are immutable evidence.");
+  }
+  if (existingDecision.decision === "kept_original") {
+    return { keptOriginal: true, jobId: job.id, deduplicated: true };
+  }
   const decidedAt = new Date().toISOString();
   const nextResult = {
     ...result,
@@ -194,6 +201,13 @@ export async function promoteActiveMaster(form: FormData) {
   const job = jobResult.data as TrackMasteringJob;
   const request = record(job.request_payload);
   const result = record(job.result_payload);
+  const existingDecision = record(result.artist_decision);
+  if (existingDecision.decision === "kept_original") {
+    throw new Error("You already chose to keep the original for this candidate. Create a fresh candidate before changing that decision.");
+  }
+  if (existingDecision.decision === "approved") {
+    return { promoted: true, trackId: job.track_vault_id, deduplicated: true };
+  }
   const checks = record(result.final_checks);
   const publicUrl = typeof request.public_url === "string" ? request.public_url : "";
   if (!job.output_asset_id || !publicUrl) throw new Error("This mastering candidate has no registered output asset.");
