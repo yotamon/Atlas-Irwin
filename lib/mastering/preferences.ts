@@ -69,8 +69,6 @@ export function masteringPreferenceEvidence(job: MasteringJobLike): MasteringPre
   const afterLoudness = record(after.loudness);
   const checks = record(result.final_checks);
   const delta = record(checks.perceptual_delta);
-  const optimizer = record(result.optimizer);
-  const selectedRole = typeof optimizer.selected_role === "string" ? optimizer.selected_role : null;
   const plan = record(result.plan);
   const tonal = record(plan.tonal);
   const stereo = record(plan.stereo);
