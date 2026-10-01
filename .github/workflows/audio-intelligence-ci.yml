@@ -100,6 +100,7 @@ jobs:
           services/media-worker/app/strongest_moments.py
           services/media-worker/app/moment_rhythm.py
           services/media-worker/app/mastering_candidates.py
+          services/media-worker/app/mastering_character.py
           services/media-worker/app/mastering_contracts.py
           services/media-worker/app/mastering_dynamics.py
           services/media-worker/app/mastering_evaluation.py
