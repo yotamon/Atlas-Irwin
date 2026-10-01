@@ -131,6 +131,7 @@ test("Active Mastering V2 keeps white-box DSP, damage gates and bounded optimiza
   assert.match(preferences, /technical_safety_may_be_loosened": False/);
   assert.match(controls, /Keep original/);
   assert.match(controls, /suggestedLoops/);
+  assert.match(controls, /Artist Mastering DNA influenced this candidate/);
   assert.match(release, /never normalizes every song to one target/i);
 });
 
@@ -173,4 +174,13 @@ test("chunked canonical mastering media validates exact byte continuity and HTTP
   assert.equal(headers.get("content-range"), "bytes 40-60/75");
   assert.equal(headers.get("accept-ranges"), "bytes");
   assert.equal(headers.get("etag"), "\"abc\"");
+});
+
+test("mastering failure paths retain storage lineage so uploaded chunks can be cleaned", async () => {
+  const [processor, callback] = await Promise.all([
+    source("services/media-worker/app/mastering_processor.py"),
+    source("app/api/studio/mastering/callback/route.ts"),
+  ]);
+  assert.match(processor, /_callback\(request, "failed", result, message\)/);
+  assert.match(callback, /status === "failed"[\s\S]*cleanupUploadedMaster\(service, requestPayload, result\)/);
 });
