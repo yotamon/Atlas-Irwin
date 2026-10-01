@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createActiveMaster, promoteActiveMaster } from "@/app/studio/mastering-actions";
-import { MasteringListenLab } from "@/components/studio/mastering-listen-lab";
+import { MasteringListenLab, type MasteringSuggestedLoop } from "@/components/studio/mastering-listen-lab";
 import { MasteringAnalysisReport } from "@/components/studio/mastering-analysis-report";
 import { ProcessingState } from "@/components/studio/processing-state";
 import { ConfirmButton, SubmitButton } from "@/components/studio/submit-button";
@@ -37,6 +37,89 @@ function metric(value: number | null, suffix: string, digits = 1) {
 
 function title(value: string) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function masteringSuggestedLoops(value: Json): MasteringSuggestedLoop[] {
+  const result = record(value);
+  const after = record(result.after);
+  const loops: MasteringSuggestedLoop[] = [];
+
+  const peaks = record(after.peaks);
+  const peakMs = number(peaks.sample_peak_ms);
+  if (peakMs !== null) {
+    const center = peakMs / 1000;
+    const start = Math.max(0, center - 4);
+    loops.push({
+      label: "Peak / transient stress",
+      start,
+      end: start + 12,
+      reason: "Audition the area around the candidate's measured peak and strongest limiter stress.",
+    });
+  }
+
+  const stereoTimeline = Array.isArray(after.stereo_timeline)
+    ? after.stereo_timeline.map(record)
+    : [];
+  const monoSensitive = stereoTimeline
+    .map((row) => ({
+      startMs: number(row.start_ms),
+      endMs: number(row.end_ms),
+      mono: number(row.mono_fold_down_delta_db),
+    }))
+    .filter((row) => row.startMs !== null && row.endMs !== null && row.mono !== null)
+    .sort((a, b) => Number(a.mono) - Number(b.mono))[0];
+  if (monoSensitive?.startMs !== null && monoSensitive?.endMs !== null) {
+    loops.push({
+      label: "Mono-sensitive moment",
+      start: monoSensitive.startMs / 1000,
+      end: Math.max(monoSensitive.startMs / 1000 + 4, monoSensitive.endMs / 1000),
+      reason: "This window has the largest measured mono fold-down loss in the candidate.",
+    });
+  }
+
+  const stability = record(after.temporal_stability);
+  const findings = Array.isArray(stability.findings) ? stability.findings.map(record) : [];
+  const localized = findings.find((finding) => number(finding.start_ms) !== null && number(finding.end_ms) !== null);
+  const findingStart = localized ? number(localized.start_ms) : null;
+  const findingEnd = localized ? number(localized.end_ms) : null;
+  if (localized && findingStart !== null && findingEnd !== null) {
+    loops.push({
+      label: "Render-change finding",
+      start: findingStart / 1000,
+      end: Math.min(findingStart / 1000 + 12, findingEnd / 1000),
+      reason: typeof localized.message === "string" ? localized.message : "Localized Mastering Inspector finding.",
+    });
+  }
+
+  const signature = record(after.reference_signature);
+  const sections = Array.isArray(signature.section_signatures)
+    ? signature.section_signatures.map(record)
+    : [];
+  const bassSection = sections
+    .map((section) => ({
+      startMs: number(section.start_ms),
+      endMs: number(section.end_ms),
+      label: typeof section.label === "string" ? section.label : "section",
+      bass: number(record(section.perceptual_envelope_db).sub_40_80),
+    }))
+    .filter((section) => section.startMs !== null && section.endMs !== null && section.bass !== null)
+    .sort((a, b) => Number(b.bass) - Number(a.bass))[0];
+  if (bassSection?.startMs !== null && bassSection?.endMs !== null) {
+    loops.push({
+      label: `Bass-heavy · ${bassSection.label}`,
+      start: bassSection.startMs / 1000,
+      end: Math.min(bassSection.startMs / 1000 + 12, bassSection.endMs / 1000),
+      reason: "This section has the strongest measured 40–80 Hz share and is useful for checking low-end translation.",
+    });
+  }
+
+  const deduped: MasteringSuggestedLoop[] = [];
+  for (const item of loops) {
+    if (deduped.some((existing) => Math.abs(existing.start - item.start) < 2.5)) continue;
+    deduped.push(item);
+    if (deduped.length >= 4) break;
+  }
+  return deduped;
 }
 
 function outputFormatLabel(value: Json) {
@@ -228,6 +311,11 @@ export function ActiveMasteringControls({
             const beforeDynamics = record(before.dynamics);
             const afterDynamics = record(after.dynamics);
             const checks = record(result.final_checks);
+            const optimizer = record(result.optimizer);
+            const target = record(result.target);
+            const targetRange = record(target.loudness_range);
+            const referenceIntelligence = record(target.reference_intelligence);
+            const suggestedLoops = masteringSuggestedLoops(job.result);
             const iterations = Array.isArray(result.iterations) ? result.iterations.length : 0;
             const downloadLabel = outputFormatLabel(job.result);
             const beforeIntegrated = number(beforeLoudness.integrated_lufs);
@@ -242,6 +330,20 @@ export function ActiveMasteringControls({
                   <small>{iterations} render pass{iterations === 1 ? "" : "es"}</small>
                 </div>
 
+                {typeof optimizer.rationale === "string" || referenceIntelligence.automatic_influence === true ? (
+                  <div className={styles.rationale}>
+                    <strong>{typeof optimizer.rationale === "string" ? optimizer.rationale : "Source-first mastering with trusted-reference context."}</strong>
+                    <span>
+                      {number(targetRange.min_lufs) !== null && number(targetRange.max_lufs) !== null
+                        ? `Clean target range ${number(targetRange.min_lufs)?.toFixed(1)} to ${number(targetRange.max_lufs)?.toFixed(1)} LUFS`
+                        : "Target range follows the source and mastering intent."}
+                      {referenceIntelligence.automatic_influence === true
+                        ? ` · ${number(referenceIntelligence.selected_count) ?? 0} similar trusted references influenced the target`
+                        : " · references stayed descriptive because influence confidence was not strong enough"}
+                    </span>
+                  </div>
+                ) : null}
+
                 <div className={styles.metrics}>
                   <div><span>Integrated</span><strong>{metric(beforeIntegrated, " LUFS")}</strong><b>→</b><strong>{metric(afterIntegrated, " LUFS")}</strong></div>
                   <div><span>True peak</span><strong>{metric(number(beforeLoudness.true_peak_dbtp), " dBTP", 2)}</strong><b>→</b><strong>{metric(number(afterLoudness.true_peak_dbtp), " dBTP", 2)}</strong></div>
@@ -255,6 +357,7 @@ export function ActiveMasteringControls({
                     originalLufs={beforeIntegrated}
                     candidateLufs={afterIntegrated}
                     references={references}
+                    suggestedLoops={suggestedLoops}
                   />
                 ) : null}
 
