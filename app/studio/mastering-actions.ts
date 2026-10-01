@@ -6,6 +6,7 @@ import { z } from "zod";
 import { analyzeVaultTrack } from "@/app/studio/growth-media-actions";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMasteringClient, kickMasteringQueue, masteringOutputPath } from "@/lib/mastering/jobs";
+import { deriveMasterReadiness } from "@/lib/mastering/readiness";
 import { buildMasteringPreferenceProfile, masteringPreferenceWorkerPayload } from "@/lib/mastering/preferences";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asGrowthClient } from "@/lib/studio/growth-db";
@@ -87,6 +88,16 @@ export async function createActiveMaster(form: FormData) {
   const inspector = record(record(track.audio_profile).mastering_inspector);
   if (!Object.keys(inspector).length) {
     throw new Error("Run Track Intelligence first so Active Mastering has deterministic mastering evidence.");
+  }
+  const readiness = deriveMasterReadiness(track.audio_profile, {
+    audioUrl: track.audio_url,
+    mediaAssetId: track.media_asset_id,
+  });
+  if (readiness.sourceMatchesCurrent === false || readiness.masterability === "unavailable" || readiness.masterability === "pending") {
+    throw new Error("Run fresh Track Intelligence on the current waveform before creating a mastering candidate.");
+  }
+  if (readiness.masterability === "source_repair_required") {
+    throw new Error("This source needs repair or replacement before mastering. Ensemblis will not master over a blocking source defect.");
   }
 
   const references = (referencesResult.data ?? [])
