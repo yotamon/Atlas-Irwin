@@ -323,6 +323,8 @@ export function ActiveMasteringControls({
             const decision = typeof artistDecision.decision === "string" ? artistDecision.decision : null;
             const targetRange = record(target.loudness_range);
             const referenceIntelligence = record(target.reference_intelligence);
+            const preferencePolicy = record(target.artist_preference_policy);
+            const tightenedPreferenceBudget = record(preferencePolicy.tightened_budget);
             const suggestedLoops = masteringSuggestedLoops(job.result);
             const iterations = Array.isArray(result.iterations) ? result.iterations.length : 0;
             const downloadLabel = outputFormatLabel(job.result);
@@ -350,6 +352,35 @@ export function ActiveMasteringControls({
                         : " · references stayed descriptive because influence confidence was not strong enough"}
                     </span>
                   </div>
+                ) : null}
+
+                {preferencePolicy.applied === true ? (
+                  <details className="studio-advanced-details">
+                    <summary>
+                      <span>Artist Mastering DNA influenced this candidate</span>
+                      <small>
+                        {number(preferencePolicy.evidence_count) ?? 0} explicit mastering decision{number(preferencePolicy.evidence_count) === 1 ? "" : "s"} · confidence {metric(number(preferencePolicy.confidence), "", 2)}
+                      </small>
+                    </summary>
+                    <p className="v2-muted-copy">
+                      Ensemblis used your previous approved or kept-original mastering decisions only as a bounded creative prior.
+                      It cannot loosen technical safety, change streaming-safe behavior or approve a master for you.
+                    </p>
+                    <div className={styles.metrics}>
+                      <div>
+                        <span>Loudness preference</span>
+                        <strong>{metric(number(preferencePolicy.loudness_nudge_lu), " LU")}</strong>
+                      </div>
+                      <div>
+                        <span>Limiter budget</span>
+                        <strong>{metric(number(tightenedPreferenceBudget.max_limiter_gain_reduction_db), " dB")}</strong>
+                      </div>
+                      <div>
+                        <span>EQ-change budget</span>
+                        <strong>{metric(number(tightenedPreferenceBudget.max_total_eq_energy), " dB")}</strong>
+                      </div>
+                    </div>
+                  </details>
                 ) : null}
 
                 <div className={styles.metrics}>
