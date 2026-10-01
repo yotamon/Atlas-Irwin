@@ -19,6 +19,7 @@ export type MasteringPreferenceProfile = {
   evidenceCount: number;
   approvedCount: number;
   keptOriginalCount: number;
+  latestDecisionAt: string | null;
   preferredCreativeLufs: number | null;
   preferredLimiterGainReductionDb: number | null;
   preferredEqEnergy: number | null;
@@ -98,6 +99,9 @@ export function buildMasteringPreferenceProfile(jobs: MasteringJobLike[]): Maste
   const limiter = creativeApproved.flatMap((item) => item.limiterGainReductionDb === null ? [] : [item.limiterGainReductionDb]);
   const eqEnergy = creativeApproved.flatMap((item) => item.totalEqEnergy === null ? [] : [item.totalEqEnergy]);
   const evidenceCount = evidence.length;
+  const latestDecisionAt = evidence
+    .flatMap((item) => item.decidedAt ? [item.decidedAt] : [])
+    .sort((a, b) => Date.parse(b) - Date.parse(a))[0] ?? null;
   const confidence = Math.min(0.9, Math.max(0, evidenceCount < 2 ? 0 : 0.4 + Math.log2(evidenceCount + 1) * 0.12));
 
   return {
@@ -105,6 +109,7 @@ export function buildMasteringPreferenceProfile(jobs: MasteringJobLike[]): Maste
     evidenceCount,
     approvedCount: approved.length,
     keptOriginalCount: evidence.filter((item) => item.decision === "kept_original").length,
+    latestDecisionAt,
     preferredCreativeLufs: median(lufs),
     preferredLimiterGainReductionDb: median(limiter),
     preferredEqEnergy: median(eqEnergy),
