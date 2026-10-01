@@ -76,9 +76,8 @@ def build_stereo_plan(
             "blind_widening_allowed": False,
         }
 
-    # FFmpeg's simple stereotools stage is broadband. Use it only for a very
-    # small corrective side trim when low-end/mono evidence is strong enough.
-    # A future crossover M/S stage may make the correction frequency-specific.
+    # Correct only the low-frequency Side component. The renderer uses
+    # acrossover so the untouched high band and corrected low band sum flat.
     side_level = 1.0
     reason = "healthy_stereo_preserved"
     if low_side >= 0.52 or (localized_mono_loss and low_side >= 0.42):
@@ -95,6 +94,7 @@ def build_stereo_plan(
         "enabled": enabled,
         "side_level": side_level,
         "side_trim_db": round(20.0 * math.log10(side_level), 3) if enabled else 0.0,
+        "crossover_hz": 180.0,
         "reason": reason,
         "blind_widening_allowed": False,
         "evidence": {
