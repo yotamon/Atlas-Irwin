@@ -19,6 +19,8 @@ test("recovery drill is protected, manual and never publishes production dumps",
   assert.match(workflow, /roles\.sql[\s\S]*schema\.sql[\s\S]*data\.sql/);
   assert.match(workflow, /upgrade\/eligibility/);
   assert.doesNotMatch(workflow, /actions\/upload-artifact/);
+  assert.doesNotMatch(workflow, /\$\{\{\s*runner\.temp/);
+  assert.match(workflow, /RUNNER_TEMP\/ensemblis-recovery-backup/);
   assert.doesNotMatch(workflow, /db reset\s+--linked/);
 });
 
