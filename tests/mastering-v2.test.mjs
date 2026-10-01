@@ -278,3 +278,13 @@ test("master readiness separates source repair, streaming safety and ready-as-is
   }];
   assert.equal(deriveMasterReadiness(broken, current).masterability, "source_repair_required");
 });
+
+test("server refuses mastering over blocking source defects", async () => {
+  const [actions, controls] = await Promise.all([
+    source("app/studio/mastering-actions.ts"),
+    source("components/studio/active-mastering-controls.tsx"),
+  ]);
+  assert.match(actions, /readiness\.masterability === "source_repair_required"/);
+  assert.match(actions, /will not master over a blocking source defect/);
+  assert.match(controls, /!sourceRepairRequired \? <details/);
+});
