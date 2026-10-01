@@ -17,6 +17,11 @@ from .main import download, sha256_file, upload_file
 from .mastering_contracts import build_v2_target_contract
 from .mastering_evaluation import build_perceptual_delta, evaluate_change_budget
 from .mastering_inspector import analyze_mastering
+from .mastering_references import (
+    select_references,
+    weighted_reference_bands,
+    weighted_reference_value,
+)
 
 ACTIVE_MASTERING_SCHEMA = "ensemblis.active_mastering.v1"
 FFMPEG_BINARY = imageio_ffmpeg.get_ffmpeg_exe()
@@ -93,7 +98,9 @@ def build_mastering_target(
         item for item in reference_signatures
         if isinstance(item, dict) and _number(item.get("integrated_lufs")) is not None
     ]
-    catalog_lufs = _catalog_median(valid_refs, "integrated_lufs")
+    source_signature = _record(source_inspector.get("reference_signature"))
+    reference_intelligence = select_references(source_signature, valid_refs)
+    catalog_lufs = weighted_reference_value(reference_intelligence, "integrated_lufs")
     source_loudness = _record(source_inspector.get("loudness"))
     source_peaks = _record(source_inspector.get("peaks"))
     source_lufs = _number(source_loudness.get("integrated_lufs"))
@@ -105,9 +112,15 @@ def build_mastering_target(
     static_gain_db = 0.0
     if preset == "streaming_safe":
         reference_source = "source_preservation"
-    elif catalog_lufs is not None and len(valid_refs) >= 3:
-        target_lufs = _clamp((target_lufs * 0.55) + (catalog_lufs * 0.45), -13.0, -8.5)
-        reference_source = "artist_catalog"
+    elif catalog_lufs is not None and bool(reference_intelligence.get("automatic_influence")):
+        confidence = _number(reference_intelligence.get("influence_confidence")) or 0.0
+        reference_weight = _clamp(0.25 + confidence * 0.25, 0.25, 0.50)
+        target_lufs = _clamp(
+            (target_lufs * (1.0 - reference_weight)) + (catalog_lufs * reference_weight),
+            -13.0,
+            -8.5,
+        )
+        reference_source = "similar_trusted_references"
 
     codec_rows = source_inspector.get("codec_stress") or []
     codec_risk = any(
@@ -151,6 +164,16 @@ def build_mastering_target(
         "max_lra_lu": round(max_lra, 2),
         "reference_source": reference_source,
         "reference_count": len(valid_refs),
+        "selected_reference_count": int(reference_intelligence.get("selected_count") or 0),
+        "reference_influence_confidence": round(float(reference_intelligence.get("influence_confidence") or 0.0), 4),
+        "reference_intelligence": {
+            "schema": reference_intelligence.get("schema"),
+            "automatic_influence": reference_intelligence.get("automatic_influence"),
+            "available_count": reference_intelligence.get("available_count"),
+            "selected_count": reference_intelligence.get("selected_count"),
+            "influence_confidence": reference_intelligence.get("influence_confidence"),
+            "ranked": reference_intelligence.get("ranked"),
+        },
         "catalog_integrated_lufs": round(catalog_lufs, 2) if catalog_lufs is not None else None,
         "codec_headroom_guard": codec_risk,
         "preserve_source": preset == "streaming_safe",
@@ -172,7 +195,12 @@ def build_processing_plan(
 ) -> dict[str, Any]:
     source_signature = _record(source_inspector.get("reference_signature"))
     current_bands = _record(source_signature.get("band_relative_db"))
-    reference_bands = _catalog_band_medians(reference_signatures) if target.get("reference_source") == "artist_catalog" else {}
+    selection = select_references(source_signature, reference_signatures)
+    reference_bands = (
+        weighted_reference_bands(selection, "band_relative_db")
+        if target.get("reference_source") == "similar_trusted_references"
+        else {}
+    )
 
     eq_moves: list[dict[str, Any]] = []
     for key, (frequency_hz, q) in BAND_EQ.items():
@@ -188,7 +216,7 @@ def build_processing_plan(
             "frequency_hz": frequency_hz,
             "q": q,
             "gain_db": round(gain_db, 2),
-            "reason": "artist_catalog_tonal_alignment",
+            "reason": "similar_trusted_reference_tonal_alignment",
         })
 
     dynamics = _record(source_inspector.get("dynamics"))
