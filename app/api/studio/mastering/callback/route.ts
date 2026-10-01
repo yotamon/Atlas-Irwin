@@ -153,7 +153,7 @@ export async function POST(request: Request) {
         bucket_name: bucket,
         storage_path: path,
         public_url: publicUrl,
-        asset_type: "audio_master",
+        asset_type: "master_audio",
         mime_type: mimeType,
         file_size: typeof output.file_size === "number" ? output.file_size : null,
         content_hash: typeof output.sha256 === "string" ? output.sha256 : null,
@@ -193,6 +193,8 @@ export async function POST(request: Request) {
     scheduleCleanup();
     return NextResponse.json({ ok: true, mediaAssetId: asset.id });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Active Mastering callback failed" }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Active Mastering callback failed";
+    console.error("[mastering-callback] completion failed", { jobId: job.id, message });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
