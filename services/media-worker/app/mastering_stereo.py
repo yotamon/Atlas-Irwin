@@ -23,6 +23,8 @@ def build_stereo_plan(
     source_inspector: dict[str, Any],
     target: dict[str, Any],
 ) -> dict[str, Any]:
+    format_info = _record(source_inspector.get("format"))
+    channels = int(_number(format_info.get("channels")) or 2)
     stereo = _record(source_inspector.get("stereo"))
     band_side_share = _record(stereo.get("band_side_share"))
     correlation = _number(stereo.get("correlation"))
@@ -43,6 +45,16 @@ def build_stereo_plan(
         item.get("code") == "localized_mono_loss"
         for item in issues
     )
+
+    if channels != 2:
+        return {
+            "schema": STEREO_PLAN_SCHEMA,
+            "mode": "preserve",
+            "enabled": False,
+            "side_level": 1.0,
+            "reason": "corrective_stereo_requires_stereo_source",
+            "blind_widening_allowed": False,
+        }
 
     if preset == "streaming_safe":
         return {
