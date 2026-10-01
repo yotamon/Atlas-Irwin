@@ -131,6 +131,7 @@ jobs:
           services/media-worker/app/automix_preview.py
           services/media-worker/app/runner.py
           services/media-worker/benchmarks/evaluate_mir.py
+          services/media-worker/benchmarks/evaluate_mastering_v2.py
           services/media-worker/benchmarks/generate_robustness_corpus.py
           services/media-worker/benchmarks/robustness_metrics.py
 
