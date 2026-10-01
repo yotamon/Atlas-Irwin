@@ -17,7 +17,7 @@ fake_main.upload_file = lambda *args, **kwargs: None
 fake_main.sha256_file = lambda path: hashlib.sha256(Path(path).read_bytes()).hexdigest()
 with patch.dict(sys.modules, {"app.main": fake_main}):
     from app.mastering_inspector import _true_peak_fallback, analyze_mastering
-    from app.mastering_processor import _render_explicit_limiter, _render_premaster, master_audio
+    from app.mastering_processor import _render_codec_preview, _render_explicit_limiter, _render_premaster, master_audio
 
 
 def _fixture_audio(sample_rate: int = 44100, seconds: float = 2.0) -> np.ndarray:
@@ -139,6 +139,21 @@ class MasteringV2AudioRenderTest(unittest.TestCase):
             self.assertEqual(info.samplerate, sample_rate)
             self.assertEqual(info.subtype, "PCM_24")
 
+
+    def test_real_codec_previews_encode_from_selected_master(self) -> None:
+        sample_rate = 44100
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "selected.flac"
+            aac = root / "preview.m4a"
+            opus = root / "preview.ogg"
+            sf.write(source, _fixture_audio(sample_rate), sample_rate, subtype="PCM_24")
+
+            _render_codec_preview(source, aac, "aac_256")
+            _render_codec_preview(source, opus, "opus_160")
+
+            self.assertGreater(aac.stat().st_size, 1000)
+            self.assertGreater(opus.stat().st_size, 1000)
 
     def test_corrective_stereo_filter_reduces_side_energy_without_widening(self) -> None:
         sample_rate = 48000
