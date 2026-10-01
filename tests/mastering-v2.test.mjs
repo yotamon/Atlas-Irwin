@@ -133,3 +133,44 @@ test("Active Mastering V2 keeps white-box DSP, damage gates and bounded optimiza
   assert.match(controls, /suggestedLoops/);
   assert.match(release, /never normalizes every song to one target/i);
 });
+
+test("chunked canonical mastering media validates exact byte continuity and HTTP ranges", async () => {
+  const {
+    masteringChunkManifest,
+    parseMasteringRange,
+    masteringRangeHeaders,
+  } = await typescriptModule("lib/mastering/chunked-media.ts");
+
+  const valid = masteringChunkManifest([
+    { index: 0, storage_path: "mastering/a/b/c/job/chunks/part-000.bin", offset: 0, size: 45 },
+    { index: 1, storage_path: "mastering/a/b/c/job/chunks/part-001.bin", offset: 45, size: 30 },
+  ], 75);
+  assert.equal(valid.length, 2);
+
+  assert.equal(masteringChunkManifest([
+    { index: 0, storage_path: "mastering/a/b/c/job/chunks/part-000.bin", offset: 0, size: 45 },
+    { index: 1, storage_path: "mastering/a/b/c/job/chunks/part-001.bin", offset: 46, size: 29 },
+  ], 75), null);
+
+  assert.equal(masteringChunkManifest([
+    { index: 0, storage_path: "../chunks/part-000.bin", offset: 0, size: 75 },
+  ], 75), null);
+
+  assert.deepEqual(parseMasteringRange(null, 75), { start: 0, end: 74, partial: false });
+  assert.deepEqual(parseMasteringRange("bytes=40-60", 75), { start: 40, end: 60, partial: true });
+  assert.deepEqual(parseMasteringRange("bytes=-10", 75), { start: 65, end: 74, partial: true });
+  assert.equal(parseMasteringRange("bytes=75-", 75), null);
+  assert.equal(parseMasteringRange("bytes=10-5", 75), null);
+
+  const headers = masteringRangeHeaders({
+    total: 75,
+    start: 40,
+    end: 60,
+    partial: true,
+    etag: "abc",
+  });
+  assert.equal(headers.get("content-length"), "21");
+  assert.equal(headers.get("content-range"), "bytes 40-60/75");
+  assert.equal(headers.get("accept-ranges"), "bytes");
+  assert.equal(headers.get("etag"), "\"abc\"");
+});
