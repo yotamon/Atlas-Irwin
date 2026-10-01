@@ -131,6 +131,12 @@ export function ReleaseMasteringSequencePlayer({
         ref={nextRef}
         src={next.url}
         preload="metadata"
+        onTimeUpdate={(event) => {
+          if (playing !== "intro" || event.currentTarget.currentTime < 12) return;
+          event.currentTarget.pause();
+          event.currentTarget.currentTime = 0;
+          setPlaying(null);
+        }}
         onEnded={() => setPlaying(null)}
       />
     </div>
