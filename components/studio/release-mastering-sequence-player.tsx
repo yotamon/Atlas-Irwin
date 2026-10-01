@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import styles from "@/components/studio/release-mastering-sequence-player.module.css";
 
 export type ReleaseSequenceTrack = {
   id: string;
@@ -91,13 +92,13 @@ export function ReleaseMasteringSequencePlayer({
   }
 
   return (
-    <div className="release-mastering-sequence-player">
-      <div>
+    <div className={styles.root}>
+      <div className={styles.copy}>
         <span className="section-label">Sequence audition</span>
         <strong>{previous.title} → {next.title}</strong>
         <small>8-second tail into the next master at their real relative levels. No loudness matching is applied here.</small>
       </div>
-      <div className="actions">
+      <div className={styles.actions}>
         {tracks.slice(0, -1).map((track, itemIndex) => (
           <button
             className={itemIndex === index ? "button primary" : "button"}
@@ -114,7 +115,7 @@ export function ReleaseMasteringSequencePlayer({
         </button>
         {playing ? <button className="text-button" type="button" onClick={stop}>Stop</button> : null}
       </div>
-      {error ? <p role="alert" className="v2-muted-copy">{error}</p> : null}
+      {error ? <p role="alert" className={styles.error}>{error}</p> : null}
       <audio
         key={previous.id}
         ref={previousRef}
