@@ -410,6 +410,47 @@ def _transient_profile(audio: np.ndarray, sample_rate: int) -> dict[str, Any]:
     }
 
 
+def _section_mastering_signatures(
+    audio: np.ndarray,
+    sample_rate: int,
+    sections: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    signatures: list[dict[str, Any]] = []
+    duration_ms = int(round(len(audio) / max(sample_rate, 1) * 1000.0))
+    for index, section in enumerate(sections[:16]):
+        if not isinstance(section, dict):
+            continue
+        try:
+            start_ms = max(0, int(section.get("start_ms") or 0))
+            end_ms = min(duration_ms, int(section.get("end_ms") or 0))
+        except (TypeError, ValueError):
+            continue
+        if end_ms - start_ms < 2000:
+            continue
+        start = int(round(start_ms * sample_rate / 1000.0))
+        end = int(round(end_ms * sample_rate / 1000.0))
+        window = audio[start:end]
+        if window.size == 0:
+            continue
+        spectral = _spectral_profile(window, sample_rate)
+        transients = _transient_profile(window, sample_rate)
+        qc = _sample_qc(window, sample_rate)
+        signatures.append({
+            "id": str(section.get("id") or f"section-{index + 1}"),
+            "label": str(section.get("label") or section.get("type") or f"Section {index + 1}"),
+            "start_ms": start_ms,
+            "end_ms": end_ms,
+            "duration_ms": end_ms - start_ms,
+            "rms_dbfs": qc.get("rms_dbfs"),
+            "crest_factor_db": qc.get("crest_factor_db"),
+            "band_relative_db": spectral.get("band_relative_db"),
+            "perceptual_envelope_db": spectral.get("perceptual_envelope_db"),
+            "onset_density_per_second": transients.get("onset_density_per_second"),
+            "transient_crest_p90_db": transients.get("transient_crest_p90_db"),
+        })
+    return signatures
+
+
 def _dynamics(audio: np.ndarray, sample_rate: int, loudness: dict[str, Any], sample_qc: dict[str, Any]) -> dict[str, Any]:
     mono = np.mean(audio, axis=1)
     frame = max(512, sample_rate * 3)
@@ -978,6 +1019,7 @@ def analyze_mastering(path: Path, music_map: dict[str, Any]) -> dict[str, Any]:
     transients = _transient_profile(audio, sample_rate)
     dynamics = _dynamics(audio, sample_rate, loudness, sample_qc)
     sections = [item for item in music_map.get("sections") or [] if isinstance(item, dict)]
+    section_signatures = _section_mastering_signatures(audio, sample_rate, sections)
     rhythm_confidence = _finite((((music_map.get("analysis") or {}).get("confidence") or {}).get("rhythm")))
     beat_stability = analyze_beat_stability([int(value) for value in music_map.get("beats_ms") or []], global_bpm=_finite(music_map.get("bpm")), sections=sections, rhythm_confidence=rhythm_confidence)
     temporal_stability = _temporal_stability(audio, sample_rate, sections)
@@ -1009,6 +1051,7 @@ def analyze_mastering(path: Path, music_map: dict[str, Any]) -> dict[str, Any]:
             "stereo_correlation": stereo.get("correlation"), "band_side_share": stereo.get("band_side_share"),
             "tempo_median_bpm": beat_stability.get("median_bpm"), "tempo_span_bpm": beat_stability.get("central_90_span_bpm"),
             "tempo_classification": beat_stability.get("classification"),
+            "section_signatures": section_signatures,
         },
         "issues": issues,
         "issue_counts": {"critical": len(critical), "review": len(review) + len(temporal_review), "info": len([item for item in issues if item.get("severity") == "info"])},
