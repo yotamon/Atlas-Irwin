@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createActiveMaster, keepOriginalMaster, promoteActiveMaster } from "@/app/studio/mastering-actions";
-import { MasteringListenLab, type MasteringSuggestedLoop } from "@/components/studio/mastering-listen-lab";
+import { MasteringListenLab, type MasteringCodecPreview, type MasteringSuggestedLoop } from "@/components/studio/mastering-listen-lab";
 import { MasteringAnalysisReport } from "@/components/studio/mastering-analysis-report";
 import { ProcessingState } from "@/components/studio/processing-state";
 import { ConfirmButton, SubmitButton } from "@/components/studio/submit-button";
@@ -374,6 +374,17 @@ export function ActiveMasteringControls({
             const preferencePolicy = record(target.artist_preference_policy);
             const tightenedPreferenceBudget = record(preferencePolicy.tightened_budget);
             const suggestedLoops = masteringSuggestedLoops(job.result);
+            const codecPreviews: MasteringCodecPreview[] = Array.isArray(result.codec_previews)
+              ? result.codec_previews.flatMap((value) => {
+                  const preview = record(value);
+                  if (preview.status !== "ready" || typeof preview.public_url !== "string") return [];
+                  return [{
+                    profile: typeof preview.profile === "string" ? preview.profile : "codec",
+                    url: preview.public_url,
+                    mimeType: typeof preview.mime_type === "string" ? preview.mime_type : null,
+                  }];
+                })
+              : [];
             const iterations = Array.isArray(result.iterations) ? result.iterations.length : 0;
             const downloadLabel = outputFormatLabel(job.result);
             const beforeIntegrated = number(beforeLoudness.integrated_lufs);
@@ -445,6 +456,7 @@ export function ActiveMasteringControls({
                     candidateLufs={afterIntegrated}
                     references={references}
                     suggestedLoops={suggestedLoops}
+                    codecPreviews={codecPreviews}
                   />
                 ) : null}
 
