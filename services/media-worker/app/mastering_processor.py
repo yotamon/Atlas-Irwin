@@ -312,7 +312,7 @@ def _filter_chain(plan: dict[str, Any]) -> str:
             f"tfrequency={frequency:.2f}:tqfactor={target_q:.3f}:"
             f"attack={attack:.1f}:release={release:.1f}:"
             f"ratio={ratio:.3f}:makeup=0:range={range_db:.3f}:"
-            "mode=cutabove:direction=downward"
+            "mode=cutabove"
         )
     compression = _record(plan.get("compression"))
     if compression.get("enabled"):
