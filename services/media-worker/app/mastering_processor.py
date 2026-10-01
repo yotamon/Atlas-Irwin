@@ -704,6 +704,7 @@ def _render_candidate(
         output,
         music_map,
         include_codec_stress=include_codec_stress,
+        include_section_signatures=False,
     )
     checks = _candidate_checks(after, target, before, measured)
     return measured, after, checks
@@ -847,7 +848,11 @@ def master_audio(
         # Full verification, including codec stress, is run only on the exact
         # candidate that may be shown/promoted. Intermediate candidates use the
         # deterministic core inspector to keep worker cost bounded.
-        after = analyze_mastering(output, music_map)
+        after = analyze_mastering(
+            output,
+            music_map,
+            include_section_signatures=False,
+        )
         checks = _candidate_checks(after, target, before, measured)
         optimizer = {
             key: value
