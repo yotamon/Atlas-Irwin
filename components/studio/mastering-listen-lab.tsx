@@ -4,6 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 type Source = "original" | "candidate" | "reference" | "mono";
 type ReferenceOption = { label: string; url: string; lufs: number | null };
+export type MasteringCodecPreview = {
+  profile: string;
+  url: string;
+  mimeType: string | null;
+};
 export type MasteringSuggestedLoop = {
   label: string;
   start: number;
@@ -39,6 +44,7 @@ export function MasteringListenLab({
   candidateLufs,
   references = [],
   suggestedLoops = [],
+  codecPreviews = [],
 }: {
   originalUrl: string;
   candidateUrl: string;
@@ -46,6 +52,7 @@ export function MasteringListenLab({
   candidateLufs: number | null;
   references?: ReferenceOption[];
   suggestedLoops?: MasteringSuggestedLoop[];
+  codecPreviews?: MasteringCodecPreview[];
 }) {
   const originalRef = useRef<HTMLAudioElement | null>(null);
   const candidateRef = useRef<HTMLAudioElement | null>(null);
@@ -458,6 +465,28 @@ export function MasteringListenLab({
           </span>
         ) : null}
       </div>
+
+      {codecPreviews.length ? (
+        <details className="studio-advanced-details mastering-codec-previews">
+          <summary>
+            <span>Hear real codec stress previews</span>
+            <small>AAC/Opus encodes generated from this exact selected master.</small>
+          </summary>
+          <p className="v2-muted-copy">
+            These are real derived encodes for artifact/headroom audition. They are not simulations and they never replace the lossless canonical master.
+          </p>
+          <div className="mastering-codec-preview-list">
+            {codecPreviews.map((preview) => (
+              <label key={preview.profile}>
+                <strong>{preview.profile === "aac_256" ? "AAC · 256 kbps" : preview.profile === "opus_160" ? "Opus · 160 kbps" : preview.profile}</strong>
+                <audio controls preload="none" src={preview.url}>
+                  {preview.mimeType ? <source src={preview.url} type={preview.mimeType} /> : null}
+                </audio>
+              </label>
+            ))}
+          </div>
+        </details>
+      ) : null}
 
       <p className="v2-muted-copy">
         A/B stay sample-position synchronized. Mono is a browser-side fold-down of the candidate for translation checks.
