@@ -318,7 +318,7 @@ export function ActiveMasteringControls({
             </div>
           )}
 
-          <details className={styles.directions}>
+          {!sourceRepairRequired ? <details className={styles.directions}>
             <summary>Explore a different mastering direction</summary>
             <p>These are creative alternatives, not release requirements. Compare them at matched loudness before choosing.</p>
             <div className={styles.presets}>
@@ -335,7 +335,7 @@ export function ActiveMasteringControls({
                 </form>
               ))}
             </div>
-          </details>
+          </details> : null}
         </>
       )}
 
