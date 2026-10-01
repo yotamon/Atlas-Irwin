@@ -3,6 +3,7 @@ import "server-only";
 import { createMarketingServiceClient } from "./db";
 import { createApprovedMasterDerivatives } from "./creative-derivatives";
 import type { Json } from "@/types/database";
+import type { MarketingExecutionScope } from "./execution-scope";
 
 function record(value: Json | unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -10,12 +11,17 @@ function record(value: Json | unknown): Record<string, unknown> {
     : {};
 }
 
-export async function processApprovedCreativeDerivativeEvents(limit = 50) {
+export async function processApprovedCreativeDerivativeEvents(
+  limit = 50,
+  scope?: MarketingExecutionScope,
+) {
   const client = createMarketingServiceClient();
-  const { data: events, error } = await client.from("marketing_events")
+  let query = client.from("marketing_events")
     .select("*")
     .eq("event_type", "content.ai_asset_approved")
-    .is("processed_at", null)
+    .is("processed_at", null);
+  if (scope) query = query.eq("owner_id", scope.ownerId).eq("artist_id", scope.artistId);
+  const { data: events, error } = await query
     .order("occurred_at", { ascending: true })
     .limit(Math.max(1, Math.min(limit, 100)));
   if (error) throw new Error(error.message);

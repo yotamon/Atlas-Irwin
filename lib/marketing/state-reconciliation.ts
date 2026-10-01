@@ -6,6 +6,7 @@ import {
   ensureReadyContentPublicationApprovals,
 } from "./lifecycle-execution";
 import type { Json } from "@/types/database";
+import type { MarketingExecutionScope } from "./execution-scope";
 
 function asJson(value: unknown) {
   return value as Json;
@@ -17,11 +18,30 @@ function objectValue(value: Json): Record<string, Json | undefined> {
     : {};
 }
 
-export async function reconcileCampaignPhaseStates(now = new Date()) {
+export async function reconcileCampaignPhaseStates(
+  now = new Date(),
+  scope?: MarketingExecutionScope,
+) {
   const marketing = createMarketingServiceClient();
-  const { data: phases, error } = await marketing.from("campaign_phases")
+  let campaignIds: string[] | null = null;
+  if (scope) {
+    const { data: campaigns, error: campaignError } = await marketing.from("campaigns")
+      .select("id")
+      .eq("owner_id", scope.ownerId)
+      .eq("artist_id", scope.artistId)
+      .limit(250);
+    if (campaignError) throw new Error(campaignError.message);
+    campaignIds = (campaigns ?? []).map((campaign) => campaign.id);
+    if (!campaignIds.length) {
+      return { considered: 0, changed: 0, active: 0, skipped: 0, completed: 0 };
+    }
+  }
+
+  let phaseQuery = marketing.from("campaign_phases")
     .select("id,campaign_id,status,starts_at,ends_at")
-    .in("status", ["planned", "active"])
+    .in("status", ["planned", "active"]);
+  if (campaignIds) phaseQuery = phaseQuery.in("campaign_id", campaignIds);
+  const { data: phases, error } = await phaseQuery
     .order("starts_at", { ascending: true, nullsFirst: true })
     .limit(250);
   if (error) throw new Error(error.message);
@@ -69,12 +89,14 @@ function contentAssetId(purpose: string) {
   return match?.[1] ?? null;
 }
 
-export async function reconcileOrphanedGenerationRuns() {
+export async function reconcileOrphanedGenerationRuns(scope?: MarketingExecutionScope) {
   const marketing = createMarketingServiceClient();
-  const { data: runs, error } = await marketing.from("generation_runs")
+  let query = marketing.from("generation_runs")
     .select("id,purpose,status,provider_request_id,metadata")
     .in("status", ["queued", "running"])
-    .like("purpose", "content_asset:%")
+    .like("purpose", "content_asset:%");
+  if (scope) query = query.eq("owner_id", scope.ownerId).eq("artist_id", scope.artistId);
+  const { data: runs, error } = await query
     .order("created_at", { ascending: true })
     .limit(100);
   if (error) throw new Error(error.message);
@@ -113,11 +135,16 @@ export async function reconcileOrphanedGenerationRuns() {
   return { considered: parsed.length, failed, ambiguous };
 }
 
-export async function ensureCampaignProductionQueues(limit = 12) {
+export async function ensureCampaignProductionQueues(
+  limit = 12,
+  scope?: MarketingExecutionScope,
+) {
   const marketing = createMarketingServiceClient();
-  const { data: campaigns, error } = await marketing.from("campaigns")
+  let query = marketing.from("campaigns")
     .select("id")
-    .in("status", ["draft", "planned", "active"])
+    .in("status", ["draft", "planned", "active"]);
+  if (scope) query = query.eq("owner_id", scope.ownerId).eq("artist_id", scope.artistId);
+  const { data: campaigns, error } = await query
     .order("updated_at", { ascending: false })
     .limit(Math.max(1, Math.min(limit, 50)));
   if (error) throw new Error(error.message);
@@ -144,10 +171,10 @@ export async function ensureCampaignProductionQueues(limit = 12) {
   };
 }
 
-export async function reconcileMarketingState() {
-  const phases = await reconcileCampaignPhaseStates();
-  const orphanedGeneration = await reconcileOrphanedGenerationRuns();
-  const campaignQueues = await ensureCampaignProductionQueues();
-  const publicationApprovals = await ensureReadyContentPublicationApprovals();
+export async function reconcileMarketingState(scope?: MarketingExecutionScope) {
+  const phases = await reconcileCampaignPhaseStates(new Date(), scope);
+  const orphanedGeneration = await reconcileOrphanedGenerationRuns(scope);
+  const campaignQueues = await ensureCampaignProductionQueues(12, scope);
+  const publicationApprovals = await ensureReadyContentPublicationApprovals(25, scope);
   return { phases, orphanedGeneration, campaignQueues, publicationApprovals };
 }

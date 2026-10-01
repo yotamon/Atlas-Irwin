@@ -2,6 +2,13 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  isMediaWorkerBusyError,
+  isMediaWorkerCapacityError,
+  mediaWorkerCapacityBlocked,
+  mediaWorkerCapacityErrorMessage,
+  mediaWorkerCapacityRetryAfter,
+} from "@/lib/media-worker/failures";
+import {
   createMediaWorkerCallbackCredential,
   dispatchMediaWorkerJob,
   MEDIA_WORKER_CALLBACK_HASH_KEY,
@@ -35,11 +42,6 @@ function timestamp(value: unknown) {
   if (typeof value !== "string") return 0;
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function busyError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return /already processing|worker is busy/i.test(message);
 }
 
 function withoutCredential(payload: Record<string, unknown>) {
@@ -160,16 +162,33 @@ async function dispatch(db: ReturnType<typeof client>, job: MarketingMediaJob) {
       .update({ external_job_id: result.sandboxName })
       .eq("id", claimed.id).eq("owner_id", claimed.owner_id).eq("artist_id", claimed.artist_id);
     if (updateError) throw new Error(updateError.message);
-    return true;
+    return { dispatched: true as const, reason: "started" as const };
   } catch (error) {
-    if (busyError(error)) {
+    if (isMediaWorkerCapacityError(error)) {
+      const message = mediaWorkerCapacityErrorMessage(error);
       await db.from("marketing_media_jobs").update({
         status: "planned",
         request_payload: json(requestPayload),
+        attempt_count: job.attempt_count,
+        external_job_id: null,
+        error: message,
+        completed_at: null,
+      }).eq("id", claimed.id).eq("owner_id", claimed.owner_id).eq("artist_id", claimed.artist_id);
+      return {
+        dispatched: false as const,
+        reason: "capacity" as const,
+        retryAt: mediaWorkerCapacityRetryAfter(message),
+      };
+    }
+    if (isMediaWorkerBusyError(error)) {
+      await db.from("marketing_media_jobs").update({
+        status: "planned",
+        request_payload: json(requestPayload),
+        attempt_count: job.attempt_count,
         external_job_id: null,
         error: null,
       }).eq("id", claimed.id).eq("owner_id", claimed.owner_id).eq("artist_id", claimed.artist_id);
-      return false;
+      return { dispatched: false as const, reason: "busy" as const };
     }
     const message = error instanceof Error ? error.message : "Marketing Media Worker dispatch failed.";
     const terminal = claimed.attempt_count >= claimed.max_attempts;
@@ -188,7 +207,7 @@ async function dispatch(db: ReturnType<typeof client>, job: MarketingMediaJob) {
         output: json({ ...output, stage: "finishing_failed", finishingError: message }),
       }).eq("id", claimed.generation_run_id).eq("owner_id", claimed.owner_id).eq("artist_id", claimed.artist_id);
     }
-    return false;
+    return { dispatched: false as const, reason: terminal ? "failed" as const : "retry" as const };
   }
 }
 
@@ -199,6 +218,15 @@ export async function kickMarketingMediaWorkerQueue(scope?: WorkerScope) {
   if (current.active) return { dispatched: false, reason: "busy" as const };
   const job = current.planned[0] ?? null;
   if (!job) return { dispatched: false, reason: "empty" as const };
-  const dispatched = await dispatch(db, job);
-  return { dispatched, reason: dispatched ? "started" as const : "busy" as const, jobId: job.id };
+  const capacity = mediaWorkerCapacityBlocked(job.error);
+  if (capacity.blocked) {
+    return {
+      dispatched: false,
+      reason: "capacity" as const,
+      retryAt: capacity.retryAfter,
+      jobId: job.id,
+    };
+  }
+  const result = await dispatch(db, job);
+  return { ...result, jobId: job.id };
 }

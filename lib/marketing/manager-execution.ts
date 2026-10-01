@@ -9,6 +9,7 @@ import { prepareDetectedGrowthOpportunities, prepareReleaseGrowthPlan } from "@/
 import type { Database, Json } from "@/types/database";
 import type { ArtistSceneRelationshipType, EnsemblisDatabase } from "@/types/ensemblis-database";
 import type { GrowthOpportunityKind } from "@/types/growth-database";
+import type { MarketingExecutionScope } from "./execution-scope";
 import { createAutonomyServiceClient } from "./autonomy-db";
 
 const SAFE_MANAGER_ACTIONS: Record<string, {
@@ -240,14 +241,19 @@ async function executeManagerPreparation(action: {
   };
 }
 
-export async function executeSafeManagerActions(limit = 20) {
+export async function executeSafeManagerActions(
+  limit = 20,
+  scope?: MarketingExecutionScope,
+) {
   const autonomy = createAutonomyServiceClient();
   const now = new Date();
   const boundedLimit = Math.max(1, Math.min(limit, 50));
-  const { data: proposed, error } = await autonomy.from("next_best_actions")
+  let query = autonomy.from("next_best_actions")
     .select("*")
     .eq("status", "proposed")
-    .eq("source_type", "artist_operating_profile")
+    .eq("source_type", "artist_operating_profile");
+  if (scope) query = query.eq("owner_id", scope.ownerId).eq("artist_id", scope.artistId);
+  const { data: proposed, error } = await query
     .order("score", { ascending: false })
     .limit(boundedLimit);
   if (error) throw new Error(error.message);

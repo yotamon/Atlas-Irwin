@@ -16,6 +16,13 @@ import {
 } from "@/lib/automix/source-candidates";
 import { dispatchMediaWorkerJob } from "@/lib/media-worker/dispatcher";
 import {
+  isMediaWorkerBusyError,
+  isMediaWorkerCapacityError,
+  mediaWorkerCapacityBlocked,
+  mediaWorkerCapacityErrorMessage,
+  mediaWorkerCapacityRetryAfter,
+} from "@/lib/media-worker/failures";
+import {
   createMediaWorkerCallbackCredential,
   MEDIA_WORKER_CALLBACK_HASH_KEY,
 } from "@/lib/media-worker/sandbox";
@@ -64,11 +71,6 @@ function withoutCredential(value: Record<string, unknown>) {
   delete next.upload_url;
   delete next.tracks;
   return next;
-}
-
-function busyError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return /already processing|worker is busy/i.test(message);
 }
 
 function errorMessage(error: unknown, fallback: string) {
@@ -375,6 +377,10 @@ export async function kickAutoMixQueue() {
     if (planned.error) throw new Error(planned.error.message);
     if (!planned.data) return { dispatched: false, busy: false };
     const job = planned.data as AutoMixJob;
+    const capacity = mediaWorkerCapacityBlocked(job.error);
+    if (capacity.blocked) {
+      return { dispatched: false, busy: false, reason: "capacity" as const, retryAt: capacity.retryAfter };
+    }
 
     let prepared: PreparedPayload;
     try {
@@ -416,14 +422,29 @@ export async function kickAutoMixQueue() {
       if (update.error) throw new Error(update.error.message);
       return { dispatched: true, busy: false };
     } catch (error) {
-      if (busyError(error)) {
+      if (isMediaWorkerCapacityError(error)) {
+        const message = mediaWorkerCapacityErrorMessage(error);
+        await db.from("automix_jobs").update({
+          status: "planned",
+          request_payload: json(withoutCredential(record(job.request_payload))),
+          external_job_id: null,
+          error: message,
+        }).eq("id", job.id);
+        return {
+          dispatched: false,
+          busy: false,
+          reason: "capacity" as const,
+          retryAt: mediaWorkerCapacityRetryAfter(message),
+        };
+      }
+      if (isMediaWorkerBusyError(error)) {
         await db.from("automix_jobs").update({
           status: "planned",
           request_payload: json(withoutCredential(record(job.request_payload))),
           external_job_id: null,
           error: null,
         }).eq("id", job.id);
-        return { dispatched: false, busy: true };
+        return { dispatched: false, busy: true, reason: "busy" as const };
       }
       const message = errorMessage(error, "AutoMix dispatch failed.");
       await db.from("automix_jobs").update({

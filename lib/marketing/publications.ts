@@ -8,6 +8,7 @@ import { createMarketingServiceClient } from "./db";
 import type { MarketingExecutionScope } from "./execution-scope";
 
 const PROVIDER_SCHEDULE_LEAD_MS = 7 * 24 * 60 * 60 * 1000;
+const STALE_PUBLISHING_CLAIM_MS = 10 * 60 * 1000;
 
 function payloadObject(value: Json): Record<string, Json | undefined> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -76,6 +77,31 @@ async function markPublicationPublished(job: {
   });
 }
 
+async function failClosedStalePublishingClaims(scope?: MarketingExecutionScope) {
+  const client = createMarketingServiceClient();
+  const staleBefore = new Date(Date.now() - STALE_PUBLISHING_CLAIM_MS).toISOString();
+  let query = client.from("publication_jobs")
+    .select("id,owner_id,artist_id")
+    .eq("status", "publishing")
+    .lt("updated_at", staleBefore)
+    .order("updated_at", { ascending: true })
+    .limit(25);
+  if (scope) query = query.eq("owner_id", scope.ownerId).eq("artist_id", scope.artistId);
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+
+  let failedClosed = 0;
+  for (const job of data ?? []) {
+    const { error: updateError } = await client.from("publication_jobs").update({
+      status: "failed",
+      last_error: "Publication execution lease expired with an ambiguous provider outcome. Atlas will not retry automatically because the external post may already exist.",
+    }).eq("id", job.id).eq("owner_id", job.owner_id).eq("artist_id", job.artist_id).eq("status", "publishing");
+    if (updateError) throw new Error(updateError.message);
+    failedClosed += 1;
+  }
+  return failedClosed;
+}
+
 async function reconcileProviderScheduledPublications(limit = 20, scope?: MarketingExecutionScope) {
   const client = createMarketingServiceClient();
   const now = new Date().toISOString();
@@ -127,6 +153,7 @@ async function reconcileProviderScheduledPublications(limit = 20, scope?: Market
 export async function processDuePublicationJobs(limit = 20, scope?: MarketingExecutionScope) {
   const client = createMarketingServiceClient();
   const dispatchHorizon = new Date(Date.now() + PROVIDER_SCHEDULE_LEAD_MS).toISOString();
+  const failedClosedStaleClaims = await failClosedStalePublishingClaims(scope);
   const reconciliation = await reconcileProviderScheduledPublications(limit, scope);
   let query = client.from("publication_jobs").select("*").in("status", ["approved", "scheduled"]).or(`scheduled_at.is.null,scheduled_at.lte.${dispatchHorizon}`).order("scheduled_at", { ascending: true, nullsFirst: true }).limit(Math.max(1, Math.min(limit * 2, 50)));
   if (scope) query = query.eq("owner_id", scope.ownerId).eq("artist_id", scope.artistId);
@@ -201,5 +228,16 @@ export async function processDuePublicationJobs(limit = 20, scope?: MarketingExe
     }
   }
 
-  return { considered: jobs?.length ?? 0, published, providerScheduled, manualReady, failed, deferred, reconciledPublished: reconciliation.published, reconciliationFailed: reconciliation.failed, reconciliationPending: reconciliation.pending };
+  return {
+    considered: jobs?.length ?? 0,
+    published,
+    providerScheduled,
+    manualReady,
+    failed,
+    deferred,
+    failedClosedStaleClaims,
+    reconciledPublished: reconciliation.published,
+    reconciliationFailed: reconciliation.failed,
+    reconciliationPending: reconciliation.pending,
+  };
 }

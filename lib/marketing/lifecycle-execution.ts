@@ -12,6 +12,7 @@ import {
   type CampaignSocialPlatform,
 } from "./social-platforms";
 import { releaseRelativeTimestamp } from "./schedule";
+import type { MarketingExecutionScope } from "./execution-scope";
 import {
   daysSinceRelease,
   lifecyclePlanningPrinciple,
@@ -421,13 +422,18 @@ export async function ensurePublicationApprovalForContent(contentItemId: string)
   return { outcome: "approval_created" as const, contentItemId, publicationJobId: publication.id };
 }
 
-export async function ensureReadyContentPublicationApprovals(limit = 25) {
+export async function ensureReadyContentPublicationApprovals(
+  limit = 25,
+  scope?: MarketingExecutionScope,
+) {
   const marketing = createMarketingServiceClient();
-  const { data, error } = await marketing.from("content_items")
+  let query = marketing.from("content_items")
     .select("id")
     .not("asset_url", "is", null)
     .not("scheduled_at", "is", null)
-    .not("status", "in", '("Published","Archived")')
+    .not("status", "in", '("Published","Archived")');
+  if (scope) query = query.eq("owner_id", scope.ownerId).eq("artist_id", scope.artistId);
+  const { data, error } = await query
     .order("scheduled_at", { ascending: true })
     .limit(Math.max(1, Math.min(limit, 100)));
   if (error) throw new Error(error.message);

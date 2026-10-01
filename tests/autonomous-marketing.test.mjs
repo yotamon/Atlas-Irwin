@@ -75,14 +75,20 @@ test("published content feeds the measurement and learning loop", async () => {
   assert.ok(automation.includes("generate_winner_derivatives"));
 });
 
-test("the lightweight automation cycle senses before ranking next actions", async () => {
+test("the durable automation cycle senses before ranking next actions", async () => {
   const cron = await readFile("app/api/cron/marketing/route.ts", "utf8");
-  const publication = cron.indexOf("processDuePublicationJobs()");
-  const audience = cron.indexOf("syncAudienceInteractions()");
-  const radar = cron.indexOf("refreshMarketingRadarIfDue()");
-  const decision = cron.indexOf("refreshNextBestActions()");
+  const heartbeat = await readFile("lib/marketing/durable-heartbeat.ts", "utf8");
+  const maintenance = await readFile("lib/marketing/maintenance.ts", "utf8");
+  const publication = maintenance.indexOf('maintenance:publications');
+  const audience = maintenance.indexOf('maintenance:audience_sync');
+  const radar = maintenance.indexOf('maintenance:radar');
+  const decision = maintenance.indexOf('maintenance:next_best_actions');
   assert.ok(publication > 0 && audience > publication && radar > audience && decision > radar);
+  assert.ok(heartbeat.includes("sequence * 1_000"));
+  assert.ok(cron.includes("runDurableMarketingHeartbeat"));
   assert.equal(cron.includes("fillOneMissingScheduledAsset"), false);
+  assert.ok(cron.includes('import { after } from "next/server"'));
+  assert.ok(cron.includes("after(async () =>"));
   assert.ok(cron.includes("export const maxDuration = 55"));
 
   const audienceCode = await readFile("lib/marketing/audience.ts", "utf8");

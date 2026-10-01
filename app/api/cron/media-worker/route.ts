@@ -17,8 +17,17 @@ export async function GET(request: Request) {
 
   try {
     const mediaWorker = await kickMediaWorkerQueue();
-    const automix = mediaWorker.dispatched || mediaWorker.reason === "busy"
-      ? { dispatched: false, busy: true, deferred: true }
+    const sharedWorkerBlocked = mediaWorker.dispatched
+      || mediaWorker.reason === "busy"
+      || mediaWorker.reason === "capacity";
+    const automix = sharedWorkerBlocked
+      ? {
+          dispatched: false,
+          busy: mediaWorker.reason === "busy",
+          deferred: true,
+          reason: mediaWorker.reason,
+          retryAt: "retryAt" in mediaWorker ? mediaWorker.retryAt : null,
+        }
       : await kickAutoMixQueue();
     return Response.json({ ok: true, authSource: auth.source, queue: { mediaWorker, automix } });
   } catch (error) {

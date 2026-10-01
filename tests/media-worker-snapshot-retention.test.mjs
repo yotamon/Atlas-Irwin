@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const sandbox = readFileSync(join(root, "lib", "media-worker", "sandbox.ts"), "utf8");
+const failures = readFileSync(join(root, "lib", "media-worker", "failures.ts"), "utf8");
 const packageJson = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 
 test("Media Worker uses a generation-stable persistent sandbox", () => {
@@ -48,7 +49,7 @@ test("Media Worker uses the current managed Sandbox lifecycle", () => {
 
 test("Media Worker recovers one stale persistent sandbox without creating a new lineage", () => {
   assert.match(sandbox, /function sandboxGoneError\(error: unknown\)/);
-  assert.match(sandbox, /410\\b\|SANDBOX_STOPPED\|SNAPSHOT_NOT_FOUND/);
+  assert.match(failures, /410\\b\|SANDBOX_STOPPED\|SNAPSHOT_NOT_FOUND/);
   assert.match(sandbox, /let recoveredGoneSandbox = false;/);
   assert.match(sandbox, /!recoveredGoneSandbox && sandboxGoneError\(error\)/);
   assert.match(sandbox, /await sandbox\.delete\(\)\.catch\(\(\) => undefined\);/);
@@ -56,6 +57,7 @@ test("Media Worker recovers one stale persistent sandbox without creating a new 
 });
 
 test("Media Worker classifies Hobby quota responses without a paid fallback", () => {
-  assert.match(sandbox, /402\|429\|hobby/i);
+  assert.match(failures, /402\|429/);
+  assert.match(failures, /quota|billing|hobby/i);
   assert.match(sandbox, /Atlas did not use a paid fallback/);
 });

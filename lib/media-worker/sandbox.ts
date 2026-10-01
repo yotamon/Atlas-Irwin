@@ -2,6 +2,7 @@ import "server-only";
 
 import { createHash, randomBytes } from "node:crypto";
 import { Sandbox } from "@vercel/sandbox";
+import { mediaWorkerDispatchFailure } from "@/lib/media-worker/failures";
 
 export const MEDIA_WORKER_CALLBACK_HASH_KEY = "__atlas_callback_token_sha256";
 const MEDIA_WORKER_RUNTIME_VERSION = 12;
@@ -90,17 +91,16 @@ async function commandError(command: { stderr: () => Promise<string> }) {
 }
 
 function sandboxDispatchError(error: unknown) {
-  const detail = error instanceof Error ? error.message : String(error);
-  if (/quota|limit|billing|payment|required|resource|402|429|hobby/i.test(detail)) {
+  const failure = mediaWorkerDispatchFailure(error);
+  if (failure.kind === "capacity") {
     return "Vercel Hobby Sandbox quota is unavailable right now. Atlas did not use a paid fallback. Try again after the free quota resets.";
   }
-  if (/already processing|worker is busy/i.test(detail)) return detail;
-  return `Vercel Sandbox dispatch failed: ${detail}`;
+  if (failure.kind === "busy") return failure.detail;
+  return `Vercel Sandbox dispatch failed: ${failure.detail}`;
 }
 
 function sandboxGoneError(error: unknown) {
-  const detail = error instanceof Error ? error.message : String(error);
-  return /(?:status code\s*)?410\b|SANDBOX_STOPPED|SNAPSHOT_NOT_FOUND/i.test(detail);
+  return mediaWorkerDispatchFailure(error).kind === "gone";
 }
 
 export async function getMediaWorkerSandbox() {
@@ -415,42 +415,52 @@ export function scheduleMediaWorkerSandboxCleanup() {
     // Terminal callbacks invoke this only after durable state has been reconciled. Give the
     // detached runner a moment to release its lock, then dispatch the next durable workload.
     await new Promise((resolve) => setTimeout(resolve, 1200));
-    let dispatched = false;
+    let sharedWorkerBlocked = false;
+    const blocksSharedWorker = (result: {
+      dispatched?: boolean;
+      busy?: boolean;
+      reason?: string;
+    }) => result.dispatched === true
+      || result.busy === true
+      || result.reason === "busy"
+      || result.reason === "capacity"
+      || result.reason === "started";
+
     try {
       const { kickMediaWorkerQueue } = await import("@/lib/media-worker/queue");
       const result = await kickMediaWorkerQueue();
-      dispatched = result.dispatched;
+      sharedWorkerBlocked = blocksSharedWorker(result);
     } catch {
       // Existing media work is durable. Give Active Mastering a chance below.
     }
-    if (!dispatched) {
+    if (!sharedWorkerBlocked) {
       try {
         const { kickMasteringQueue } = await import("@/lib/mastering/jobs");
         const result = await kickMasteringQueue();
-        dispatched = result.dispatched;
+        sharedWorkerBlocked = blocksSharedWorker(result);
       } catch {
         // Mastering work is durable. Give full AutoMix a chance below.
       }
     }
-    if (!dispatched) {
+    if (!sharedWorkerBlocked) {
       try {
         const { kickAutoMixQueue } = await import("@/lib/automix/jobs");
         const result = await kickAutoMixQueue();
-        dispatched = result.dispatched;
+        sharedWorkerBlocked = blocksSharedWorker(result);
       } catch {
         // Full AutoMix work is durable. Give transition previews a chance below.
       }
     }
-    if (!dispatched) {
+    if (!sharedWorkerBlocked) {
       try {
         const { kickAutoMixPreviewQueue } = await import("@/lib/automix/previews");
         const result = await kickAutoMixPreviewQueue();
-        dispatched = result.dispatched;
+        sharedWorkerBlocked = blocksSharedWorker(result);
       } catch {
         // Preview work is durable. Give marketing finishing a chance below.
       }
     }
-    if (!dispatched) {
+    if (!sharedWorkerBlocked) {
       try {
         const { kickMarketingMediaWorkerQueue } = await import("@/lib/marketing/media-worker-queue");
         await kickMarketingMediaWorkerQueue();
