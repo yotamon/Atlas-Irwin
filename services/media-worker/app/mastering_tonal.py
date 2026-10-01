@@ -127,6 +127,8 @@ def build_tonal_plan(
 
         remaining = max_total
         for key, gain in smoothed:
+            if key == "sub_20_40":
+                gain = min(0.0, gain)
             bounded = _clamp(gain, -max_move, max_move)
             if abs(bounded) < 0.22 or remaining <= 0.0:
                 continue
