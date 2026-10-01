@@ -25,6 +25,7 @@ from .mastering_references import (
     weighted_reference_bands,
     weighted_reference_value,
 )
+from .mastering_stereo import build_stereo_plan
 from .mastering_tonal import build_tonal_plan
 
 ACTIVE_MASTERING_SCHEMA = "ensemblis.active_mastering.v1"
@@ -217,6 +218,7 @@ def build_processing_plan(
         legacy_reference_bands=reference_broad,
     )
     dynamics_plan = build_dynamics_plan(preset, source_inspector, target)
+    stereo_plan = build_stereo_plan(preset, source_inspector, target)
 
     issues = source_inspector.get("issues") or []
     phase_risk = any(
@@ -231,9 +233,9 @@ def build_processing_plan(
         "tonal": tonal,
         "compression": dynamics_plan,
         "stereo": {
-            "mode": "preserve",
+            **stereo_plan,
             "phase_risk_detected": phase_risk,
-            "note": "V2 still forbids blind widening. Corrective M/S is introduced only behind measured translation evidence.",
+            "note": "V2 forbids blind widening. Any automatic stereo move can only reduce Side energy and is re-measured for mono/phase regression.",
         },
         "loudness": {
             "integrated_lufs": target["integrated_lufs"],
@@ -296,6 +298,10 @@ def _filter_chain(plan: dict[str, Any]) -> str:
             f"threshold={threshold_linear:.6f}:ratio={ratio:.3f}:"
             f"attack={attack:.1f}:release={release:.1f}:makeup=1"
         )
+    stereo = _record(plan.get("stereo"))
+    side_level = _number(stereo.get("side_level"))
+    if stereo.get("enabled") and side_level is not None and side_level < 0.999:
+        filters.append(f"stereotools=mode=lr>lr:slev={side_level:.6f}")
     return ",".join(filters)
 
 
