@@ -1,0 +1,293 @@
+name: Production Database Recovery Drill
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Why this recovery drill is being run"
+        required: false
+        default: "Production readiness verification"
+
+concurrency:
+  group: production-database-recovery-drill
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  restore-drill:
+    name: restore production into isolated Supabase
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment: Production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_ID: zhyjnpajlvwwbvuryeyv
+      PROD_PGHOST: aws-0-eu-central-1.pooler.supabase.com
+      PROD_PGPORT: "5432"
+
+    steps:
+      - name: Prepare ephemeral recovery paths
+        shell: bash
+        run: |
+          echo "BACKUP_DIR=$RUNNER_TEMP/ensemblis-recovery-backup" >> "$GITHUB_ENV"
+          echo "LOCAL_DIR=$RUNNER_TEMP/ensemblis-recovery-local" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: supabase/setup-cli@v2
+        with:
+          version: 2.111.0
+          github-token: ${{ github.token }}
+
+      - name: Require protected recovery credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_DB_PASSWORD:-}" ]; then
+            echo "::error::Missing required Production environment secret: SUPABASE_DB_PASSWORD"
+            exit 1
+          fi
+          if [ "$SUPABASE_PROJECT_ID" != "zhyjnpajlvwwbvuryeyv" ]; then
+            echo "::error::Recovery workflow is pinned to the canonical production project ref."
+            exit 1
+          fi
+
+      - name: Capture source recovery fingerprint
+        shell: bash
+        env:
+          PGHOST: ${{ env.PROD_PGHOST }}
+          PGPORT: ${{ env.PROD_PGPORT }}
+          PGDATABASE: postgres
+          PGUSER: postgres.${{ env.SUPABASE_PROJECT_ID }}
+          PGPASSWORD: ${{ env.SUPABASE_DB_PASSWORD }}
+          PGSSLMODE: require
+        run: |
+          set -euo pipefail
+          mkdir -p "$BACKUP_DIR"
+
+          psql -X -v ON_ERROR_STOP=1 -At -F '|' > "$BACKUP_DIR/source-counts.txt" <<'SQL'
+          select * from (
+            select 'auth.users' as entity, count(*)::bigint as row_count from auth.users
+            union all select 'public.workspaces', count(*) from public.workspaces
+            union all select 'public.workspace_memberships', count(*) from public.workspace_memberships
+            union all select 'public.artists', count(*) from public.artists
+            union all select 'public.releases', count(*) from public.releases
+            union all select 'public.tracks', count(*) from public.tracks
+            union all select 'public.track_vault', count(*) from public.track_vault
+            union all select 'public.media_assets', count(*) from public.media_assets
+            union all select 'public.automation_jobs', count(*) from public.automation_jobs
+            union all select 'storage.buckets', count(*) from storage.buckets
+            union all select 'storage.objects', count(*) from storage.objects
+          ) counts order by entity;
+          SQL
+
+          psql -X -v ON_ERROR_STOP=1 -At > "$BACKUP_DIR/source-rls-policy-fingerprint.txt" <<'SQL'
+          with entries as (
+            select 'table|' || n.nspname || '|' || c.relname || '|' ||
+                   c.relrowsecurity::text || '|' || c.relforcerowsecurity::text as value
+              from pg_class c
+              join pg_namespace n on n.oid = c.relnamespace
+             where n.nspname = 'public' and c.relkind in ('r','p')
+            union all
+            select 'policy|' || schemaname || '|' || tablename || '|' || policyname || '|' ||
+                   permissive || '|' || array_to_string(roles, ',') || '|' || cmd || '|' ||
+                   coalesce(qual, '') || '|' || coalesce(with_check, '')
+              from pg_policies
+             where schemaname = 'public'
+          )
+          select md5(coalesce(string_agg(value, E'\n' order by value), '')) from entries;
+          SQL
+
+          psql -X -v ON_ERROR_STOP=1 -At > "$BACKUP_DIR/source-storage-sample.txt" <<'SQL'
+          select name
+            from storage.objects
+           where bucket_id = 'public-media'
+             and coalesce((metadata->>'size')::bigint, 0) > 0
+           order by coalesce((metadata->>'size')::bigint, 0), name
+           limit 1;
+          SQL
+
+          test -s "$BACKUP_DIR/source-storage-sample.txt"
+          echo "Source recovery fingerprint captured without exporting row contents."
+
+      - name: Create independent logical backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          PROD_DB_URL="$(python - <<'PY'
+          import os
+          import urllib.parse
+          password = urllib.parse.quote(os.environ["SUPABASE_DB_PASSWORD"], safe="")
+          ref = os.environ["SUPABASE_PROJECT_ID"]
+          print(f"postgresql://postgres.{ref}:{password}@aws-0-eu-central-1.pooler.supabase.com:5432/postgres?sslmode=require")
+          PY
+          )"
+          supabase db dump --db-url "$PROD_DB_URL" -f "$BACKUP_DIR/roles.sql" --role-only
+          supabase db dump --db-url "$PROD_DB_URL" -f "$BACKUP_DIR/schema.sql"
+          supabase db dump --db-url "$PROD_DB_URL" -f "$BACKUP_DIR/data.sql" --use-copy --data-only -x "storage.buckets_vectors" -x "storage.vector_indexes"
+          unset PROD_DB_URL
+
+          test -s "$BACKUP_DIR/roles.sql"
+          test -s "$BACKUP_DIR/schema.sql"
+          test -s "$BACKUP_DIR/data.sql"
+          sha256sum "$BACKUP_DIR/roles.sql" "$BACKUP_DIR/schema.sql" "$BACKUP_DIR/data.sql" > "$BACKUP_DIR/SHA256SUMS"
+          echo "Logical backup created and checksummed in ephemeral runner storage."
+          du -h "$BACKUP_DIR/roles.sql" "$BACKUP_DIR/schema.sql" "$BACKUP_DIR/data.sql"
+
+      - name: Read Supabase upgrade eligibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error             -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"             "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_ID/upgrade/eligibility"             > "$BACKUP_DIR/upgrade-eligibility.json"
+
+          {
+            echo "### Supabase upgrade eligibility"
+            jq '{eligible,current_app_version,current_app_version_release_channel,latest_app_version,target_upgrade_versions}' "$BACKUP_DIR/upgrade-eligibility.json"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Start isolated local Supabase
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOCAL_DIR"
+          cd "$LOCAL_DIR"
+          supabase init
+          if grep -q '^major_version = ' supabase/config.toml; then
+            sed -i 's/^major_version = .*/major_version = 17/' supabase/config.toml
+          fi
+          supabase start
+          supabase status -o env > "$BACKUP_DIR/local-supabase.env"
+          grep -q '^DB_URL=' "$BACKUP_DIR/local-supabase.env"
+
+      - name: Restore logical backup into isolated Supabase
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$BACKUP_DIR/local-supabase.env"
+          set +a
+
+          psql "$DB_URL" -v ON_ERROR_STOP=1             -c 'ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated;'
+
+          psql "$DB_URL"             --single-transaction             --variable ON_ERROR_STOP=1             --file "$BACKUP_DIR/roles.sql"             --file "$BACKUP_DIR/schema.sql"             --command 'SET session_replication_role = replica'             --file "$BACKUP_DIR/data.sql"
+
+      - name: Verify row counts, RLS and lineage
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$BACKUP_DIR/local-supabase.env"
+          set +a
+
+          psql "$DB_URL" -X -v ON_ERROR_STOP=1 -At -F '|' > "$BACKUP_DIR/restored-counts.txt" <<'SQL'
+          select * from (
+            select 'auth.users' as entity, count(*)::bigint as row_count from auth.users
+            union all select 'public.workspaces', count(*) from public.workspaces
+            union all select 'public.workspace_memberships', count(*) from public.workspace_memberships
+            union all select 'public.artists', count(*) from public.artists
+            union all select 'public.releases', count(*) from public.releases
+            union all select 'public.tracks', count(*) from public.tracks
+            union all select 'public.track_vault', count(*) from public.track_vault
+            union all select 'public.media_assets', count(*) from public.media_assets
+            union all select 'public.automation_jobs', count(*) from public.automation_jobs
+            union all select 'storage.buckets', count(*) from storage.buckets
+            union all select 'storage.objects', count(*) from storage.objects
+          ) counts order by entity;
+          SQL
+
+          diff -u "$BACKUP_DIR/source-counts.txt" "$BACKUP_DIR/restored-counts.txt"
+
+          psql "$DB_URL" -X -v ON_ERROR_STOP=1 -At > "$BACKUP_DIR/restored-rls-policy-fingerprint.txt" <<'SQL'
+          with entries as (
+            select 'table|' || n.nspname || '|' || c.relname || '|' ||
+                   c.relrowsecurity::text || '|' || c.relforcerowsecurity::text as value
+              from pg_class c
+              join pg_namespace n on n.oid = c.relnamespace
+             where n.nspname = 'public' and c.relkind in ('r','p')
+            union all
+            select 'policy|' || schemaname || '|' || tablename || '|' || policyname || '|' ||
+                   permissive || '|' || array_to_string(roles, ',') || '|' || cmd || '|' ||
+                   coalesce(qual, '') || '|' || coalesce(with_check, '')
+              from pg_policies
+             where schemaname = 'public'
+          )
+          select md5(coalesce(string_agg(value, E'\n' order by value), '')) from entries;
+          SQL
+
+          diff -u "$BACKUP_DIR/source-rls-policy-fingerprint.txt" "$BACKUP_DIR/restored-rls-policy-fingerprint.txt"
+
+          ORPHANS="$(psql "$DB_URL" -X -v ON_ERROR_STOP=1 -At <<'SQL'
+          select
+            (select count(*) from public.workspace_memberships m left join public.workspaces w on w.id=m.workspace_id where w.id is null) +
+            (select count(*) from public.artists a left join public.workspaces w on w.id=a.workspace_id where a.workspace_id is not null and w.id is null) +
+            (select count(*) from public.releases r left join public.artists a on a.id=r.artist_id where r.artist_id is not null and a.id is null) +
+            (select count(*) from public.tracks t left join public.releases r on r.id=t.release_id where t.release_id is not null and r.id is null) +
+            (select count(*) from public.tracks t left join public.artists a on a.id=t.artist_id where t.artist_id is not null and a.id is null) +
+            (select count(*) from public.track_vault v left join public.releases r on r.id=v.linked_release_id where v.linked_release_id is not null and r.id is null) +
+            (select count(*) from public.track_vault v left join public.tracks t on t.id=v.linked_track_id where v.linked_track_id is not null and t.id is null) +
+            (select count(*) from public.track_vault v left join public.media_assets m on m.id=v.media_asset_id where v.media_asset_id is not null and m.id is null) +
+            (select count(*) from public.track_vault v left join public.artists a on a.id=v.artist_id where v.artist_id is not null and a.id is null) +
+            (select count(*) from public.automation_jobs j left join public.artists a on a.id=j.artist_id where j.artist_id is not null and a.id is null);
+          SQL
+          )"
+          if [ "$ORPHANS" != "0" ]; then
+            echo "::error::Restore contains $ORPHANS critical ownership/lineage orphan(s)."
+            exit 1
+          fi
+
+          echo "Production/restored critical counts and RLS policy fingerprint match; ownership/lineage orphan count is zero."
+
+      - name: Restore one representative Storage object
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "$BACKUP_DIR/local-supabase.env"
+          set +a
+
+          SAMPLE_NAME="$(cat "$BACKUP_DIR/source-storage-sample.txt")"
+          ENCODED_NAME="$(python -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe="/"))' "$SAMPLE_NAME")"
+          SOURCE_URL="https://$SUPABASE_PROJECT_ID.supabase.co/storage/v1/object/public/public-media/$ENCODED_NAME"
+
+          curl --fail --silent --show-error "$SOURCE_URL" -o "$BACKUP_DIR/storage-source.bin"
+          SOURCE_SHA="$(sha256sum "$BACKUP_DIR/storage-source.bin" | awk '{print $1}')"
+
+          curl --fail --silent --show-error             -X POST             -H "Authorization: Bearer $SERVICE_ROLE_KEY"             -H "apikey: $SERVICE_ROLE_KEY"             -H "x-upsert: true"             -H "Content-Type: application/octet-stream"             --data-binary "@$BACKUP_DIR/storage-source.bin"             "$API_URL/storage/v1/object/public-media/$ENCODED_NAME"             > /dev/null
+
+          curl --fail --silent --show-error             "$API_URL/storage/v1/object/public/public-media/$ENCODED_NAME"             -o "$BACKUP_DIR/storage-restored.bin"
+
+          RESTORED_SHA="$(sha256sum "$BACKUP_DIR/storage-restored.bin" | awk '{print $1}')"
+          test "$SOURCE_SHA" = "$RESTORED_SHA"
+          echo "Representative Storage object restored byte-for-byte (SHA-256 match)."
+
+      - name: Summarize recovery evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "### Recovery drill"
+            echo "- Logical backup: created and SHA-256 checksummed in ephemeral storage"
+            echo "- Critical row counts: exact match"
+            echo "- Public RLS/policy fingerprint: exact match"
+            echo "- Ownership/lineage orphan count: 0"
+            echo "- Representative Storage object: byte-for-byte SHA-256 match"
+            echo "- Database dumps uploaded as artifacts: no"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Destroy temporary restored state and dumps
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          if [ -d "$LOCAL_DIR" ]; then
+            cd "$LOCAL_DIR"
+            supabase stop --no-backup
+          fi
+          rm -rf "$BACKUP_DIR" "$LOCAL_DIR"
