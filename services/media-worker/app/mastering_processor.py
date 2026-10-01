@@ -15,7 +15,8 @@ import imageio_ffmpeg
 from pydantic import BaseModel, Field
 
 from .main import download, sha256_file, upload_file
-from .mastering_candidates import build_candidate_family, select_candidate
+from .mastering_candidates import build_candidate_family, build_candidate_processing_plan, select_candidate
+from .mastering_character import build_character_permission
 from .mastering_contracts import build_v2_target_contract
 from .mastering_dynamics import build_dynamics_plan
 from .mastering_evaluation import build_perceptual_delta, evaluate_change_budget
@@ -246,6 +247,11 @@ def build_processing_plan(
         reference_bands=reference_fine,
     )
     dynamics_plan = build_dynamics_plan(preset, source_inspector, target)
+    character = build_character_permission(
+        preset=preset,
+        source_inspector=source_inspector,
+        target=target,
+    )
     stereo_plan = build_stereo_plan(preset, source_inspector, target)
 
     issues = source_inspector.get("issues") or []
@@ -261,6 +267,7 @@ def build_processing_plan(
         "tonal": tonal,
         "resonance": resonance,
         "compression": dynamics_plan,
+        "character": character,
         "stereo": {
             **stereo_plan,
             "phase_risk_detected": phase_risk,
@@ -348,6 +355,17 @@ def _filter_chain(plan: dict[str, Any]) -> str:
             "acompressor="
             f"threshold={threshold_linear:.6f}:ratio={ratio:.3f}:"
             f"attack={attack:.1f}:release={release:.1f}:makeup=1"
+        )
+    character = _record(plan.get("character"))
+    if character.get("enabled"):
+        clip_type = str(character.get("type") or "tanh")
+        threshold = _number(character.get("threshold")) or 0.98
+        output_level = _number(character.get("output")) or 0.99
+        oversample = int(_number(character.get("oversample")) or 4)
+        filters.append(
+            "asoftclip="
+            f"type={clip_type}:threshold={threshold:.6f}:"
+            f"output={output_level:.6f}:oversample={oversample}"
         )
     stereo = _record(plan.get("stereo"))
     side_level = _number(stereo.get("side_level"))
@@ -744,12 +762,13 @@ def master_audio(
     source_resolution = _record(target.get("source_resolution"))
     native_sample_rate_hz = int(_number(source_resolution.get("sample_rate_hz")) or 48000)
     premaster = workdir / "premaster.wav"
-    _render_premaster(
-        source,
-        premaster,
-        plan,
-        sample_rate_hz=native_sample_rate_hz,
-    )
+    if bool(target.get("preserve_source")):
+        _render_premaster(
+            source,
+            premaster,
+            plan,
+            sample_rate_hz=native_sample_rate_hz,
+        )
 
     iterations: list[dict[str, Any]] = []
     optimizer: dict[str, Any] | None = None
@@ -806,9 +825,18 @@ def master_audio(
         rendered_candidates: list[dict[str, Any]] = []
         for index, candidate in enumerate(build_candidate_family(target), start=1):
             candidate_target = _record(candidate.get("target"))
+            candidate_role = str(candidate.get("role") or "recommended")
+            candidate_plan = build_candidate_processing_plan(plan, candidate_role)
+            candidate_premaster = workdir / f"mastering-premaster-{index:02d}.wav"
             candidate_path = workdir / f"mastering-candidate-{index:02d}.flac"
+            _render_premaster(
+                source,
+                candidate_premaster,
+                candidate_plan,
+                sample_rate_hz=native_sample_rate_hz,
+            )
             candidate_measurement, candidate_after, candidate_checks = _render_candidate(
-                premaster,
+                candidate_premaster,
                 candidate_path,
                 music_map,
                 before,
@@ -817,9 +845,10 @@ def master_audio(
             )
             row = {
                 "id": candidate.get("id"),
-                "role": candidate.get("role"),
+                "role": candidate_role,
                 "reason": candidate.get("reason"),
                 "path": candidate_path,
+                "plan": candidate_plan,
                 "target": candidate_target,
                 "measurement": candidate_measurement,
                 "after": candidate_after,
@@ -829,7 +858,8 @@ def master_audio(
             iterations.append({
                 "iteration": index,
                 "candidate_id": candidate.get("id"),
-                "candidate_role": candidate.get("role"),
+                "candidate_role": candidate_role,
+                "plan": candidate_plan,
                 "target": dict(candidate_target),
                 "render_measurement": candidate_measurement,
                 "checks": candidate_checks,
@@ -842,6 +872,7 @@ def master_audio(
             raise RuntimeError("Candidate optimizer returned no render path.")
         shutil.copyfile(selected_path, output)
         target = _record(selected.get("target"))
+        plan = _record(selected.get("plan"))
         measured = _record(selected.get("measurement"))
         # Full verification, including codec stress, is run only on the exact
         # candidate that may be shown/promoted. Intermediate candidates use the
