@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createActiveMaster, promoteActiveMaster } from "@/app/studio/mastering-actions";
+import { createActiveMaster, keepOriginalMaster, promoteActiveMaster } from "@/app/studio/mastering-actions";
 import { MasteringListenLab, type MasteringSuggestedLoop } from "@/components/studio/mastering-listen-lab";
 import { MasteringAnalysisReport } from "@/components/studio/mastering-analysis-report";
 import { ProcessingState } from "@/components/studio/processing-state";
@@ -199,6 +199,12 @@ export function ActiveMasteringControls({
     router.refresh();
   }
 
+  async function keepOriginal(formData: FormData) {
+    await keepOriginalMaster(formData);
+    setRefreshedJobs(null);
+    router.refresh();
+  }
+
   const completed = displayJobs.filter((job) => job.status === "completed" && job.outputUrl);
   const latestActive = displayJobs.find((job) => ["planned", "queued", "running"].includes(job.status));
   const failed = displayJobs.find((job) => job.status === "failed");
@@ -313,6 +319,8 @@ export function ActiveMasteringControls({
             const checks = record(result.final_checks);
             const optimizer = record(result.optimizer);
             const target = record(result.target);
+            const artistDecision = record(result.artist_decision);
+            const decision = typeof artistDecision.decision === "string" ? artistDecision.decision : null;
             const targetRange = record(target.loudness_range);
             const referenceIntelligence = record(target.reference_intelligence);
             const suggestedLoops = masteringSuggestedLoops(job.result);
@@ -370,21 +378,35 @@ export function ActiveMasteringControls({
                 <div className={styles.actions}>
                   <div className={styles.actionButtons}>
                     <a className="button" href={job.outputUrl || "#"} download>Download {downloadLabel}</a>
-                    {checks.pass === true ? (
-                      <form action={promoteCandidate}>
-                        <input type="hidden" name="job_id" value={job.id} />
-                        <ConfirmButton
-                          className="button primary"
-                          confirmClassName="button primary"
-                          title="Use this verified master?"
-                          message="This will make the rendered candidate the canonical master for the track and trigger fresh Track Intelligence from that audio. The previous source remains in media history."
-                          confirmLabel="Use as canonical master"
-                          pendingLabel="Promoting master…"
-                        >
-                          Use as canonical master
-                        </ConfirmButton>
-                      </form>
-                    ) : null}
+                    {decision === "approved" ? (
+                      <span className={styles.decision}>Approved as canonical master</span>
+                    ) : decision === "kept_original" ? (
+                      <span className={styles.decision}>Original kept</span>
+                    ) : (
+                      <>
+                        <form action={keepOriginal}>
+                          <input type="hidden" name="job_id" value={job.id} />
+                          <SubmitButton className="button" pendingLabel="Keeping original…">
+                            Keep original
+                          </SubmitButton>
+                        </form>
+                        {checks.pass === true ? (
+                          <form action={promoteCandidate}>
+                            <input type="hidden" name="job_id" value={job.id} />
+                            <ConfirmButton
+                              className="button primary"
+                              confirmClassName="button primary"
+                              title="Use this verified master?"
+                              message="This will make the rendered candidate the canonical master for the track and trigger fresh Track Intelligence from that audio. The previous source remains in media history."
+                              confirmLabel="Use as canonical master"
+                              pendingLabel="Promoting master…"
+                            >
+                              Use as canonical master
+                            </ConfirmButton>
+                          </form>
+                        ) : null}
+                      </>
+                    )}
                   </div>
                   <span>{checks.true_peak_safe === true ? "True peak safe" : "Check true peak"} · {checks.dynamics_preserved === true ? "Dynamics preserved" : "Review dynamics"}</span>
                 </div>
