@@ -42,7 +42,7 @@ function withoutCredential(value: Record<string, unknown>) {
 }
 
 export function masteringOutputPath(job: Pick<TrackMasteringJob, "owner_id" | "artist_id" | "track_vault_id" | "id">) {
-  return `mastering/${job.owner_id}/${job.artist_id}/${job.track_vault_id}/${job.id}.wav`;
+  return `mastering/${job.owner_id}/${job.artist_id}/${job.track_vault_id}/${job.id}.flac`;
 }
 
 export async function kickMasteringQueue() {

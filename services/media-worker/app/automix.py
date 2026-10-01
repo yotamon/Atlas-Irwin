@@ -78,7 +78,7 @@ async def _upload_streaming(upload_url: str, path: Path, content_type: str) -> N
                 "x-upsert": "false",
             },
         )
-        response.raise_for_status()
+        worker_main.raise_upload_error(response)
 
 
 def _attach_transition_evidence(music_map: dict[str, Any], raw: dict[str, Any]) -> dict[str, Any]:

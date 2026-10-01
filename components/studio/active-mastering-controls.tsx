@@ -39,6 +39,15 @@ function title(value: string) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function outputFormatLabel(value: Json) {
+  const output = record(record(value).output);
+  const container = typeof output.container === "string" && output.container.trim()
+    ? output.container.trim().toUpperCase()
+    : "lossless master";
+  const bitDepth = number(output.bit_depth);
+  return `${bitDepth ? `${Math.round(bitDepth)}-bit ` : ""}${container}`;
+}
+
 const presets = [
   { id: "balanced", title: "Balanced", copy: "Clean, controlled and release-ready without chasing loudness." },
   { id: "punchy", title: "Punchy", copy: "More forward impact when the source still has dynamic headroom." },
@@ -195,7 +204,16 @@ export function ActiveMasteringControls({
       {failed ? (
         <div className={styles.error} role="alert">
           <strong>The last mastering attempt needs attention.</strong>
-          <p>{failed.error || "The mastering worker could not complete the render. Choose a preset above to retry from the untouched source."}</p>
+          <p>{failed.error || "The mastering worker could not complete the render. The untouched source remains canonical and safe to retry."}</p>
+          {!hasActive ? (
+            <form action={createCandidate}>
+              <input type="hidden" name="track_id" value={trackId} />
+              <input type="hidden" name="preset" value={failed.preset} />
+              <SubmitButton className="button" pendingLabel="Retrying mastering…" disabled={!sourceAudioUrl}>
+                Retry {failed.preset === "streaming_safe" ? "streaming-safe master" : `${title(failed.preset)} master`}
+              </SubmitButton>
+            </form>
+          ) : null}
         </div>
       ) : null}
 
@@ -211,6 +229,7 @@ export function ActiveMasteringControls({
             const afterDynamics = record(after.dynamics);
             const checks = record(result.final_checks);
             const iterations = Array.isArray(result.iterations) ? result.iterations.length : 0;
+            const downloadLabel = outputFormatLabel(job.result);
             const beforeIntegrated = number(beforeLoudness.integrated_lufs);
             const afterIntegrated = number(afterLoudness.integrated_lufs);
             return (
@@ -247,7 +266,7 @@ export function ActiveMasteringControls({
 
                 <div className={styles.actions}>
                   <div className={styles.actionButtons}>
-                    <a className="button" href={job.outputUrl || "#"} download>Download 24-bit WAV</a>
+                    <a className="button" href={job.outputUrl || "#"} download>Download {downloadLabel}</a>
                     {checks.pass === true ? (
                       <form action={promoteCandidate}>
                         <input type="hidden" name="job_id" value={job.id} />

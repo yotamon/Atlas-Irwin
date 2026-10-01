@@ -1,6 +1,7 @@
 import { ActiveMasteringControls } from "@/components/studio/active-mastering-controls";
 import { MasteringAnalysisReport } from "@/components/studio/mastering-analysis-report";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { masteringFailureMessage } from "@/lib/mastering/job-error";
 import { asMasteringClient } from "@/lib/mastering/jobs";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import type { MasterReadiness } from "@/lib/mastering/readiness";
@@ -10,6 +11,17 @@ function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
+}
+
+function outputFormatLabel(value: Json) {
+  const output = record(record(value).output);
+  const container = typeof output.container === "string" && output.container.trim()
+    ? output.container.trim().toUpperCase()
+    : "lossless master";
+  const bitDepth = typeof output.bit_depth === "number" && Number.isFinite(output.bit_depth)
+    ? Math.round(output.bit_depth)
+    : null;
+  return `${bitDepth ? `${bitDepth}-bit ` : ""}${container}`;
 }
 
 function runDate(value: string) {
@@ -72,7 +84,7 @@ export async function ActiveMasteringPanel({
       id: job.id,
       preset: job.preset,
       status: job.status,
-      error: job.error ? "The mastering worker could not complete this render." : null,
+      error: job.error ? masteringFailureMessage(job.error) : null,
       createdAt: job.created_at,
       outputUrl: job.status === "completed" && typeof request.public_url === "string" ? request.public_url : null,
       result: job.result_payload as Json,
@@ -103,7 +115,7 @@ export async function ActiveMasteringPanel({
                   {job.preset.charAt(0).toUpperCase() + job.preset.slice(1)} · {job.status} · {runDate(job.createdAt)}
                 </summary>
                 {job.error ? <p className="v2-muted-copy" role="alert">{job.error}</p> : null}
-                {job.outputUrl ? <p><a className="button" href={job.outputUrl} download>Download rendered WAV</a></p> : null}
+                {job.outputUrl ? <p><a className="button" href={job.outputUrl} download>Download {outputFormatLabel(job.result)}</a></p> : null}
                 <MasteringAnalysisReport result={job.result} compact />
               </details>
             ))}

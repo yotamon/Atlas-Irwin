@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { masteringFailureMessage } from "@/lib/mastering/job-error";
 import { asMasteringClient } from "@/lib/mastering/jobs";
 import { resolveArtistContext } from "@/lib/studio/artist-context";
 
@@ -44,7 +45,7 @@ export async function GET(request: Request) {
         id: job.id,
         preset: job.preset,
         status: job.status,
-        error: job.error ? "The mastering worker could not complete this render." : null,
+        error: job.error ? masteringFailureMessage(job.error) : null,
         createdAt: job.created_at,
         outputUrl: job.status === "completed" && typeof requestPayload.public_url === "string" ? requestPayload.public_url : null,
         result: job.result_payload,

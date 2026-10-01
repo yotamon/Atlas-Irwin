@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 import types
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 # Planning tests intentionally avoid importing the heavyweight canonical analyzer stack.
@@ -12,7 +14,8 @@ fake_main.download = lambda *args, **kwargs: None
 fake_main.upload_file = lambda *args, **kwargs: None
 fake_main.sha256_file = lambda *args, **kwargs: "test"
 with patch.dict(sys.modules, {"app.main": fake_main}):
-    from app.mastering_processor import build_mastering_target, build_processing_plan
+    from app import mastering_processor as mastering_processor_module
+    from app.mastering_processor import _ensure_storage_envelope, build_mastering_target, build_processing_plan
 
 
 def _inspector(*, lufs: float = -7.5, true_peak: float = -0.1, plr: float = 9.0, crest: float = 8.5):
@@ -117,6 +120,53 @@ class ActiveMasteringPlanTest(unittest.TestCase):
         target = build_mastering_target("streaming_safe", source, _references(3))
         self.assertLessEqual(float(target["true_peak_dbtp"]), -2.0)
         self.assertTrue(target["codec_headroom_guard"])
+
+    def test_storage_envelope_keeps_small_24_bit_flac(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "mastered.flac"
+            output.write_bytes(b"x" * 90)
+            result = _ensure_storage_envelope(output, root, max_bytes=100)
+            self.assertEqual(result["profile"], "flac_24")
+            self.assertFalse(result["fallback_applied"])
+            self.assertEqual(output.stat().st_size, 90)
+
+    def test_storage_envelope_falls_back_to_dithered_16_bit_flac(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "mastered.flac"
+            output.write_bytes(b"x" * 180)
+
+            def fake_encode(_source: Path, target: Path, *, bit_depth: int, sample_rate_hz: int) -> None:
+                self.assertEqual(bit_depth, 16)
+                target.write_bytes(b"y" * (80 if sample_rate_hz == 48000 else 70))
+
+            with patch.object(mastering_processor_module, "_encode_flac_variant", side_effect=fake_encode):
+                result = _ensure_storage_envelope(output, root, max_bytes=100)
+
+            self.assertEqual(result["profile"], "flac_16_dithered")
+            self.assertEqual(result["bit_depth"], 16)
+            self.assertEqual(result["sample_rate_hz"], 48000)
+            self.assertTrue(result["fallback_applied"])
+            self.assertEqual(output.stat().st_size, 80)
+
+    def test_storage_envelope_can_reduce_sample_rate_without_lossy_audio(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "mastered.flac"
+            output.write_bytes(b"x" * 180)
+
+            def fake_encode(_source: Path, target: Path, *, bit_depth: int, sample_rate_hz: int) -> None:
+                target.write_bytes(b"y" * (120 if sample_rate_hz == 48000 else 90))
+
+            with patch.object(mastering_processor_module, "_encode_flac_variant", side_effect=fake_encode):
+                result = _ensure_storage_envelope(output, root, max_bytes=100)
+
+            self.assertEqual(result["profile"], "flac_16_44k_dithered")
+            self.assertEqual(result["bit_depth"], 16)
+            self.assertEqual(result["sample_rate_hz"], 44100)
+            self.assertTrue(result["fallback_applied"])
+            self.assertEqual(output.stat().st_size, 90)
 
 
 if __name__ == "__main__":

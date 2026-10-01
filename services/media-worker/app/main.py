@@ -103,6 +103,26 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def raise_upload_error(response: httpx.Response) -> None:
+    if not response.is_error:
+        return
+
+    code = ""
+    message = ""
+    try:
+        payload = response.json()
+        if isinstance(payload, dict):
+            code = str(payload.get("code") or payload.get("error") or "").strip()
+            message = str(payload.get("message") or payload.get("error_description") or payload.get("error") or "").strip()
+    except ValueError:
+        message = response.text.strip()[:600]
+
+    label = f" [{code}]" if code else ""
+    detail = f": {message}" if message else ""
+    # Never include response.url here. Signed upload URLs contain one-time credentials.
+    raise RuntimeError(f"Media upload failed ({response.status_code}){label}{detail}")
+
+
 async def upload_file(upload_url: str, path: Path, content_type: str) -> None:
     validate_remote_url(upload_url)
     async with httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=20.0)) as client:
@@ -116,7 +136,7 @@ async def upload_file(upload_url: str, path: Path, content_type: str) -> None:
                     "x-upsert": "false",
                 },
             )
-        response.raise_for_status()
+        raise_upload_error(response)
 
 
 async def ffmpeg(*args: str) -> None:
