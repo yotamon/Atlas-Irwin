@@ -184,3 +184,10 @@ test("mastering failure paths retain storage lineage so uploaded chunks can be c
   assert.match(processor, /_callback\(request, "failed", result, message\)/);
   assert.match(callback, /status === "failed"[\s\S]*cleanupUploadedMaster\(service, requestPayload, result\)/);
 });
+
+test("mastering decisions are immutable preference evidence", async () => {
+  const actions = await source("app/studio/mastering-actions.ts");
+  assert.match(actions, /already approved as the canonical master/);
+  assert.match(actions, /already chose to keep the original/);
+  assert.match(actions, /deduplicated: true/);
+});
