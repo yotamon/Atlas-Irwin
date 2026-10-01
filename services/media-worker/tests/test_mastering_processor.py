@@ -96,6 +96,28 @@ class ActiveMasteringPlanTest(unittest.TestCase):
         plan = build_processing_plan("punchy", source, target, [])
         self.assertFalse(plan["compression"]["enabled"])
 
+    def test_streaming_safe_preserves_source_and_ignores_reference_tone(self) -> None:
+        source = _inspector(lufs=-9.7, plr=14.0, crest=13.0)
+        refs = _references(4)
+        target = build_mastering_target("streaming_safe", source, refs)
+        plan = build_processing_plan("streaming_safe", source, target, refs)
+
+        self.assertEqual(target["reference_source"], "source_preservation")
+        self.assertEqual(float(target["integrated_lufs"]), -9.7)
+        self.assertTrue(target["preserve_source"])
+        self.assertLessEqual(float(target["true_peak_dbtp"]), -2.0)
+        self.assertEqual(plan["eq_moves"], [])
+        self.assertEqual(float(plan["highpass_hz"]), 0.0)
+        self.assertFalse(plan["compression"]["enabled"])
+        self.assertEqual(float(plan["compression"]["ratio"]), 1.0)
+
+    def test_streaming_safe_codec_risk_never_reduces_peak_headroom(self) -> None:
+        source = _inspector(lufs=-15.5)
+        source["codec_stress"] = [{"status": "completed", "very_low_headroom": True}]
+        target = build_mastering_target("streaming_safe", source, _references(3))
+        self.assertLessEqual(float(target["true_peak_dbtp"]), -2.0)
+        self.assertTrue(target["codec_headroom_guard"])
+
 
 if __name__ == "__main__":
     unittest.main()

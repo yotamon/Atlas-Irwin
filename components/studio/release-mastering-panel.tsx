@@ -1,10 +1,13 @@
 import { ActiveMasteringPanel } from "@/components/studio/active-mastering-panel";
 import { MasteringInspectorPanel } from "@/components/studio/mastering-inspector-panel";
+import { MasterReadinessCard } from "@/components/studio/master-readiness-card";
+import { MasteringReferencesPanel } from "@/components/studio/mastering-references-panel";
 import { MasteringTechnicalReport } from "@/components/studio/mastering-technical-report";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { deriveMasterReadiness } from "@/lib/mastering/readiness";
+import { asMasteringClient } from "@/lib/mastering/jobs";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
-import { asGrowthClient } from "@/lib/studio/growth-db";
-import { hasMusicIntelligenceMap } from "@/lib/studio/track-analysis-state";
+import { describeTrackAnalysis } from "@/lib/studio/track-analysis-state";
 import type { Json } from "@/types/database";
 import type { VaultTrack } from "@/types/growth-database";
 
@@ -14,31 +17,46 @@ function record(value: unknown): Record<string, unknown> {
     : {};
 }
 
-function statusLabel(musicMap: Json) {
-  const status = record(record(musicMap).mastering_inspector).status;
-  if (status === "fix_before_release") return "Fix before release";
-  if (status === "ready_review_suggested") return "Review suggested";
-  if (status === "ready") return "Ready";
-  return "Available";
-}
-
 export async function ReleaseMasteringPanel({ vaultTrack }: { vaultTrack: VaultTrack }) {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveActiveArtistContext(supabase, user);
-  const growth = asGrowthClient(supabase);
-  const catalogResult = await growth
-    .from("track_vault")
-    .select("id,title,audio_profile")
+  const masteringDb = asMasteringClient(supabase);
+  const referencesResult = await masteringDb
+    .from("mastering_references")
+    .select("label,reference_signature,track_vault_id")
     .eq("owner_id", user.id)
     .eq("artist_id", artist.artistId)
-    .neq("id", vaultTrack.id);
-  if (catalogResult.error) throw new Error(catalogResult.error.message);
+    .eq("active", true)
+    .eq("status", "ready")
+    .limit(24);
+  if (referencesResult.error) throw new Error(referencesResult.error.message);
 
-  const catalogProfiles = (catalogResult.data ?? [])
-    .filter((track) => hasMusicIntelligenceMap(track.audio_profile))
-    .map((track) => ({ title: track.title, musicMap: track.audio_profile as Json }));
+  const catalogProfiles = (referencesResult.data ?? [])
+    .filter((reference) => reference.track_vault_id !== vaultTrack.id)
+    .map((reference) => ({
+    title: reference.label,
+    musicMap: {
+      mastering_inspector: { reference_signature: reference.reference_signature },
+    } as Json,
+  }));
   const inspector = record(record(vaultTrack.audio_profile).mastering_inspector);
   const hasInspector = Object.keys(inspector).length > 0;
+  const analysis = describeTrackAnalysis(vaultTrack.analysis, vaultTrack.audio_profile);
+  const readiness = deriveMasterReadiness(vaultTrack.audio_profile, {
+    audioUrl: vaultTrack.audio_url,
+    mediaAssetId: vaultTrack.media_asset_id,
+    analysisActive: analysis.isActive && !analysis.hasMusicMap,
+    analysisFailed: analysis.needsRecovery && !analysis.hasMusicMap,
+  });
+  const statusLabel = readiness.status === "ready"
+    ? "Ready"
+    : readiness.status === "review"
+      ? "Review suggested"
+      : readiness.status === "fix_required"
+        ? "Fix before release"
+        : readiness.status === "pending"
+          ? "Checking"
+          : "Unverified";
 
   return (
     <section className="v2-section v2-full-column" id="mastering">
@@ -50,17 +68,24 @@ export async function ReleaseMasteringPanel({ vaultTrack }: { vaultTrack: VaultT
             Loudness, true peak, dynamics, stereo, codec stress, beat stability and artist-catalog comparison stay attached to the same canonical master.
           </p>
         </div>
-        <span className="growth-active-label">{statusLabel(vaultTrack.audio_profile)}</span>
+        <span className="growth-active-label">{statusLabel}</span>
       </div>
 
-      <MasteringInspectorPanel
+      <MasterReadinessCard
+        readiness={readiness}
         audioUrl={vaultTrack.audio_url}
-        musicMap={vaultTrack.audio_profile}
-        catalogProfiles={catalogProfiles}
+        continueHref={vaultTrack.linked_release_id ? `/studio/releases/${vaultTrack.linked_release_id}/distribution` : null}
+        replaceHref={vaultTrack.linked_release_id ? `/studio/releases/${vaultTrack.linked_release_id}?stage=overview#master-audio` : "/studio/music/import"}
       />
 
       {hasInspector ? (
-        <ActiveMasteringPanel trackId={vaultTrack.id} sourceAudioUrl={vaultTrack.audio_url} />
+        <>
+          <ActiveMasteringPanel trackId={vaultTrack.id} sourceAudioUrl={vaultTrack.audio_url} readiness={readiness} />
+          <MasteringReferencesPanel
+            trackId={vaultTrack.id}
+            canAddCurrent={readiness.status === "ready" || readiness.status === "review"}
+          />
+        </>
       ) : (
         <div className="v2-calm-state compact">
           <strong>Active Mastering unlocks after the latest mastering checks are available.</strong>
@@ -68,6 +93,14 @@ export async function ReleaseMasteringPanel({ vaultTrack }: { vaultTrack: VaultT
         </div>
       )}
 
+      <details className="workspace-drawer">
+        <summary>Measurements and reference comparison</summary>
+        <MasteringInspectorPanel
+          audioUrl={vaultTrack.audio_url}
+          musicMap={vaultTrack.audio_profile}
+          catalogProfiles={catalogProfiles}
+        />
+      </details>
       <MasteringTechnicalReport musicMap={vaultTrack.audio_profile} />
     </section>
   );

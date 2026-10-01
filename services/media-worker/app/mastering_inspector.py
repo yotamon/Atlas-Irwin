@@ -368,6 +368,220 @@ def _dynamics(audio: np.ndarray, sample_rate: int, loudness: dict[str, Any], sam
     }
 
 
+
+def _temporal_stability(audio: np.ndarray, sample_rate: int, sections: list[dict[str, Any]]) -> dict[str, Any]:
+    """Find unusually persistent mix/render changes without pretending to identify AI artifacts."""
+    duration_seconds = len(audio) / max(sample_rate, 1)
+    if duration_seconds < 28:
+        return {
+            "status": "insufficient_evidence",
+            "classification": "unknown",
+            "confidence": 0.0,
+            "timeline": [],
+            "findings": [],
+            "analysis_note": "Temporal render stability needs enough duration to compare several musical windows.",
+        }
+
+    frame = max(sample_rate * 8, 1)
+    hop = max(sample_rate * 4, 1)
+    n_fft = 2048
+    timeline: list[dict[str, Any]] = []
+    mono = np.mean(audio, axis=1).astype(np.float32)
+    freqs = librosa.fft_frequencies(sr=sample_rate, n_fft=n_fft)
+
+    for start in range(0, max(1, len(audio) - frame + 1), hop):
+        end = min(len(audio), start + frame)
+        if end - start < sample_rate * 4:
+            continue
+        window = audio[start:end]
+        mono_window = mono[start:end]
+        stft = librosa.stft(mono_window, n_fft=n_fft, hop_length=n_fft // 2)
+        power = np.square(np.abs(stft))
+        spectrum = np.mean(power, axis=1)
+        band_energy: dict[str, float] = {}
+        for name, (low, high) in BAND_RANGES_HZ.items():
+            upper = min(high, sample_rate / 2.0)
+            mask = (freqs >= low) & (freqs < upper)
+            band_energy[name] = float(np.sum(spectrum[mask]))
+        total = sum(band_energy.values()) or 1.0
+        band_db = {
+            name: 10.0 * math.log10(max(value / total, 1e-12))
+            for name, value in band_energy.items()
+        }
+
+        rms = float(np.sqrt(np.mean(np.square(mono_window))))
+        peak = float(np.max(np.abs(mono_window)))
+        crest = _db(peak) - _db(rms)
+        centroid = float(np.mean(librosa.feature.spectral_centroid(y=mono_window, sr=sample_rate)))
+        flatness = float(np.mean(librosa.feature.spectral_flatness(y=mono_window)))
+        correlation = None
+        mono_delta = None
+        if window.shape[1] >= 2:
+            left = window[:, 0].astype(np.float64)
+            right = window[:, 1].astype(np.float64)
+            if np.std(left) > 1e-9 and np.std(right) > 1e-9:
+                correlation = float(np.corrcoef(left, right)[0, 1])
+            mid = 0.5 * (left + right)
+            stereo_rms = float(np.sqrt(np.mean((np.square(left) + np.square(right)) / 2.0)))
+            mid_rms = float(np.sqrt(np.mean(np.square(mid))))
+            mono_delta = 20.0 * math.log10(max(mid_rms, 1e-12) / max(stereo_rms, 1e-12))
+
+        center_ms = int(round(((start + end) * 0.5) / sample_rate * 1000))
+        timeline.append({
+            "start_ms": int(round(start / sample_rate * 1000)),
+            "end_ms": int(round(end / sample_rate * 1000)),
+            "ms": center_ms,
+            "crest_factor_db": round(crest, 3),
+            "spectral_centroid_hz": round(centroid, 1),
+            "spectral_flatness": round(flatness, 6),
+            "low_mid_db": round(band_db.get("low_mid_180_500", -120.0), 3),
+            "presence_db": round(band_db.get("presence_2500_6000", -120.0), 3),
+            "air_db": round(band_db.get("air_6000_16000", -120.0), 3),
+            "stereo_correlation": round(correlation, 4) if correlation is not None else None,
+            "mono_fold_down_delta_db": round(mono_delta, 3) if mono_delta is not None else None,
+        })
+
+    if len(timeline) < 6:
+        return {
+            "status": "insufficient_evidence",
+            "classification": "unknown",
+            "confidence": 0.0,
+            "timeline": timeline,
+            "findings": [],
+            "analysis_note": "Temporal render stability needs at least six analysis windows.",
+        }
+
+    def series(key: str) -> np.ndarray:
+        values = [float(item[key]) for item in timeline if isinstance(item.get(key), (int, float))]
+        return np.asarray(values, dtype=np.float64)
+
+    def persistent_change(key: str, threshold: float) -> tuple[float, int] | None:
+        values = series(key)
+        if values.size < 6:
+            return None
+        span = max(2, values.size // 3)
+        early = float(np.median(values[:span]))
+        late = float(np.median(values[-span:]))
+        delta = late - early
+        if abs(delta) < threshold:
+            return None
+        # Require the latter part to move consistently, not one isolated window.
+        late_values = values[-span:]
+        threshold_delta = threshold * 0.55
+        direction_ratio = float(np.mean(late_values >= early + threshold_delta)) if delta > 0 else float(np.mean(late_values <= early - threshold_delta))
+        if direction_ratio < 0.66:
+            return None
+
+        # Locate the onset of the persistent change instead of using the beginning
+        # of the final comparison bucket. Section-boundary discounting must be
+        # evaluated where the tonal/transient shift actually starts.
+        for index in range(span, len(values)):
+            probe = values[index:min(len(values), index + 3)]
+            if probe.size == 0:
+                continue
+            crossed = probe >= early + threshold_delta if delta > 0 else probe <= early - threshold_delta
+            if float(np.mean(crossed)) >= 0.66:
+                first_crossing = np.flatnonzero(crossed)
+                if first_crossing.size:
+                    return delta, index + int(first_crossing[0])
+        return delta, max(1, len(timeline) - span)
+
+    findings: list[dict[str, Any]] = []
+
+    air_change = persistent_change("air_db", 2.4)
+    centroid_change = persistent_change("spectral_centroid_hz", 700.0)
+    crest_change = persistent_change("crest_factor_db", 1.8)
+    low_mid_change = persistent_change("low_mid_db", 2.4)
+
+    if air_change and air_change[0] < 0 and (not centroid_change or centroid_change[0] < 0):
+        delta, index = air_change
+        point = timeline[index]
+        boundary = _section_boundary_distance(int(point["ms"]), sections)
+        if boundary is None or boundary > 7000:
+            findings.append({
+                "severity": "review",
+                "code": "high_frequency_detail_drop",
+                "message": "High-frequency detail falls persistently later in the track without a nearby section boundary. Listen for dulling, smearing or render degradation.",
+                "start_ms": point["start_ms"],
+                "end_ms": timeline[-1]["end_ms"],
+                "evidence": {
+                    "air_delta_db": round(delta, 2),
+                    "centroid_delta_hz": round(centroid_change[0], 1) if centroid_change else None,
+                    "nearest_section_boundary_ms": boundary,
+                },
+            })
+
+    if low_mid_change and low_mid_change[0] > 0:
+        delta, index = low_mid_change
+        point = timeline[index]
+        boundary = _section_boundary_distance(int(point["ms"]), sections)
+        if boundary is None or boundary > 7000:
+            findings.append({
+                "severity": "review",
+                "code": "low_mid_buildup",
+                "message": "Low-mid energy builds persistently later in the track without a nearby section boundary. Listen for mud or bass accumulation.",
+                "start_ms": point["start_ms"],
+                "end_ms": timeline[-1]["end_ms"],
+                "evidence": {
+                    "low_mid_delta_db": round(delta, 2),
+                    "nearest_section_boundary_ms": boundary,
+                },
+            })
+
+    if crest_change and crest_change[0] < 0:
+        delta, index = crest_change
+        point = timeline[index]
+        boundary = _section_boundary_distance(int(point["ms"]), sections)
+        if boundary is None or boundary > 7000:
+            findings.append({
+                "severity": "review",
+                "code": "transient_contrast_drop",
+                "message": "Transient contrast falls persistently later in the track. Listen for increasing saturation, compression or softened attacks.",
+                "start_ms": point["start_ms"],
+                "end_ms": timeline[-1]["end_ms"],
+                "evidence": {
+                    "crest_delta_db": round(delta, 2),
+                    "nearest_section_boundary_ms": boundary,
+                },
+            })
+
+    correlations = [
+        (index, float(item["stereo_correlation"]))
+        for index, item in enumerate(timeline)
+        if isinstance(item.get("stereo_correlation"), (int, float))
+    ]
+    if correlations:
+        median_corr = float(np.median([value for _, value in correlations]))
+        worst_index, worst_corr = min(correlations, key=lambda item: item[1])
+        if worst_corr < -0.15 and worst_corr < median_corr - 0.3:
+            point = timeline[worst_index]
+            boundary = _section_boundary_distance(int(point["ms"]), sections)
+            if boundary is None or boundary > 3500:
+                findings.append({
+                    "severity": "review",
+                    "code": "stereo_instability",
+                    "message": "Stereo correlation changes unusually in this window. Listen for phasey or unstable spatial texture.",
+                    "start_ms": point["start_ms"],
+                    "end_ms": point["end_ms"],
+                    "evidence": {
+                        "correlation": round(worst_corr, 3),
+                        "median_correlation": round(median_corr, 3),
+                        "nearest_section_boundary_ms": boundary,
+                    },
+                })
+
+    # Avoid overwhelming the artist. Strongest persistent evidence comes first.
+    findings = findings[:4]
+    return {
+        "status": "completed",
+        "classification": "review" if findings else "stable",
+        "confidence": round(min(0.96, 0.65 + min(len(timeline), 36) / 120.0), 3),
+        "timeline": timeline,
+        "findings": findings,
+        "analysis_note": "Temporal stability compares robust windowed spectral, transient and stereo evidence while discounting changes near known musical section boundaries. It surfaces audition cues, not AI-authorship claims.",
+    }
+
+
 def _section_boundary_distance(ms: int, sections: list[dict[str, Any]]) -> int | None:
     points: list[int] = []
     for section in sections:
@@ -672,13 +886,16 @@ def analyze_mastering(path: Path, music_map: dict[str, Any]) -> dict[str, Any]:
     stereo, stereo_windows = _windowed_stereo(audio, sample_rate)
     spectral = _spectral_profile(audio, sample_rate)
     dynamics = _dynamics(audio, sample_rate, loudness, sample_qc)
+    sections = [item for item in music_map.get("sections") or [] if isinstance(item, dict)]
     rhythm_confidence = _finite((((music_map.get("analysis") or {}).get("confidence") or {}).get("rhythm")))
-    beat_stability = analyze_beat_stability([int(value) for value in music_map.get("beats_ms") or []], global_bpm=_finite(music_map.get("bpm")), sections=[item for item in music_map.get("sections") or [] if isinstance(item, dict)], rhythm_confidence=rhythm_confidence)
+    beat_stability = analyze_beat_stability([int(value) for value in music_map.get("beats_ms") or []], global_bpm=_finite(music_map.get("bpm")), sections=sections, rhythm_confidence=rhythm_confidence)
+    temporal_stability = _temporal_stability(audio, sample_rate, sections)
     codec_stress = _codec_stress(path, loudness)
     issues = _evaluate(format_info=format_info, loudness=loudness, sample_qc=sample_qc, stereo=stereo, stereo_windows=stereo_windows, spectral=spectral, beat_stability=beat_stability, codec_stress=codec_stress)
     critical = [item for item in issues if item.get("severity") == "critical"]
     review = [item for item in issues if item.get("severity") == "review"]
-    status = "fix_before_release" if critical else "ready_review_suggested" if review else "ready"
+    temporal_review = [item for item in temporal_stability.get("findings") or [] if item.get("severity") == "review"]
+    status = "fix_before_release" if critical else "ready_review_suggested" if (review or temporal_review) else "ready"
     technical_ready = not critical
     integrated = _finite(loudness.get("integrated_lufs"))
     true_peak = _finite(loudness.get("true_peak_dbtp"))
@@ -689,7 +906,7 @@ def analyze_mastering(path: Path, music_map: dict[str, Any]) -> dict[str, Any]:
         "format": format_info, "loudness": loudness, "loudness_crosscheck": crosscheck,
         "peaks": {**sample_qc, "true_peak_dbtp": loudness.get("true_peak_dbtp"), "true_peak_channel": loudness.get("true_peak_channel")},
         "dynamics": dynamics, "stereo": stereo, "stereo_timeline": stereo_windows, "tonal_balance": spectral,
-        "beat_stability": beat_stability, "codec_stress": codec_stress,
+        "beat_stability": beat_stability, "temporal_stability": temporal_stability, "codec_stress": codec_stress,
         "platform_previews": {"spotify": _spotify_playback(integrated, true_peak)},
         "reference_signature": {
             "integrated_lufs": loudness.get("integrated_lufs"), "true_peak_dbtp": loudness.get("true_peak_dbtp"),
@@ -700,7 +917,7 @@ def analyze_mastering(path: Path, music_map: dict[str, Any]) -> dict[str, Any]:
             "tempo_classification": beat_stability.get("classification"),
         },
         "issues": issues,
-        "issue_counts": {"critical": len(critical), "review": len(review), "info": len([item for item in issues if item.get("severity") == "info"])},
+        "issue_counts": {"critical": len(critical), "review": len(review) + len(temporal_review), "info": len([item for item in issues if item.get("severity") == "info"])},
         "analysis_note": "Measurement and judgment are separated. Technical defects and platform risks are deterministic; tonal/dynamic differences are descriptive unless a reference or artist-catalog baseline supports the comparison.",
     }
 

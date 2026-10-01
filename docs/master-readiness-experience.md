@@ -1,9 +1,9 @@
 # Master Readiness Experience
 
-**Status:** Implementation plan for a single PR  
-**Branch:** `feat/master-readiness-experience`  
-**Scope:** Track → Master Readiness → optional mastering → verification → Distribution  
-**Product architecture:** Ensemblis UX V4  
+**Status:** Implemented in PR #265; canonical Master Readiness contract
+**Branch:** `feat/master-readiness-experience`
+**Scope:** Track → Master Readiness → optional mastering → verification → Distribution
+**Product architecture:** Ensemblis UX V4
 **Primary principle:** diagnosis before action, evidence before mastering, one canonical readiness state everywhere
 
 ## 1. Product outcome
@@ -653,9 +653,10 @@ Required acceptance criteria:
 ### Product/domain
 
 - `lib/mastering/readiness.ts` — canonical projection and issue → action policy
-- `lib/mastering/references.ts` — trusted reference selection
+- `lib/mastering/reference-jobs.ts` — durable uploaded-reference analysis queue
+- `app/studio/mastering-reference-actions.ts` — explicit approved/uploaded reference lifecycle
 - `types/mastering-database.ts` — mastering intent/reference types
-- new Supabase migration — trusted references + exact policies
+- `supabase/migrations/20261001003000_master_readiness_experience.sql` — trusted references, `streaming_safe`, exact vault → track synchronization
 
 ### Audio worker
 
@@ -666,13 +667,12 @@ Required acceptance criteria:
   - `streaming_safe` intent
   - preserve-source targets
 - worker callback contracts/tests
-- lazy codec-preview support for Listen Lab
+- codec stress stays measurement-only until a real preview asset exists; Listen Lab never simulates proprietary streaming audio
 
 ### UI
 
-- new `components/studio/master-readiness-card.tsx`
-- new/refactored `components/studio/master-finding-list.tsx`
-- evolve `mastering-ab-player.tsx` into `mastering-listen-lab.tsx`
+- `components/studio/master-readiness-card.tsx` — dominant decision + localized finding audition
+- `components/studio/mastering-listen-lab.tsx` — synchronized A/B, finding loops, mono fold-down and trusted-reference audition
 - refactor `mastering-inspector-panel.tsx` into detail/advanced role
 - refactor `active-mastering-controls.tsx` to contextual actions
 - update Track page
@@ -682,8 +682,9 @@ Required acceptance criteria:
 
 ### Distribution
 
+- `lib/mastering/distribution-readiness.ts` — exact-track readiness loader
 - `lib/distribution/artist-facing.ts`
-- final submit/preflight server gate
+- `app/studio/distribution-actions-safe.ts` + submission runtime — package-preparation and final-submit gates
 - exact deep links to Track Master Readiness
 
 ### Lineage
@@ -701,9 +702,9 @@ Required acceptance criteria:
 
 ---
 
-## 16. Test plan
+## 16. Validation contract
 
-This PR is not complete with screenshot polish alone.
+This PR is not complete with screenshot polish alone. The checks below are implemented as focused Master Readiness contracts plus the repository-wide Studio, TypeScript, lint, browser and production-build gates. The authenticated Playwright journey is non-destructive: it verifies the approval affordance but never promotes a real production master.
 
 ### Domain contract tests
 
@@ -771,14 +772,14 @@ Run:
 - `npm run typecheck`
 - `npm run test:studio`
 - relevant worker Python tests
-- Playwright Track → mastering → Distribution journey
+- Playwright Track → Master Readiness → approval affordance → Distribution journey when Studio test credentials are supplied
 - production build
 
 ---
 
-## 17. Single-PR commit sequence
+## 17. Reviewable single-PR sequence
 
-Everything lands in one PR, but commits remain reviewable and reversible.
+Everything lands in one PR. The implementation remains reviewable and reversible even when the final branch consolidates adjacent steps after rebasing onto current `main`.
 
 1. **docs: define master readiness experience**
 2. **fix: enforce exact master track lineage**

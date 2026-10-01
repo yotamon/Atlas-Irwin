@@ -20,6 +20,7 @@ ACTIVE_MASTERING_SCHEMA = "ensemblis.active_mastering.v1"
 FFMPEG_BINARY = imageio_ffmpeg.get_ffmpeg_exe()
 
 PRESET_TARGETS: dict[str, dict[str, float]] = {
+    "streaming_safe": {"integrated_lufs": -12.0, "true_peak_dbtp": -1.0, "compression_ratio": 1.0},
     "balanced": {"integrated_lufs": -10.0, "true_peak_dbtp": -1.2, "compression_ratio": 1.35},
     "punchy": {"integrated_lufs": -9.0, "true_peak_dbtp": -1.2, "compression_ratio": 1.5},
     "dynamic": {"integrated_lufs": -11.5, "true_peak_dbtp": -1.3, "compression_ratio": 1.0},
@@ -88,9 +89,14 @@ def build_mastering_target(
         if isinstance(item, dict) and _number(item.get("integrated_lufs")) is not None
     ]
     catalog_lufs = _catalog_median(valid_refs, "integrated_lufs")
+    source_loudness = _record(source_inspector.get("loudness"))
+    source_lufs = _number(source_loudness.get("integrated_lufs"))
     target_lufs = selected["integrated_lufs"]
     reference_source = "preset"
-    if catalog_lufs is not None and len(valid_refs) >= 3:
+    if preset == "streaming_safe":
+        target_lufs = source_lufs if source_lufs is not None else selected["integrated_lufs"]
+        reference_source = "source_preservation"
+    elif catalog_lufs is not None and len(valid_refs) >= 3:
         target_lufs = _clamp((target_lufs * 0.55) + (catalog_lufs * 0.45), -13.0, -8.5)
         reference_source = "artist_catalog"
 
@@ -102,7 +108,11 @@ def build_mastering_target(
         for item in codec_rows
     )
     true_peak = selected["true_peak_dbtp"]
-    if codec_risk:
+    if preset == "streaming_safe":
+        true_peak = -2.0 if source_lufs is not None and source_lufs > -14.0 else -1.0
+        if codec_risk:
+            true_peak = min(true_peak, -2.0)
+    elif codec_risk:
         true_peak = min(true_peak, -1.8)
 
     source_dynamics = _record(source_inspector.get("dynamics"))
@@ -118,6 +128,7 @@ def build_mastering_target(
         "reference_count": len(valid_refs),
         "catalog_integrated_lufs": round(catalog_lufs, 2) if catalog_lufs is not None else None,
         "codec_headroom_guard": codec_risk,
+        "preserve_source": preset == "streaming_safe",
     }
 
 
@@ -168,7 +179,7 @@ def build_processing_plan(
     return {
         "schema": ACTIVE_MASTERING_SCHEMA,
         "eq_moves": eq_moves,
-        "highpass_hz": 20.0,
+        "highpass_hz": 0.0 if preset == "streaming_safe" else 20.0,
         "compression": {
             "enabled": compression_enabled,
             "threshold_dbfs": -18.0,
@@ -203,7 +214,10 @@ def _run_ffmpeg(args: list[str], timeout: int = 300) -> subprocess.CompletedProc
 
 
 def _filter_chain(plan: dict[str, Any]) -> str:
-    filters: list[str] = [f"highpass=f={float(plan.get('highpass_hz') or 20.0):.1f}"]
+    filters: list[str] = []
+    highpass = _number(plan.get("highpass_hz"))
+    if highpass is not None and highpass > 0:
+        filters.append(f"highpass=f={highpass:.1f}")
     for move in plan.get("eq_moves") or []:
         if not isinstance(move, dict):
             continue
@@ -233,7 +247,7 @@ def _filter_chain(plan: dict[str, Any]) -> str:
 def _render_premaster(source: Path, output: Path, plan: dict[str, Any]) -> None:
     process = _run_ffmpeg([
         "-loglevel", "error", "-y", "-i", str(source), "-vn",
-        "-af", _filter_chain(plan),
+        "-af", _filter_chain(plan) or "anull",
         "-ar", "48000", "-ac", "2", "-c:a", "pcm_s24le", str(output),
     ])
     if process.returncode != 0:
@@ -301,9 +315,12 @@ def _candidate_checks(after: dict[str, Any], target: dict[str, Any], before: dic
     after_plr = _number(dynamics.get("peak_to_loudness_ratio_lu"))
     plr_loss = (before_plr - after_plr) if before_plr is not None and after_plr is not None else None
 
-    loudness_ok = integrated is not None and abs(integrated - float(target["integrated_lufs"])) <= 0.75
+    preserve_source = bool(target.get("preserve_source"))
+    loudness_tolerance = 0.35 if preserve_source else 0.75
+    dynamics_tolerance = 0.75 if preserve_source else 1.75
+    loudness_ok = integrated is not None and abs(integrated - float(target["integrated_lufs"])) <= loudness_tolerance
     peak_ok = true_peak is not None and true_peak <= float(target["true_peak_dbtp"]) + 0.20
-    dynamics_ok = plr_loss is None or plr_loss <= 1.75
+    dynamics_ok = plr_loss is None or plr_loss <= dynamics_tolerance
     return {
         "technical_ready": bool(after.get("technical_ready")) and critical == 0,
         "loudness_in_range": loudness_ok,
@@ -357,7 +374,7 @@ def master_audio(
     if not checks["pass"]:
         safer_target = dict(target)
         safer_target["true_peak_dbtp"] = round(min(float(target["true_peak_dbtp"]) - 0.5, -1.5), 2)
-        if not checks["loudness_in_range"] or not checks["dynamics_preserved"]:
+        if not bool(target.get("preserve_source")) and (not checks["loudness_in_range"] or not checks["dynamics_preserved"]):
             safer_target["integrated_lufs"] = round(float(target["integrated_lufs"]) - 0.35, 2)
         measured, after, checks = _render_candidate(premaster, output, music_map, before, safer_target)
         iterations.append({
@@ -388,7 +405,7 @@ def master_audio(
         },
         "notes": [
             "No generative audio is used. Ensemblis adjusts a constrained mastering DSP chain and verifies the rendered waveform.",
-            "Artist-catalog tonal matching is only applied when at least three analyzed catalog references exist.",
+            "Trusted-reference tonal matching is only applied when at least three explicit mastering references exist.",
             "Active v1 preserves stereo by default and does not perform blind widening or destructive stem remixing.",
         ],
     }

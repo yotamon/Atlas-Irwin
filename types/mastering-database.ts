@@ -7,8 +7,28 @@ type Table<Row> = {
   Relationships: [];
 };
 
-export type MasteringPreset = "balanced" | "punchy" | "dynamic";
+export type MasteringPreset = "streaming_safe" | "balanced" | "punchy" | "dynamic";
 export type MasteringJobStatus = "planned" | "queued" | "running" | "completed" | "failed" | "cancelled";
+
+export type MasteringReference = {
+  id: string;
+  owner_id: string;
+  artist_id: string;
+  kind: "approved_master" | "uploaded_reference";
+  status: "pending" | "queued" | "running" | "ready" | "failed";
+  track_vault_id: string | null;
+  media_asset_id: string | null;
+  audio_url: string | null;
+  label: string;
+  reference_signature: Json;
+  source_fingerprint: string | null;
+  analysis_state: Json;
+  external_job_id: string | null;
+  active: boolean;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+};
 
 export type TrackMasteringJob = {
   id: string;
@@ -39,6 +59,7 @@ export type MasteringDatabase = Omit<Database, "public"> & {
   public: Omit<Database["public"], "Tables"> & {
     Tables: ExistingTables & {
       track_mastering_jobs: Table<TrackMasteringJob>;
+      mastering_references: Table<MasteringReference>;
     };
   };
 };

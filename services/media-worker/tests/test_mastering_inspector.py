@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import unittest
 
-from app.mastering_inspector import analyze_beat_stability
+import numpy as np
+
+from app.mastering_inspector import _temporal_stability, analyze_beat_stability
 
 
 def _steady_beats(bpm: float, seconds: float) -> list[int]:
@@ -55,6 +57,54 @@ def _jittered_beats(bpm: float, seconds: float) -> list[int]:
         current += interval
         index += 1
     return values
+
+
+def _stereo_signal(seconds: float, sample_rate: int, components: list[tuple[float, float]]) -> np.ndarray:
+    t = np.arange(int(seconds * sample_rate), dtype=np.float32) / float(sample_rate)
+    mono = np.zeros_like(t)
+    for frequency, amplitude in components:
+        mono += amplitude * np.sin(2.0 * np.pi * frequency * t)
+    peak = float(np.max(np.abs(mono))) or 1.0
+    mono = 0.5 * mono / peak
+    return np.column_stack((mono, mono)).astype(np.float32)
+
+
+class TemporalStabilityTest(unittest.TestCase):
+    def test_stable_audio_has_no_temporal_review_finding(self) -> None:
+        sample_rate = 16000
+        audio = _stereo_signal(36.0, sample_rate, [(440.0, 1.0), (7000.0, 0.08)])
+        result = _temporal_stability(audio, sample_rate, [])
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["classification"], "stable")
+        self.assertEqual(result["findings"], [])
+
+    def test_section_aligned_tonal_change_is_discounted(self) -> None:
+        sample_rate = 16000
+        first = _stereo_signal(20.0, sample_rate, [(440.0, 1.0), (7000.0, 0.18)])
+        second = _stereo_signal(20.0, sample_rate, [(440.0, 1.0)])
+        audio = np.concatenate((first, second), axis=0)
+        result = _temporal_stability(
+            audio,
+            sample_rate,
+            [
+                {"id": "a", "label": "A", "start_ms": 0, "end_ms": 20000},
+                {"id": "b", "label": "B", "start_ms": 20000, "end_ms": 40000},
+            ],
+        )
+        codes = {item["code"] for item in result["findings"]}
+        self.assertNotIn("high_frequency_detail_drop", codes)
+
+    def test_non_section_high_frequency_deterioration_is_localized(self) -> None:
+        sample_rate = 16000
+        first = _stereo_signal(20.0, sample_rate, [(440.0, 1.0), (7000.0, 0.22)])
+        second = _stereo_signal(24.0, sample_rate, [(440.0, 1.0)])
+        audio = np.concatenate((first, second), axis=0)
+        result = _temporal_stability(audio, sample_rate, [])
+        codes = {item["code"] for item in result["findings"]}
+        self.assertIn("high_frequency_detail_drop", codes)
+        finding = next(item for item in result["findings"] if item["code"] == "high_frequency_detail_drop")
+        self.assertGreaterEqual(int(finding["start_ms"]), 16000)
+        self.assertGreater(int(finding["end_ms"]), int(finding["start_ms"]))
 
 
 class BeatStabilityTest(unittest.TestCase):
