@@ -597,11 +597,25 @@ def master_audio(
     if not checks["pass"]:
         safer_target = dict(target)
         safer_target["true_peak_dbtp"] = round(min(float(target["true_peak_dbtp"]) - 0.5, -1.5), 2)
+        safer_true_peak = dict(_record(target.get("true_peak")))
+        safer_true_peak["ceiling_dbtp"] = safer_target["true_peak_dbtp"]
+        safer_target["true_peak"] = safer_true_peak
+
+        loudness_shift = 0.0
         if bool(target.get("preserve_source")):
             safer_target["static_gain_db"] = round(float(target.get("static_gain_db") or 0.0) - 0.5, 2)
-            safer_target["integrated_lufs"] = round(float(target["integrated_lufs"]) - 0.5, 2)
+            loudness_shift = -0.5
         elif not checks["loudness_in_range"] or not checks["dynamics_preserved"]:
-            safer_target["integrated_lufs"] = round(float(target["integrated_lufs"]) - 0.35, 2)
+            loudness_shift = -0.35
+
+        if loudness_shift:
+            safer_target["integrated_lufs"] = round(float(target["integrated_lufs"]) + loudness_shift, 2)
+            safer_range = dict(_record(target.get("loudness_range")))
+            for key in ("preferred_lufs", "min_lufs", "max_lufs"):
+                value = _number(safer_range.get(key))
+                if value is not None:
+                    safer_range[key] = round(value + loudness_shift, 2)
+            safer_target["loudness_range"] = safer_range
         measured, after, checks = _render_candidate(premaster, output, music_map, before, safer_target)
         iterations.append({
             "iteration": 2,
