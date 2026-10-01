@@ -210,3 +210,22 @@ test("uploaded mastering references stay private and use fresh signed reads", as
   assert.match(referenceJobs, /sourceIdentityUrl = `media-asset:\$\{asset\.id\}`/);
   assert.match(referenceCallback, /reference\.media_asset_id[\s\S]*sourceAssetId !== reference\.media_asset_id/);
 });
+
+test("selected masters expose real AAC and Opus audition assets without replacing canonical audio", async () => {
+  const [jobs, processor, callback, controls, listenLab] = await Promise.all([
+    source("lib/mastering/jobs.ts"),
+    source("services/media-worker/app/mastering_processor.py"),
+    source("app/api/studio/mastering/callback/route.ts"),
+    source("components/studio/active-mastering-controls.tsx"),
+    source("components/studio/mastering-listen-lab.tsx"),
+  ]);
+
+  assert.match(jobs, /aac_256/);
+  assert.match(jobs, /opus_160/);
+  assert.match(processor, /_render_and_upload_codec_previews/);
+  assert.match(processor, /source": "exact_selected_master"/);
+  assert.match(callback, /codec_preview_uploads/);
+  assert.match(controls, /codecPreviews=\{codecPreviews\}/);
+  assert.match(listenLab, /Hear real codec stress previews/);
+  assert.match(listenLab, /never replace the lossless canonical master/);
+});
