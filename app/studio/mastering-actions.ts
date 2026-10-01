@@ -254,7 +254,12 @@ export async function promoteActiveMaster(form: FormData) {
     result_payload: json(approvedResult),
     updated_at: approvedAt,
   }).eq("id", job.id).eq("owner_id", user.id).eq("artist_id", artist.artistId);
-  if (preferenceUpdate.error) throw new Error(preferenceUpdate.error.message);
+  if (preferenceUpdate.error) {
+    console.error("[active-mastering] canonical promotion succeeded but preference evidence could not be recorded", {
+      jobId: job.id,
+      message: preferenceUpdate.error.message,
+    });
+  }
 
   const analysisForm = new FormData();
   analysisForm.set("id", job.track_vault_id);
