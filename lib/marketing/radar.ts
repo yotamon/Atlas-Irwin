@@ -100,7 +100,7 @@ async function scanYouTube(
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${access.accessToken}` },
       cache: "no-store",
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(externalTimeoutMs),
     });
     if (!response.ok) continue;
     const payload = await response.json() as {
@@ -127,7 +127,7 @@ async function scanYouTube(
   const response = await fetch(statsUrl, {
     headers: { Authorization: `Bearer ${access.accessToken}` },
     cache: "no-store",
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(externalTimeoutMs),
   });
   if (!response.ok) return 0;
   const payload = await response.json() as {

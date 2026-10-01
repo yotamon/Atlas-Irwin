@@ -14,7 +14,6 @@ import {
 import { releaseRelativeTimestamp } from "./schedule";
 import type { MarketingExecutionScope } from "./execution-scope";
 import {
-  daysSinceRelease,
   lifecyclePlanningPrinciple,
   relativeDayForFutureOffset,
   releaseLifecycle,
