@@ -104,14 +104,16 @@ export async function createUploadedMasteringReference(form: FormData) {
   const requestedLabel = String(form.get("label") ?? "").trim();
 
   const assetResult = await supabase.from("media_assets")
-    .select("id,public_url,mime_type,metadata")
+    .select("id,bucket_name,storage_path,public_url,visibility,mime_type,metadata")
     .eq("id", assetId)
     .eq("owner_id", user.id)
     .single();
   if (assetResult.error || !assetResult.data) throw new Error(assetResult.error?.message || "Reference audio was not found.");
   const asset = assetResult.data;
   if (!asset.mime_type?.startsWith("audio/")) throw new Error("Mastering references must be audio files.");
-  if (!asset.public_url) throw new Error("Reference analysis requires a readable media URL.");
+  if (!asset.public_url && (!asset.bucket_name || !asset.storage_path)) {
+    throw new Error("Reference analysis requires readable media storage lineage.");
+  }
 
   const metadata = record(asset.metadata);
   const originalName = typeof metadata.original_name === "string" ? metadata.original_name : "Reference";
@@ -133,7 +135,7 @@ export async function createUploadedMasteringReference(form: FormData) {
       const retry = await mastering.from("mastering_references").update({
         status: "pending",
         label,
-        audio_url: asset.public_url,
+        audio_url: asset.visibility === "public" ? asset.public_url : null,
         reference_signature: json({}),
         source_fingerprint: null,
         analysis_state: json({ status: "pending", requested_at: new Date().toISOString() }),
@@ -155,7 +157,7 @@ export async function createUploadedMasteringReference(form: FormData) {
     status: "pending",
     track_vault_id: null,
     media_asset_id: asset.id,
-    audio_url: asset.public_url,
+    audio_url: asset.visibility === "public" ? asset.public_url : null,
     label,
     reference_signature: json({}),
     source_fingerprint: null,
