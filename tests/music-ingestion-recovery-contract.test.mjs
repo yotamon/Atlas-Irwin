@@ -4,7 +4,8 @@ import { readFile } from "node:fs/promises";
 
 test("stranded Music ingestion follow-ups have a bounded durable recovery path", async () => {
   const recovery = await readFile("lib/music-intelligence/ingestion-follow-up.ts", "utf8");
-  const heartbeat = await readFile("app/api/cron/marketing/route.ts", "utf8");
+  const cron = await readFile("app/api/cron/marketing/route.ts", "utf8");
+  const heartbeat = await readFile("lib/marketing/durable-heartbeat.ts", "utf8");
 
   assert.ok(recovery.includes("FOLLOW_UP_RECOVERY_GRACE_MS"));
   assert.ok(recovery.includes('followUp.status !== "queued" && followUp.status !== "waiting"'));
@@ -12,6 +13,7 @@ test("stranded Music ingestion follow-ups have a bounded durable recovery path",
   assert.ok(recovery.includes("expectedAudioUrl: target.audioUrl"));
   assert.ok(recovery.includes("currentRequestId !== target.requestId"));
   assert.ok(recovery.includes("current.data.linked_track_id !== target.trackId"));
+  assert.ok(cron.includes("runDurableMarketingHeartbeat"));
   assert.ok(heartbeat.includes("recoverStrandedMusicIngestionFollowUp"));
   assert.ok(heartbeat.includes('runStep("music ingestion follow-up"'));
 });

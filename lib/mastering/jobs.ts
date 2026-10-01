@@ -3,6 +3,13 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { dispatchMediaWorkerJob } from "@/lib/media-worker/dispatcher";
 import {
+  isMediaWorkerBusyError,
+  isMediaWorkerCapacityError,
+  mediaWorkerCapacityBlocked,
+  mediaWorkerCapacityErrorMessage,
+  mediaWorkerCapacityRetryAfter,
+} from "@/lib/media-worker/failures";
+import {
   createMediaWorkerCallbackCredential,
   MEDIA_WORKER_CALLBACK_HASH_KEY,
 } from "@/lib/media-worker/sandbox";
@@ -34,11 +41,6 @@ function withoutCredential(value: Record<string, unknown>) {
   return next;
 }
 
-function busyError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return /already processing|worker is busy/i.test(message);
-}
-
 export function masteringOutputPath(job: Pick<TrackMasteringJob, "owner_id" | "artist_id" | "track_vault_id" | "id">) {
   return `mastering/${job.owner_id}/${job.artist_id}/${job.track_vault_id}/${job.id}.wav`;
 }
@@ -64,6 +66,10 @@ export async function kickMasteringQueue() {
   if (planned.error) throw new Error(planned.error.message);
   if (!planned.data) return { dispatched: false, busy: false };
   const job = planned.data as TrackMasteringJob;
+  const capacity = mediaWorkerCapacityBlocked(job.error);
+  if (capacity.blocked) {
+    return { dispatched: false, busy: false, reason: "capacity" as const, retryAt: capacity.retryAfter };
+  }
   const path = job.output_path || masteringOutputPath(job);
   const credential = createMediaWorkerCallbackCredential();
   const basePayload = withoutCredential(record(job.request_payload));
@@ -110,7 +116,23 @@ export async function kickMasteringQueue() {
     if (update.error) throw new Error(update.error.message);
     return { dispatched: true, busy: false };
   } catch (error) {
-    if (busyError(error)) {
+    if (isMediaWorkerCapacityError(error)) {
+      const message = mediaWorkerCapacityErrorMessage(error);
+      await db.from("track_mastering_jobs").update({
+        status: "planned",
+        request_payload: json(basePayload),
+        external_job_id: null,
+        error: message,
+        updated_at: new Date().toISOString(),
+      }).eq("id", job.id);
+      return {
+        dispatched: false,
+        busy: false,
+        reason: "capacity" as const,
+        retryAt: mediaWorkerCapacityRetryAfter(message),
+      };
+    }
+    if (isMediaWorkerBusyError(error)) {
       await db.from("track_mastering_jobs").update({
         status: "planned",
         request_payload: json(basePayload),
@@ -118,7 +140,7 @@ export async function kickMasteringQueue() {
         error: null,
         updated_at: new Date().toISOString(),
       }).eq("id", job.id);
-      return { dispatched: false, busy: true };
+      return { dispatched: false, busy: true, reason: "busy" as const };
     }
     const message = error instanceof Error ? error.message : "Active Mastering dispatch failed.";
     await db.from("track_mastering_jobs").update({

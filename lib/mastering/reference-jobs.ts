@@ -3,6 +3,13 @@
 import { activeCapabilitiesForOwner } from "@/lib/licensing/capabilities";
 import { dispatchMediaWorkerJob } from "@/lib/media-worker/dispatcher";
 import {
+  isMediaWorkerBusyError,
+  isMediaWorkerCapacityError,
+  mediaWorkerCapacityBlocked,
+  mediaWorkerCapacityErrorMessage,
+  mediaWorkerCapacityRetryAfter,
+} from "@/lib/media-worker/failures";
+import {
   createMediaWorkerCallbackCredential,
   MEDIA_WORKER_CALLBACK_HASH_KEY,
 } from "@/lib/media-worker/sandbox";
@@ -28,11 +35,6 @@ function withoutCredential(value: Record<string, unknown>) {
   const next = { ...value };
   delete next[MEDIA_WORKER_CALLBACK_HASH_KEY];
   return next;
-}
-
-function deferredWorkerError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return /already processing|worker is busy|quota|limit|billing|payment|required|resource|402|429|hobby/i.test(message);
 }
 
 function timestamp(value: unknown) {
@@ -73,7 +75,7 @@ export async function kickMasteringReferenceQueue() {
   if (active.error) throw new Error(active.error.message);
   if (active.data) {
     const recovered = await recoverStaleReference(active.data as MasteringReference);
-    if (!recovered) return { dispatched: false, busy: true };
+    if (!recovered) return { dispatched: false, busy: true, reason: "busy" as const };
   }
 
   const pending = await db.from("mastering_references")
@@ -85,9 +87,18 @@ export async function kickMasteringReferenceQueue() {
     .limit(1)
     .maybeSingle();
   if (pending.error) throw new Error(pending.error.message);
-  if (!pending.data) return { dispatched: false, busy: false };
+  if (!pending.data) return { dispatched: false, busy: false, reason: "empty" as const };
 
   const reference = pending.data as MasteringReference;
+  const capacity = mediaWorkerCapacityBlocked(reference.error);
+  if (capacity.blocked) {
+    return {
+      dispatched: false,
+      busy: false,
+      reason: "capacity" as const,
+      retryAt: capacity.retryAfter,
+    };
+  }
   if (!reference.audio_url) {
     const failed = await db.from("mastering_references").update({
       status: "failed",
@@ -95,7 +106,7 @@ export async function kickMasteringReferenceQueue() {
       updated_at: new Date().toISOString(),
     }).eq("id", reference.id).eq("owner_id", reference.owner_id);
     if (failed.error) throw new Error(failed.error.message);
-    return { dispatched: false, busy: false };
+    return { dispatched: false, busy: false, reason: "failed" as const };
   }
 
   const credential = createMediaWorkerCallbackCredential();
@@ -115,7 +126,7 @@ export async function kickMasteringReferenceQueue() {
     updated_at: new Date().toISOString(),
   }).eq("id", reference.id).eq("owner_id", reference.owner_id).eq("status", "pending").select("*").maybeSingle();
   if (claimed.error) throw new Error(claimed.error.message);
-  if (!claimed.data) return { dispatched: false, busy: false };
+  if (!claimed.data) return { dispatched: false, busy: true, reason: "busy" as const };
 
   try {
     const dispatch = await dispatchMediaWorkerJob({
@@ -137,10 +148,26 @@ export async function kickMasteringReferenceQueue() {
       updated_at: new Date().toISOString(),
     }).eq("id", reference.id).eq("owner_id", reference.owner_id);
     if (update.error) throw new Error(update.error.message);
-    return { dispatched: true, busy: false };
+    return { dispatched: true, busy: false, reason: "started" as const };
   } catch (error) {
     const cleanState = withoutCredential(analysisState);
-    if (deferredWorkerError(error)) {
+    if (isMediaWorkerCapacityError(error)) {
+      const message = mediaWorkerCapacityErrorMessage(error);
+      await db.from("mastering_references").update({
+        status: "pending",
+        analysis_state: json({ ...cleanState, status: "pending" }),
+        external_job_id: null,
+        error: message,
+        updated_at: new Date().toISOString(),
+      }).eq("id", reference.id).eq("owner_id", reference.owner_id);
+      return {
+        dispatched: false,
+        busy: false,
+        reason: "capacity" as const,
+        retryAt: mediaWorkerCapacityRetryAfter(message),
+      };
+    }
+    if (isMediaWorkerBusyError(error)) {
       await db.from("mastering_references").update({
         status: "pending",
         analysis_state: json({ ...cleanState, status: "pending" }),
@@ -148,7 +175,7 @@ export async function kickMasteringReferenceQueue() {
         error: null,
         updated_at: new Date().toISOString(),
       }).eq("id", reference.id).eq("owner_id", reference.owner_id);
-      return { dispatched: false, busy: true };
+      return { dispatched: false, busy: true, reason: "busy" as const };
     }
 
     const message = error instanceof Error ? error.message : "Reference analysis dispatch failed.";

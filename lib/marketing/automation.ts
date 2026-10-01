@@ -1,10 +1,24 @@
 import "server-only";
 
 import { randomBytes } from "node:crypto";
+import { syncAudienceInteractions } from "./audience";
+import { processAutonomousCreativeSpend } from "./autonomous-creative-spend";
 import { channelAdapter } from "./channels";
+import { processApprovedCreativeDerivativeEvents } from "./creative-derivative-events";
 import { createMarketingServiceClient } from "./db";
 import { aggregateMetrics, primarySignalValue } from "./domain";
+import type { MarketingExecutionScope } from "./execution-scope";
+import { executeSafeManagerActions } from "./manager-execution";
+import {
+  isMarketingMaintenanceJob,
+  marketingMaintenanceCadenceMs,
+} from "./maintenance";
+import { refreshNextBestActions } from "./next-best-action";
+import { processDueOutreachEnrollments } from "./outreach";
+import { processDuePublicationJobs } from "./publications";
+import { refreshMarketingRadarIfDue } from "./radar";
 import { releaseRelativeTimestamp } from "./schedule";
+import { reconcileMarketingState } from "./state-reconciliation";
 import type { Json } from "@/types/database";
 import type {
   AutomationJob,
@@ -473,11 +487,52 @@ async function collectMetricsJob(job: ScopedAutomationJob) {
   return { outcome: "metrics_collected", externalPostId: publication.external_post_id };
 }
 
+const AUTOMATION_LEASE_MS = 10 * 60 * 1000;
+const AUTOMATION_JOB_START_HEADROOM_MS = 90_000;
+
+function jobScope(job: ScopedAutomationJob): MarketingExecutionScope {
+  return { ownerId: job.owner_id, artistId: job.artist_id };
+}
+
+function recurringMaintenanceRecovery(job: ScopedAutomationJob, now = Date.now()) {
+  const cadenceMs = marketingMaintenanceCadenceMs(job.job_type);
+  if (!isMarketingMaintenanceJob(job.job_type) || cadenceMs === null) return null;
+  return {
+    status: "queued" as const,
+    locked_at: null,
+    completed_at: null,
+    run_after: new Date(now + cadenceMs).toISOString(),
+    attempt_count: 0,
+  };
+}
+
 async function processJob(job: ScopedAutomationJob) {
   if (!job.artist_id) throw new Error("Automation job is missing artist scope.");
   if (job.job_type === "evaluate_experiment") return evaluateExperimentJob(job);
   if (job.job_type === "generate_winner_derivatives") return generateWinnerDerivatives(job);
   if (job.job_type === "collect_metrics") return collectMetricsJob(job);
+
+  const scope = jobScope(job);
+  if (job.job_type === "maintenance:state_reconciliation") return reconcileMarketingState(scope);
+  if (job.job_type === "maintenance:publications") return processDuePublicationJobs(1, scope);
+  if (job.job_type === "maintenance:outreach") return processDueOutreachEnrollments(2, scope);
+  if (job.job_type === "maintenance:creative_spend") return processAutonomousCreativeSpend(2, scope);
+  if (job.job_type === "maintenance:creative_derivatives") return processApprovedCreativeDerivativeEvents(4, scope);
+  if (job.job_type === "maintenance:event_automation") {
+    return { processedEvents: await processMarketingEvents(5, scope.artistId) };
+  }
+  if (job.job_type === "maintenance:audience_sync") {
+    return syncAudienceInteractions(scope, {
+      maxPostsPerPlatform: 1,
+      maxReplyDrafts: 1,
+      externalTimeoutMs: 10_000,
+    });
+  }
+  if (job.job_type === "maintenance:radar") {
+    return refreshMarketingRadarIfDue(scope, { maxQueries: 1, externalTimeoutMs: 10_000 });
+  }
+  if (job.job_type === "maintenance:next_best_actions") return refreshNextBestActions(scope);
+  if (job.job_type === "maintenance:manager_execution") return executeSafeManagerActions(2, scope);
   return { outcome: "unsupported_job", jobType: job.job_type };
 }
 
@@ -498,42 +553,148 @@ async function claimDueAutomationJobs(limit: number, artistId?: string) {
     : rpcClient.rpc("claim_marketing_automation_jobs", { p_limit: boundedLimit });
 }
 
+async function recoverStaleAutomationJobs(artistId?: string) {
+  const client = createMarketingServiceClient();
+  const staleBefore = new Date(Date.now() - AUTOMATION_LEASE_MS).toISOString();
+  let query = client.from("automation_jobs")
+    .select("*")
+    .eq("status", "running")
+    .lt("locked_at", staleBefore)
+    .order("locked_at", { ascending: true })
+    .limit(100);
+  if (artistId) query = query.eq("artist_id", artistId);
+  const { data: stale, error } = await query;
+  if (error) throw new Error(error.message);
+
+  let recovered = 0;
+  let terminal = 0;
+  for (const row of stale ?? []) {
+    const job = row as ScopedAutomationJob;
+    const exhausted = job.attempt_count >= job.max_attempts;
+    const recurringRecovery = exhausted ? recurringMaintenanceRecovery(job) : null;
+    const terminalFailure = exhausted && !recurringRecovery;
+    const { error: updateError } = await client.from("automation_jobs").update(recurringRecovery ? {
+      ...recurringRecovery,
+      error: "Recurring marketing maintenance lease expired after exhausting its retry budget; rescheduled for the next cadence.",
+    } : {
+      status: terminalFailure ? "failed" : "queued",
+      locked_at: null,
+      run_after: terminalFailure ? job.run_after : new Date().toISOString(),
+      completed_at: terminalFailure ? new Date().toISOString() : null,
+      error: terminalFailure
+        ? "Automation job lease expired after the maximum number of attempts."
+        : "Automation job lease expired before completion; queued for safe recovery.",
+    }).eq("id", job.id).eq("status", "running");
+    if (updateError) throw new Error(updateError.message);
+    if (terminalFailure) terminal += 1;
+    else recovered += 1;
+  }
+  return { recovered, terminal };
+}
+
+async function settleClaimedAutomationJob(
+  client: ReturnType<typeof createMarketingServiceClient>,
+  job: ScopedAutomationJob,
+) {
+  try {
+    const result = await processJob(job);
+    const cadenceMs = marketingMaintenanceCadenceMs(job.job_type);
+    const recurring = isMarketingMaintenanceJob(job.job_type) && cadenceMs !== null;
+    const { error: completeError } = await client.from("automation_jobs").update(recurring ? {
+      status: "queued",
+      completed_at: null,
+      locked_at: null,
+      run_after: new Date(Date.now() + cadenceMs!).toISOString(),
+      attempt_count: 0,
+      result: asJson(result),
+      error: null,
+    } : {
+      status: "completed",
+      completed_at: new Date().toISOString(),
+      locked_at: null,
+      result: asJson(result),
+      error: null,
+    }).eq("id", job.id).eq("owner_id", job.owner_id).eq("artist_id", job.artist_id);
+    if (completeError) throw new Error(completeError.message);
+    return { completed: 1, failed: 0, rescheduled: recurring ? 1 : 0 };
+  } catch (jobError) {
+    const terminal = job.attempt_count >= job.max_attempts;
+    const recurringRecovery = terminal ? recurringMaintenanceRecovery(job) : null;
+    const terminalFailure = terminal && !recurringRecovery;
+    const backoffHours = Math.min(24, Math.max(1, 2 ** Math.max(0, job.attempt_count - 1)));
+    const message = jobError instanceof Error ? jobError.message : "Automation job failed.";
+    const { error: retryError } = await client.from("automation_jobs").update(recurringRecovery ? {
+      ...recurringRecovery,
+      error: `Recurring marketing maintenance exhausted its retry budget; rescheduled for the next cadence. Last error: ${message}`,
+    } : {
+      status: terminalFailure ? "failed" : "queued",
+      locked_at: null,
+      completed_at: terminalFailure ? new Date().toISOString() : null,
+      run_after: new Date(Date.now() + backoffHours * 60 * 60 * 1000).toISOString(),
+      error: message,
+    }).eq("id", job.id).eq("owner_id", job.owner_id).eq("artist_id", job.artist_id);
+    if (retryError) throw new Error(retryError.message);
+    return { completed: 0, failed: 1, rescheduled: recurringRecovery ? 1 : 0 };
+  }
+}
+
 export async function runDueAutomationJobs(limit = 20, artistId?: string) {
   const client = createMarketingServiceClient();
+  await recoverStaleAutomationJobs(artistId);
   const { data: jobs, error } = await claimDueAutomationJobs(limit, artistId);
   if (error) throw new Error(error.message);
 
   let completed = 0;
   let failed = 0;
+  let rescheduled = 0;
   for (const job of jobs ?? []) {
     if (artistId && job.artist_id !== artistId) {
       throw new Error("Artist-scoped automation claim returned a sibling artist job.");
     }
-    try {
-      const result = await processJob(job);
-      const { error: completeError } = await client.from("automation_jobs").update({
-        status: "completed",
-        completed_at: new Date().toISOString(),
-        locked_at: null,
-        result: asJson(result),
-        error: null,
-      }).eq("id", job.id).eq("owner_id", job.owner_id).eq("artist_id", job.artist_id);
-      if (completeError) throw new Error(completeError.message);
-      completed += 1;
-    } catch (jobError) {
-      const terminal = job.attempt_count >= job.max_attempts;
-      const backoffHours = Math.min(24, Math.max(1, 2 ** Math.max(0, job.attempt_count - 1)));
-      const { error: retryError } = await client.from("automation_jobs").update({
-        status: terminal ? "failed" : "queued",
-        locked_at: null,
-        run_after: new Date(Date.now() + backoffHours * 60 * 60 * 1000).toISOString(),
-        error: jobError instanceof Error ? jobError.message : "Automation job failed.",
-      }).eq("id", job.id).eq("owner_id", job.owner_id).eq("artist_id", job.artist_id);
-      if (retryError) throw new Error(retryError.message);
-      failed += 1;
-    }
+    const result = await settleClaimedAutomationJob(client, job);
+    completed += result.completed;
+    failed += result.failed;
+    rescheduled += result.rescheduled;
   }
-  return { claimed: jobs?.length ?? 0, completed, failed };
+  return { claimed: jobs?.length ?? 0, completed, failed, rescheduled };
+}
+
+export async function runDueAutomationJobsWithinBudget(input: {
+  deadline: number;
+  maxJobs?: number;
+  artistId?: string;
+}) {
+  const client = createMarketingServiceClient();
+  const maxJobs = Math.max(1, Math.min(input.maxJobs ?? 8, 20));
+  await recoverStaleAutomationJobs(input.artistId);
+
+  let claimed = 0;
+  let completed = 0;
+  let failed = 0;
+  let rescheduled = 0;
+
+  while (claimed < maxJobs && Date.now() + AUTOMATION_JOB_START_HEADROOM_MS < input.deadline) {
+    const { data: jobs, error } = await claimDueAutomationJobs(1, input.artistId);
+    if (error) throw new Error(error.message);
+    const job = jobs?.[0] ?? null;
+    if (!job) break;
+    if (input.artistId && job.artist_id !== input.artistId) {
+      throw new Error("Artist-scoped automation claim returned a sibling artist job.");
+    }
+    claimed += 1;
+    const result = await settleClaimedAutomationJob(client, job);
+    completed += result.completed;
+    failed += result.failed;
+    rescheduled += result.rescheduled;
+  }
+
+  return {
+    claimed,
+    completed,
+    failed,
+    rescheduled,
+    budgetExhausted: Date.now() + AUTOMATION_JOB_START_HEADROOM_MS >= input.deadline,
+  };
 }
 
 export async function runMarketingAutomationCycle(artistId?: string) {

@@ -6,13 +6,18 @@ import test from "node:test";
 const root = process.cwd();
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
-test("free content factory can bootstrap persistent ffmpeg without a 55-second race", () => {
+test("free content factory creates Sandbox only after quota and real-work checks", () => {
   const route = read("app/api/cron/content-factory/route.ts");
+  const source = read("lib/marketing/free-content-factory.ts");
   assert.match(route, /maxDuration\s*=\s*240/);
-  assert.match(route, /COMPOSER_BOOTSTRAP_TIMEOUT_MS\s*=\s*180_000/);
-  assert.match(route, /resume:\s*true/);
-  assert.match(route, /ffmpeg-static@5\.2\.0/);
   assert.match(route, /fillOneMissingScheduledAsset/);
+  assert.doesNotMatch(route, /Sandbox\.getOrCreate|prepareComposerSandbox/);
+  assert.match(source, /Sandbox\.getOrCreate/);
+  assert.match(source, /SANDBOX_TIMEOUT_MS\s*=\s*180_000/);
+  assert.match(source, /ffmpeg-static@5\.2\.0/);
+  assert.match(source, /composerQuota/);
+  assert.match(source, /nothing_missing/);
+  assert.match(source, /sandbox_capacity_deferred/);
 });
 
 test("database-side content factory caller outlives bootstrap without mutating paid or publish state", () => {

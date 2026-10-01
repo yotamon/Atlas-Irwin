@@ -22,6 +22,7 @@ import {
 } from "./creative-provider-types";
 import type { Json } from "@/types/database";
 import type { CreativeSpendDatabase } from "@/types/creative-spend-database";
+import type { MarketingExecutionScope } from "./execution-scope";
 
 function record(value: Json | unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -63,22 +64,34 @@ function quoteFromOutput(output: Record<string, unknown>) {
   return quote as CreativeMoneyQuote;
 }
 
-async function eligibleCampaignIds(ownerId?: string) {
+function normalizeScope(scope?: MarketingExecutionScope | string) {
+  return typeof scope === "string"
+    ? { ownerId: scope, artistId: null }
+    : { ownerId: scope?.ownerId ?? null, artistId: scope?.artistId ?? null };
+}
+
+async function eligibleCampaignIds(scope?: MarketingExecutionScope | string) {
   const client = spendClient();
+  const normalized = normalizeScope(scope);
   let query = client.from("campaign_ai_spend_envelopes")
     .select("campaign_id,owner_id,artist_id")
     .eq("enabled", true)
     .gt("hard_limit_usd", 0)
     .gt("max_single_generation_usd", 0);
-  if (ownerId) query = query.eq("owner_id", ownerId);
+  if (normalized.ownerId) query = query.eq("owner_id", normalized.ownerId);
+  if (normalized.artistId) query = query.eq("artist_id", normalized.artistId);
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return data ?? [];
 }
 
-export async function processAutonomousCreativeSpend(limit = 4, ownerId?: string) {
+export async function processAutonomousCreativeSpend(
+  limit = 4,
+  scope?: MarketingExecutionScope | string,
+) {
   const client = spendClient();
-  const envelopes = await eligibleCampaignIds(ownerId);
+  const normalized = normalizeScope(scope);
+  const envelopes = await eligibleCampaignIds(scope);
   if (!envelopes.length) return { considered: 0, submitted: 0, blocked: 0, ambiguous: 0 };
   const campaignIds = Array.from(new Set(envelopes.map((item) => item.campaign_id)));
   let query = client.from("generation_runs")
@@ -88,7 +101,8 @@ export async function processAutonomousCreativeSpend(limit = 4, ownerId?: string
     .like("purpose", "content_asset:%")
     .order("created_at", { ascending: true })
     .limit(Math.max(1, Math.min(limit, 10)));
-  if (ownerId) query = query.eq("owner_id", ownerId);
+  if (normalized.ownerId) query = query.eq("owner_id", normalized.ownerId);
+  if (normalized.artistId) query = query.eq("artist_id", normalized.artistId);
   const { data: runs, error } = await query;
   if (error) throw new Error(error.message);
 

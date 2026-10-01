@@ -19,6 +19,12 @@ export type AudienceArtistScope = {
   artistId: string;
 };
 
+export type AudienceSyncOptions = {
+  maxPostsPerPlatform?: number;
+  maxReplyDrafts?: number;
+  externalTimeoutMs?: number;
+};
+
 function instagramUrl(path: string) {
   return `${INSTAGRAM_GRAPH_URL}/${INSTAGRAM_API_VERSION}${path}`;
 }
@@ -61,16 +67,22 @@ async function upsertInteraction(row: InteractionUpsert) {
   if (error) throw new Error(error.message);
 }
 
-async function syncInstagramComments(ownerId: string, artistId: string, postIds: string[]) {
+async function syncInstagramComments(
+  ownerId: string,
+  artistId: string,
+  postIds: string[],
+  maxPosts = MAX_POSTS_PER_PLATFORM,
+  timeoutMs = 20_000,
+) {
   if (!postIds.length) return 0;
   const access = await requireSocialAccess(ownerId, artistId, "instagram");
   let imported = 0;
-  for (const postId of postIds.slice(0, MAX_POSTS_PER_PLATFORM)) {
+  for (const postId of postIds.slice(0, maxPosts)) {
     const url = new URL(instagramUrl(`/${postId}/comments`));
     url.searchParams.set("fields", "id,text,timestamp,from,username,parent_id");
     url.searchParams.set("limit", "50");
     url.searchParams.set("access_token", access.accessToken);
-    const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(20_000) });
+    const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(timeoutMs) });
     if (!response.ok) continue;
     const payload = await response.json() as {
       data?: Array<{
@@ -104,11 +116,17 @@ async function syncInstagramComments(ownerId: string, artistId: string, postIds:
   return imported;
 }
 
-async function syncYouTubeComments(ownerId: string, artistId: string, videoIds: string[]) {
+async function syncYouTubeComments(
+  ownerId: string,
+  artistId: string,
+  videoIds: string[],
+  maxPosts = MAX_POSTS_PER_PLATFORM,
+  timeoutMs = 20_000,
+) {
   if (!videoIds.length) return 0;
   const access = await requireSocialAccess(ownerId, artistId, "youtube", ["https://www.googleapis.com/auth/youtube.readonly"]);
   let imported = 0;
-  for (const videoId of videoIds.slice(0, MAX_POSTS_PER_PLATFORM)) {
+  for (const videoId of videoIds.slice(0, maxPosts)) {
     const url = new URL(`${YOUTUBE_API_URL}/commentThreads`);
     url.searchParams.set("part", "snippet");
     url.searchParams.set("videoId", videoId);
@@ -118,7 +136,7 @@ async function syncYouTubeComments(ownerId: string, artistId: string, videoIds: 
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${access.accessToken}` },
       cache: "no-store",
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!response.ok) continue;
     const payload = await response.json() as {
@@ -176,7 +194,12 @@ async function artistScopesWithRecentPublications(): Promise<AudienceArtistScope
   return [...unique.values()];
 }
 
-async function recentPublishedIds(ownerId: string, artistId: string, platform: "Instagram" | "YouTube Shorts") {
+async function recentPublishedIds(
+  ownerId: string,
+  artistId: string,
+  platform: "Instagram" | "YouTube Shorts",
+  limit = MAX_POSTS_PER_PLATFORM,
+) {
   const client = createMarketingServiceClient();
   const { data, error } = await client.from("publication_jobs")
     .select("external_post_id")
@@ -186,7 +209,7 @@ async function recentPublishedIds(ownerId: string, artistId: string, platform: "
     .eq("status", "published")
     .not("external_post_id", "is", null)
     .order("published_at", { ascending: false })
-    .limit(MAX_POSTS_PER_PLATFORM);
+    .limit(Math.max(1, Math.min(limit, MAX_POSTS_PER_PLATFORM)));
   if (error) throw new Error(error.message);
   return (data ?? []).map((row) => row.external_post_id).filter((id): id is string => Boolean(id));
 }
@@ -249,7 +272,12 @@ async function draftReply(ownerId: string, artistId: string, interaction: Audien
   return result.value;
 }
 
-async function draftPendingReplies(ownerId: string, artistId: string) {
+async function draftPendingReplies(
+  ownerId: string,
+  artistId: string,
+  limit = MAX_REPLY_DRAFTS_PER_CYCLE,
+) {
+  if (limit <= 0) return 0;
   const db = createAutonomyServiceClient();
   const { data, error } = await db.from("audience_interactions")
     .select("*")
@@ -258,7 +286,7 @@ async function draftPendingReplies(ownerId: string, artistId: string) {
     .eq("status", "needs_reply")
     .is("suggested_reply", null)
     .order("occurred_at", { ascending: false })
-    .limit(MAX_REPLY_DRAFTS_PER_CYCLE);
+    .limit(Math.max(1, Math.min(limit, MAX_REPLY_DRAFTS_PER_CYCLE)));
   if (error) throw new Error(error.message);
   let drafted = 0;
   for (const interaction of data ?? []) {
@@ -280,25 +308,37 @@ async function draftPendingReplies(ownerId: string, artistId: string) {
   return drafted;
 }
 
-export async function syncAudienceInteractions(scope?: AudienceArtistScope) {
+export async function syncAudienceInteractions(
+  scope?: AudienceArtistScope,
+  options: AudienceSyncOptions = {},
+) {
   const scopes = scope ? [scope] : await artistScopesWithRecentPublications();
   const client = createMarketingServiceClient();
+  const maxPostsPerPlatform = Math.max(1, Math.min(
+    options.maxPostsPerPlatform ?? MAX_POSTS_PER_PLATFORM,
+    MAX_POSTS_PER_PLATFORM,
+  ));
+  const maxReplyDrafts = Math.max(0, Math.min(
+    options.maxReplyDrafts ?? MAX_REPLY_DRAFTS_PER_CYCLE,
+    MAX_REPLY_DRAFTS_PER_CYCLE,
+  ));
+  const externalTimeoutMs = Math.max(2_000, Math.min(options.externalTimeoutMs ?? 20_000, 20_000));
   let imported = 0;
   let drafted = 0;
   let artistsSynced = 0;
   for (const { ownerId, artistId } of scopes) {
     if (!await syncDue(ownerId, artistId)) continue;
     const [instagramIds, youtubeIds] = await Promise.all([
-      recentPublishedIds(ownerId, artistId, "Instagram"),
-      recentPublishedIds(ownerId, artistId, "YouTube Shorts"),
+      recentPublishedIds(ownerId, artistId, "Instagram", maxPostsPerPlatform),
+      recentPublishedIds(ownerId, artistId, "YouTube Shorts", maxPostsPerPlatform),
     ]);
     const results = await Promise.allSettled([
-      syncInstagramComments(ownerId, artistId, instagramIds),
-      syncYouTubeComments(ownerId, artistId, youtubeIds),
+      syncInstagramComments(ownerId, artistId, instagramIds, maxPostsPerPlatform, externalTimeoutMs),
+      syncYouTubeComments(ownerId, artistId, youtubeIds, maxPostsPerPlatform, externalTimeoutMs),
     ]);
     let artistImported = 0;
     for (const result of results) if (result.status === "fulfilled") artistImported += result.value;
-    const artistDrafted = await draftPendingReplies(ownerId, artistId);
+    const artistDrafted = await draftPendingReplies(ownerId, artistId, maxReplyDrafts);
     imported += artistImported;
     drafted += artistDrafted;
     await client.from("marketing_events").insert({

@@ -3,6 +3,13 @@ import "server-only";
 import { activeCapabilitiesForOwner } from "@/lib/licensing/capabilities";
 import { dispatchMediaWorkerJob } from "@/lib/media-worker/dispatcher";
 import {
+  isMediaWorkerBusyError,
+  isMediaWorkerCapacityError,
+  mediaWorkerCapacityBlocked,
+  mediaWorkerCapacityErrorMessage,
+  mediaWorkerCapacityRetryAfter,
+} from "@/lib/media-worker/failures";
+import {
   createMediaWorkerCallbackCredential,
   MEDIA_WORKER_CALLBACK_HASH_KEY,
   mediaWorkerReadiness,
@@ -51,11 +58,6 @@ function timestamp(value: unknown) {
   if (typeof value !== "string") return 0;
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function busyError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return /already processing|worker is busy/i.test(message);
 }
 
 function withoutCredential(payload: Record<string, unknown>) {
@@ -250,7 +252,9 @@ function vaultRequestedAt(track: { analysis: Json; updated_at: string }) {
 }
 
 async function dispatchVideoJob(db: SupabaseClient<VideoDatabase>, job: MusicVideoWorkerJob) {
-  if (!SUPPORTED_VIDEO_JOB_TYPES.has(job.job_type)) return false;
+  if (!SUPPORTED_VIDEO_JOB_TYPES.has(job.job_type)) {
+    return { dispatched: false as const, reason: "empty" as const };
+  }
   const requestPayload = withoutCredential(record(job.request_payload));
   const credential = createMediaWorkerCallbackCredential();
   const { data: claimed, error: claimError } = await db.from("music_video_worker_jobs")
@@ -267,7 +271,7 @@ async function dispatchVideoJob(db: SupabaseClient<VideoDatabase>, job: MusicVid
     .select("*")
     .maybeSingle();
   if (claimError) throw new Error(claimError.message);
-  if (!claimed) return false;
+  if (!claimed) return { dispatched: false as const, reason: "busy" as const };
 
   try {
     const entitlements = await activeCapabilitiesForOwner(claimed.owner_id);
@@ -281,16 +285,30 @@ async function dispatchVideoJob(db: SupabaseClient<VideoDatabase>, job: MusicVid
     await db.from("music_video_worker_jobs")
       .update({ external_job_id: dispatch.sandboxName, error: null })
       .eq("id", claimed.id);
-    return true;
+    return { dispatched: true as const, reason: "started" as const };
   } catch (error) {
-    if (busyError(error)) {
+    if (isMediaWorkerCapacityError(error)) {
+      const message = mediaWorkerCapacityErrorMessage(error);
+      await db.from("music_video_worker_jobs").update({
+        status: "planned",
+        request_payload: json(requestPayload),
+        external_job_id: null,
+        error: message,
+      }).eq("id", claimed.id);
+      return {
+        dispatched: false as const,
+        reason: "capacity" as const,
+        retryAt: mediaWorkerCapacityRetryAfter(message),
+      };
+    }
+    if (isMediaWorkerBusyError(error)) {
       await db.from("music_video_worker_jobs").update({
         status: "planned",
         request_payload: json(requestPayload),
         external_job_id: null,
         error: null,
       }).eq("id", claimed.id);
-      return false;
+      return { dispatched: false as const, reason: "busy" as const };
     }
     const message = error instanceof Error ? error.message : "Media Worker dispatch failed.";
     await db.from("music_video_worker_jobs").update({
@@ -338,7 +356,7 @@ async function dispatchStemJob(db: SupabaseClient<StemDatabase>, job: TrackStemJ
     .select("*")
     .maybeSingle();
   if (claimError) throw new Error(claimError.message);
-  if (!claimed) return false;
+  if (!claimed) return { dispatched: false as const, reason: "busy" as const };
 
   try {
     const dispatchPayload = await prepareStemPayloadForDispatch(db, claimed as TrackStemJob, requestPayload);
@@ -351,16 +369,30 @@ async function dispatchStemJob(db: SupabaseClient<StemDatabase>, job: TrackStemJ
       callbackToken: credential.token,
     }, { entitlements });
     await db.from("track_stem_jobs").update({ external_job_id: dispatch.sandboxName }).eq("id", claimed.id);
-    return true;
+    return { dispatched: true as const, reason: "started" as const };
   } catch (error) {
-    if (busyError(error)) {
+    if (isMediaWorkerCapacityError(error)) {
+      const message = mediaWorkerCapacityErrorMessage(error);
+      await db.from("track_stem_jobs").update({
+        status: "planned",
+        request_payload: json(requestPayload),
+        external_job_id: null,
+        error: message,
+      }).eq("id", claimed.id);
+      return {
+        dispatched: false as const,
+        reason: "capacity" as const,
+        retryAt: mediaWorkerCapacityRetryAfter(message),
+      };
+    }
+    if (isMediaWorkerBusyError(error)) {
       await db.from("track_stem_jobs").update({
         status: "planned",
         request_payload: json(requestPayload),
         external_job_id: null,
         error: null,
       }).eq("id", claimed.id);
-      return false;
+      return { dispatched: false as const, reason: "busy" as const };
     }
     const message = error instanceof Error ? error.message : "Stem Intelligence dispatch failed.";
     await db.from("track_stem_jobs").update({
@@ -400,7 +432,7 @@ async function dispatchVaultTrack(
         completed_at: new Date().toISOString(),
       }),
     }).eq("id", track.id);
-    return false;
+    return { dispatched: false as const, reason: "failed" as const };
   }
 
   const credential = createMediaWorkerCallbackCredential();
@@ -408,6 +440,8 @@ async function dispatchVaultTrack(
     ...withoutCredential(analysis),
     status: "dispatched",
     dispatched_at: new Date().toISOString(),
+    capacity_retry_after: null,
+    message: null,
     [MEDIA_WORKER_CALLBACK_HASH_KEY]: credential.hash,
   };
   const { data: claimed, error: claimError } = await growth.from("track_vault")
@@ -430,13 +464,32 @@ async function dispatchVaultTrack(
       callbackUrl: `${getSiteUrl()}/api/studio/growth/audio-callback`,
       callbackToken: credential.token,
     }, { entitlements });
-    return true;
+    return { dispatched: true as const, reason: "started" as const };
   } catch (error) {
-    if (busyError(error)) {
+    if (isMediaWorkerCapacityError(error)) {
+      const message = mediaWorkerCapacityErrorMessage(error);
+      const retryAt = mediaWorkerCapacityRetryAfter(message);
       await growth.from("track_vault").update({
-        analysis: json({ ...withoutCredential(dispatchedAnalysis), status: "queued", dispatched_at: null }),
+        analysis: json({
+          ...withoutCredential(dispatchedAnalysis),
+          status: "queued",
+          dispatched_at: null,
+          message,
+          capacity_retry_after: retryAt,
+        }),
       }).eq("id", track.id);
-      return false;
+      return { dispatched: false as const, reason: "capacity" as const, retryAt };
+    }
+    if (isMediaWorkerBusyError(error)) {
+      await growth.from("track_vault").update({
+        analysis: json({
+          ...withoutCredential(dispatchedAnalysis),
+          status: "queued",
+          dispatched_at: null,
+          capacity_retry_after: null,
+        }),
+      }).eq("id", track.id);
+      return { dispatched: false as const, reason: "busy" as const };
     }
     const message = error instanceof Error ? error.message : "Media Worker dispatch failed.";
     await growth.from("track_vault").update({
@@ -474,12 +527,37 @@ export async function kickMediaWorkerQueue() {
   ].filter((value): value is NonNullable<typeof value> => Boolean(value)).sort((a, b) => a.at - b.at);
 
   const selected = choices[0]?.kind;
-  const dispatched = selected === "vault" && vault
+
+  const selectedCapacity = selected === "video" && videoJob
+    ? mediaWorkerCapacityBlocked(videoJob.error)
+    : selected === "stem" && stemJob
+      ? mediaWorkerCapacityBlocked(stemJob.error)
+      : selected === "vault" && vault
+        ? (() => {
+            const analysis = record(vault.analysis);
+            const retryAt = typeof analysis.capacity_retry_after === "string"
+              ? analysis.capacity_retry_after
+              : null;
+            return {
+              blocked: Boolean(retryAt && Date.parse(retryAt) > Date.now()),
+              retryAfter: retryAt,
+            };
+          })()
+        : { blocked: false, retryAfter: null };
+  if (selectedCapacity.blocked) {
+    return {
+      dispatched: false,
+      reason: "capacity" as const,
+      retryAt: selectedCapacity.retryAfter,
+    };
+  }
+
+  const result = selected === "vault" && vault
     ? await dispatchVaultTrack(vaultState.growth, vault)
     : selected === "stem" && stemJob
       ? await dispatchStemJob(stems, stemJob)
       : videoJob
         ? await dispatchVideoJob(video, videoJob)
-        : false;
-  return { dispatched, reason: dispatched ? "started" as const : "busy" as const };
+        : { dispatched: false as const, reason: "empty" as const };
+  return result;
 }

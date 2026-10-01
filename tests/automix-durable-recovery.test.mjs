@@ -9,7 +9,10 @@ test("media-worker heartbeat gives idle capacity to durable AutoMix jobs", async
 
   assert.ok(route.includes('import { kickAutoMixQueue } from "@/lib/automix/jobs"'));
   assert.ok(route.includes("const mediaWorker = await kickMediaWorkerQueue()"));
-  assert.ok(route.includes('mediaWorker.dispatched || mediaWorker.reason === "busy"'));
+  assert.ok(route.includes("function blocksSharedWorker"));
+  assert.ok(route.includes('result.reason === "busy"'));
+  assert.ok(route.includes('result.reason === "capacity"'));
   assert.ok(route.includes("await kickAutoMixQueue()"));
-  assert.ok(route.includes("queue: { mediaWorker, automix }"));
+  assert.ok(route.includes("queue.autoMix = autoMix"));
+  assert.ok(route.includes("kickMasteringReferenceQueue"));
 });

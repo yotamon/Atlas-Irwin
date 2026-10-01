@@ -13,6 +13,10 @@ const RADAR_INTERVAL_MS = 20 * 60 * 60 * 1000;
 const DEFAULT_QUERIES = ["nu disco", "disco house", "electronic music visualizer"];
 
 type RadarArtist = { ownerId: string; artistId: string };
+type RadarScanOptions = {
+  maxQueries?: number;
+  externalTimeoutMs?: number;
+};
 
 function serviceSocial() {
   const { url } = getSupabaseEnv();
@@ -74,12 +78,18 @@ async function youtubeArtists(): Promise<RadarArtist[]> {
   return [...unique.values()];
 }
 
-async function scanYouTube(ownerId: string, artistId: string) {
+async function scanYouTube(
+  ownerId: string,
+  artistId: string,
+  options: RadarScanOptions = {},
+) {
+  const maxQueries = Math.max(1, Math.min(options.maxQueries ?? 3, 3));
+  const externalTimeoutMs = Math.max(2_000, Math.min(options.externalTimeoutMs ?? 20_000, 20_000));
   const access = await requireSocialAccess(ownerId, artistId, "youtube", ["https://www.googleapis.com/auth/youtube.readonly"]);
   const found = new Map<string, { id: string; title: string; channelTitle: string; publishedAt: string; query: string }>();
   const publishedAfter = new Date(Date.now() - 10 * 86_400_000).toISOString();
 
-  for (const query of queries()) {
+  for (const query of queries().slice(0, maxQueries)) {
     const url = new URL(`${YOUTUBE_API_URL}/search`);
     url.searchParams.set("part", "snippet");
     url.searchParams.set("type", "video");
@@ -90,7 +100,7 @@ async function scanYouTube(ownerId: string, artistId: string) {
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${access.accessToken}` },
       cache: "no-store",
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(externalTimeoutMs),
     });
     if (!response.ok) continue;
     const payload = await response.json() as {
@@ -117,7 +127,7 @@ async function scanYouTube(ownerId: string, artistId: string) {
   const response = await fetch(statsUrl, {
     headers: { Authorization: `Bearer ${access.accessToken}` },
     cache: "no-store",
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(externalTimeoutMs),
   });
   if (!response.ok) return 0;
   const payload = await response.json() as {
@@ -206,7 +216,10 @@ async function scanArtistBreakouts(ownerId: string, artistId: string) {
   return saved;
 }
 
-export async function refreshMarketingRadarIfDue(scope?: RadarArtist) {
+export async function refreshMarketingRadarIfDue(
+  scope?: RadarArtist,
+  options: RadarScanOptions = {},
+) {
   const artists = scope ? [scope] : await youtubeArtists();
   const client = createMarketingServiceClient();
   let scanned = 0;
@@ -214,7 +227,7 @@ export async function refreshMarketingRadarIfDue(scope?: RadarArtist) {
   for (const { ownerId, artistId } of artists) {
     if (!await radarDue(ownerId, artistId)) continue;
     const [external, internal] = await Promise.allSettled([
-      scanYouTube(ownerId, artistId),
+      scanYouTube(ownerId, artistId, options),
       scanArtistBreakouts(ownerId, artistId),
     ]);
     let artistOpportunities = 0;

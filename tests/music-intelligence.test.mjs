@@ -112,7 +112,8 @@ test("Media Worker contention is a durable queue, not an analysis failure", asyn
   const sandbox = await readFile("lib/media-worker/sandbox.ts", "utf8");
   assert.ok(queue.includes('status: "planned"'));
   assert.ok(queue.includes('status: "queued"'));
-  assert.ok(queue.includes("busyError"));
+  assert.ok(queue.includes("isMediaWorkerBusyError"));
+  assert.ok(queue.includes("isMediaWorkerCapacityError"));
   assert.ok(queue.includes("kickMediaWorkerQueue"));
   assert.ok(queue.includes("vaultQueueState"));
   assert.ok(worker.includes("kickMediaWorkerQueue"));

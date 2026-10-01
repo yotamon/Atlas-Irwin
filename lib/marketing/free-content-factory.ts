@@ -2,12 +2,16 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 import { Sandbox } from "@vercel/sandbox";
+import {
+  mediaWorkerCapacityRetryAt,
+  mediaWorkerDispatchFailure,
+} from "@/lib/media-worker/failures";
 import { createMarketingServiceClient } from "./db";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { Json } from "@/types/database";
 
 const SANDBOX_NAME = "atlas-free-content-factory";
-const SANDBOX_TIMEOUT_MS = 55 * 1000;
+const SANDBOX_TIMEOUT_MS = 180_000;
 const SANDBOX_SNAPSHOT_EXPIRATION_MS = 7 * 24 * 60 * 60 * 1000;
 const OUTPUT_SECONDS = 15;
 const BUCKET = "public-media";
@@ -330,6 +334,19 @@ export async function fillOneMissingScheduledAsset() {
     const result = await composeFreeSocialAsset(data.owner_id, data.id);
     return { outcome: "composed" as const, contentItemId: data.id, ...result };
   } catch (error) {
-    return { outcome: "skipped" as const, contentItemId: data.id, reason: error instanceof Error ? error.message : "Free composition failed." };
+    const failure = mediaWorkerDispatchFailure(error);
+    if (failure.kind === "capacity") {
+      return {
+        outcome: "sandbox_capacity_deferred" as const,
+        contentItemId: data.id,
+        retryAfter: mediaWorkerCapacityRetryAt(),
+        reason: failure.detail,
+      };
+    }
+    return {
+      outcome: "skipped" as const,
+      contentItemId: data.id,
+      reason: error instanceof Error ? error.message : "Free composition failed.",
+    };
   }
 }

@@ -3,6 +3,13 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { dispatchMediaWorkerJob } from "@/lib/media-worker/dispatcher";
 import {
+  isMediaWorkerBusyError,
+  isMediaWorkerCapacityError,
+  mediaWorkerCapacityBlocked,
+  mediaWorkerCapacityErrorMessage,
+  mediaWorkerCapacityRetryAfter,
+} from "@/lib/media-worker/failures";
+import {
   createMediaWorkerCallbackCredential,
   MEDIA_WORKER_CALLBACK_HASH_KEY,
 } from "@/lib/media-worker/sandbox";
@@ -44,11 +51,6 @@ function timestamp(value: unknown) {
   if (typeof value !== "string") return 0;
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function busyError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return /already processing|worker is busy/i.test(message);
 }
 
 function errorMessage(error: unknown, fallback: string) {
@@ -280,6 +282,10 @@ export async function kickAutoMixPreviewQueue() {
     if (planned.error) throw new Error(planned.error.message);
     if (!planned.data) return { dispatched: false, busy: false };
     const preview = planned.data as AutoMixTransitionPreview;
+    const capacity = mediaWorkerCapacityBlocked(preview.error);
+    if (capacity.blocked) {
+      return { dispatched: false, busy: false, reason: "capacity" as const, retryAt: capacity.retryAfter };
+    }
 
     let prepared: Awaited<ReturnType<typeof preparePreview>>;
     try {
@@ -320,14 +326,29 @@ export async function kickAutoMixPreviewQueue() {
       if (update.error) throw new Error(update.error.message);
       return { dispatched: true, busy: false };
     } catch (error) {
-      if (busyError(error)) {
+      if (isMediaWorkerCapacityError(error)) {
+        const message = mediaWorkerCapacityErrorMessage(error);
+        await db.from("automix_transition_previews").update({
+          status: "planned",
+          request_payload: json(withoutCredential(preview.request_payload)),
+          external_job_id: null,
+          error: message,
+        }).eq("id", preview.id);
+        return {
+          dispatched: false,
+          busy: false,
+          reason: "capacity" as const,
+          retryAt: mediaWorkerCapacityRetryAfter(message),
+        };
+      }
+      if (isMediaWorkerBusyError(error)) {
         await db.from("automix_transition_previews").update({
           status: "planned",
           request_payload: json(withoutCredential(preview.request_payload)),
           external_job_id: null,
           error: null,
         }).eq("id", preview.id);
-        return { dispatched: false, busy: true };
+        return { dispatched: false, busy: true, reason: "busy" as const };
       }
       const message = errorMessage(error, "Transition preview dispatch failed.");
       await db.from("automix_transition_previews").update({

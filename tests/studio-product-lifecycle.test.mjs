@@ -17,10 +17,15 @@ test("Studio has one lifecycle model shared by product execution", () => {
 
 test("marketing heartbeat self-heals state before publishing", () => {
   const cron = read("app/api/cron/marketing/route.ts");
-  const reconcile = cron.indexOf('runStep("state reconciliation"');
-  const publish = cron.indexOf('runStep("publication queue"');
-  assert.ok(reconcile >= 0, "cron must reconcile durable product state");
-  assert.ok(publish > reconcile, "state reconciliation must happen before external publishing");
+  const heartbeat = read("lib/marketing/durable-heartbeat.ts");
+  const maintenance = read("lib/marketing/maintenance.ts");
+  const reconcile = maintenance.indexOf('"maintenance:state_reconciliation"');
+  const publish = maintenance.indexOf('"maintenance:publications"');
+
+  assert.match(cron, /runDurableMarketingHeartbeat/);
+  assert.match(heartbeat, /seedMarketingMaintenanceJobs/);
+  assert.ok(reconcile >= 0, "durable maintenance must reconcile product state");
+  assert.ok(publish > reconcile, "state reconciliation must be seeded before external publishing");
 });
 
 test("lifecycle execution creates future internal work but keeps publishing approval-gated", () => {
