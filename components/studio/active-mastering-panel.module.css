@@ -410,3 +410,15 @@
   border-color: color-mix(in srgb, var(--en-accent) 46%, var(--en-line));
   color: var(--en-ink);
 }
+
+.decision {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.4rem;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--en-accent) 34%, var(--en-line));
+  border-radius: 999px;
+  color: var(--en-ink);
+  font-size: var(--en-text-xs);
+  font-weight: var(--en-weight-semibold);
+}
