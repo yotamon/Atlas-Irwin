@@ -191,3 +191,22 @@ test("mastering decisions are immutable preference evidence", async () => {
   assert.match(actions, /already chose to keep the original/);
   assert.match(actions, /deduplicated: true/);
 });
+
+test("uploaded mastering references stay private and use fresh signed reads", async () => {
+  const [uploader, catalog, referenceActions, referenceJobs, referenceCallback] = await Promise.all([
+    source("components/studio/media-uploader.tsx"),
+    source("app/studio/catalog-actions-internal.ts"),
+    source("app/studio/mastering-reference-actions.ts"),
+    source("lib/mastering/reference-jobs.ts"),
+    source("app/api/studio/mastering/references/callback/route.ts"),
+  ]);
+
+  assert.match(uploader, /storage_scope", referenceIntake \? "mastering_reference" : "public"/);
+  assert.match(uploader, /visibility: uploadTarget\.visibility/);
+  assert.match(catalog, /"studio-private"/);
+  assert.match(catalog, /mastering-references/);
+  assert.match(referenceActions, /asset\.visibility === "public" \? asset\.public_url : null/);
+  assert.match(referenceJobs, /createSignedUrl\(asset\.storage_path, 60 \* 60\)/);
+  assert.match(referenceJobs, /sourceIdentityUrl = `media-asset:\$\{asset\.id\}`/);
+  assert.match(referenceCallback, /reference\.media_asset_id[\s\S]*sourceAssetId !== reference\.media_asset_id/);
+});
