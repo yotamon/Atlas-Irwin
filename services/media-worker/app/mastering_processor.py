@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from .main import download, sha256_file, upload_file
 from .mastering_contracts import build_v2_target_contract
+from .mastering_evaluation import build_perceptual_delta, evaluate_change_budget
 from .mastering_inspector import analyze_mastering
 
 ACTIVE_MASTERING_SCHEMA = "ensemblis.active_mastering.v1"
@@ -365,6 +366,12 @@ def _render_explicit_limiter(
     requested_gain_db = preferred_lufs - input_lufs
     applied_gain_db = _clamp(requested_gain_db, -12.0, hard_max_gain)
     ceiling_dbtp = float(target["true_peak_dbtp"])
+    input_true_peak = _number(measured.get("input_tp"))
+    estimated_peak_gain_reduction_db = (
+        max(0.0, input_true_peak + applied_gain_db - ceiling_dbtp)
+        if input_true_peak is not None
+        else None
+    )
     limit_linear = 10.0 ** (ceiling_dbtp / 20.0)
     oversampled_rate_hz = min(max(sample_rate_hz * 4, sample_rate_hz), 192000)
     oversampling_factor = oversampled_rate_hz / float(sample_rate_hz)
@@ -398,6 +405,11 @@ def _render_explicit_limiter(
         "applied_gain_db": round(applied_gain_db, 3),
         "hard_max_gain_db": round(hard_max_gain, 3),
         "ceiling_dbtp": round(ceiling_dbtp, 3),
+        "estimated_peak_gain_reduction_db": (
+            round(estimated_peak_gain_reduction_db, 3)
+            if estimated_peak_gain_reduction_db is not None
+            else None
+        ),
         "oversampled_rate_hz": oversampled_rate_hz,
         "oversampling_factor": round(oversampling_factor, 3),
         "attack_ms": 5.0,
@@ -482,7 +494,12 @@ def _ensure_storage_envelope(
     )
 
 
-def _candidate_checks(after: dict[str, Any], target: dict[str, Any], before: dict[str, Any]) -> dict[str, Any]:
+def _candidate_checks(
+    after: dict[str, Any],
+    target: dict[str, Any],
+    before: dict[str, Any],
+    render_measurement: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     loudness = _record(after.get("loudness"))
     peaks = _record(after.get("peaks"))
     dynamics = _record(after.get("dynamics"))
@@ -511,13 +528,30 @@ def _candidate_checks(after: dict[str, Any], target: dict[str, Any], before: dic
         dynamics_tolerance = 0.75 if preserve_source else 1.75
     peak_ok = true_peak is not None and true_peak <= float(target["true_peak_dbtp"]) + 0.20
     dynamics_ok = plr_loss is None or plr_loss <= dynamics_tolerance
+    delta = build_perceptual_delta(before, after, render_measurement)
+    budget_evaluation = evaluate_change_budget(
+        delta,
+        _record(target.get("change_budget")),
+    )
+    technical_pass = (
+        bool(after.get("technical_ready"))
+        and critical == 0
+        and loudness_ok
+        and peak_ok
+        and clipping == 0
+    )
+    creative_pass = bool(budget_evaluation.get("creative_pass")) and dynamics_ok
     return {
         "technical_ready": bool(after.get("technical_ready")) and critical == 0,
+        "technical_pass": technical_pass,
+        "creative_pass": creative_pass,
         "loudness_in_range": loudness_ok,
         "true_peak_safe": peak_ok and clipping == 0,
         "dynamics_preserved": dynamics_ok,
         "plr_change_lu": round(-plr_loss, 2) if plr_loss is not None else None,
-        "pass": bool(after.get("technical_ready")) and critical == 0 and loudness_ok and peak_ok and clipping == 0 and dynamics_ok,
+        "perceptual_delta": delta,
+        "change_budget": budget_evaluation,
+        "pass": technical_pass and creative_pass,
     }
 
 
@@ -557,7 +591,7 @@ def _render_candidate(
             ),
         }
     after = analyze_mastering(output, music_map)
-    checks = _candidate_checks(after, target, before)
+    checks = _candidate_checks(after, target, before, measured)
     return measured, after, checks
 
 
@@ -632,7 +666,7 @@ def master_audio(
     )
     if delivery["fallback_applied"]:
         after = analyze_mastering(output, music_map)
-        checks = _candidate_checks(after, target, before)
+        checks = _candidate_checks(after, target, before, measured)
 
     format_info = _record(after.get("format"))
     bit_depth = int(_number(format_info.get("bit_depth")) or delivery["bit_depth"])
