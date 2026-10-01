@@ -996,6 +996,7 @@ def analyze_mastering(
     music_map: dict[str, Any],
     *,
     include_codec_stress: bool = True,
+    include_section_signatures: bool = True,
 ) -> dict[str, Any]:
     try:
         audio, sample_rate = sf.read(str(path), always_2d=True, dtype="float32")
@@ -1025,7 +1026,11 @@ def analyze_mastering(
     transients = _transient_profile(audio, sample_rate)
     dynamics = _dynamics(audio, sample_rate, loudness, sample_qc)
     sections = [item for item in music_map.get("sections") or [] if isinstance(item, dict)]
-    section_signatures = _section_mastering_signatures(audio, sample_rate, sections)
+    section_signatures = (
+        _section_mastering_signatures(audio, sample_rate, sections)
+        if include_section_signatures
+        else []
+    )
     rhythm_confidence = _finite((((music_map.get("analysis") or {}).get("confidence") or {}).get("rhythm")))
     beat_stability = analyze_beat_stability([int(value) for value in music_map.get("beats_ms") or []], global_bpm=_finite(music_map.get("bpm")), sections=sections, rhythm_confidence=rhythm_confidence)
     temporal_stability = _temporal_stability(audio, sample_rate, sections)
