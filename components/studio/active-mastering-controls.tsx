@@ -94,6 +94,49 @@ function masteringSuggestedLoops(value: Json): MasteringSuggestedLoop[] {
   const before = record(result.before);
   const afterSignature = record(after.reference_signature);
   const beforeSignature = record(before.reference_signature);
+
+  const beforeSections = Array.isArray(beforeSignature.section_signatures)
+    ? beforeSignature.section_signatures.map(record)
+    : [];
+  const afterSections = Array.isArray(afterSignature.section_signatures)
+    ? afterSignature.section_signatures.map(record)
+    : [];
+  const beforeById = new Map(beforeSections.flatMap((section) => {
+    const id = typeof section.id === "string" ? section.id : null;
+    return id ? [[id, section] as const] : [];
+  }));
+  const changedSection = afterSections
+    .flatMap((section) => {
+      const id = typeof section.id === "string" ? section.id : null;
+      const source = id ? beforeById.get(id) : null;
+      const startMs = number(section.start_ms);
+      const endMs = number(section.end_ms);
+      if (!source || startMs === null || endMs === null) return [];
+      const sourceEnvelope = record(source.perceptual_envelope_db);
+      const candidateEnvelope = record(section.perceptual_envelope_db);
+      const shared = Object.keys(sourceEnvelope).filter((key) => (
+        number(sourceEnvelope[key]) !== null && number(candidateEnvelope[key]) !== null
+      ));
+      if (shared.length < 3) return [];
+      const distance = shared.reduce((sum, key) => (
+        sum + Math.abs(Number(sourceEnvelope[key]) - Number(candidateEnvelope[key]))
+      ), 0) / shared.length;
+      return [{
+        startMs,
+        endMs,
+        label: typeof section.label === "string" ? section.label : "section",
+        distance,
+      }];
+    })
+    .sort((left, right) => right.distance - left.distance)[0];
+  if (changedSection && changedSection.distance >= 0.2) {
+    loops.push({
+      label: `Most changed section · ${changedSection.label}`,
+      start: changedSection.startMs / 1000,
+      end: Math.min(changedSection.startMs / 1000 + 12, changedSection.endMs / 1000),
+      reason: `Largest measured section-level tonal-envelope movement (${changedSection.distance.toFixed(2)} dB mean absolute change).`,
+    });
+  }
   const rawSections = Array.isArray(afterSignature.section_signatures) && afterSignature.section_signatures.length
     ? afterSignature.section_signatures
     : beforeSignature.section_signatures;
