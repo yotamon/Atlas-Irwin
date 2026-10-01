@@ -106,6 +106,39 @@ class MasteringV2AudioRenderTest(unittest.TestCase):
             self.assertEqual(info.samplerate, sample_rate)
             self.assertEqual(info.subtype, "PCM_24")
 
+    def test_optional_character_filter_renders_with_bundled_ffmpeg(self) -> None:
+        sample_rate = 48000
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source.wav"
+            output = root / "premaster-character.wav"
+            sf.write(source, _fixture_audio(sample_rate), sample_rate, subtype="PCM_24")
+            plan = {
+                "highpass_hz": 0.0,
+                "eq_moves": [],
+                "resonance": {"enabled": False, "moves": []},
+                "compression": {"enabled": False},
+                "character": {
+                    "enabled": True,
+                    "type": "tanh",
+                    "threshold": 0.98,
+                    "output": 0.99,
+                    "oversample": 4,
+                },
+                "stereo": {"enabled": False},
+            }
+
+            _render_premaster(
+                source,
+                output,
+                plan,
+                sample_rate_hz=sample_rate,
+            )
+
+            info = sf.info(output)
+            self.assertEqual(info.samplerate, sample_rate)
+            self.assertEqual(info.subtype, "PCM_24")
+
     def test_explicit_limiter_is_waveform_deterministic(self) -> None:
         sample_rate = 48000
         with tempfile.TemporaryDirectory() as directory:
