@@ -282,6 +282,23 @@ Remaining exit work:
 #### P1.9 Artist-first creative UX - #110 - **Complete**
 PRs #115-#118 shipped Quick Video, shared durable Director state, representative-preview/budget flow, automatic master + socials delivery, exact approved-Moment lineage and artist-scoped Creative Memory retrieval. Director Pro preserves expert controls and existing spend safety.
 
+#### P1.10 Active Mastering V2 - **Planned; single draft PR execution program**
+The production Master Readiness / Active Mastering V1 loop is safe and source-preserving, but its creative DSP remains intentionally conservative. The canonical V2 program is [`docs/active-mastering-v2-plan.md`](active-mastering-v2-plan.md).
+
+V2 exit work:
+- preserve native canonical sample rate and 24-bit fidelity independently of object-storage constraints;
+- replace fixed creative loudness processing with explicit true-peak limiting and adaptive target ranges;
+- add perceptual damage budgets covering transients, tone, dynamics and stereo translation;
+- replace simple reference medians with similarity- and section-aware Reference Intelligence;
+- add bounded adaptive tonal, resonance, dynamics and corrective M/S processing;
+- evaluate a small candidate family with multi-objective selection rather than loudness-first scoring;
+- extend Listen Lab with representative changed-region audition;
+- learn artist mastering preferences only from explicit approved/rejected candidate evidence;
+- add release/album mastering coherence after single-track V2 is stable;
+- keep any ML layer behind bounded parameter-proposal contracts and deterministic DSP/QA.
+
+The implementation remains one draft PR until its required fidelity, deterministic regression and blind-listening gates pass. The existing `streaming_safe` path remains the fallback safety baseline throughout rollout.
+
 ### Phase 2 - Relationship and trust expansion
 
 #### P2.1 Provenance and Trust - #54 - **Operating-policy foundation shipped; full provenance manifest open**
