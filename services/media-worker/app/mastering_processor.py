@@ -7,7 +7,6 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
-from statistics import median
 from typing import Any, Literal
 
 import httpx
@@ -45,16 +44,6 @@ PRESET_TARGETS: dict[str, dict[str, float]] = {
     "punchy": {"integrated_lufs": -9.0, "true_peak_dbtp": -1.2, "compression_ratio": 1.5},
     "dynamic": {"integrated_lufs": -11.5, "true_peak_dbtp": -1.3, "compression_ratio": 1.0},
 }
-BAND_EQ = {
-    "sub_20_80": (55.0, 0.8),
-    "bass_80_180": (120.0, 0.9),
-    "low_mid_180_500": (320.0, 1.0),
-    "mid_500_2500": (1200.0, 1.0),
-    "presence_2500_6000": (4200.0, 1.0),
-    "air_6000_16000": (10500.0, 0.8),
-}
-
-
 class MasteringWorkerRequest(BaseModel):
     job_id: str
     job_type: Literal["master_audio"]
@@ -77,25 +66,6 @@ def _number(value: Any) -> float | None:
 
 def _clamp(value: float, low: float, high: float) -> float:
     return max(low, min(high, value))
-
-
-def _catalog_median(signatures: list[dict[str, Any]], key: str) -> float | None:
-    values = [_number(item.get(key)) for item in signatures]
-    clean = [item for item in values if item is not None]
-    return float(median(clean)) if clean else None
-
-
-def _catalog_band_medians(signatures: list[dict[str, Any]]) -> dict[str, float]:
-    result: dict[str, float] = {}
-    for key in BAND_EQ:
-        values = [
-            _number(_record(signature.get("band_relative_db")).get(key))
-            for signature in signatures
-        ]
-        clean = [item for item in values if item is not None]
-        if clean:
-            result[key] = float(median(clean))
-    return result
 
 
 def build_mastering_target(
@@ -172,7 +142,7 @@ def build_mastering_target(
         preferences=_record(artist_preferences),
     )
     preferred_after_memory = _number(preference_policy.get("preferred_lufs"))
-    if preferred_after_memory is not None and not bool(v2_contract.get("decision_policy", {}).get("loudness_is_not_quality") is False):
+    if preferred_after_memory is not None:
         target_lufs = preferred_after_memory
         v2_contract = build_v2_target_contract(
             preset=preset,
