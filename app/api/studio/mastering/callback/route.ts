@@ -128,6 +128,16 @@ export async function POST(request: Request) {
     const publicUrl = typeof requestPayload.public_url === "string" ? requestPayload.public_url : "";
     const output = record(result.output);
     if (!path || !bucket || !publicUrl) throw new Error("Active Mastering callback is missing output lineage.");
+    const container = typeof output.container === "string" ? output.container.toUpperCase() : "";
+    const isFlac = container === "FLAC" || path.toLowerCase().endsWith(".flac");
+    const mimeType = isFlac ? "audio/flac" : "audio/wav";
+    const extension = isFlac ? "flac" : "wav";
+    const bitDepth = typeof output.bit_depth === "number" && Number.isFinite(output.bit_depth)
+      ? Math.round(output.bit_depth)
+      : null;
+    const sampleRateHz = typeof output.sample_rate_hz === "number" && Number.isFinite(output.sample_rate_hz)
+      ? Math.round(output.sample_rate_hz)
+      : null;
 
     const existing = await service.from("media_assets")
       .select("*")
@@ -144,7 +154,7 @@ export async function POST(request: Request) {
         storage_path: path,
         public_url: publicUrl,
         asset_type: "audio_master",
-        mime_type: "audio/wav",
+        mime_type: mimeType,
         file_size: typeof output.file_size === "number" ? output.file_size : null,
         content_hash: typeof output.sha256 === "string" ? output.sha256 : null,
         width: null,
@@ -152,9 +162,9 @@ export async function POST(request: Request) {
         duration_ms: null,
         visibility: "public",
         metadata: json({
-          original_name: `ensemblis-${job.preset}-master-${job.id}.wav`,
+          original_name: `ensemblis-${job.preset}-master-${job.id}.${extension}`,
           title: `Ensemblis ${job.preset} master`,
-          description: "24-bit WAV rendered by Ensemblis Active Mastering.",
+          description: `${bitDepth ? `${bitDepth}-bit ` : ""}${isFlac ? "lossless FLAC" : "WAV"} rendered by Ensemblis Active Mastering${sampleRateHz ? ` at ${Math.round(sampleRateHz / 100) / 10} kHz` : ""}.`,
           tags: ["active-mastering", job.preset, "distribution-ready"],
           upload_source: "atlas_media_worker",
           source_kind: "active_mastering_candidate",

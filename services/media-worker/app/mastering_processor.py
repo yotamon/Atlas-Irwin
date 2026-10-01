@@ -18,6 +18,9 @@ from .mastering_inspector import analyze_mastering
 
 ACTIVE_MASTERING_SCHEMA = "ensemblis.active_mastering.v1"
 FFMPEG_BINARY = imageio_ffmpeg.get_ffmpeg_exe()
+# Supabase Free projects cap individual Storage objects at 50 MB globally.
+# Keep a small transport margin so signed uploads never sit on the plan boundary.
+MAX_MASTERING_UPLOAD_BYTES = 48_000_000
 
 PRESET_TARGETS: dict[str, dict[str, float]] = {
     "streaming_safe": {"integrated_lufs": -12.0, "true_peak_dbtp": -1.0, "compression_ratio": 1.0},
@@ -296,10 +299,83 @@ def _render_loudnorm(path: Path, output: Path, target: dict[str, Any], measured:
     process = _run_ffmpeg([
         "-loglevel", "error", "-y", "-i", str(path), "-vn",
         "-af", loudnorm,
-        "-ar", "48000", "-ac", "2", "-c:a", "pcm_s24le", str(output),
+        "-ar", "48000", "-ac", "2",
+        "-c:a", "flac", "-compression_level", "12", "-sample_fmt", "s32",
+        str(output),
     ])
     if process.returncode != 0:
         raise RuntimeError(f"Final loudness render failed: {process.stderr[-1200:]}")
+
+
+def _encode_flac_variant(
+    source: Path,
+    target: Path,
+    *,
+    bit_depth: int,
+    sample_rate_hz: int,
+) -> None:
+    args = [
+        "-loglevel", "error", "-y", "-i", str(source), "-vn",
+        "-ar", str(sample_rate_hz), "-ac", "2",
+    ]
+    if bit_depth == 16:
+        args.extend([
+            "-af", f"aresample={sample_rate_hz}:osf=s16:dither_method=triangular",
+            "-sample_fmt", "s16",
+        ])
+    else:
+        args.extend(["-sample_fmt", "s32"])
+    args.extend(["-c:a", "flac", "-compression_level", "12", str(target)])
+    process = _run_ffmpeg(args)
+    if process.returncode != 0:
+        raise RuntimeError(f"Lossless mastering delivery encode failed: {process.stderr[-1200:]}")
+
+
+def _ensure_storage_envelope(
+    output: Path,
+    workdir: Path,
+    *,
+    max_bytes: int = MAX_MASTERING_UPLOAD_BYTES,
+) -> dict[str, Any]:
+    current_size = output.stat().st_size
+    if current_size <= max_bytes:
+        return {
+            "profile": "flac_24",
+            "bit_depth": 24,
+            "sample_rate_hz": 48000,
+            "fallback_applied": False,
+            "file_size": current_size,
+            "max_upload_bytes": max_bytes,
+        }
+
+    variants = (
+        ("flac_16_dithered", 16, 48000),
+        ("flac_16_44k_dithered", 16, 44100),
+    )
+    for profile, bit_depth, sample_rate_hz in variants:
+        candidate = workdir / f"{profile}.flac"
+        _encode_flac_variant(
+            output,
+            candidate,
+            bit_depth=bit_depth,
+            sample_rate_hz=sample_rate_hz,
+        )
+        candidate_size = candidate.stat().st_size
+        if candidate_size <= max_bytes:
+            candidate.replace(output)
+            return {
+                "profile": profile,
+                "bit_depth": bit_depth,
+                "sample_rate_hz": sample_rate_hz,
+                "fallback_applied": True,
+                "file_size": candidate_size,
+                "max_upload_bytes": max_bytes,
+            }
+
+    raise RuntimeError(
+        "The lossless mastering candidate is still larger than the current storage limit "
+        f"after storage-safe encoding (limit {max_bytes} bytes)."
+    )
 
 
 def _candidate_checks(after: dict[str, Any], target: dict[str, Any], before: dict[str, Any]) -> dict[str, Any]:
@@ -385,6 +461,16 @@ def master_audio(
         })
         target = safer_target
 
+    delivery = _ensure_storage_envelope(output, workdir)
+    if delivery["fallback_applied"]:
+        after = analyze_mastering(output, music_map)
+        checks = _candidate_checks(after, target, before)
+
+    format_info = _record(after.get("format"))
+    bit_depth = int(_number(format_info.get("bit_depth")) or delivery["bit_depth"])
+    sample_rate_hz = int(_number(format_info.get("sample_rate_hz")) or delivery["sample_rate_hz"])
+    channels = int(_number(format_info.get("channels")) or 2)
+
     return {
         "schema": ACTIVE_MASTERING_SCHEMA,
         "preset": preset if preset in PRESET_TARGETS else "balanced",
@@ -393,19 +479,29 @@ def master_audio(
         "before": before,
         "after": after,
         "iterations": iterations,
+        "delivery": {
+            **delivery,
+            "container": "FLAC",
+            "codec": "FLAC",
+            "lossless_codec": True,
+            "source_precision_preserved": not bool(delivery["fallback_applied"]),
+            "dithered": bool(delivery["bit_depth"] == 16),
+        },
         "final_checks": checks,
         "output": {
-            "container": "WAV",
-            "codec": "PCM",
-            "bit_depth": 24,
-            "sample_rate_hz": 48000,
-            "channels": 2,
+            "container": "FLAC",
+            "codec": "FLAC",
+            "bit_depth": bit_depth,
+            "sample_rate_hz": sample_rate_hz,
+            "channels": channels,
             "sha256": sha256_file(output),
             "file_size": output.stat().st_size,
         },
         "notes": [
             "No generative audio is used. Ensemblis adjusts a constrained mastering DSP chain and verifies the rendered waveform.",
             "Trusted-reference tonal matching is only applied when at least three explicit mastering references exist.",
+            "The stored candidate uses the lossless FLAC codec so release-grade mastering can stay within bounded object-storage limits without perceptual/lossy codec compression.",
+            "If a 24-bit candidate exceeds the storage envelope, Ensemblis uses a dithered 16-bit PCM-in-FLAC delivery fallback and re-verifies the stored waveform.",
             "Active v1 preserves stereo by default and does not perform blind widening or destructive stem remixing.",
         ],
     }
@@ -449,7 +545,7 @@ async def execute_mastering(request: MasteringWorkerRequest) -> None:
         with TemporaryDirectory(prefix="ensemblis-mastering-") as directory:
             workdir = Path(directory)
             source = workdir / "source-audio"
-            output = workdir / "mastered.wav"
+            output = workdir / "mastered.flac"
             await download(audio_url, source)
             result = await asyncio.to_thread(
                 master_audio,
@@ -460,7 +556,7 @@ async def execute_mastering(request: MasteringWorkerRequest) -> None:
                 reference_signatures=references,
                 workdir=workdir,
             )
-            await upload_file(upload_url, output, "audio/wav")
+            await upload_file(upload_url, output, "audio/flac")
         await _callback(request, "completed", result)
     except Exception as exc:
         message = str(exc)[:2200] or "Active Mastering failed."

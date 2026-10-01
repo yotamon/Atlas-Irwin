@@ -120,6 +120,39 @@ test("one PR enforces exact track lineage, trusted references and targeted strea
   assert.match(safeDistribution, /before Ensemblis prepares distribution/);
 });
 
+test("Active Mastering uses a bounded lossless storage envelope and never persists signed upload credentials", async () => {
+  const [processor, jobs, callback, controls, panel, errors, workerMain, automix] = await Promise.all([
+    source("services/media-worker/app/mastering_processor.py"),
+    source("lib/mastering/jobs.ts"),
+    source("app/api/studio/mastering/callback/route.ts"),
+    source("components/studio/active-mastering-controls.tsx"),
+    source("components/studio/active-mastering-panel.tsx"),
+    source("lib/mastering/job-error.ts"),
+    source("services/media-worker/app/main.py"),
+    source("services/media-worker/app/automix.py"),
+  ]);
+
+  assert.match(processor, /MAX_MASTERING_UPLOAD_BYTES = 48_000_000/);
+  assert.match(processor, /"-c:a", "flac"/);
+  assert.match(processor, /dither_method=triangular/);
+  assert.match(processor, /_ensure_storage_envelope/);
+  assert.match(processor, /"lossless_codec": True/);
+  assert.match(processor, /"source_precision_preserved": not bool\(delivery\["fallback_applied"\]\)/);
+  assert.match(processor, /upload_file\(upload_url, output, "audio\/flac"\)/);
+  assert.match(jobs, /masteringOutputPath[\s\S]*?\.flac/);
+  assert.match(callback, /mimeType = isFlac \? "audio\/flac" : "audio\/wav"/);
+  assert.match(callback, /original_name:[\s\S]*?extension/);
+  assert.match(controls, /Retry \{failed\.preset/);
+  assert.doesNotMatch(controls, /Download 24-bit WAV/);
+  assert.doesNotMatch(panel, /Download rendered WAV/);
+  assert.match(errors, /lossless candidate was larger than the current storage limit/);
+  assert.match(workerMain, /Never include response\.url here/);
+  assert.match(workerMain, /Media upload failed/);
+  const uploadGuard = workerMain.match(/def raise_upload_error[\s\S]*?async def upload_file/)?.[0] ?? "";
+  assert.doesNotMatch(uploadGuard, /raise_for_status/);
+  assert.match(automix, /worker_main\.raise_upload_error\(response\)/);
+});
+
 test("temporal stability uses musical boundaries and never claims AI artifact detection", async () => {
   const inspector = await source("services/media-worker/app/mastering_inspector.py");
   assert.match(inspector, /def _temporal_stability/);

@@ -29,7 +29,7 @@ Canonical master
   -> Mastering Inspector re-analysis
   -> acceptance checks
   -> optional safer second render
-  -> immutable candidate WAV
+  -> storage-safe lossless candidate (normally 24-bit / 48 kHz FLAC)
   -> A/B + download
   -> explicit promotion
   -> Track Intelligence re-analysis
@@ -56,6 +56,8 @@ A candidate must satisfy all of the following before it can be promoted:
 
 If the first render does not pass, the processor performs one safer iteration with more peak headroom and, when needed, a slightly lower loudness target. A non-passing result is still available for review/download, but cannot replace the canonical master.
 
+The verified delivery file uses the lossless FLAC codec. Ensemblis normally keeps 24-bit / 48 kHz precision; on bounded object-storage tiers it deterministically falls back to dithered 16-bit PCM encoded in FLAC (48 kHz first, then 44.1 kHz only if required). The fallback does reduce bit depth, so result metadata records that source precision was not fully preserved. Any fallback is re-analyzed from the exact stored waveform before promotion is allowed. This avoids perceptual/lossy codec compression, and Distribution already accepts both WAV and FLAC masters.
+
 ## Listen Lab
 
 Verified candidates use the shared Listen Lab before promotion:
@@ -72,7 +74,7 @@ Reference playback is intentionally independent because the reference may be a d
 
 ## Durable execution
 
-Active Mastering uses the existing single-concurrency Vercel Sandbox Media Worker. Jobs are durable in Supabase, callbacks use one-time SHA-256-hashed credentials, and late results are rejected when the source master changed during rendering. Uploaded mastering references reuse the same durable worker and source-lineage validation without creating catalog Tracks.
+Active Mastering uses the existing single-concurrency Vercel Sandbox Media Worker. Jobs are durable in Supabase, callbacks use one-time SHA-256-hashed credentials, and late results are rejected when the source master changed during rendering. Signed upload credentials are transport-only and are never persisted in worker error messages. Uploaded mastering references reuse the same durable worker and source-lineage validation without creating catalog Tracks.
 
 The worker bootstrap explicitly downloads every V4 audio runtime dependency, including Mastering Inspector and Active Mastering, so a fresh Sandbox does not depend on files left by an older persistent snapshot.
 
