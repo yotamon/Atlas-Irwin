@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ReleaseMasteringSequencePlayer } from "@/components/studio/release-mastering-sequence-player";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { deriveReleaseMasteringCoherence } from "@/lib/mastering/release-coherence";
 import type { Track } from "@/types/database";
@@ -49,6 +50,15 @@ export function ReleaseMasteringCoherence({
           {coherence.analyzedTrackCount}/{tracks.length} analyzed
         </span>
       </div>
+
+      <ReleaseMasteringSequencePlayer
+        tracks={tracks.flatMap((track) => {
+          const vault = byTrack.get(track.id);
+          return vault?.audio_url
+            ? [{ id: track.id, title: track.title, url: vault.audio_url }]
+            : [];
+        })}
+      />
 
       {coherence.relationships.length ? (
         <div className="release-mastering-sequence" aria-label="Adjacent track relationships">
