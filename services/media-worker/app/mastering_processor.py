@@ -465,6 +465,7 @@ def _ensure_storage_envelope(
 ) -> dict[str, Any]:
     del workdir  # retained in the signature for backward-compatible callers/tests.
     current_size = output.stat().st_size
+    effective_chunk_bytes = min(MASTERING_CHUNK_BYTES, max_bytes)
     if current_size <= max_bytes:
         return {
             "profile": "flac_24_native",
@@ -479,7 +480,7 @@ def _ensure_storage_envelope(
             "chunk_count": 1,
         }
 
-    chunk_count = int(math.ceil(current_size / MASTERING_CHUNK_BYTES))
+    chunk_count = int(math.ceil(current_size / effective_chunk_bytes))
     return {
         "profile": "flac_24_native_chunked",
         "bit_depth": 24,
@@ -489,7 +490,7 @@ def _ensure_storage_envelope(
         "source_precision_preserved": True,
         "file_size": current_size,
         "max_upload_bytes": max_bytes,
-        "chunk_size_bytes": MASTERING_CHUNK_BYTES,
+        "chunk_size_bytes": effective_chunk_bytes,
         "chunk_count": chunk_count,
     }
 
@@ -545,7 +546,12 @@ async def _upload_mastering_output(
         item for item in chunk_uploads_raw
         if isinstance(item, dict)
     ] if isinstance(chunk_uploads_raw, list) else []
-    chunks = _split_mastering_chunks(output, workdir)
+    requested_chunk_size = int(_number(delivery.get("chunk_size_bytes")) or MASTERING_CHUNK_BYTES)
+    chunks = _split_mastering_chunks(
+        output,
+        workdir,
+        chunk_size_bytes=requested_chunk_size,
+    )
     if len(chunks) > len(chunk_uploads):
         raise RuntimeError(
             "The canonical lossless master needs more storage chunks than the "
