@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import sys
 import tempfile
 import types
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 # Planning tests intentionally avoid importing the heavyweight canonical analyzer stack.
 # Production imports the real app.main helpers after the worker bootstrap installs them.
@@ -15,7 +16,7 @@ fake_main.upload_file = lambda *args, **kwargs: None
 fake_main.sha256_file = lambda *args, **kwargs: "test"
 with patch.dict(sys.modules, {"app.main": fake_main}):
     from app import mastering_processor as mastering_processor_module
-    from app.mastering_processor import _ensure_storage_envelope, _render_candidate, build_mastering_target, build_processing_plan
+    from app.mastering_processor import _ensure_storage_envelope, _render_candidate, _split_mastering_chunks, _upload_mastering_output, build_mastering_target, build_processing_plan
 
 
 def _inspector(*, lufs: float = -7.5, true_peak: float = -0.1, plr: float = 9.0, crest: float = 8.5):
@@ -254,6 +255,50 @@ class ActiveMasteringPlanTest(unittest.TestCase):
             self.assertTrue(result["source_precision_preserved"])
             self.assertFalse(result["fallback_applied"])
             self.assertEqual(output.read_bytes(), original)
+
+    def test_chunk_manifest_reassembles_exact_canonical_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "mastered.flac"
+            original = bytes(range(256)) * 2
+            output.write_bytes(original)
+            chunks = _split_mastering_chunks(output, root, chunk_size_bytes=180)
+            self.assertEqual([item["size"] for item in chunks], [180, 180, 152])
+            rebuilt = b"".join(Path(item["path"]).read_bytes() for item in chunks)
+            self.assertEqual(rebuilt, original)
+
+    def test_chunked_upload_uses_prepared_slots_and_safe_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "mastered.flac"
+            original = bytes(range(200)) * 2
+            output.write_bytes(original)
+            payload = {
+                "chunk_uploads": [
+                    {"storage_path": "mastering/job/chunks/part-000.bin", "upload_url": "https://upload/0"},
+                    {"storage_path": "mastering/job/chunks/part-001.bin", "upload_url": "https://upload/1"},
+                ],
+            }
+            result = {
+                "delivery": {
+                    "storage_mode": "chunked_lossless",
+                    "chunk_size_bytes": 200,
+                }
+            }
+            upload = AsyncMock()
+
+            with patch.object(mastering_processor_module, "upload_file", upload):
+                stored = asyncio.run(_upload_mastering_output(payload, output, result, root))
+
+            self.assertEqual(stored["storage_mode"], "chunked_lossless")
+            manifest = stored["chunk_manifest"]
+            self.assertEqual([item["size"] for item in manifest], [200, 200])
+            self.assertEqual(
+                [item["storage_path"] for item in manifest],
+                ["mastering/job/chunks/part-000.bin", "mastering/job/chunks/part-001.bin"],
+            )
+            self.assertTrue(all("upload_url" not in item for item in manifest))
+            self.assertEqual(upload.await_count, 2)
 
 
 if __name__ == "__main__":
