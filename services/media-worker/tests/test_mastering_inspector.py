@@ -4,7 +4,7 @@ import unittest
 
 import numpy as np
 
-from app.mastering_inspector import _temporal_stability, analyze_beat_stability
+from app.mastering_inspector import _spectral_profile, _temporal_stability, _transient_profile, analyze_beat_stability
 
 
 def _steady_beats(bpm: float, seconds: float) -> list[int]:
@@ -67,6 +67,43 @@ def _stereo_signal(seconds: float, sample_rate: int, components: list[tuple[floa
     peak = float(np.max(np.abs(mono))) or 1.0
     mono = 0.5 * mono / peak
     return np.column_stack((mono, mono)).astype(np.float32)
+
+
+class PerceptualEvidenceV2Test(unittest.TestCase):
+    def test_fine_spectral_envelope_has_more_resolution_than_legacy_bands(self) -> None:
+        sample_rate = 48000
+        audio = _stereo_signal(
+            4.0,
+            sample_rate,
+            [(45.0, 0.5), (120.0, 0.8), (1200.0, 0.5), (9000.0, 0.2)],
+        )
+        result = _spectral_profile(audio, sample_rate)
+        self.assertEqual(int(result["perceptual_band_count"]), 12)
+        self.assertEqual(len(result["perceptual_envelope_db"]), 12)
+        self.assertIn("bass_80_160", result["perceptual_envelope_db"])
+        self.assertIn("air_6000_10000", result["perceptual_envelope_db"])
+
+    def test_transient_profile_distinguishes_impulsive_from_steady_audio(self) -> None:
+        sample_rate = 24000
+        steady = _stereo_signal(4.0, sample_rate, [(440.0, 1.0)])
+        impulsive = steady.copy()
+        for second in (0.5, 1.5, 2.5, 3.5):
+            start = int(second * sample_rate)
+            end = min(len(impulsive), start + 80)
+            envelope = np.linspace(0.9, 0.0, end - start, endpoint=False, dtype=np.float32)
+            impulsive[start:end, 0] += envelope
+            impulsive[start:end, 1] += envelope
+        impulsive = np.clip(impulsive, -0.99, 0.99)
+
+        steady_result = _transient_profile(steady, sample_rate)
+        impulsive_result = _transient_profile(impulsive, sample_rate)
+
+        self.assertEqual(impulsive_result["status"], "completed")
+        self.assertGreater(
+            float(impulsive_result["onset_strength_p95"]),
+            float(steady_result["onset_strength_p95"]),
+        )
+        self.assertGreater(float(impulsive_result["transient_crest_p90_db"]), 0.0)
 
 
 class TemporalStabilityTest(unittest.TestCase):
