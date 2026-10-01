@@ -229,3 +229,52 @@ test("selected masters expose real AAC and Opus audition assets without replacin
   assert.match(listenLab, /Hear real codec stress previews/);
   assert.match(listenLab, /never replace the lossless canonical master/);
 });
+
+test("master readiness separates source repair, streaming safety and ready-as-is states", async () => {
+  const { deriveMasterReadiness } = await typescriptModule("lib/mastering/readiness.ts");
+
+  const base = {
+    source_audio: { url: "https://example.test/master.flac", audio_sha256: "abc" },
+    mastering_inspector: {
+      schema: "ensemblis.mastering_inspector.v2",
+      technical_ready: true,
+      status: "ready",
+      issues: [],
+      temporal_stability: { findings: [] },
+    },
+  };
+  const current = { audioUrl: "https://example.test/master.flac" };
+
+  assert.equal(deriveMasterReadiness(base, current).masterability, "ready_as_is");
+
+  const streaming = structuredClone(base);
+  streaming.mastering_inspector.status = "ready_review_suggested";
+  streaming.mastering_inspector.issues = [{
+    code: "codec_headroom",
+    severity: "review",
+    category: "platform_risk",
+    message: "Codec headroom is tight.",
+  }];
+  assert.equal(deriveMasterReadiness(streaming, current).masterability, "streaming_safety_only");
+
+  const mix = structuredClone(base);
+  mix.mastering_inspector.status = "ready_review_suggested";
+  mix.mastering_inspector.issues = [{
+    code: "wide_low_end",
+    severity: "review",
+    category: "creative_observation",
+    message: "Low end is unusually wide.",
+  }];
+  assert.equal(deriveMasterReadiness(mix, current).masterability, "mix_review_recommended");
+
+  const broken = structuredClone(base);
+  broken.mastering_inspector.status = "fix_before_release";
+  broken.mastering_inspector.technical_ready = false;
+  broken.mastering_inspector.issues = [{
+    code: "digital_clipping",
+    severity: "critical",
+    category: "technical_defect",
+    message: "Clipping.",
+  }];
+  assert.equal(deriveMasterReadiness(broken, current).masterability, "source_repair_required");
+});
