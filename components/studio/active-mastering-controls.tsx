@@ -3,16 +3,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createActiveMaster, promoteActiveMaster } from "@/app/studio/mastering-actions";
-import { MasteringABPlayer } from "@/components/studio/mastering-ab-player";
+import { MasteringListenLab } from "@/components/studio/mastering-listen-lab";
 import { MasteringAnalysisReport } from "@/components/studio/mastering-analysis-report";
 import { ProcessingState } from "@/components/studio/processing-state";
 import { ConfirmButton, SubmitButton } from "@/components/studio/submit-button";
+import type { MasterReadiness } from "@/lib/mastering/readiness";
 import type { Json } from "@/types/database";
 import styles from "./active-mastering-panel.module.css";
 
 type Job = {
   id: string;
-  preset: "balanced" | "punchy" | "dynamic";
+  preset: "streaming_safe" | "balanced" | "punchy" | "dynamic";
   status: "planned" | "queued" | "running" | "completed" | "failed" | "cancelled";
   error: string | null;
   createdAt: string;
@@ -35,7 +36,7 @@ function metric(value: number | null, suffix: string, digits = 1) {
 }
 
 function title(value: string) {
-  return value.charAt(0).toUpperCase() + value.slice(1);
+  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 const presets = [
@@ -49,11 +50,15 @@ export function ActiveMasteringControls({
   trackId,
   sourceAudioUrl,
   jobs,
+  readiness,
+  references,
 }: {
   artistId: string;
   trackId: string;
   sourceAudioUrl: string | null;
   jobs: Job[];
+  readiness: MasterReadiness;
+  references: Array<{ label: string; url: string; lufs: number | null }>;
 }) {
   const router = useRouter();
   const [refreshedJobs, setRefreshedJobs] = useState<{ trackId: string; jobs: Job[] } | null>(null);
@@ -106,14 +111,22 @@ export function ActiveMasteringControls({
   const latestActive = displayJobs.find((job) => ["planned", "queued", "running"].includes(job.status));
   const failed = displayJobs.find((job) => job.status === "failed");
   const activePreset = latestActive ? title(latestActive.preset) : null;
+  const masteringRecommended = readiness.primaryAction === "mastering_fix";
+  const sourceRepairRequired = readiness.status === "fix_required" && !readiness.findings.some((finding) => finding.masteringCanHelp);
 
   return (
-    <section className={styles.root} aria-label="Active Mastering">
+    <section className={styles.root} id="active-mastering" aria-label="Mastering options">
       <header className={styles.header}>
         <div>
-          <span className="section-label">Active Mastering</span>
-          <h3>Improve the master, then verify the result</h3>
-          <p>Ensemblis uses a constrained DSP chain, re-measures the rendered waveform and keeps the original master untouched.</p>
+          <span className="section-label">{latestActive ? "Mastering candidate" : "Optional mastering"}</span>
+          <h3>{latestActive ? "Ensemblis is preparing a verified alternative" : masteringRecommended ? "Add streaming headroom without changing the character" : sourceRepairRequired ? "Mastering is not the right fix for this blocker" : readiness.status === "ready" ? "The current master does not need corrective mastering" : "Master only when you want a deliberate change"}</h3>
+          <p>{latestActive
+            ? "The original stays untouched. Ensemblis will re-measure the rendered waveform before it can be approved."
+            : masteringRecommended
+              ? "The source-preserving path keeps loudness, tone and dynamics as close as possible while creating safer true-peak and codec headroom."
+              : sourceRepairRequired
+                ? "Repair or replace the source first. Ensemblis will not present mastering as a cure for clipping, phase, timing or render problems it cannot safely restore."
+                : "Balanced, Punchy and Dynamic remain available as creative directions, but they are never required just because the tools exist."}</p>
         </div>
         {latestActive ? <span className={styles.running}>{latestActive.status === "running" ? "Mastering…" : "Queued"}</span> : null}
       </header>
@@ -135,20 +148,46 @@ export function ActiveMasteringControls({
           ]}
         />
       ) : (
-        <div className={styles.presets}>
-          {presets.map((preset, index) => (
-            <form action={createCandidate} className={styles.preset} key={preset.id}>
+        <>
+          {masteringRecommended ? (
+            <form action={createCandidate} className={styles.recommended}>
               <input type="hidden" name="track_id" value={trackId} />
-              <input type="hidden" name="preset" value={preset.id} />
-              <span className={styles.presetIndex}>0{index + 1}</span>
-              <strong>{preset.title}</strong>
-              <p>{preset.copy}</p>
-              <SubmitButton className="button" pendingLabel={`Creating ${preset.title.toLowerCase()} master…`} disabled={!sourceAudioUrl}>
-                Create {preset.title} master
+              <input type="hidden" name="preset" value="streaming_safe" />
+              <div>
+                <span className="section-label">Recommended fix</span>
+                <strong>Streaming-safe master</strong>
+                <p>Preserve the current balance and loudness while creating safer reconstruction and codec headroom.</p>
+              </div>
+              <SubmitButton className="button primary" pendingLabel="Creating streaming-safe master…" disabled={!sourceAudioUrl}>
+                Create streaming-safe master
               </SubmitButton>
             </form>
-          ))}
-        </div>
+          ) : (
+            <div className={styles.calm}>
+              <strong>{sourceRepairRequired ? "Fix the source before creating a new master." : readiness.status === "ready" ? "Keep the current master unless you want a creative change." : "Listen to the findings before deciding whether to change the sound."}</strong>
+              <span>{sourceRepairRequired ? "A mastering render could hide symptoms without repairing the underlying audio." : "The original remains the canonical master until you explicitly approve a verified candidate."}</span>
+            </div>
+          )}
+
+          <details className={styles.directions}>
+            <summary>Explore a different mastering direction</summary>
+            <p>These are creative alternatives, not release requirements. Compare them at matched loudness before choosing.</p>
+            <div className={styles.presets}>
+              {presets.map((preset, index) => (
+                <form action={createCandidate} className={styles.preset} key={preset.id}>
+                  <input type="hidden" name="track_id" value={trackId} />
+                  <input type="hidden" name="preset" value={preset.id} />
+                  <span className={styles.presetIndex}>0{index + 1}</span>
+                  <strong>{preset.title}</strong>
+                  <p>{preset.copy}</p>
+                  <SubmitButton className="button" pendingLabel={`Creating ${preset.title.toLowerCase()} master…`} disabled={!sourceAudioUrl}>
+                    Create {preset.title} master
+                  </SubmitButton>
+                </form>
+              ))}
+            </div>
+          </details>
+        </>
       )}
 
       {pollError ? <div className={styles.error} role="status"><strong>Live status paused.</strong><p>{pollError}</p><button type="button" className="text-button" onClick={() => void refreshJobs()}>Retry status</button></div> : null}
@@ -178,7 +217,7 @@ export function ActiveMasteringControls({
               <article className={styles.candidate} key={job.id}>
                 <div className={styles.candidateHead}>
                   <div>
-                    <span>{title(job.preset)} candidate</span>
+                    <span>{job.preset === "streaming_safe" ? "Streaming-safe candidate" : `${title(job.preset)} candidate`}</span>
                     <strong>{checks.pass === true ? "Verified master" : "Review candidate"}</strong>
                   </div>
                   <small>{iterations} render pass{iterations === 1 ? "" : "es"}</small>
@@ -191,11 +230,12 @@ export function ActiveMasteringControls({
                 </div>
 
                 {sourceAudioUrl && job.outputUrl ? (
-                  <MasteringABPlayer
+                  <MasteringListenLab
                     originalUrl={sourceAudioUrl}
-                    masteredUrl={job.outputUrl}
+                    candidateUrl={job.outputUrl}
                     originalLufs={beforeIntegrated}
-                    masteredLufs={afterIntegrated}
+                    candidateLufs={afterIntegrated}
+                    references={references}
                   />
                 ) : null}
 

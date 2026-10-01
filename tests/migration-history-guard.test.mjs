@@ -2,6 +2,7 @@ import fs from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  isAllowedPendingBomNormalization,
   parseMigrationPath,
   parseNameStatus,
   validateMigrationChanges,
@@ -38,6 +39,45 @@ test("accepts only append-only new migrations", () => {
   });
   assert.deepEqual(result.errors, []);
   assert.equal(result.added.length, 1);
+});
+
+test("allows only the exact pending Master Readiness BOM normalization", () => {
+  const path = "supabase/migrations/20261001003000_master_readiness_experience.sql";
+  const body = Buffer.from("-- Master Readiness Experience\nselect 1;\n", "utf8");
+  const withBom = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), body]);
+
+  assert.equal(
+    isAllowedPendingBomNormalization({
+      filePath: path,
+      baseContent: withBom,
+      currentContent: body,
+    }),
+    true,
+  );
+  assert.equal(
+    isAllowedPendingBomNormalization({
+      filePath: path,
+      baseContent: withBom,
+      currentContent: Buffer.from("-- changed\n", "utf8"),
+    }),
+    false,
+  );
+  assert.equal(
+    isAllowedPendingBomNormalization({
+      filePath: "supabase/migrations/20261001003001_other.sql",
+      baseContent: withBom,
+      currentContent: body,
+    }),
+    false,
+  );
+  assert.equal(
+    isAllowedPendingBomNormalization({
+      filePath: path,
+      baseContent: body,
+      currentContent: body,
+    }),
+    false,
+  );
 });
 
 test("rejects edits, deletes, and renames of existing migrations", () => {
@@ -302,7 +342,7 @@ test("latest production recovery baseline matches the 2026-10-01 audited drift",
   const local = readLocalMigrations();
   const localIds = new Set(local.map((migration) => `${migration.version}_${migration.name}`));
 
-  assert.equal(local.length, 147);
+  assert.equal(local.length, 150);
   assert.equal(baseline.auditDate, "2026-10-01");
   assert.equal(baseline.canonicalMigrationCount, local.length);
   assert.equal(baseline.remoteMigrationCount, 147);

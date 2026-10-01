@@ -1,7 +1,7 @@
 # Ensemblis Mastering Inspector
 
-**Status:** v1 implementation  
-**Surface:** Music → Track → Mastering  
+**Status:** Master Readiness production integration
+**Surface:** Music → Track → Mastering
 **Source of truth:** the exact canonical master used by Audio Intelligence
 
 ## Product goal
@@ -90,9 +90,22 @@ The canonical analysis stores a compact `reference_signature` containing:
 - stereo metrics;
 - beat-stability summary.
 
-The default product compares the current master against the median of the artist's other analyzed Ensemblis masters. The comparison is descriptive and artist-specific. Tonal deviation alone never creates a technical failure.
+The product compares the current master only against **trusted mastering references** the artist explicitly chose. These may be verified Ensemblis masters or uploaded external audio references. Unrelated Vault tracks never silently become mastering targets.
 
-The same signature contract can support one-off uploaded reference masters later without changing the Mastering Inspector schema.
+The current track is excluded from its own reference median. Comparison remains descriptive and artist-specific, and tonal deviation alone never creates a technical failure. Uploaded references are analyzed through the canonical Media Worker without becoming catalog Tracks.
+
+## Temporal render stability
+
+Mastering Inspector now includes a deterministic `temporal_stability` pass. It compares robust windowed spectral, transient and stereo evidence over time and discounts changes near canonical musical section boundaries.
+
+It can surface localized review cues such as:
+
+- persistent high-frequency detail loss;
+- low-mid buildup;
+- transient-contrast loss;
+- unusual stereo-correlation changes.
+
+These are audition cues, not AI-authorship claims. They remain review-only unless independent deterministic signal evidence justifies a technical blocker.
 
 ## Codec stress test
 
@@ -171,6 +184,7 @@ mastering_inspector
 ├─ stereo + stereo_timeline
 ├─ tonal_balance
 ├─ beat_stability
+├─ temporal_stability
 ├─ codec_stress
 ├─ platform_previews
 ├─ reference_signature
@@ -181,24 +195,24 @@ For compatibility, `master_qc` continues to exist and is backfilled from the can
 
 ## UX contract
 
-The default Track workspace gets a first-class **Mastering** section. It prioritizes:
+The default Track workspace is now **Master Readiness first**. It prioritizes:
 
-- Ready / Review suggested / Fix before release;
-- six immediately useful metering values;
-- evidence-backed issues with listen-at-timestamp controls;
-- Beat Stability with a local-tempo graph;
-- Spotify normalization preview;
-- delivery/file QA;
-- codec stress results;
-- artist-catalog mastering comparison.
+- one Ready / Review / Fix-required decision;
+- deterministic issue → action guidance;
+- localized repeatable listening loops;
+- contextual mastering only when mastering can actually help;
+- trusted-reference comparison;
+- exact source identity and Distribution readiness.
 
-Provider/model internals stay out of the normal artist path.
+Beat Stability, Spotify normalization preview, delivery/file QA, codec stress, detailed meters and reference measurements remain available behind intentional technical disclosure. Provider/model internals stay out of the normal artist path.
 
 ## Safety and interpretation rules
 
 - No LLM decides whether a measurement passes.
 - Technical and platform rules operate on deterministic measurements.
 - Reference/creative differences do not become defects without explicit evidence.
+- Only artist-approved references influence comparison or optional mastering targets.
+- Temporal stability findings are audition cues, never an AI detector.
 - No generic tonal-balance percentage threshold is treated as objective mastering truth.
 - Codec preview never claims to reproduce a proprietary streaming encoder exactly.
 - Beat instability is not inferred from one global BPM number.

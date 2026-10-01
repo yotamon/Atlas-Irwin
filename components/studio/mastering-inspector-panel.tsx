@@ -269,11 +269,11 @@ export function MasteringInspectorPanel({
       </section>
 
       <section className={styles.block}>
-        <div className={styles.blockHead}><div><span className="section-label">Reference intelligence</span><h3>Compare with {catalogProfiles.length ? `${catalogProfiles.length} analyzed catalog master${catalogProfiles.length === 1 ? "" : "s"}` : "your catalog"}</h3></div></div>
+        <div className={styles.blockHead}><div><span className="section-label">Trusted references</span><h3>Compare with {catalogProfiles.length ? `${catalogProfiles.length} mastering reference${catalogProfiles.length === 1 ? "" : "s"}` : "your chosen references"}</h3></div></div>
         {catalogProfiles.length ? (
           <>
             <div className={styles.referenceTable}>
-              <div className={styles.referenceHeader}><span>Measurement</span><span>This master</span><span>Catalog median</span><span>Difference</span></div>
+              <div className={styles.referenceHeader}><span>Measurement</span><span>This master</span><span>Reference median</span><span>Difference</span></div>
               {referenceRows.map(([label, key, suffix]) => {
                 const current = asNumber(signature[key]);
                 const reference = catalogMedian(catalogProfiles, key);
@@ -284,12 +284,12 @@ export function MasteringInspectorPanel({
               {bands.map(([label, key, range]) => {
                 const current = asNumber(currentBands[key]);
                 const reference = catalogBands[key] ?? null;
-                return <article key={key}><span>{label}</span><small>{range}</small><strong>{current !== null && reference !== null ? `${signed(current - reference, 1)} dB` : "—"}</strong><small>vs catalog spectral share</small></article>;
+                return <article key={key}><span>{label}</span><small>{range}</small><strong>{current !== null && reference !== null ? `${signed(current - reference, 1)} dB` : "—"}</strong><small>vs reference spectral share</small></article>;
               })}
             </div>
-            <p className={styles.muted}>Catalog differences are loudness-independent spectral/dynamic comparisons. They are never treated as defects by themselves.</p>
+            <p className={styles.muted}>Reference differences are loudness-independent spectral/dynamic comparisons. They are never treated as defects by themselves.</p>
           </>
-        ) : <p className={styles.muted}>When more analyzed masters exist for this artist, Ensemblis will compare this master against the artist’s own released/unreleased mastering profile instead of using generic genre targets.</p>}
+        ) : <p className={styles.muted}>Add an approved master or external reference to compare against sound you explicitly trust. Ensemblis will not silently learn mastering targets from unrelated Vault tracks.</p>}
       </section>
     </div>
   );

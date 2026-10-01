@@ -3,6 +3,7 @@ import { MasteringAnalysisReport } from "@/components/studio/mastering-analysis-
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMasteringClient } from "@/lib/mastering/jobs";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
+import type { MasterReadiness } from "@/lib/mastering/readiness";
 import type { Json } from "@/types/database";
 
 function record(value: unknown): Record<string, unknown> {
@@ -22,20 +23,48 @@ function runDate(value: string) {
 export async function ActiveMasteringPanel({
   trackId,
   sourceAudioUrl,
+  readiness,
 }: {
   trackId: string;
   sourceAudioUrl: string | null;
+  readiness: MasterReadiness;
 }) {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveActiveArtistContext(supabase, user);
   const db = asMasteringClient(supabase);
-  const jobs = await db.from("track_mastering_jobs")
-    .select("*")
-    .eq("owner_id", user.id)
-    .eq("artist_id", artist.artistId)
-    .eq("track_vault_id", trackId)
-    .order("created_at", { ascending: false });
+  const [jobs, referencesResult] = await Promise.all([
+    db.from("track_mastering_jobs")
+      .select("*")
+      .eq("owner_id", user.id)
+      .eq("artist_id", artist.artistId)
+      .eq("track_vault_id", trackId)
+      .order("created_at", { ascending: false }),
+    db.from("mastering_references")
+      .select("label,audio_url,reference_signature,track_vault_id,created_at")
+      .eq("owner_id", user.id)
+      .eq("artist_id", artist.artistId)
+      .eq("active", true)
+      .eq("status", "ready")
+      .not("audio_url", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(12),
+  ]);
   if (jobs.error) throw new Error(jobs.error.message);
+  if (referencesResult.error) throw new Error(referencesResult.error.message);
+
+  const references = (referencesResult.data ?? [])
+    .filter((reference) => reference.track_vault_id !== trackId && reference.audio_url)
+    .map((reference) => {
+      const signature = record(reference.reference_signature);
+      const lufs = typeof signature.integrated_lufs === "number" && Number.isFinite(signature.integrated_lufs)
+        ? signature.integrated_lufs
+        : null;
+      return {
+        label: reference.label,
+        url: reference.audio_url!,
+        lufs,
+      };
+    });
 
   const serialized = (jobs.data ?? []).map((job) => {
     const request = record(job.request_payload);
@@ -57,6 +86,8 @@ export async function ActiveMasteringPanel({
         trackId={trackId}
         sourceAudioUrl={sourceAudioUrl}
         jobs={serialized.slice(0, 4)}
+        readiness={readiness}
+        references={references}
       />
 
       {serialized.length > 4 ? (

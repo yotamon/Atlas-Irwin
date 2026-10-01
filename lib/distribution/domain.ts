@@ -1,3 +1,4 @@
+import type { MasterReadiness } from "@/lib/mastering/readiness";
 import type { Json, Release, Track } from "@/types/database";
 
 export const DISTRIBUTION_STATES = [
@@ -127,6 +128,7 @@ export function calculateDistributionReadiness({
   artistProfiles,
   providerIssues = [],
   creditsReady,
+  masterReadinessByTrack = null,
 }: {
   release: Release;
   tracks: Track[];
@@ -135,12 +137,82 @@ export function calculateDistributionReadiness({
   artistProfiles: Array<{ platform: string; external_artist_id: string | null; status: string }>;
   providerIssues?: DistributionIssue[];
   creditsReady?: { ready: boolean; detail: string; issues?: DistributionIssue[] };
+  masterReadinessByTrack?: Record<string, MasterReadiness> | null;
 }): DistributionReadiness {
   const issues: DistributionIssue[] = [...providerIssues, ...(creditsReady?.issues ?? [])];
   const primaryTrack = tracks.find((track) => track.is_primary) ?? tracks[0];
-  const audioPass = tracks.length > 0 && tracks.every((track) => Boolean(track.audio_url));
-  if (!tracks.length) issues.push({ code: "tracks.missing", title: "Add at least one track", detail: "DSP delivery requires a release with at least one track.", severity: "error", source: "ensemblis", objectType: "release", objectId: release.id });
-  else if (!audioPass) issues.push({ code: "audio.master_missing", title: "Add every track master", detail: "Every track needs its canonical master audio before distribution.", severity: "error", source: "ensemblis", objectType: "track", objectId: tracks.find((track) => !track.audio_url)?.id });
+  const mastersAttached = tracks.length > 0 && tracks.every((track) => Boolean(track.audio_url));
+  let audioStatus: "pass" | "warning" | "block" = "pass";
+  let audioDetail = tracks.length ? `${tracks.length} verified master${tracks.length === 1 ? "" : "s"}` : "No tracks";
+
+  if (!tracks.length) {
+    audioStatus = "block";
+    audioDetail = "No track audio is available";
+    issues.push({ code: "tracks.missing", title: "Add at least one track", detail: "DSP delivery requires a release with at least one track.", severity: "error", source: "ensemblis", objectType: "release", objectId: release.id });
+  } else if (!mastersAttached) {
+    audioStatus = "block";
+    audioDetail = "Master audio is incomplete";
+    issues.push({ code: "audio.master_missing", title: "Add every track master", detail: "Every track needs its canonical master audio before distribution.", severity: "error", source: "ensemblis", objectType: "track", objectId: tracks.find((track) => !track.audio_url)?.id });
+  } else if (masterReadinessByTrack) {
+    for (const track of tracks) {
+      const readiness = masterReadinessByTrack[track.id];
+      if (!readiness || readiness.distributionGate === "unverified") {
+        audioStatus = "block";
+        audioDetail = "Audio verification is incomplete";
+        issues.push({
+          code: "audio.master_unverified",
+          title: `Verify the current master for ${track.title}`,
+          detail: "A master is attached, but Ensemblis has no current Master Readiness evidence for this exact waveform.",
+          severity: "error",
+          source: "ensemblis",
+          objectType: "track",
+          objectId: track.id,
+          fixHref: `/studio/music/${track.id}#mastering`,
+        });
+      } else if (readiness.distributionGate === "waiting") {
+        audioStatus = "block";
+        audioDetail = "Audio verification is still running";
+        issues.push({
+          code: "audio.master_verification_pending",
+          title: `Wait for ${track.title} audio verification`,
+          detail: "Ensemblis is still verifying this exact master. Distribution will unlock when the current analysis completes.",
+          severity: "error",
+          source: "ensemblis",
+          objectType: "track",
+          objectId: track.id,
+          fixHref: `/studio/music/${track.id}#mastering`,
+        });
+      } else if (readiness.distributionGate === "block") {
+        audioStatus = "block";
+        audioDetail = "A master needs a technical fix";
+        issues.push({
+          code: "audio.master_fix_required",
+          title: `Fix the master for ${track.title}`,
+          detail: readiness.summary,
+          severity: "error",
+          source: "ensemblis",
+          objectType: "track",
+          objectId: track.id,
+          fixHref: `/studio/music/${track.id}#mastering`,
+        });
+      } else if (readiness.distributionGate === "review" && audioStatus !== "block") {
+        audioStatus = "warning";
+        audioDetail = "Audio is distributable; listening review is suggested";
+        issues.push({
+          code: "audio.master_review_suggested",
+          title: `Listen once more to ${track.title}`,
+          detail: readiness.summary,
+          severity: "warning",
+          source: "ensemblis",
+          objectType: "track",
+          objectId: track.id,
+          fixHref: `/studio/music/${track.id}#mastering`,
+        });
+      }
+    }
+  } else {
+    audioDetail = `${tracks.length} master${tracks.length === 1 ? "" : "s"} attached`;
+  }
 
   const metadataPass = Boolean(release.title.trim() && release.artist?.trim() && release.genre?.trim());
   if (!metadataPass) issues.push({ code: "metadata.incomplete", title: "Complete release metadata", detail: "Artist, title and primary genre are required for distribution readiness.", severity: "error", source: "ensemblis", objectType: "release", objectId: release.id });
@@ -175,7 +247,7 @@ export function calculateDistributionReadiness({
 
   const creditsStatus = creditsReady ? (creditsReady.ready ? "pass" : "block") : "warning";
   const checks: DistributionReadiness["checks"] = [
-    { key: "audio", label: "Audio", status: audioPass ? "pass" : "block", detail: audioPass ? `${tracks.length} master${tracks.length === 1 ? "" : "s"} attached` : "Master audio is incomplete" },
+    { key: "audio", label: "Audio", status: audioStatus, detail: audioDetail },
     { key: "metadata", label: "Metadata", status: metadataPass ? "pass" : "block", detail: metadataPass ? "Core release identity is complete" : "Artist, title or genre is missing" },
     { key: "artwork", label: "Artwork", status: artworkPass ? "pass" : "block", detail: artworkPass ? "Cover artwork is attached" : "Cover artwork is missing" },
     { key: "credits", label: "Credits", status: creditsStatus, detail: creditsReady?.detail ?? "Provider validation will verify contributor/composer requirements per DSP" },

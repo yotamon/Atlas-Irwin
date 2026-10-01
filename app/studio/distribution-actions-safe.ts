@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { loadMasterReadinessByTrack } from "@/lib/mastering/distribution-readiness";
 import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import type { DistributionDatabase } from "@/types/distribution-database";
 import * as actions from "./distribution-actions";
@@ -39,7 +40,7 @@ async function validateReleaseArtistScope(form: FormData) {
   if (!release) throw new Error("Release not found for the active artist.");
 
   form.set("artist_id", artist.artistId);
-  return { artist, db, userId: user.id, releaseId, release };
+  return { artist, db, supabase, userId: user.id, releaseId, release };
 }
 
 async function assertCanonicalIdentity(form: FormData) {
@@ -59,6 +60,29 @@ async function assertCanonicalIdentity(form: FormData) {
   if (meta?.upc_source === "artist" && !context.release.upc) missing.push("UPC/EAN");
   if (!meta) missing.push("release delivery identity");
   if (missing.length) throw new Error(`Complete ${missing.join(", ")} before Ensemblis prepares external distribution work.`);
+
+  const tracksResult = await context.db.from("tracks")
+    .select("*")
+    .eq("release_id", context.releaseId)
+    .eq("owner_id", context.userId)
+    .order("display_order");
+  if (tracksResult.error) throw new Error(tracksResult.error.message);
+  const tracks = tracksResult.data ?? [];
+  if (!tracks.length || tracks.some((track) => !track.audio_url)) {
+    throw new Error("Attach every final track master before Ensemblis prepares distribution.");
+  }
+  const readinessByTrack = await loadMasterReadinessByTrack(
+    context.supabase,
+    context.userId,
+    context.artist.artistId,
+    tracks,
+  );
+  for (const track of tracks) {
+    const readiness = readinessByTrack[track.id];
+    if (!readiness || !["pass", "review"].includes(readiness.distributionGate)) {
+      throw new Error(`Verify the current master for ${track.title} before Ensemblis prepares distribution.`);
+    }
+  }
   return context;
 }
 

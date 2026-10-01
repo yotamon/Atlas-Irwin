@@ -12,7 +12,7 @@ import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import type { Json } from "@/types/database";
 import type { MasteringPreset, TrackMasteringJob } from "@/types/mastering-database";
 
-const presetSchema = z.enum(["balanced", "punchy", "dynamic"]);
+const presetSchema = z.enum(["streaming_safe", "balanced", "punchy", "dynamic"]);
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -37,12 +37,6 @@ function compactMusicMap(value: Json) {
   };
 }
 
-function signature(value: Json) {
-  const inspector = record(record(value).mastering_inspector);
-  const result = record(inspector.reference_signature);
-  return Object.keys(result).length ? result : null;
-}
-
 export async function createActiveMaster(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveActiveArtistContext(supabase, user);
@@ -51,18 +45,19 @@ export async function createActiveMaster(form: FormData) {
   const trackId = z.uuid().parse(String(form.get("track_id") ?? ""));
   const preset = presetSchema.parse(String(form.get("preset") ?? "balanced")) as MasteringPreset;
 
-  const [trackResult, catalogResult, activeResult] = await Promise.all([
+  const [trackResult, referencesResult, activeResult] = await Promise.all([
     growth.from("track_vault")
       .select("id,title,audio_url,media_asset_id,audio_profile")
       .eq("id", trackId)
       .eq("owner_id", user.id)
       .eq("artist_id", artist.artistId)
       .single(),
-    growth.from("track_vault")
-      .select("id,audio_profile")
+    mastering.from("mastering_references")
+      .select("reference_signature,track_vault_id")
       .eq("owner_id", user.id)
       .eq("artist_id", artist.artistId)
-      .neq("id", trackId)
+      .eq("active", true)
+      .eq("status", "ready")
       .limit(24),
     mastering.from("track_mastering_jobs")
       .select("id,status")
@@ -74,7 +69,7 @@ export async function createActiveMaster(form: FormData) {
       .maybeSingle(),
   ]);
   if (trackResult.error || !trackResult.data) throw new Error(trackResult.error?.message || "Track not found.");
-  if (catalogResult.error) throw new Error(catalogResult.error.message);
+  if (referencesResult.error) throw new Error(referencesResult.error.message);
   if (activeResult.error) throw new Error(activeResult.error.message);
   if (activeResult.data) return { jobId: activeResult.data.id, deduplicated: true };
 
@@ -85,9 +80,10 @@ export async function createActiveMaster(form: FormData) {
     throw new Error("Run Track Intelligence first so Active Mastering has deterministic mastering evidence.");
   }
 
-  const references = (catalogResult.data ?? [])
-    .map((item) => signature(item.audio_profile))
-    .filter((item): item is Record<string, unknown> => Boolean(item));
+  const references = (referencesResult.data ?? [])
+    .filter((item) => item.track_vault_id !== trackId)
+    .map((item) => record(item.reference_signature))
+    .filter((item) => Object.keys(item).length > 0);
   const id = randomUUID();
   const draft = {
     id,
@@ -151,7 +147,7 @@ export async function promoteActiveMaster(form: FormData) {
   if (checks.pass !== true) throw new Error("Only a fully verified mastering candidate can become the canonical master.");
 
   const trackResult = await growth.from("track_vault")
-    .select("id,audio_url,linked_release_id")
+    .select("id,audio_url,linked_release_id,linked_track_id")
     .eq("id", job.track_vault_id)
     .eq("owner_id", user.id)
     .eq("artist_id", artist.artistId)
@@ -171,22 +167,25 @@ export async function promoteActiveMaster(form: FormData) {
   if (updated.error) throw new Error(updated.error.message);
 
   if (trackResult.data.linked_release_id) {
-    const releaseTracks = await music.from("tracks")
-      .select("id,is_primary")
+    let canonicalTrackId = trackResult.data.linked_track_id;
+    if (!canonicalTrackId) {
+      const releaseTracks = await music.from("tracks")
+        .select("id")
+        .eq("release_id", trackResult.data.linked_release_id)
+        .eq("owner_id", user.id)
+        .eq("artist_id", artist.artistId)
+        .limit(2);
+      if (releaseTracks.error) throw new Error(releaseTracks.error.message);
+      if ((releaseTracks.data ?? []).length === 1) canonicalTrackId = releaseTracks.data![0].id;
+      else throw new Error("This vault track has no exact catalog-track lineage. Link the exact track before promoting a master.");
+    }
+
+    const releaseUpdate = await music.from("tracks").update({ audio_url: publicUrl })
+      .eq("id", canonicalTrackId)
       .eq("release_id", trackResult.data.linked_release_id)
       .eq("owner_id", user.id)
-      .eq("artist_id", artist.artistId)
-      .order("is_primary", { ascending: false })
-      .order("display_order", { ascending: true });
-    if (releaseTracks.error) throw new Error(releaseTracks.error.message);
-    const canonical = (releaseTracks.data ?? []).find((track) => track.is_primary) ?? releaseTracks.data?.[0] ?? null;
-    if (canonical) {
-      const releaseUpdate = await music.from("tracks").update({ audio_url: publicUrl })
-        .eq("id", canonical.id)
-        .eq("owner_id", user.id)
-        .eq("artist_id", artist.artistId);
-      if (releaseUpdate.error) throw new Error(releaseUpdate.error.message);
-    }
+      .eq("artist_id", artist.artistId);
+    if (releaseUpdate.error) throw new Error(releaseUpdate.error.message);
   }
 
   const analysisForm = new FormData();

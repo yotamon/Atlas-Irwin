@@ -5,6 +5,7 @@ import { requireStudioAdmin } from "@/lib/auth/studio";
 import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { deriveDistributionArtistState } from "@/lib/distribution/artist-facing";
 import { normalizeAiProvenance, type DistributionRights } from "@/lib/distribution/domain";
+import { loadMasterReadinessByTrack } from "@/lib/mastering/distribution-readiness";
 import { saveDistributionReleaseMetadata } from "@/app/studio/distribution-release-metadata-actions";
 import {
   addDistributionTrackContributor,
@@ -84,6 +85,7 @@ export default async function ReleaseDistributionArtistView({ params, searchPara
   const release = releaseResult.data;
   const tracks = tracksResult.data ?? [];
   const trackIds = new Set(tracks.map((track) => track.id));
+  const masterReadinessByTrack = await loadMasterReadinessByTrack(supabase, user.id, artist.artistId, tracks);
   const trackMetadata = (metadataResult.data ?? []).filter((row) => trackIds.has(row.track_id));
   const writers = (writersResult.data ?? []).filter((row) => trackIds.has(row.track_id));
   const contributors = (contributorsResult.data ?? []).filter((row) => trackIds.has(row.track_id));
@@ -100,6 +102,7 @@ export default async function ReleaseDistributionArtistView({ params, searchPara
     contributors,
     artistProfiles: profiles,
     openIssues: issuesResult.data ?? [],
+    masterReadinessByTrack,
   });
   const locked = state.submitted && !["rejected", "error"].includes(config?.state ?? "");
   const rights = rightsFrom(config?.rights);
@@ -127,7 +130,7 @@ export default async function ReleaseDistributionArtistView({ params, searchPara
 
     <section className="distribution-section">
       <div className="distribution-section-heading"><div><span className="section-label">Needs you</span><h2>{state.decisions.length ? `${state.decisions.length} exact item${state.decisions.length === 1 ? "" : "s"}` : "Nothing is blocking delivery"}</h2><p>No readiness score. These are the concrete facts or decisions that still matter.</p></div></div>
-      {state.decisions.length ? <div className="distribution-issue-list">{state.decisions.map((decision) => <article key={decision.key} className={decision.severity === "review" ? "issue-warning" : "issue-error"}><span>{decision.severity}</span><div><strong>{decision.title}</strong><p>{decision.detail}</p><small>{decision.section}</small></div></article>)}</div> : <div className="distribution-feedback success"><strong>Release package complete</strong><span>Ensemblis has all artist-owned facts and declarations required for the final approval boundary.</span></div>}
+      {state.decisions.length ? <div className="distribution-issue-list">{state.decisions.map((decision) => <article key={decision.key} className={decision.severity === "review" ? "issue-warning" : "issue-error"}><span>{decision.severity}</span><div><strong>{decision.title}</strong><p>{decision.detail}</p><small>{decision.section}</small>{decision.href ? <Link className="text-button" href={decision.href}>Review exact track →</Link> : null}</div></article>)}</div> : <div className="distribution-feedback success"><strong>Release package complete</strong><span>Ensemblis has all artist-owned facts and declarations required for the final approval boundary.</span></div>}
     </section>
 
     <section className="distribution-section">
@@ -163,8 +166,20 @@ export default async function ReleaseDistributionArtistView({ params, searchPara
         const trackContributors = contributors.filter((row) => row.track_id === track.id);
         const share = trackWriters.reduce((sum, writer) => sum + Number(writer.share), 0);
         const datalistId = `artist-facing-contributor-roles-${track.id}`;
+        const audioReadiness = masterReadinessByTrack[track.id];
+        const audioLabel = !track.audio_url
+          ? "Master missing"
+          : audioReadiness?.distributionGate === "pass"
+            ? "Audio verified"
+            : audioReadiness?.distributionGate === "review"
+              ? "Review suggested"
+              : audioReadiness?.distributionGate === "block"
+                ? "Fix master before delivery"
+                : audioReadiness?.distributionGate === "waiting"
+                  ? "Audio verification in progress"
+                  : "Verification unavailable";
         return <article className="distribution-track-card" key={track.id}>
-          <div className="distribution-track-heading"><div><span>Track {index + 1}</span><h3>{track.title}</h3><small>{track.audio_url ? "Master attached" : "Master missing"} · writer shares {share.toFixed(2)}%</small></div></div>
+          <div className="distribution-track-heading"><div><span>Track {index + 1}</span><h3>{track.title}</h3><small>{audioLabel} · writer shares {share.toFixed(2)}%</small></div></div>
           <form action={saveDistributionTrackMetadata} className="distribution-track-metadata-form">{hiddenArtist}<input type="hidden" name="release_id" value={release.id} /><input type="hidden" name="track_id" value={track.id} /><fieldset disabled={locked}><div className="distribution-field-grid"><label>Metadata language<input name="metadata_language_code" required defaultValue={meta?.metadata_language_code ?? "en"} /></label><label>Audio language<input name="audio_language_code" required defaultValue={meta?.audio_language_code ?? "en"} /></label><label>Origin<select name="track_origin" defaultValue={meta?.track_origin ?? "original"}><option value="original">Original</option><option value="cover">Cover</option><option value="public_domain">Public domain</option></select></label><label>ISRC<input name="isrc" defaultValue={meta?.isrc ?? ""} placeholder="Blank = assign for me" /></label></div><label className="inline-check"><input type="checkbox" name="explicit" defaultChecked={meta?.explicit ?? false} />Explicit lyrics/content</label></fieldset>{!locked ? <button className="button" type="submit">Save track facts</button> : null}</form>
           <div className="distribution-credit-columns"><div><div className="distribution-credit-title"><strong>Writers</strong><span>{share.toFixed(2)} / 100%</span></div>{trackWriters.map((writer) => <div className="distribution-credit-list" key={writer.id}><div><span><strong>{writer.legal_name}</strong><small>{writer.role.replaceAll("_", " ")} · {writer.share}%{writer.publisher_name ? ` · ${writer.publisher_name}` : ""}</small></span>{!locked ? <form action={removeDistributionTrackWriter}>{hiddenArtist}<input type="hidden" name="release_id" value={release.id} /><input type="hidden" name="writer_id" value={writer.id} /><button type="submit" aria-label={`Remove ${writer.legal_name}`}>×</button></form> : null}</div></div>)}{!locked ? <form action={addDistributionTrackWriter} className="distribution-credit-form">{hiddenArtist}<input type="hidden" name="release_id" value={release.id} /><input type="hidden" name="track_id" value={track.id} /><input name="legal_name" required placeholder="Legal writer name" /><select name="role" defaultValue="composer_lyricist"><option value="composer_lyricist">Composer & lyricist</option><option value="composer">Composer</option><option value="lyricist">Lyricist</option></select><input name="share" required type="number" min="0.01" max="100" step="0.01" placeholder="Share %" /><select name="publishing_type" defaultValue="copyright_control"><option value="copyright_control">Copyright control</option><option value="published">Published</option><option value="public_domain">Public domain</option></select><input name="publisher_name" placeholder="Publisher, if published" /><button className="button" type="submit">Add writer</button></form> : null}</div>
           <div><div className="distribution-credit-title"><strong>Production & engineering</strong><span>{trackContributors.length}</span></div>{trackContributors.map((contributor) => <div className="distribution-credit-list" key={contributor.id}><div><span><strong>{contributor.name}</strong><small>{contributor.role}</small></span>{!locked ? <form action={removeDistributionTrackContributor}>{hiddenArtist}<input type="hidden" name="release_id" value={release.id} /><input type="hidden" name="contributor_id" value={contributor.id} /><button type="submit" aria-label={`Remove ${contributor.name}`}>×</button></form> : null}</div></div>)}{!locked ? <form action={addDistributionTrackContributor} className="distribution-credit-form">{hiddenArtist}<input type="hidden" name="release_id" value={release.id} /><input type="hidden" name="track_id" value={track.id} /><input name="name" required placeholder="Contributor name" /><input name="role" required list={datalistId} placeholder="Producer" /><datalist id={datalistId}><option value="Producer" /><option value="Mixing Engineer" /><option value="Mastering Engineer" /><option value="Recording Engineer" /></datalist><button className="button" type="submit">Add credit</button></form> : null}</div></div>
