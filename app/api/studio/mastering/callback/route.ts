@@ -45,6 +45,7 @@ function cleanRequestPayload(value: Record<string, unknown>) {
   delete next[MEDIA_WORKER_CALLBACK_HASH_KEY];
   delete next.upload_url;
   delete next.chunk_uploads;
+  delete next.codec_preview_uploads;
   return next;
 }
 
@@ -71,6 +72,12 @@ function uploadedStoragePaths(
   // objects. Supabase removal is tolerant of paths that were never uploaded.
   if (Array.isArray(requestPayload.chunk_uploads)) {
     for (const entry of requestPayload.chunk_uploads) {
+      const row = record(entry);
+      if (typeof row.storage_path === "string" && row.storage_path) paths.add(row.storage_path);
+    }
+  }
+  if (Array.isArray(requestPayload.codec_preview_uploads)) {
+    for (const entry of requestPayload.codec_preview_uploads) {
       const row = record(entry);
       if (typeof row.storage_path === "string" && row.storage_path) paths.add(row.storage_path);
     }
@@ -237,6 +244,7 @@ export async function POST(request: Request) {
           source_master_url: job.source_audio_url,
           mastering_schema: result.schema ?? null,
           final_checks: finalChecks,
+          codec_previews: Array.isArray(result.codec_previews) ? result.codec_previews : [],
           storage_mode: storageMode,
           chunk_manifest: Array.isArray(storage.chunk_manifest) ? storage.chunk_manifest : [],
           canonical_file_size: typeof output.file_size === "number" ? output.file_size : null,
