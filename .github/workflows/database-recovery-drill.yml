@@ -24,7 +24,7 @@ jobs:
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-      SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+      SUPABASE_PROJECT_ID: zhyjnpajlvwwbvuryeyv
       PROD_PGHOST: aws-0-eu-central-1.pooler.supabase.com
       PROD_PGPORT: "5432"
 
@@ -50,12 +50,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for name in SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD SUPABASE_PROJECT_ID; do
-            if [ -z "${!name:-}" ]; then
-              echo "::error::Missing required Production environment secret: $name"
-              exit 1
-            fi
-          done
+          if [ -z "${SUPABASE_DB_PASSWORD:-}" ]; then
+            echo "::error::Missing required Production environment secret: SUPABASE_DB_PASSWORD"
+            exit 1
+          fi
+          if [ "$SUPABASE_PROJECT_ID" != "zhyjnpajlvwwbvuryeyv" ]; then
+            echo "::error::Recovery workflow is pinned to the canonical production project ref."
+            exit 1
+          fi
 
       - name: Capture source recovery fingerprint
         shell: bash
@@ -115,16 +117,22 @@ jobs:
           test -s "$BACKUP_DIR/source-storage-sample.txt"
           echo "Source recovery fingerprint captured without exporting row contents."
 
-      - name: Link production project
-        run: supabase link --project-ref "$SUPABASE_PROJECT_ID"
-
       - name: Create independent logical backup
         shell: bash
         run: |
           set -euo pipefail
-          supabase db dump --linked -f "$BACKUP_DIR/roles.sql" --role-only
-          supabase db dump --linked -f "$BACKUP_DIR/schema.sql"
-          supabase db dump --linked -f "$BACKUP_DIR/data.sql" --use-copy --data-only -x "storage.buckets_vectors" -x "storage.vector_indexes"
+          PROD_DB_URL="$(python - <<'PY'
+          import os
+          import urllib.parse
+          password = urllib.parse.quote(os.environ["SUPABASE_DB_PASSWORD"], safe="")
+          ref = os.environ["SUPABASE_PROJECT_ID"]
+          print(f"postgresql://postgres.{ref}:{password}@aws-0-eu-central-1.pooler.supabase.com:5432/postgres?sslmode=require")
+          PY
+          )"
+          supabase db dump --db-url "$PROD_DB_URL" -f "$BACKUP_DIR/roles.sql" --role-only
+          supabase db dump --db-url "$PROD_DB_URL" -f "$BACKUP_DIR/schema.sql"
+          supabase db dump --db-url "$PROD_DB_URL" -f "$BACKUP_DIR/data.sql" --use-copy --data-only -x "storage.buckets_vectors" -x "storage.vector_indexes"
+          unset PROD_DB_URL
 
           test -s "$BACKUP_DIR/roles.sql"
           test -s "$BACKUP_DIR/schema.sql"
