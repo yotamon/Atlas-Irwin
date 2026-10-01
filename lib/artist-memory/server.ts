@@ -3,6 +3,8 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadArtistCreativeMemory } from "@/lib/creative-memory/server";
 import { asMarketingClient } from "@/lib/marketing/db";
+import { asMasteringClient } from "@/lib/mastering/jobs";
+import { buildMasteringPreferenceProfile } from "@/lib/mastering/preferences";
 import { latestExactCalibrationByMoment } from "@/lib/studio/moment-calibration";
 import { asMomentsClient } from "@/lib/studio/moments-db";
 import { asArtistScopedOperationalClient } from "@/lib/studio/operational-db";
@@ -13,6 +15,7 @@ import {
   brandSettingMemoryItem,
   creativePreferenceMemoryItems,
   momentCalibrationMemoryItem,
+  masteringPreferenceMemoryItems,
   summarizeArtistMemory,
   verifiedLearningMemoryItem,
   type ArtistMemoryConsumer,
@@ -68,7 +71,8 @@ export async function loadArtistMemory(input: {
   const operational = asArtistScopedOperationalClient(input.db);
   const marketing = asMarketingClient(input.db);
   const moments = asMomentsClient(input.db);
-  const [brandResult, learningsResult, creativeMemory, calibrationResult] = await Promise.all([
+  const mastering = asMasteringClient(input.db);
+  const [brandResult, learningsResult, creativeMemory, calibrationResult, masteringJobsResult] = await Promise.all([
     operational
       .from("brand_settings")
       .select("*")
@@ -95,9 +99,17 @@ export async function loadArtistMemory(input: {
       .eq("artist_id", input.artistId)
       .order("created_at", { ascending: false })
       .limit(100),
+    mastering
+      .from("track_mastering_jobs")
+      .select("id,preset,result_payload")
+      .eq("owner_id", input.ownerId)
+      .eq("artist_id", input.artistId)
+      .eq("status", "completed")
+      .order("completed_at", { ascending: false })
+      .limit(20),
   ]);
 
-  const firstError = brandResult.error ?? learningsResult.error;
+  const firstError = brandResult.error ?? learningsResult.error ?? masteringJobsResult.error;
   if (firstError) throw new Error(firstError.message);
   if (calibrationResult.error && !missingCalibrationTable(calibrationResult.error)) {
     throw new Error(calibrationResult.error.message);
@@ -154,6 +166,24 @@ export async function loadArtistMemory(input: {
       }));
     }
   }
+
+  const masteringPreferences = buildMasteringPreferenceProfile(
+    (masteringJobsResult.data ?? []).map((job) => ({
+      id: job.id,
+      preset: job.preset,
+      result_payload: job.result_payload,
+    })),
+  );
+  items.push(...masteringPreferenceMemoryItems({
+    evidenceCount: masteringPreferences.evidenceCount,
+    approvedCount: masteringPreferences.approvedCount,
+    keptOriginalCount: masteringPreferences.keptOriginalCount,
+    preferredCreativeLufs: masteringPreferences.preferredCreativeLufs,
+    preferredLimiterGainReductionDb: masteringPreferences.preferredLimiterGainReductionDb,
+    preferredEqEnergy: masteringPreferences.preferredEqEnergy,
+    confidence: masteringPreferences.confidence,
+    observedAt: masteringPreferences.latestDecisionAt,
+  }));
 
   const now = Date.now();
   for (const row of (learningsResult.data ?? []) as unknown as LearningRow[]) {
