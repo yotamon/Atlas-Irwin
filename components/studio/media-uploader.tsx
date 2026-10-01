@@ -15,6 +15,7 @@ import {
   createVaultTrackFromMedia,
 } from "@/app/studio/growth-media-actions-safe";
 import { reportMediaUploadTransportFailure } from "@/app/studio/media-upload-diagnostics";
+import { createUploadedMasteringReference } from "@/app/studio/mastering-reference-actions";
 import { createClient } from "@/lib/supabase/client";
 import { ResumableUploadAuthorizationError, uploadResumableMedia } from "@/lib/supabase/resumable-upload";
 import {
@@ -161,6 +162,7 @@ export function MediaUploader({
   vaultMode = false,
   musicIntakeMode = false,
   releaseMasterMode = false,
+  masteringReferenceMode = false,
 }: {
   releaseId?: string;
   trackId?: string;
@@ -170,12 +172,16 @@ export function MediaUploader({
   vaultMode?: boolean;
   musicIntakeMode?: boolean;
   releaseMasterMode?: boolean;
+  masteringReferenceMode?: boolean;
 }) {
   const router = useRouter();
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const dragDepth = useRef(0);
   const masterIntake = vaultMode || musicIntakeMode;
+  const referenceIntake = masteringReferenceMode;
+  const audioOnly = masterIntake || releaseMasterMode || referenceIntake;
+  const singleAudio = releaseMasterMode || referenceIntake;
   const trackScopedMaster = Boolean(releaseMasterMode && trackId);
   const [items, setItems] = useState<UploadItem[]>([]);
   const [dragging, setDragging] = useState(false);
@@ -190,7 +196,7 @@ export function MediaUploader({
     const source = Array.from(files);
     const rejectedEmpty = source.filter((file) => file.size <= 0);
     const rejectedSize = source.filter((file) => file.size > PUBLIC_LIMIT);
-    const rejectedType = source.filter((file) => (masterIntake || releaseMasterMode) && !file.type.startsWith("audio/"));
+    const rejectedType = source.filter((file) => audioOnly && !file.type.startsWith("audio/"));
     const rejected = new Set([...rejectedEmpty, ...rejectedSize, ...rejectedType]);
     const next = source.filter((file) => !rejected.has(file));
 
@@ -202,10 +208,10 @@ export function MediaUploader({
     setSelectionError(messages.join(" "));
     if (!next.length) return;
 
-    if (releaseMasterMode) {
+    if (singleAudio) {
       const file = next[0];
       setItems([{ file, role: "master_audio", state: "ready" }]);
-      if (next.length > 1) setSelectionError((current) => `${current ? `${current} ` : ""}Only one track master can be selected at a time.`);
+      if (next.length > 1) setSelectionError((current) => `${current ? `${current} ` : ""}${referenceIntake ? "Choose one reference at a time." : "Only one track master can be selected at a time."}`);
       return;
     }
 
@@ -255,9 +261,11 @@ export function MediaUploader({
           ? item.state === "paused" ? "Checking saved upload progress…" : "Preparing resumable upload…"
           : releaseMasterMode
             ? "Uploading master and preparing Music Intelligence…"
-            : masterIntake
-              ? "Uploading master…"
-              : "Uploading securely…",
+            : referenceIntake
+              ? "Uploading reference for mastering analysis…"
+              : masterIntake
+                ? "Uploading master…"
+                : "Uploading securely…",
       } : entry));
       let uploadTarget: UploadTarget | null = item.target ?? null;
       let registered = false;
@@ -368,11 +376,13 @@ export function MediaUploader({
           description,
           tags: releaseMasterMode
             ? [scopedTags, trackId ? `track:${trackId}` : "release-master"].filter(Boolean).join(",")
-            : musicIntakeMode
-              ? [scopedTags, "unreleased", "music"].filter(Boolean).join(",")
-              : vaultMode
-                ? [scopedTags, "unreleased", "vault"].filter(Boolean).join(",")
-                : scopedTags,
+            : referenceIntake
+              ? [scopedTags, "mastering-reference"].filter(Boolean).join(",")
+              : musicIntakeMode
+                ? [scopedTags, "unreleased", "music"].filter(Boolean).join(",")
+                : vaultMode
+                  ? [scopedTags, "unreleased", "vault"].filter(Boolean).join(",")
+                  : scopedTags,
           release_id: contentItemId || masterIntake ? "" : releaseId ?? "",
           is_primary: primary ? "on" : "",
           ...dimensions,
@@ -386,6 +396,12 @@ export function MediaUploader({
           attachForm.set("media_asset_id", result.id);
           attachForm.set("role", item.role);
           await attachContentMediaV2(attachForm);
+        }
+        if (referenceIntake) {
+          const referenceForm = new FormData();
+          referenceForm.set("media_asset_id", result.id);
+          referenceForm.set("label", items.length === 1 && title.trim() ? title.trim() : cleanAudioTitle(item.file.name));
+          await createUploadedMasteringReference(referenceForm);
         }
         if (masterIntake) {
           const vaultForm = new FormData();
@@ -420,7 +436,9 @@ export function MediaUploader({
                 : releaseMasterResult?.analysisQueued
                   ? "Master attached. Ensemblis is analyzing its structure and strongest hooks."
                   : "Master attached. Analysis can be retried from the release when the media worker is available."
-            : musicIntakeMode
+            : referenceIntake
+              ? "Reference uploaded. Ensemblis is measuring it for mastering comparison."
+              : musicIntakeMode
               ? "Master added to Music. Ensemblis is understanding its structure and strongest moments."
               : vaultMode
                 ? "Master is in the Vault. Free audio analysis was queued when the media worker is available."
@@ -451,7 +469,7 @@ export function MediaUploader({
       }
     }
 
-    const workerCount = releaseMasterMode ? 1 : Math.min(MAX_PARALLEL_UPLOADS, pending.length);
+    const workerCount = singleAudio ? 1 : Math.min(MAX_PARALLEL_UPLOADS, pending.length);
     await Promise.all(Array.from({ length: workerCount }, async () => {
       while (cursor < pending.length) {
         const next = pending[cursor];
@@ -472,8 +490,8 @@ export function MediaUploader({
   const pendingItems = items.filter((item) => item.state !== "done");
   const allPendingResume = pendingItems.length > 0 && pendingItems.every((item) => item.recovery === "resume");
   const allPendingRestart = pendingItems.length > 0 && pendingItems.every((item) => item.recovery === "restart");
-  const contextualAttach = Boolean(releaseId || contentItemId || masterIntake || releaseMasterMode);
-  const pickerLabel = releaseMasterMode ? "Choose master" : musicIntakeMode ? "Choose mastered tracks" : vaultMode ? "Choose masters" : "Choose files";
+  const contextualAttach = Boolean(releaseId || contentItemId || masterIntake || releaseMasterMode || referenceIntake);
+  const pickerLabel = referenceIntake ? "Choose reference" : releaseMasterMode ? "Choose master" : musicIntakeMode ? "Choose mastered tracks" : vaultMode ? "Choose masters" : "Choose files";
   const actionLabel = busy
     ? `Uploading ${activeUploads || 1} file${activeUploads === 1 ? "" : "s"}…`
     : completed === items.length && items.length
@@ -484,9 +502,11 @@ export function MediaUploader({
           ? pendingItems.length === 1 ? "Start over" : `Start over ${pendingItems.length} uploads`
           : pausedUploads || failedUploads
             ? "Continue uploads"
-            : releaseMasterMode
-              ? "Upload & analyze master"
-              : musicIntakeMode
+            : referenceIntake
+              ? "Upload & analyze reference"
+              : releaseMasterMode
+                ? "Upload & analyze master"
+                : musicIntakeMode
                 ? `Add ${items.length || ""} mastered track${items.length === 1 ? "" : "s"}`
                 : vaultMode
                   ? `Import ${items.length || ""} to Vault`
@@ -495,7 +515,7 @@ export function MediaUploader({
                     : `Add ${items.length || ""} to library`;
 
   return (
-    <div className={`media-uploader${vaultMode ? " vault-media-uploader" : ""}${musicIntakeMode ? " music-intake-uploader" : ""}${releaseMasterMode ? " release-master-uploader" : ""}`}>
+    <div className={`media-uploader${vaultMode ? " vault-media-uploader" : ""}${musicIntakeMode ? " music-intake-uploader" : ""}${releaseMasterMode ? " release-master-uploader" : ""}${referenceIntake ? " mastering-reference-uploader" : ""}`}>
       <label
         className={`media-dropzone${dragging ? " dragging" : ""}`}
         htmlFor={inputId}
@@ -518,8 +538,8 @@ export function MediaUploader({
         }}
       >
         <FiUploadCloud aria-hidden />
-        <strong>{releaseMasterMode ? trackScopedMaster ? "Drop this track's master here" : "Drop the release master here" : musicIntakeMode ? "Drop mastered tracks here" : vaultMode ? "Drop unreleased masters here" : "Drop media here"}</strong>
-        <span>{releaseMasterMode ? trackScopedMaster ? "WAV, MP3 or another audio master. It stays attached to this exact song and receives its own Music Intelligence." : "WAV, MP3 or another audio master. Ensemblis will attach it to this release and analyze its structure and strongest hooks." : musicIntakeMode ? "Audio only. Title is optional; Ensemblis starts understanding structure and strongest moments automatically." : vaultMode ? "Audio masters only. Each file becomes an independent Vault track." : "Images, video, audio, masters, stems, or ZIP files"}</span>
+        <strong>{referenceIntake ? "Drop a mastering reference here" : releaseMasterMode ? trackScopedMaster ? "Drop this track's master here" : "Drop the release master here" : musicIntakeMode ? "Drop mastered tracks here" : vaultMode ? "Drop unreleased masters here" : "Drop media here"}</strong>
+        <span>{referenceIntake ? "Audio only. Ensemblis measures it for mastering comparison and does not add it to Music." : releaseMasterMode ? trackScopedMaster ? "WAV, MP3 or another audio master. It stays attached to this exact song and receives its own Music Intelligence." : "WAV, MP3 or another audio master. Ensemblis will attach it to this release and analyze its structure and strongest hooks." : musicIntakeMode ? "Audio only. Title is optional; Ensemblis starts understanding structure and strongest moments automatically." : vaultMode ? "Audio masters only. Each file becomes an independent Vault track." : "Images, video, audio, masters, stems, or ZIP files"}</span>
         <small>Maximum {humanSize(PUBLIC_LIMIT)} per file. Large files resume safely and automatically switch to a secure direct upload if the resumable route cannot complete.</small>
         <span className="button media-dropzone-cta" aria-hidden="true">{pickerLabel}</span>
       </label>
@@ -527,9 +547,9 @@ export function MediaUploader({
         id={inputId}
         ref={inputRef}
         className="sr-only"
-        multiple={!releaseMasterMode}
+        multiple={!singleAudio}
         type="file"
-        accept={masterIntake || releaseMasterMode ? "audio/*" : "image/*,video/*,audio/*,.zip"}
+        accept={audioOnly ? "audio/*,.wav,.flac,.aif,.aiff" : "image/*,video/*,audio/*,.zip"}
         onChange={(event) => {
           if (event.target.files) addFiles(event.target.files);
           event.target.value = "";

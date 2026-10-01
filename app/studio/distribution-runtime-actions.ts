@@ -13,6 +13,9 @@ import {
   type DistributionState,
 } from "@/lib/distribution/domain";
 import { providerForDistributionAccount } from "@/lib/distribution/provider-account";
+import { loadMasterReadinessByTrack } from "@/lib/mastering/distribution-readiness";
+import type { MasterReadiness } from "@/lib/mastering/readiness";
+import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import type { DistributionProvider, ProviderStore } from "@/lib/distribution/provider";
 import type { Json, Release, Track } from "@/types/database";
 import type {
@@ -38,6 +41,7 @@ type RuntimeContext = {
   trackMetadata: DistributionTrackMetadata[];
   writers: DistributionTrackWriter[];
   contributors: DistributionTrackContributor[];
+  masterReadinessByTrack: Record<string, MasterReadiness>;
 };
 
 function bool(form: FormData, key: string) {
@@ -96,6 +100,7 @@ function issueFingerprint(issue: DistributionIssue) {
 
 async function loadContext(releaseId: string): Promise<RuntimeContext> {
   const { supabase, user } = await requireStudioAdmin();
+  const artist = await resolveDefaultArtistContext(supabase, user);
   const db = supabase as unknown as Db;
   const [releaseResult, tracksResult, configResult, accountResult, profilesResult, metadataResult, writersResult, contributorsResult] = await Promise.all([
     db.from("releases").select("*").eq("id", releaseId).eq("owner_id", user.id).single(),
@@ -113,6 +118,12 @@ async function loadContext(releaseId: string): Promise<RuntimeContext> {
   if (!releaseResult.data) throw new Error("Release not found or unauthorized.");
   const tracks = tracksResult.data ?? [];
   const trackIds = new Set(tracks.map((track) => track.id));
+  const masterReadinessByTrack = await loadMasterReadinessByTrack(
+    supabase,
+    user.id,
+    artist.artistId,
+    tracks,
+  );
   return {
     db,
     userId: user.id,
@@ -124,6 +135,7 @@ async function loadContext(releaseId: string): Promise<RuntimeContext> {
     trackMetadata: (metadataResult.data ?? []).filter((row) => trackIds.has(row.track_id)),
     writers: (writersResult.data ?? []).filter((row) => trackIds.has(row.track_id)),
     contributors: (contributorsResult.data ?? []).filter((row) => trackIds.has(row.track_id)),
+    masterReadinessByTrack,
   };
 }
 
@@ -194,6 +206,7 @@ async function validateContext(context: RuntimeContext) {
     artistProfiles: context.artistProfiles,
     providerIssues,
     creditsReady: creditsReadiness(context),
+    masterReadinessByTrack: context.masterReadinessByTrack,
   });
   return { readiness, stores, selectedStoreIds, providerSnapshot };
 }

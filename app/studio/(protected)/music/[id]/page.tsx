@@ -7,6 +7,8 @@ import { AnalysisSubmitButton } from "@/components/studio/analysis-submit-button
 import { CatalogTrackWorkspace } from "@/components/studio/catalog-track-workspace";
 import { LyricsIntelligencePanel } from "@/components/studio/lyrics-intelligence-panel";
 import { MasteringInspectorPanel } from "@/components/studio/mastering-inspector-panel";
+import { MasterReadinessCard } from "@/components/studio/master-readiness-card";
+import { MasteringReferencesPanel } from "@/components/studio/mastering-references-panel";
 import { MusicIntelligencePreview } from "@/components/studio/music-intelligence-preview";
 import { ObjectHeader } from "@/components/studio/object-header";
 import { ProcessingState } from "@/components/studio/processing-state";
@@ -15,13 +17,14 @@ import { TrackPreview } from "@/components/studio/track-preview";
 import { ObjectActionBar, type ObjectAction } from "@/components/studio/ux-v4-widgets";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
+import { deriveMasterReadiness } from "@/lib/mastering/readiness";
+import { asMasteringClient } from "@/lib/mastering/jobs";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asGrowthClient } from "@/lib/studio/growth-db";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import {
   describeMusicIngestionProgress,
   describeTrackAnalysis,
-  hasMusicIntelligenceMap,
 } from "@/lib/studio/track-analysis-state";
 import type { Json, Track } from "@/types/database";
 
@@ -48,15 +51,6 @@ function duration(seconds: number | null) {
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
-}
-
-function masteringStatus(value: unknown) {
-  const inspector = asRecord(asRecord(value).mastering_inspector);
-  const status = inspector.status;
-  if (status === "fix_before_release") return "Fix before release";
-  if (status === "ready_review_suggested") return "Review suggested";
-  if (status === "ready") return "Ready";
-  return null;
 }
 
 function describeAnalysisProcessing(status: string, isRefreshing: boolean): AnalysisProcessingCopy {
@@ -124,6 +118,7 @@ export default async function TrackWorkspacePage({
   const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
   const growth = asGrowthClient(supabase);
   const music = asArtistScopedMusicClient(supabase);
+  const masteringDb = asMasteringClient(supabase);
 
   const { data: vaultTrack, error: vaultError } = await growth
     .from("track_vault")
@@ -173,14 +168,15 @@ export default async function TrackWorkspacePage({
     notFound();
   }
 
-  const { data: catalogTracks, error: catalogError } = await growth
-    .from("track_vault")
-    .select("id,title,audio_profile")
+  const { data: masteringReferences, error: referencesError } = await masteringDb
+    .from("mastering_references")
+    .select("label,reference_signature,track_vault_id")
     .eq("owner_id", user.id)
     .eq("artist_id", artist.artistId)
-    .neq("id", id)
+    .eq("active", true)
+    .eq("status", "ready")
     .limit(24);
-  if (catalogError) throw new Error(catalogError.message);
+  if (referencesError) throw new Error(referencesError.message);
 
   let release: { id: string; title: string; artwork_url: string | null; cover_alt: string | null; release_date: string | null } | null = null;
   let releaseTrack: Track | null = null;
@@ -241,7 +237,23 @@ export default async function TrackWorkspacePage({
   const sections = Array.isArray(musicMap.sections) ? musicMap.sections.length : 0;
   const hooks = Array.isArray(musicMap.hook_candidates) ? musicMap.hook_candidates.length : 0;
   const bpm = typeof musicMap.bpm === "number" && Number.isFinite(musicMap.bpm) ? Math.round(musicMap.bpm) : null;
-  const mastering = masteringStatus(vaultTrack.audio_profile);
+  const masterReadiness = deriveMasterReadiness(vaultTrack.audio_profile, {
+    audioUrl: vaultTrack.audio_url,
+    mediaAssetId: vaultTrack.media_asset_id,
+    analysisActive: analysis.isActive && !analysis.hasMusicMap,
+    analysisFailed: analysis.needsRecovery && !analysis.hasMusicMap,
+  });
+  const mastering = masterReadiness.status === "ready"
+    ? "Ready"
+    : masterReadiness.status === "review"
+      ? "Review suggested"
+      : masterReadiness.status === "fix_required"
+        ? "Fix before release"
+        : masterReadiness.status === "pending"
+          ? "Checking"
+          : vaultTrack.audio_url
+            ? "Unverified"
+            : null;
   const createHref = href(`/studio/create?intent=asset&track=${releaseTrack?.id ?? vaultTrack.id}`);
   const mixTrackId = releaseTrack?.id ?? vaultTrack.linked_track_id;
   const mixHref = href(mixTrackId ? `/studio/music/automix?track=${mixTrackId}` : "/studio/music/automix");
@@ -259,9 +271,14 @@ export default async function TrackWorkspacePage({
     { label: "Mastering", href: "#mastering" },
     ...(releaseTrack ? [{ label: "Stems", href: "#stems" }, { label: "Lyrics", href: "#lyrics" }] : []),
   ];
-  const catalogProfiles = (catalogTracks ?? [])
-    .filter((track) => hasMusicIntelligenceMap(track.audio_profile))
-    .map((track) => ({ title: track.title, musicMap: track.audio_profile as Json }));
+  const catalogProfiles = (masteringReferences ?? [])
+    .filter((reference) => reference.track_vault_id !== vaultTrack.id)
+    .map((reference) => ({
+    title: reference.label,
+    musicMap: {
+      mastering_inspector: { reference_signature: reference.reference_signature },
+    } as Json,
+  }));
 
   return (
     <div className="studio-v2-page track-object-page">
@@ -422,12 +439,29 @@ export default async function TrackWorkspacePage({
         </div>
         {analysis.hasMusicMap ? (
           <>
-            <ActiveMasteringPanel trackId={vaultTrack.id} sourceAudioUrl={vaultTrack.audio_url} />
-            <MasteringInspectorPanel
+            <MasterReadinessCard
+              readiness={masterReadiness}
               audioUrl={vaultTrack.audio_url}
-              musicMap={vaultTrack.audio_profile}
-              catalogProfiles={catalogProfiles}
+              continueHref={release ? href(`/studio/releases/${release.id}/distribution`) : null}
+              replaceHref={release ? href(`/studio/releases/${release.id}?stage=overview#master-audio`) : href("/studio/music/import")}
             />
+            <ActiveMasteringPanel
+              trackId={vaultTrack.id}
+              sourceAudioUrl={vaultTrack.audio_url}
+              readiness={masterReadiness}
+            />
+            <MasteringReferencesPanel
+              trackId={vaultTrack.id}
+              canAddCurrent={masterReadiness.status === "ready" || masterReadiness.status === "review"}
+            />
+            <details className="track-object-advanced" id="mastering-technical">
+              <summary>Technical mastering details</summary>
+              <MasteringInspectorPanel
+                audioUrl={vaultTrack.audio_url}
+                musicMap={vaultTrack.audio_profile}
+                catalogProfiles={catalogProfiles}
+              />
+            </details>
           </>
         ) : (
           <div className="v2-calm-state compact">

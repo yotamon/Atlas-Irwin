@@ -94,7 +94,7 @@ The original Atlas-specific architecture has been substantially transformed. `ma
 
 - explicit Workspace → Artist ownership and active-artist context;
 - artist-scoped music, marketing, growth, automation and audience data;
-- Track Intelligence V4, musical timeline, section/hook analysis, mastering inspection and beat stability;
+- Track Intelligence V4, musical timeline, section/hook analysis, Master Readiness, temporal/beat stability and source-preserving Active Mastering;
 - Lyrics Intelligence, Stem Intelligence and Audio Scenes;
 - artist-facing Best Moments capped to a small curated set with complete musical boundaries and source lineage;
 - Moment-first and outcome-first Create with exact lineage;
@@ -261,6 +261,8 @@ The canonical next step is [`docs/ensemblis-ux-architecture-v4.md`](ensemblis-ux
 - replace long multi-tool pages with guided workflows, widgets and inspectors;
 - preserve specialist capabilities and routes as implementation/advanced layers without making them the default mental model;
 - use AutoMix as the first reference migration from stacked specialist panels to Source → Intent → Build → Review → Render.
+
+PR #265 implements the [`Master Readiness`](master-readiness-experience.md) reference vertical slice. Mastering Inspector, Active Mastering and Distribution audio checks now share one canonical Track-centered journey: readiness decision → exact listening evidence → only relevant corrective action → loudness-matched verification → explicit approval → exact-track Distribution gate. Trusted references are explicit, stale waveform evidence fails closed, and the default UI answers whether the current master is ready before exposing creative mastering directions or engineering meters.
 
 #### P1.6 Rebrand implementation / Atlas decoupling - #59 - **Complete**
 Ensemblis is the product identity. Atlas Irwin remains artist data/reference production content.

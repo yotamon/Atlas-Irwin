@@ -8,18 +8,20 @@ Active Mastering extends Mastering Inspector from deterministic diagnosis into a
 2. A mastering candidate is a separate media asset with source, DSP plan, targets, iterations and final QA stored in `track_mastering_jobs`.
 3. Only a candidate that passes the final closed-loop checks can be promoted to the canonical master.
 4. Promotion invalidates stale Track Intelligence and automatically re-runs analysis against the promoted waveform.
-5. Artist-catalog tonal matching is descriptive and conservative. It is enabled only when at least three analyzed catalog masters exist.
-6. No generic tonal curve is treated as “correct”. Without enough artist references, Active Mastering focuses on dynamics, loudness, true-peak safety and delivery integrity.
+5. Artist-specific tonal matching is descriptive and conservative and uses only explicit trusted mastering references.
+6. No generic tonal curve is treated as “correct”. Without enough trusted references, Active Mastering focuses on dynamics, loudness, true-peak safety and delivery integrity.
+7. A `streaming_safe` intent preserves source loudness, tone and dynamics as closely as possible and changes only the headroom needed by measured streaming/codec risk.
 
 ## Runtime flow
 
 ```text
 Canonical master
+  -> Master Readiness decision
   -> Mastering Inspector evidence
-  -> preset + artist-catalog target builder
+  -> contextual intent + trusted-reference target builder
   -> constrained DSP plan
-     - 20 Hz cleanup
-     - bounded reference EQ (max +/-1.5 dB)
+     - streaming_safe: no cleanup EQ, catalog EQ or compression
+     - creative directions: 20 Hz cleanup + bounded trusted-reference EQ when enough references exist
      - gentle compression only when dynamic headroom exists
      - no blind stereo widening
   -> 48 kHz / 24-bit premaster
@@ -33,13 +35,14 @@ Canonical master
   -> Track Intelligence re-analysis
 ```
 
-## Presets
+## Mastering intents
 
+- **Streaming-safe**: source-preserving corrective path for measured true-peak/codec headroom risk. It keeps source integrated loudness, disables catalog EQ and compression, and chooses true-peak headroom from measured loudness/risk.
 - **Balanced**: clean, controlled and release-ready. Default target around -10 LUFS with conservative true-peak headroom.
 - **Punchy**: slightly more forward target around -9 LUFS, but compression is skipped when the source is already dynamically constrained.
 - **Dynamic**: target around -11.5 LUFS and never adds master-bus compression.
 
-These are starting targets, not platform normalization targets. If at least three artist-catalog references exist, the target loudness is blended toward the artist's own median and clamped to a safe range. Codec-stress evidence can automatically increase true-peak headroom.
+Balanced, Punchy and Dynamic are creative starting targets, not platform normalization targets. If at least three trusted references exist, their target loudness can blend toward the trusted median and stays clamped to a safe range. `streaming_safe` never uses that catalog blend. Codec-stress evidence can automatically increase true-peak headroom.
 
 ## Closed-loop acceptance
 
@@ -53,9 +56,23 @@ A candidate must satisfy all of the following before it can be promoted:
 
 If the first render does not pass, the processor performs one safer iteration with more peak headroom and, when needed, a slightly lower loudness target. A non-passing result is still available for review/download, but cannot replace the canonical master.
 
+## Listen Lab
+
+Verified candidates use the shared Listen Lab before promotion:
+
+- sample-position-synchronized Original / Candidate A/B;
+- loudness matching on by default;
+- 12-second repeatable loops;
+- browser-side Candidate mono fold-down for translation checks;
+- explicit trusted-reference audition with a selectable reference;
+- keyboard A/B/Mono/Reference switching;
+- no automatic playback.
+
+Reference playback is intentionally independent because the reference may be a different song. A streaming/codec listening mode is shown only when Ensemblis has a real generated preview asset; codec-stress measurements are never presented as fake “Spotify audio”.
+
 ## Durable execution
 
-Active Mastering uses the existing single-concurrency Vercel Sandbox Media Worker. Jobs are durable in Supabase, callbacks use one-time SHA-256-hashed credentials, and late results are rejected when the source master changed during rendering.
+Active Mastering uses the existing single-concurrency Vercel Sandbox Media Worker. Jobs are durable in Supabase, callbacks use one-time SHA-256-hashed credentials, and late results are rejected when the source master changed during rendering. Uploaded mastering references reuse the same durable worker and source-lineage validation without creating catalog Tracks.
 
 The worker bootstrap explicitly downloads every V4 audio runtime dependency, including Mastering Inspector and Active Mastering, so a fresh Sandbox does not depend on files left by an older persistent snapshot.
 

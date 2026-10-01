@@ -1,3 +1,4 @@
+import type { MasterReadiness } from "@/lib/mastering/readiness";
 import type { Json, Release, Track } from "@/types/database";
 import type {
   DistributionArtistProfile,
@@ -15,6 +16,7 @@ export type DistributionArtistDecision = {
   detail: string;
   section: "release" | "tracks" | "credits" | "rights" | "profiles" | "delivery";
   severity: "required" | "decision" | "review";
+  href?: string;
 };
 
 export type DistributionArtistState = {
@@ -50,6 +52,7 @@ export function deriveDistributionArtistState(input: {
   contributors: DistributionTrackContributor[];
   artistProfiles: DistributionArtistProfile[];
   openIssues?: DistributionValidationIssue[];
+  masterReadinessByTrack?: Record<string, MasterReadiness>;
 }): DistributionArtistState {
   const decisions: DistributionArtistDecision[] = [];
   const meta = input.releaseMetadata;
@@ -80,7 +83,18 @@ export function deriveDistributionArtistState(input: {
   const metadataByTrack = new Map(input.trackMetadata.map((row) => [row.track_id, row]));
   for (const track of input.tracks) {
     if (!track.audio_url) {
-      pushUnique(decisions, { key: `track.${track.id}.master`, title: `Add the final master for ${track.title}`, detail: "Every delivered track needs canonical master audio.", section: "tracks", severity: "required" });
+      pushUnique(decisions, { key: `track.${track.id}.master`, title: `Add the final master for ${track.title}`, detail: "Every delivered track needs canonical master audio.", section: "tracks", severity: "required", href: `/studio/music/${track.id}#mastering` });
+    } else {
+      const readiness = input.masterReadinessByTrack?.[track.id];
+      if (!readiness || readiness.distributionGate === "unverified") {
+        pushUnique(decisions, { key: `track.${track.id}.master_verification`, title: `Verify the current master for ${track.title}`, detail: "Ensemblis needs fresh Master Readiness evidence for this exact waveform before delivery.", section: "tracks", severity: "required", href: `/studio/music/${track.id}#mastering` });
+      } else if (readiness.distributionGate === "waiting") {
+        pushUnique(decisions, { key: `track.${track.id}.master_waiting`, title: `${track.title} is still being verified`, detail: "No action is needed while Track Intelligence finishes. Distribution stays locked until the current waveform is verified.", section: "tracks", severity: "required", href: `/studio/music/${track.id}#mastering` });
+      } else if (readiness.distributionGate === "block") {
+        pushUnique(decisions, { key: `track.${track.id}.master_fix`, title: `Fix the master for ${track.title}`, detail: readiness.summary, section: "tracks", severity: "required", href: `/studio/music/${track.id}#mastering` });
+      } else if (readiness.distributionGate === "review") {
+        pushUnique(decisions, { key: `track.${track.id}.master_review`, title: `Listen once more to ${track.title}`, detail: readiness.summary, section: "tracks", severity: "review", href: `/studio/music/${track.id}#mastering` });
+      }
     }
     const trackMeta = metadataByTrack.get(track.id);
     if (!trackMeta) {

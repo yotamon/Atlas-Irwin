@@ -434,6 +434,15 @@ export function scheduleMediaWorkerSandboxCleanup() {
     }
     if (!dispatched) {
       try {
+        const { kickMasteringReferenceQueue } = await import("@/lib/mastering/reference-jobs");
+        const result = await kickMasteringReferenceQueue();
+        dispatched = result.dispatched;
+      } catch {
+        // Reference analysis is durable. Give full AutoMix a chance below.
+      }
+    }
+    if (!dispatched) {
+      try {
         const { kickAutoMixQueue } = await import("@/lib/automix/jobs");
         const result = await kickAutoMixQueue();
         dispatched = result.dispatched;

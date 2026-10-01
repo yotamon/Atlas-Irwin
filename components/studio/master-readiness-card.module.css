@@ -1,0 +1,227 @@
+﻿.root {
+  display: grid;
+  gap: 1rem;
+  padding: clamp(1rem, 2.5vw, 1.35rem);
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius);
+  background: color-mix(in srgb, var(--en-surface-raised) 58%, transparent);
+}
+
+.root[data-tone="ready"] {
+  border-color: color-mix(in srgb, var(--en-accent) 34%, var(--en-line));
+}
+
+.root[data-tone="critical"] {
+  border-color: color-mix(in srgb, var(--en-danger) 56%, var(--en-line));
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.heroCopy {
+  display: grid;
+  gap: .42rem;
+  max-width: 54rem;
+}
+
+.statusLine {
+  display: flex;
+  gap: .65rem;
+  align-items: center;
+}
+
+.statusLine h3 {
+  margin: 0;
+  font-size: clamp(1.45rem, 3.5vw, 2.35rem);
+  line-height: 1.05;
+  letter-spacing: -.035em;
+}
+
+.statusIcon {
+  display: grid;
+  place-items: center;
+  width: 1.8rem;
+  height: 1.8rem;
+  flex: 0 0 auto;
+  border: 1px solid var(--en-line-strong);
+  border-radius: 999px;
+  font-weight: 800;
+}
+
+.root[data-tone="ready"] .statusIcon { color: var(--en-accent); }
+.root[data-tone="critical"] .statusIcon { color: var(--en-danger); }
+
+.heroCopy p,
+.finding p,
+.secondaryAction span,
+.calm span {
+  margin: 0;
+  color: var(--en-muted);
+  line-height: 1.5;
+}
+
+.heroAction {
+  display: grid;
+  justify-items: end;
+  gap: .45rem;
+  min-width: 12rem;
+}
+
+.heroAction small {
+  color: var(--en-muted);
+  font-size: var(--en-text-xs);
+  text-align: right;
+}
+
+.noAction {
+  padding: .55rem 0;
+  color: var(--en-accent);
+}
+
+.signals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--en-line);
+  border-bottom: 1px solid var(--en-line);
+}
+
+.signals > div {
+  display: grid;
+  gap: .18rem;
+  padding: .8rem;
+  border-right: 1px solid var(--en-line);
+}
+
+.signals > div:last-child { border-right: 0; }
+.signals span { color: var(--en-muted); font-size: .72rem; }
+.signals strong { font-size: .86rem; }
+
+.findings {
+  display: grid;
+  gap: .6rem;
+}
+
+.sectionHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: end;
+}
+
+.sectionHead h4 {
+  margin: .12rem 0 0;
+  font-size: 1rem;
+}
+
+.sectionHead > span {
+  display: grid;
+  place-items: center;
+  min-width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  background: var(--en-surface);
+  font-size: .72rem;
+  font-weight: 700;
+}
+
+.finding {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  padding: .82rem;
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-sm);
+  background: color-mix(in srgb, var(--en-bg) 72%, transparent);
+}
+
+.finding[data-severity="critical"] {
+  border-color: color-mix(in srgb, var(--en-danger) 50%, var(--en-line));
+}
+
+.findingCopy {
+  display: grid;
+  gap: .2rem;
+}
+
+.findingCopy small {
+  color: var(--en-muted);
+  font-size: .62rem;
+  font-weight: 760;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+}
+
+.findingCopy strong { font-size: .8rem; }
+.findingCopy p { font-size: .7rem; }
+
+.calm,
+.secondaryAction {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  padding: .82rem;
+  border-radius: var(--en-radius-sm);
+  background: color-mix(in srgb, var(--en-bg) 65%, transparent);
+}
+
+.calm {
+  display: grid;
+  gap: .18rem;
+}
+
+.calm span,
+.secondaryAction span { font-size: .7rem; }
+
+.secondaryAction > div {
+  display: grid;
+  gap: .18rem;
+}
+
+@media (max-width: 720px) {
+  .hero {
+    grid-template-columns: 1fr;
+  }
+
+  .heroAction {
+    justify-items: stretch;
+    min-width: 0;
+  }
+
+  .heroAction small {
+    text-align: left;
+  }
+
+  .signals {
+    grid-template-columns: 1fr;
+  }
+
+  .signals > div {
+    border-right: 0;
+    border-bottom: 1px solid var(--en-line);
+  }
+
+  .signals > div:last-child { border-bottom: 0; }
+
+  .finding,
+  .secondaryAction {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .finding {
+    display: grid;
+  }
+
+  .finding :global(.button),
+  .secondaryAction :global(.button) {
+    width: 100%;
+    justify-content: center;
+  }
+}
+

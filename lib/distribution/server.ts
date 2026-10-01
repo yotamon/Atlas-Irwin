@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { deriveDistributionArtistState, type DistributionArtistState } from "@/lib/distribution/artist-facing";
+import { loadMasterReadinessByTrack } from "@/lib/mastering/distribution-readiness";
 import type { Database } from "@/types/database";
 import type { DistributionDatabase } from "@/types/distribution-database";
 
@@ -32,6 +33,7 @@ export async function loadDistributionArtistState(
   if (!release) return null;
   const tracks = tracksResult.data ?? [];
   const trackIds = new Set(tracks.map((track) => track.id));
+  const masterReadinessByTrack = await loadMasterReadinessByTrack(client, ownerId, artistId, tracks);
   return deriveDistributionArtistState({
     release,
     tracks,
@@ -42,5 +44,6 @@ export async function loadDistributionArtistState(
     contributors: (contributorsResult.data ?? []).filter((row) => trackIds.has(row.track_id)),
     artistProfiles: (profilesResult.data ?? []).filter((row) => row.artist_name === release.artist),
     openIssues: issuesResult.data ?? [],
+    masterReadinessByTrack,
   });
 }
