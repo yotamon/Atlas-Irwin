@@ -288,3 +288,11 @@ test("server refuses mastering over blocking source defects", async () => {
   assert.match(actions, /will not master over a blocking source defect/);
   assert.match(controls, /!sourceRepairRequired \? <details/);
 });
+
+test("private mastering references use temporary signed URLs for Listen Lab playback", async () => {
+  const panel = await source("components/studio/active-mastering-panel.tsx");
+  assert.match(panel, /select\("label,audio_url,media_asset_id,reference_signature,track_vault_id,created_at"\)/);
+  assert.match(panel, /asset\?\.visibility === "private"/);
+  assert.match(panel, /createSignedUrl\(asset\.storage_path, 60 \* 60\)/);
+  assert.doesNotMatch(panel, /\.not\("audio_url", "is", null\)/);
+});
