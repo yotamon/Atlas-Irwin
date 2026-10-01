@@ -12,8 +12,10 @@ test("recovery drill is protected, manual and never publishes production dumps",
   assert.match(workflow, /environment:\s*Production/);
   assert.match(workflow, /supabase\/setup-cli@v2/);
   assert.match(workflow, /version:\s*2\.111\.0/);
-  assert.match(workflow, /supabase db dump[\s\S]*--role-only/);
-  assert.match(workflow, /supabase db dump[\s\S]*schema\.sql/);
+  assert.match(workflow, /supabase db dump[\s\S]*--db-url[\s\S]*--role-only/);
+  assert.match(workflow, /supabase db dump[\s\S]*--db-url[\s\S]*schema\.sql/);
+  assert.doesNotMatch(workflow, /supabase link --project-ref/);
+  assert.doesNotMatch(workflow, /for name in SUPABASE_ACCESS_TOKEN/);
   assert.match(workflow, /supabase db dump[\s\S]*--data-only/);
   assert.match(workflow, /supabase start/);
   assert.match(workflow, /roles\.sql[\s\S]*schema\.sql[\s\S]*data\.sql/);
