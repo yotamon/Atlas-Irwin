@@ -71,7 +71,7 @@ The workflow:
 2. Captures production critical row counts and public RLS/policy fingerprint.
 3. Creates ephemeral `roles.sql`, `schema.sql` and `data.sql` with pinned Supabase CLI.
 4. SHA-256 checksums all dump files.
-5. Queries Supabase's upgrade eligibility endpoint and records only non-secret eligibility metadata.
+5. Queries Supabase's upgrade eligibility endpoint when a Management API token is provisioned; restore verification does not depend on that optional control-plane credential.
 6. Starts a fresh local Supabase stack on the CI runner.
 7. Restores roles → schema → data in one fail-closed restore transaction.
 8. Requires exact critical row-count and RLS/policy fingerprint equality.
