@@ -25,12 +25,16 @@ jobs:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
-      BACKUP_DIR: ${{ runner.temp }}/ensemblis-recovery-backup
-      LOCAL_DIR: ${{ runner.temp }}/ensemblis-recovery-local
       PROD_PGHOST: aws-0-eu-central-1.pooler.supabase.com
       PROD_PGPORT: "5432"
 
     steps:
+      - name: Prepare ephemeral recovery paths
+        shell: bash
+        run: |
+          echo "BACKUP_DIR=$RUNNER_TEMP/ensemblis-recovery-backup" >> "$GITHUB_ENV"
+          echo "LOCAL_DIR=$RUNNER_TEMP/ensemblis-recovery-local" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
