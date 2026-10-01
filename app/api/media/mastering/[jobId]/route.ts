@@ -1,4 +1,9 @@
 import { NextResponse } from "next/server";
+import {
+  masteringChunkManifest,
+  masteringRangeHeaders,
+  parseMasteringRange,
+} from "@/lib/mastering/chunked-media";
 import { asMasteringClient } from "@/lib/mastering/jobs";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -6,91 +11,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-type Chunk = {
-  index: number;
-  storage_path: string;
-  offset: number;
-  size: number;
-  sha256?: string;
-};
-
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
-}
-
-function chunkManifest(value: unknown): Chunk[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((entry) => {
-    const item = record(entry);
-    if (
-      typeof item.index !== "number"
-      || typeof item.storage_path !== "string"
-      || typeof item.offset !== "number"
-      || typeof item.size !== "number"
-      || item.size <= 0
-    ) return [];
-    return [{
-      index: item.index,
-      storage_path: item.storage_path,
-      offset: item.offset,
-      size: item.size,
-      sha256: typeof item.sha256 === "string" ? item.sha256 : undefined,
-    }];
-  }).sort((left, right) => left.index - right.index);
-}
-
-function parseRange(value: string | null, total: number) {
-  if (!value) return { start: 0, end: Math.max(0, total - 1), partial: false };
-  const match = /^bytes=(\d*)-(\d*)$/.exec(value.trim());
-  if (!match) return null;
-  if (!match[1] && !match[2]) return null;
-
-  if (!match[1]) {
-    const suffix = Number(match[2]);
-    if (!Number.isFinite(suffix) || suffix <= 0) return null;
-    return {
-      start: Math.max(0, total - suffix),
-      end: Math.max(0, total - 1),
-      partial: true,
-    };
-  }
-
-  const start = Number(match[1]);
-  const requestedEnd = match[2] ? Number(match[2]) : total - 1;
-  if (
-    !Number.isFinite(start)
-    || !Number.isFinite(requestedEnd)
-    || start < 0
-    || start >= total
-    || requestedEnd < start
-  ) return null;
-  return {
-    start,
-    end: Math.min(total - 1, requestedEnd),
-    partial: true,
-  };
-}
-
-function responseHeaders(input: {
-  total: number;
-  start: number;
-  end: number;
-  partial: boolean;
-  etag: string | null;
-}) {
-  const headers = new Headers({
-    "Accept-Ranges": "bytes",
-    "Access-Control-Allow-Origin": "*",
-    "Cache-Control": "public, max-age=31536000, immutable",
-    "Content-Type": "audio/flac",
-    "Content-Length": String(input.end - input.start + 1),
-    "X-Content-Type-Options": "nosniff",
-  });
-  if (input.partial) headers.set("Content-Range", `bytes ${input.start}-${input.end}/${input.total}`);
-  if (input.etag) headers.set("ETag", `"${input.etag}"`);
-  return headers;
 }
 
 async function resolveMasteringAsset(jobId: string) {
@@ -125,14 +49,17 @@ async function serve(request: Request, jobId: string, headOnly: boolean) {
     return NextResponse.redirect(asset.public_url, 307);
   }
 
-  const chunks = chunkManifest(metadata.chunk_manifest);
-  const total = typeof metadata.canonical_file_size === "number"
+  const canonicalTotal = typeof metadata.canonical_file_size === "number"
+    && Number.isInteger(metadata.canonical_file_size)
+    && metadata.canonical_file_size > 0
     ? metadata.canonical_file_size
-    : chunks.reduce((sum, chunk) => sum + chunk.size, 0);
-  if (!chunks.length || total <= 0) {
+    : null;
+  const chunks = masteringChunkManifest(metadata.chunk_manifest, canonicalTotal);
+  if (!chunks) {
     return new NextResponse("Mastering chunk manifest is incomplete.", { status: 500 });
   }
-  const range = parseRange(request.headers.get("range"), total);
+  const total = canonicalTotal ?? chunks.reduce((sum, chunk) => sum + chunk.size, 0);
+  const range = parseMasteringRange(request.headers.get("range"), total);
   if (!range) {
     return new NextResponse(null, {
       status: 416,
@@ -143,7 +70,7 @@ async function serve(request: Request, jobId: string, headOnly: boolean) {
     });
   }
 
-  const headers = responseHeaders({
+  const headers = masteringRangeHeaders({
     total,
     start: range.start,
     end: range.end,
