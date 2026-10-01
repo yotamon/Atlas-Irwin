@@ -20,6 +20,7 @@ from .mastering_contracts import build_v2_target_contract
 from .mastering_dynamics import build_dynamics_plan
 from .mastering_evaluation import build_perceptual_delta, evaluate_change_budget
 from .mastering_inspector import analyze_mastering
+from .mastering_preferences import apply_mastering_preferences
 from .mastering_references import (
     select_references,
     weighted_reference_bands,
@@ -97,6 +98,7 @@ def build_mastering_target(
     preset: str,
     source_inspector: dict[str, Any],
     reference_signatures: list[dict[str, Any]],
+    artist_preferences: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     selected = PRESET_TARGETS.get(preset, PRESET_TARGETS["balanced"])
     valid_refs = [
@@ -159,6 +161,22 @@ def build_mastering_target(
         true_peak_dbtp=true_peak,
         source_inspector=source_inspector,
     )
+    preference_policy = apply_mastering_preferences(
+        preset=preset,
+        preferred_lufs=target_lufs,
+        change_budget=_record(v2_contract.get("change_budget")),
+        preferences=_record(artist_preferences),
+    )
+    preferred_after_memory = _number(preference_policy.get("preferred_lufs"))
+    if preferred_after_memory is not None and not bool(v2_contract.get("decision_policy", {}).get("loudness_is_not_quality") is False):
+        target_lufs = preferred_after_memory
+        v2_contract = build_v2_target_contract(
+            preset=preset,
+            preferred_lufs=target_lufs,
+            true_peak_dbtp=true_peak,
+            source_inspector=source_inspector,
+        )
+        v2_contract["change_budget"] = preference_policy["change_budget"]
 
     return {
         "schema": v2_contract["schema"],
@@ -189,6 +207,7 @@ def build_mastering_target(
         "change_budget": v2_contract["change_budget"],
         "source_resolution": v2_contract["source_resolution"],
         "decision_policy": v2_contract["decision_policy"],
+        "artist_preference_policy": preference_policy,
     }
 
 
@@ -625,12 +644,18 @@ def master_audio(
     preset: str,
     music_map: dict[str, Any],
     reference_signatures: list[dict[str, Any]],
+    artist_preferences: dict[str, Any] | None = None,
     workdir: Path,
 ) -> dict[str, Any]:
     before = _record(music_map.get("mastering_inspector"))
     if not before:
         before = analyze_mastering(source, music_map)
-    target = build_mastering_target(preset, before, reference_signatures)
+    target = build_mastering_target(
+        preset,
+        before,
+        reference_signatures,
+        artist_preferences,
+    )
     plan = build_processing_plan(preset, before, target, reference_signatures)
     source_resolution = _record(target.get("source_resolution"))
     native_sample_rate_hz = int(_number(source_resolution.get("sample_rate_hz")) or 48000)
@@ -833,6 +858,7 @@ async def execute_mastering(request: MasteringWorkerRequest) -> None:
         music_map = _record(payload.get("music_map"))
         references_raw = payload.get("reference_signatures")
         references = [item for item in references_raw if isinstance(item, dict)] if isinstance(references_raw, list) else []
+        artist_preferences = _record(payload.get("artist_mastering_preferences"))
 
         from tempfile import TemporaryDirectory
         with TemporaryDirectory(prefix="ensemblis-mastering-") as directory:
@@ -847,6 +873,7 @@ async def execute_mastering(request: MasteringWorkerRequest) -> None:
                 preset=preset,
                 music_map=music_map,
                 reference_signatures=references,
+                artist_preferences=artist_preferences,
                 workdir=workdir,
             )
             await upload_file(upload_url, output, "audio/flac")
