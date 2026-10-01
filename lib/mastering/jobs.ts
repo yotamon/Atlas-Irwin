@@ -19,7 +19,7 @@ import type { Database, Json } from "@/types/database";
 import type { MasteringDatabase, TrackMasteringJob } from "@/types/mastering-database";
 
 const MASTERING_BUCKET = "public-media";
-const MASTERING_CHUNK_SLOT_COUNT = 12;
+const MASTERING_CHUNK_SLOT_COUNT = 14;
 
 export function asMasteringClient(client: SupabaseClient<Database> | SupabaseClient<MasteringDatabase>) {
   return client as unknown as SupabaseClient<MasteringDatabase>;
