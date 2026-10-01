@@ -34,6 +34,7 @@ FFMPEG_BINARY = imageio_ffmpeg.get_ffmpeg_exe()
 # Supabase Free projects cap individual Storage objects at 50 MB globally.
 # Keep a small transport margin so signed uploads never sit on the plan boundary.
 MAX_MASTERING_UPLOAD_BYTES = 48_000_000
+MASTERING_CHUNK_BYTES = 45_000_000
 
 PRESET_TARGETS: dict[str, dict[str, float]] = {
     "streaming_safe": {"integrated_lufs": -12.0, "true_peak_dbtp": -1.0, "compression_ratio": 1.0},
@@ -455,30 +456,6 @@ def _render_explicit_limiter(
     }
 
 
-def _encode_flac_variant(
-    source: Path,
-    target: Path,
-    *,
-    bit_depth: int,
-    sample_rate_hz: int,
-) -> None:
-    args = [
-        "-loglevel", "error", "-y", "-i", str(source), "-vn",
-        "-ar", str(sample_rate_hz), "-ac", "2",
-    ]
-    if bit_depth == 16:
-        args.extend([
-            "-af", f"aresample={sample_rate_hz}:osf=s16:dither_method=triangular",
-            "-sample_fmt", "s16",
-        ])
-    else:
-        args.extend(["-sample_fmt", "s32"])
-    args.extend(["-c:a", "flac", "-compression_level", "12", str(target)])
-    process = _run_ffmpeg(args)
-    if process.returncode != 0:
-        raise RuntimeError(f"Lossless mastering delivery encode failed: {process.stderr[-1200:]}")
-
-
 def _ensure_storage_envelope(
     output: Path,
     workdir: Path,
@@ -486,48 +463,118 @@ def _ensure_storage_envelope(
     sample_rate_hz: int = 48000,
     max_bytes: int = MAX_MASTERING_UPLOAD_BYTES,
 ) -> dict[str, Any]:
+    del workdir  # retained in the signature for backward-compatible callers/tests.
     current_size = output.stat().st_size
     if current_size <= max_bytes:
         return {
-            "profile": "flac_24",
+            "profile": "flac_24_native",
             "bit_depth": 24,
             "sample_rate_hz": sample_rate_hz,
+            "storage_mode": "single_object",
             "fallback_applied": False,
+            "source_precision_preserved": True,
             "file_size": current_size,
             "max_upload_bytes": max_bytes,
+            "chunk_size_bytes": None,
+            "chunk_count": 1,
         }
 
-    variants: list[tuple[str, int, int]] = [
-        ("flac_16_native_dithered", 16, sample_rate_hz),
-    ]
-    if sample_rate_hz > 48000:
-        variants.append(("flac_16_48k_dithered", 16, 48000))
-    if sample_rate_hz != 44100:
-        variants.append(("flac_16_44k_dithered", 16, 44100))
-    for profile, bit_depth, sample_rate_hz in variants:
-        candidate = workdir / f"{profile}.flac"
-        _encode_flac_variant(
-            output,
-            candidate,
-            bit_depth=bit_depth,
-            sample_rate_hz=sample_rate_hz,
-        )
-        candidate_size = candidate.stat().st_size
-        if candidate_size <= max_bytes:
-            candidate.replace(output)
-            return {
-                "profile": profile,
-                "bit_depth": bit_depth,
-                "sample_rate_hz": sample_rate_hz,
-                "fallback_applied": True,
-                "file_size": candidate_size,
-                "max_upload_bytes": max_bytes,
-            }
+    chunk_count = int(math.ceil(current_size / MASTERING_CHUNK_BYTES))
+    return {
+        "profile": "flac_24_native_chunked",
+        "bit_depth": 24,
+        "sample_rate_hz": sample_rate_hz,
+        "storage_mode": "chunked_lossless",
+        "fallback_applied": False,
+        "source_precision_preserved": True,
+        "file_size": current_size,
+        "max_upload_bytes": max_bytes,
+        "chunk_size_bytes": MASTERING_CHUNK_BYTES,
+        "chunk_count": chunk_count,
+    }
 
-    raise RuntimeError(
-        "The lossless mastering candidate is still larger than the current storage limit "
-        f"after storage-safe encoding (limit {max_bytes} bytes)."
-    )
+
+def _split_mastering_chunks(
+    source: Path,
+    workdir: Path,
+    *,
+    chunk_size_bytes: int = MASTERING_CHUNK_BYTES,
+) -> list[dict[str, Any]]:
+    chunks: list[dict[str, Any]] = []
+    with source.open("rb") as handle:
+        index = 0
+        offset = 0
+        while True:
+            payload = handle.read(chunk_size_bytes)
+            if not payload:
+                break
+            path = workdir / f"mastering-part-{index:03d}.bin"
+            path.write_bytes(payload)
+            chunks.append({
+                "index": index,
+                "path": path,
+                "offset": offset,
+                "size": len(payload),
+                "sha256": sha256_file(path),
+            })
+            offset += len(payload)
+            index += 1
+    return chunks
+
+
+async def _upload_mastering_output(
+    payload: dict[str, Any],
+    output: Path,
+    result: dict[str, Any],
+    workdir: Path,
+) -> dict[str, Any]:
+    delivery = _record(result.get("delivery"))
+    storage_mode = str(delivery.get("storage_mode") or "single_object")
+    if storage_mode == "single_object":
+        upload_url = str(payload.get("upload_url") or "")
+        if not upload_url:
+            raise ValueError("upload_url is required for single-object mastering delivery")
+        await upload_file(upload_url, output, "audio/flac")
+        return {
+            "storage_mode": "single_object",
+            "chunk_manifest": [],
+        }
+
+    chunk_uploads_raw = payload.get("chunk_uploads")
+    chunk_uploads = [
+        item for item in chunk_uploads_raw
+        if isinstance(item, dict)
+    ] if isinstance(chunk_uploads_raw, list) else []
+    chunks = _split_mastering_chunks(output, workdir)
+    if len(chunks) > len(chunk_uploads):
+        raise RuntimeError(
+            "The canonical lossless master needs more storage chunks than the "
+            f"prepared upload envelope ({len(chunks)} required, {len(chunk_uploads)} available)."
+        )
+
+    manifest: list[dict[str, Any]] = []
+    for chunk, slot in zip(chunks, chunk_uploads):
+        upload_url = str(slot.get("upload_url") or "")
+        storage_path = str(slot.get("storage_path") or "")
+        if not upload_url or not storage_path:
+            raise RuntimeError("A mastering chunk upload slot is incomplete.")
+        await upload_file(upload_url, chunk["path"], "application/octet-stream")
+        manifest.append({
+            "index": chunk["index"],
+            "storage_path": storage_path,
+            "offset": chunk["offset"],
+            "size": chunk["size"],
+            "sha256": chunk["sha256"],
+        })
+
+    total_size = sum(int(item["size"]) for item in manifest)
+    if total_size != output.stat().st_size:
+        raise RuntimeError("Chunked mastering upload manifest does not match the canonical file size.")
+
+    return {
+        "storage_mode": "chunked_lossless",
+        "chunk_manifest": manifest,
+    }
 
 
 def _candidate_checks(
@@ -799,8 +846,8 @@ def master_audio(
             "container": "FLAC",
             "codec": "FLAC",
             "lossless_codec": True,
-            "source_precision_preserved": not bool(delivery["fallback_applied"]),
-            "dithered": bool(delivery["bit_depth"] == 16),
+            "source_precision_preserved": True,
+            "dithered": False,
         },
         "final_checks": checks,
         "output": {
@@ -816,10 +863,10 @@ def master_audio(
             "No generative audio is used. Ensemblis adjusts a constrained mastering DSP chain and verifies the rendered waveform.",
             "Streaming-safe mastering uses transparent static attenuation for true-peak headroom instead of squeezing peaks to preserve the original loudness.",
             "Trusted-reference tonal matching is only applied when at least three explicit mastering references exist.",
-            "The stored candidate uses the lossless FLAC codec so release-grade mastering can stay within bounded object-storage limits without perceptual/lossy codec compression.",
+            "The stored candidate uses lossless 24-bit FLAC at the native sample rate; storage limits never reduce canonical mastering precision.",
             "Creative mastering measures EBU R128 loudness first, then uses explicit oversampled lookahead limiting instead of loudnorm as the final waveform processor.",
-            "Canonical renders preserve the source sample rate and use 24-bit PCM-in-FLAC before any temporary storage-tier compatibility fallback.",
-            "If a 24-bit candidate exceeds the current storage envelope, Ensemblis still uses the existing dithered 16-bit compatibility fallback and re-verifies the stored waveform until canonical storage is decoupled in the next V2 storage step.",
+            "Canonical renders preserve the source sample rate and use 24-bit PCM-in-FLAC.",
+            "When the canonical FLAC exceeds the storage provider's per-object limit, Ensemblis splits the exact file bytes into immutable lossless chunks and serves them through one logical canonical asset URL.",
             "Active Mastering preserves stereo by default and does not perform blind widening or destructive stem remixing.",
         ],
     }
@@ -853,8 +900,8 @@ async def execute_mastering(request: MasteringWorkerRequest) -> None:
         preset = str(payload.get("preset") or "balanced").lower()
         if not audio_url:
             raise ValueError("audio_url is required")
-        if not upload_url:
-            raise ValueError("upload_url is required")
+        if not upload_url and not isinstance(payload.get("chunk_uploads"), list):
+            raise ValueError("A mastering upload envelope is required")
         music_map = _record(payload.get("music_map"))
         references_raw = payload.get("reference_signatures")
         references = [item for item in references_raw if isinstance(item, dict)] if isinstance(references_raw, list) else []
@@ -876,7 +923,13 @@ async def execute_mastering(request: MasteringWorkerRequest) -> None:
                 artist_preferences=artist_preferences,
                 workdir=workdir,
             )
-            await upload_file(upload_url, output, "audio/flac")
+            storage_result = await _upload_mastering_output(
+                payload,
+                output,
+                result,
+                workdir,
+            )
+            result["storage"] = storage_result
         await _callback(request, "completed", result)
     except Exception as exc:
         message = str(exc)[:2200] or "Active Mastering failed."
