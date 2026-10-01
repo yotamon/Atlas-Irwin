@@ -2,6 +2,8 @@
 
 Active Mastering extends Mastering Inspector from deterministic diagnosis into an auditable render-and-verify loop. It intentionally does not use generative audio or opaque quality scores.
 
+> **V2 implementation program:** The current production behavior documented here remains the shipped baseline. The planned adaptive DSP, candidate optimization, native-resolution, reference-intelligence, perceptual-QA and release-coherence work is tracked in [`active-mastering-v2-plan.md`](active-mastering-v2-plan.md). Planned V2 behavior must not be described here as shipped until its implementation gates pass.
+
 ## Product contract
 
 1. The canonical source master is immutable while a candidate is rendering.
