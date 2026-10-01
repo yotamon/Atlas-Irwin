@@ -26,6 +26,7 @@ from .mastering_references import (
     weighted_reference_bands,
     weighted_reference_value,
 )
+from .mastering_resonance import build_resonance_plan
 from .mastering_stereo import build_stereo_plan
 from .mastering_tonal import build_tonal_plan
 
@@ -238,6 +239,12 @@ def build_processing_plan(
         reference_bands=reference_fine,
         legacy_reference_bands=reference_broad,
     )
+    resonance = build_resonance_plan(
+        preset=preset,
+        source_inspector=source_inspector,
+        target=target,
+        reference_bands=reference_fine,
+    )
     dynamics_plan = build_dynamics_plan(preset, source_inspector, target)
     stereo_plan = build_stereo_plan(preset, source_inspector, target)
 
@@ -252,6 +259,7 @@ def build_processing_plan(
         "eq_moves": tonal["eq_moves"],
         "highpass_hz": tonal["highpass_hz"],
         "tonal": tonal,
+        "resonance": resonance,
         "compression": dynamics_plan,
         "stereo": {
             **stereo_plan,
@@ -306,6 +314,28 @@ def _filter_chain(plan: dict[str, Any]) -> str:
             continue
         filters.append(
             f"equalizer=f={frequency:.2f}:width_type=q:width={q:.3f}:g={gain:.3f}"
+        )
+    resonance = _record(plan.get("resonance"))
+    for move in resonance.get("moves") or []:
+        if not isinstance(move, dict):
+            continue
+        frequency = _number(move.get("frequency_hz"))
+        detector_q = _number(move.get("detector_q"))
+        target_q = _number(move.get("target_q"))
+        range_db = _number(move.get("range_db"))
+        ratio = _number(move.get("ratio"))
+        attack = _number(move.get("attack_ms"))
+        release = _number(move.get("release_ms"))
+        if None in {frequency, detector_q, target_q, range_db, ratio, attack, release}:
+            continue
+        filters.append(
+            "adynamicequalizer="
+            "auto=adaptive:"
+            f"dfrequency={frequency:.2f}:dqfactor={detector_q:.3f}:"
+            f"tfrequency={frequency:.2f}:tqfactor={target_q:.3f}:"
+            f"attack={attack:.1f}:release={release:.1f}:"
+            f"ratio={ratio:.3f}:makeup=0:range={range_db:.3f}:"
+            "mode=cutabove:direction=downward"
         )
     compression = _record(plan.get("compression"))
     if compression.get("enabled"):
