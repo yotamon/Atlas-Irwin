@@ -163,11 +163,16 @@ def candidate_sort_key(candidate: dict[str, Any]) -> tuple[float, ...]:
     technical_pass = checks.get("technical_pass") is True
     creative_pass = checks.get("creative_pass") is True
     full_pass = checks.get("pass") is True
+    budget = _record(checks.get("change_budget"))
+    unevaluated = _number(budget.get("unevaluated_metric_count")) or 0.0
+    evaluated = _number(budget.get("evaluated_metric_count")) or 0.0
+    evidence_penalty = unevaluated / max(1.0, evaluated + unevaluated)
     return (
         0.0 if full_pass else 1.0,
         0.0 if technical_pass else 1.0,
         0.0 if creative_pass else 1.0,
         _damage_penalty(checks),
+        evidence_penalty,
         limiter_gr,
         loudness_distance,
     )
