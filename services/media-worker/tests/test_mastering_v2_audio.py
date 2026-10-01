@@ -17,7 +17,7 @@ fake_main.upload_file = lambda *args, **kwargs: None
 fake_main.sha256_file = lambda path: hashlib.sha256(Path(path).read_bytes()).hexdigest()
 with patch.dict(sys.modules, {"app.main": fake_main}):
     from app.mastering_inspector import _true_peak_fallback
-    from app.mastering_processor import _render_explicit_limiter
+    from app.mastering_processor import _render_explicit_limiter, _render_premaster
 
 
 def _fixture_audio(sample_rate: int = 44100, seconds: float = 2.0) -> np.ndarray:
@@ -68,6 +68,43 @@ class MasteringV2AudioRenderTest(unittest.TestCase):
             self.assertEqual(int(telemetry["oversampled_rate_hz"]), sample_rate * 4)
             self.assertAlmostEqual(float(telemetry["applied_gain_db"]), 4.0, places=3)
             self.assertLessEqual(float(true_peak_dbtp), -0.9)
+
+    def test_dynamic_resonance_filter_renders_with_bundled_ffmpeg(self) -> None:
+        sample_rate = 48000
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source.wav"
+            output = root / "premaster.wav"
+            sf.write(source, _fixture_audio(sample_rate), sample_rate, subtype="PCM_24")
+            plan = {
+                "highpass_hz": 0.0,
+                "eq_moves": [],
+                "resonance": {
+                    "enabled": True,
+                    "moves": [{
+                        "frequency_hz": 3200.0,
+                        "detector_q": 1.8,
+                        "target_q": 1.8,
+                        "range_db": 1.0,
+                        "ratio": 2.0,
+                        "attack_ms": 18.0,
+                        "release_ms": 130.0,
+                    }],
+                },
+                "compression": {"enabled": False},
+                "stereo": {"enabled": False},
+            }
+
+            _render_premaster(
+                source,
+                output,
+                plan,
+                sample_rate_hz=sample_rate,
+            )
+
+            info = sf.info(output)
+            self.assertEqual(info.samplerate, sample_rate)
+            self.assertEqual(info.subtype, "PCM_24")
 
     def test_explicit_limiter_is_waveform_deterministic(self) -> None:
         sample_rate = 48000
