@@ -148,14 +148,17 @@ def score_reference_similarity(
     source_signature: dict[str, Any],
     reference_signature: dict[str, Any],
 ) -> dict[str, Any]:
-    source_envelope = (
-        _record(source_signature.get("perceptual_envelope_db"))
-        or _record(source_signature.get("band_relative_db"))
-    )
-    reference_envelope = (
-        _record(reference_signature.get("perceptual_envelope_db"))
-        or _record(reference_signature.get("band_relative_db"))
-    )
+    source_fine = _record(source_signature.get("perceptual_envelope_db"))
+    reference_fine = _record(reference_signature.get("perceptual_envelope_db"))
+    fine_overlap = set(source_fine) & set(reference_fine)
+    if len(fine_overlap) >= 3:
+        source_envelope = source_fine
+        reference_envelope = reference_fine
+        spectral_resolution = "perceptual"
+    else:
+        source_envelope = _record(source_signature.get("band_relative_db"))
+        reference_envelope = _record(reference_signature.get("band_relative_db"))
+        spectral_resolution = "legacy"
     spectral_distance, spectral_band_count = _vector_distance(
         source_envelope,
         reference_envelope,
@@ -231,6 +234,7 @@ def score_reference_similarity(
         "similarity": round(similarity, 4),
         "confidence": round(confidence, 4),
         "spectral_band_count": spectral_band_count,
+        "spectral_resolution": spectral_resolution,
         "matched_section_count": matched_sections,
         "components": {
             name: round(float(value), 4) if value is not None else None
@@ -292,6 +296,7 @@ def select_references(
                 "confidence": item["confidence"],
                 "components": item["components"],
                 "matched_section_count": item["matched_section_count"],
+                "spectral_resolution": item.get("spectral_resolution"),
             }
             for item in ranked
         ],
