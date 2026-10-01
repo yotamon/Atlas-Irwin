@@ -126,6 +126,35 @@ class MasteringCandidateOptimizerV2Test(unittest.TestCase):
         result = select_candidate([first, second])
         self.assertEqual(result["selected_id"], "second")
 
+
+    def test_complete_damage_evidence_breaks_an_otherwise_equal_tie(self) -> None:
+        sparse = _candidate(
+            candidate_id="sparse",
+            technical=True,
+            creative=True,
+            loudness=-10.2,
+            limiter_gr=1.0,
+            damage_value=0.4,
+        )
+        complete = _candidate(
+            candidate_id="complete",
+            technical=True,
+            creative=True,
+            loudness=-10.2,
+            limiter_gr=1.0,
+            damage_value=0.4,
+        )
+        sparse["checks"]["change_budget"].update({
+            "evaluated_metric_count": 2,
+            "unevaluated_metric_count": 4,
+        })
+        complete["checks"]["change_budget"].update({
+            "evaluated_metric_count": 6,
+            "unevaluated_metric_count": 0,
+        })
+        result = select_candidate([sparse, complete])
+        self.assertEqual(result["selected_id"], "complete")
+
     def test_technically_valid_review_candidate_beats_invalid_candidate(self) -> None:
         review = _candidate(
             candidate_id="review",
