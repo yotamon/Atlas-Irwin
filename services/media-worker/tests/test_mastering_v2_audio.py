@@ -16,8 +16,8 @@ fake_main.download = lambda *args, **kwargs: None
 fake_main.upload_file = lambda *args, **kwargs: None
 fake_main.sha256_file = lambda path: hashlib.sha256(Path(path).read_bytes()).hexdigest()
 with patch.dict(sys.modules, {"app.main": fake_main}):
-    from app.mastering_inspector import _true_peak_fallback
-    from app.mastering_processor import _render_explicit_limiter, _render_premaster
+    from app.mastering_inspector import _true_peak_fallback, analyze_mastering
+    from app.mastering_processor import _render_explicit_limiter, _render_premaster, master_audio
 
 
 def _fixture_audio(sample_rate: int = 44100, seconds: float = 2.0) -> np.ndarray:
@@ -138,6 +138,77 @@ class MasteringV2AudioRenderTest(unittest.TestCase):
             info = sf.info(output)
             self.assertEqual(info.samplerate, sample_rate)
             self.assertEqual(info.subtype, "PCM_24")
+
+
+    def test_corrective_stereo_filter_reduces_side_energy_without_widening(self) -> None:
+        sample_rate = 48000
+        frames = sample_rate * 2
+        t = np.arange(frames, dtype=np.float64) / sample_rate
+        mid = 0.35 * np.sin(2.0 * np.pi * 700.0 * t)
+        side = 0.45 * np.sin(2.0 * np.pi * 90.0 * t)
+        stereo = np.column_stack((mid + side, mid - side)).astype(np.float32)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "wide.wav"
+            output = root / "corrected.wav"
+            sf.write(source, stereo, sample_rate, subtype="PCM_24")
+            plan = {
+                "highpass_hz": 0.0,
+                "eq_moves": [],
+                "resonance": {"enabled": False, "moves": []},
+                "compression": {"enabled": False},
+                "character": {"enabled": False},
+                "stereo": {"enabled": True, "side_level": 0.88},
+            }
+            _render_premaster(source, output, plan, sample_rate_hz=sample_rate)
+            rendered, rendered_rate = sf.read(output, always_2d=True, dtype="float32")
+
+            before_side = np.sqrt(np.mean(np.square((stereo[:, 0] - stereo[:, 1]) * 0.5)))
+            after_side = np.sqrt(np.mean(np.square((rendered[:, 0] - rendered[:, 1]) * 0.5)))
+            self.assertEqual(rendered_rate, sample_rate)
+            self.assertLess(after_side, before_side * 0.95)
+
+    def test_creative_master_runs_end_to_end_with_candidate_optimizer(self) -> None:
+        sample_rate = 44100
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source.wav"
+            output = root / "master.flac"
+            sf.write(source, _fixture_audio(sample_rate, 3.0), sample_rate, subtype="PCM_24")
+            music_map = {
+                "sections": [
+                    {"id": "a", "label": "verse", "start_ms": 0, "end_ms": 1500},
+                    {"id": "b", "label": "chorus", "start_ms": 1500, "end_ms": 3000},
+                ],
+                "mastering_inspector": analyze_mastering(
+                    source,
+                    {"sections": []},
+                    include_codec_stress=False,
+                ),
+            }
+
+            result = master_audio(
+                source,
+                output,
+                preset="balanced",
+                music_map=music_map,
+                reference_signatures=[],
+                artist_preferences={},
+                workdir=root,
+            )
+
+            info = sf.info(output)
+            self.assertEqual(result["schema"], "ensemblis.active_mastering.v2")
+            self.assertIn(
+                result["optimizer"]["selected_id"],
+                {"target_centered", "more_dynamic", "conservative"},
+            )
+            self.assertEqual(info.samplerate, sample_rate)
+            self.assertEqual(info.subtype, "PCM_24")
+            self.assertIn("technical_pass", result["final_checks"])
+            self.assertIn("creative_pass", result["final_checks"])
+            self.assertEqual(result["delivery"]["storage_mode"], "single_object")
 
     def test_explicit_limiter_is_waveform_deterministic(self) -> None:
         sample_rate = 48000
