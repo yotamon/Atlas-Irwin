@@ -56,15 +56,29 @@ function uploadedStoragePaths(
   requestPayload: Record<string, unknown>,
   result: Record<string, unknown>,
 ) {
+  const paths = new Set<string>();
   const storage = record(result.storage);
   if (storage.storage_mode === "chunked_lossless" && Array.isArray(storage.chunk_manifest)) {
-    return storage.chunk_manifest.flatMap((entry) => {
+    for (const entry of storage.chunk_manifest) {
       const row = record(entry);
-      return typeof row.storage_path === "string" && row.storage_path ? [row.storage_path] : [];
-    });
+      if (typeof row.storage_path === "string" && row.storage_path) paths.add(row.storage_path);
+    }
   }
-  const path = typeof requestPayload.upload_path === "string" ? requestPayload.upload_path : "";
-  return path ? [path] : [];
+
+  // A chunk upload can fail after earlier parts already reached Storage but
+  // before the worker can return a completed manifest. The server prepared all
+  // possible slots, so removing the whole envelope is safe and prevents orphan
+  // objects. Supabase removal is tolerant of paths that were never uploaded.
+  if (Array.isArray(requestPayload.chunk_uploads)) {
+    for (const entry of requestPayload.chunk_uploads) {
+      const row = record(entry);
+      if (typeof row.storage_path === "string" && row.storage_path) paths.add(row.storage_path);
+    }
+  }
+
+  const directPath = typeof requestPayload.upload_path === "string" ? requestPayload.upload_path : "";
+  if (directPath) paths.add(directPath);
+  return [...paths];
 }
 
 async function cleanupUploadedMaster(
