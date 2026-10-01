@@ -99,10 +99,42 @@ export async function kickMasteringReferenceQueue() {
       retryAt: capacity.retryAfter,
     };
   }
-  if (!reference.audio_url) {
+  let analysisAudioUrl = reference.audio_url;
+  let sourceIdentityUrl = reference.audio_url;
+  if (reference.media_asset_id) {
+    const assetResult = await service.from("media_assets")
+      .select("id,bucket_name,storage_path,public_url,visibility")
+      .eq("id", reference.media_asset_id)
+      .eq("owner_id", reference.owner_id)
+      .maybeSingle();
+    if (assetResult.error) throw new Error(assetResult.error.message);
+    const asset = assetResult.data;
+    if (!asset) {
+      const failed = await db.from("mastering_references").update({
+        status: "failed",
+        error: "The mastering reference media asset no longer exists.",
+        updated_at: new Date().toISOString(),
+      }).eq("id", reference.id).eq("owner_id", reference.owner_id);
+      if (failed.error) throw new Error(failed.error.message);
+      return { dispatched: false, busy: false, reason: "failed" as const };
+    }
+    if (asset.visibility === "private") {
+      const signed = await service.storage.from(asset.bucket_name).createSignedUrl(asset.storage_path, 60 * 60);
+      if (signed.error || !signed.data?.signedUrl) {
+        throw new Error(signed.error?.message || "Could not create a private mastering-reference read URL.");
+      }
+      analysisAudioUrl = signed.data.signedUrl;
+      sourceIdentityUrl = `media-asset:${asset.id}`;
+    } else if (asset.public_url) {
+      analysisAudioUrl = asset.public_url;
+      sourceIdentityUrl = `media-asset:${asset.id}`;
+    }
+  }
+
+  if (!analysisAudioUrl) {
     const failed = await db.from("mastering_references").update({
       status: "failed",
-      error: "The uploaded mastering reference has no readable audio URL.",
+      error: "The uploaded mastering reference has no readable audio source.",
       updated_at: new Date().toISOString(),
     }).eq("id", reference.id).eq("owner_id", reference.owner_id);
     if (failed.error) throw new Error(failed.error.message);
@@ -133,8 +165,8 @@ export async function kickMasteringReferenceQueue() {
       jobId: reference.id,
       jobType: "analyze_audio",
       payload: {
-        audio_url: reference.audio_url,
-        source_audio_url: reference.audio_url,
+        audio_url: analysisAudioUrl,
+        source_audio_url: sourceIdentityUrl || analysisAudioUrl,
         source_media_asset_id: reference.media_asset_id,
       },
       callbackUrl: `${getSiteUrl()}/api/studio/mastering/references/callback`,
