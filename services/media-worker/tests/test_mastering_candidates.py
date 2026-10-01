@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from app.mastering_candidates import build_candidate_family, candidate_sort_key, select_candidate
+from app.mastering_candidates import build_candidate_family, build_candidate_processing_plan, candidate_sort_key, select_candidate
 
 
 def _target() -> dict:
@@ -63,6 +63,27 @@ class MasteringCandidateOptimizerV2Test(unittest.TestCase):
         preferred = float(family[0]["target"]["integrated_lufs"])
         self.assertLess(float(family[1]["target"]["integrated_lufs"]), preferred)
         self.assertLess(float(family[2]["target"]["integrated_lufs"]), float(family[1]["target"]["integrated_lufs"]))
+
+    def test_candidate_roles_change_the_actual_dsp_chain(self) -> None:
+        base = {
+            "eq_moves": [{"band": "presence", "gain_db": 1.0}],
+            "tonal": {"eq_moves": [{"band": "presence", "gain_db": 1.0}], "total_eq_energy": 1.0},
+            "compression": {"enabled": True, "ratio": 1.4},
+            "resonance": {"enabled": True, "moves": [{"frequency_hz": 3200.0}]},
+            "character": {"allowed": True, "enabled": False},
+            "stereo": {"enabled": False},
+        }
+        centered = build_candidate_processing_plan(base, "recommended")
+        dynamic = build_candidate_processing_plan(base, "more_dynamic")
+        conservative = build_candidate_processing_plan(base, "conservative")
+
+        self.assertTrue(centered["compression"]["enabled"])
+        self.assertTrue(centered["character"]["enabled"])
+        self.assertFalse(dynamic["compression"]["enabled"])
+        self.assertFalse(dynamic["resonance"]["enabled"])
+        self.assertFalse(dynamic["character"]["enabled"])
+        self.assertFalse(conservative["compression"]["enabled"])
+        self.assertLess(abs(float(conservative["eq_moves"][0]["gain_db"])), 1.0)
 
     def test_full_pass_beats_louder_damaged_candidate(self) -> None:
         damaged = _candidate(
