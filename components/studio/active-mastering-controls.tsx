@@ -91,9 +91,14 @@ function masteringSuggestedLoops(value: Json): MasteringSuggestedLoop[] {
     });
   }
 
-  const signature = record(after.reference_signature);
-  const sections = Array.isArray(signature.section_signatures)
-    ? signature.section_signatures.map(record)
+  const before = record(result.before);
+  const afterSignature = record(after.reference_signature);
+  const beforeSignature = record(before.reference_signature);
+  const rawSections = Array.isArray(afterSignature.section_signatures) && afterSignature.section_signatures.length
+    ? afterSignature.section_signatures
+    : beforeSignature.section_signatures;
+  const sections = Array.isArray(rawSections)
+    ? rawSections.map(record)
     : [];
   const bassSection = sections
     .map((section) => ({
