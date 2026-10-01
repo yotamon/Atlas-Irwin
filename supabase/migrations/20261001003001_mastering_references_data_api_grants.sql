@@ -1,4 +1,4 @@
-﻿-- Mastering references Data API hardening.
+-- Mastering references Data API hardening.
 -- Supabase stops auto-exposing new public tables to Data API roles on 2026-10-30.
 -- Keep this table intentionally private from anon while preserving authenticated Studio
 -- access and service-role worker callbacks.
