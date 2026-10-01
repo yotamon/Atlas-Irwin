@@ -108,11 +108,14 @@ test("Manager planning reaches quiet artists and follows the configured working 
 });
 
 test("hands-off Manager executes only safe internal evidence-backed preparation", async () => {
-  const [executor, materializer, actions, cron, snapshot] = await Promise.all([
+  const [executor, materializer, actions, cron, heartbeat, maintenance, automation, snapshot] = await Promise.all([
     read("lib/marketing/manager-execution.ts"),
     read("lib/artist-operating/growth-opportunities.ts"),
     read("app/studio/artist-operating-actions.ts"),
     read("app/api/cron/marketing/route.ts"),
+    read("lib/marketing/durable-heartbeat.ts"),
+    read("lib/marketing/maintenance.ts"),
+    read("lib/marketing/automation.ts"),
     read("lib/studio/artist-operating-snapshot.ts"),
   ]);
 
@@ -134,8 +137,11 @@ test("hands-off Manager executes only safe internal evidence-backed preparation"
   assert.match(materializer, /usedSceneMapFallback/);
   assert.match(actions, /materializeSceneGrowthOpportunities/);
 
-  assert.match(cron, /executeSafeManagerActions/);
-  assert.match(cron, /deterministic \$0 internal preparation/);
+  assert.match(cron, /runDurableMarketingHeartbeat/);
+  assert.doesNotMatch(cron, /executeSafeManagerActions/);
+  assert.match(heartbeat, /runDueAutomationJobsWithinBudget/);
+  assert.match(maintenance, /maintenance:manager_execution/);
+  assert.match(automation, /executeSafeManagerActions/);
   assert.match(snapshot, /status: "Prepared"/);
   assert.match(snapshot, /completedManagerActions/);
   assert.match(snapshot, /execution\.prepared/);
