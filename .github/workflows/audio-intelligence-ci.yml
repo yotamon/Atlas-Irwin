@@ -99,9 +99,12 @@ jobs:
           services/media-worker/app/music_intelligence_v4_runtime.py
           services/media-worker/app/strongest_moments.py
           services/media-worker/app/moment_rhythm.py
+          services/media-worker/app/mastering_candidates.py
           services/media-worker/app/mastering_contracts.py
+          services/media-worker/app/mastering_dynamics.py
           services/media-worker/app/mastering_evaluation.py
           services/media-worker/app/mastering_references.py
+          services/media-worker/app/mastering_tonal.py
           services/media-worker/app/mastering_inspector.py
           services/media-worker/app/mastering_processor.py
           services/media-worker/app/audio_intelligence_providers.py
