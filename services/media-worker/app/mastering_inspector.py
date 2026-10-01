@@ -13,7 +13,8 @@ import numpy as np
 import pyloudnorm as pyln
 import soundfile as sf
 
-MASTERING_SCHEMA = "ensemblis.mastering_inspector.v1"
+MASTERING_SCHEMA = "ensemblis.mastering_inspector.v2"
+MASTERING_LEGACY_SCHEMA = "ensemblis.mastering_inspector.v1"
 SPOTIFY_PROFILE_VERSION = "spotify-artist-guidance-2026-09"
 BAND_RANGES_HZ = {
     "sub_20_80": (20.0, 80.0),
@@ -1000,10 +1001,10 @@ def analyze_mastering(
         audio, sample_rate = sf.read(str(path), always_2d=True, dtype="float32")
     except Exception as exc:
         issue = _issue(severity="critical", category="technical_defect", code="decode_failed", message=f"Mastering Inspector could not decode the source audio: {str(exc)[:180]}")
-        return {"schema": MASTERING_SCHEMA, "status": "fix_before_release", "technical_ready": False, "issues": [issue], "beat_stability": analyze_beat_stability([int(value) for value in music_map.get("beats_ms") or []], global_bpm=_finite(music_map.get("bpm")), sections=[item for item in music_map.get("sections") or [] if isinstance(item, dict)], rhythm_confidence=_finite((((music_map.get("analysis") or {}).get("confidence") or {}).get("rhythm"))))}
+        return {"schema": MASTERING_SCHEMA, "compatibility": {"legacy_schema": MASTERING_LEGACY_SCHEMA, "legacy_fields_preserved": True}, "status": "fix_before_release", "technical_ready": False, "issues": [issue], "beat_stability": analyze_beat_stability([int(value) for value in music_map.get("beats_ms") or []], global_bpm=_finite(music_map.get("bpm")), sections=[item for item in music_map.get("sections") or [] if isinstance(item, dict)], rhythm_confidence=_finite((((music_map.get("analysis") or {}).get("confidence") or {}).get("rhythm"))))}
     if audio.size == 0:
         issue = _issue(severity="critical", category="technical_defect", code="empty_audio", message="The decoded master contains no audio samples.")
-        return {"schema": MASTERING_SCHEMA, "status": "fix_before_release", "technical_ready": False, "issues": [issue]}
+        return {"schema": MASTERING_SCHEMA, "compatibility": {"legacy_schema": MASTERING_LEGACY_SCHEMA, "legacy_fields_preserved": True}, "status": "fix_before_release", "technical_ready": False, "issues": [issue]}
 
     format_info = _format_info(path, sample_rate, audio.shape[1])
     sample_qc = _sample_qc(audio, sample_rate)
@@ -1039,7 +1040,12 @@ def analyze_mastering(
     true_peak = _finite(loudness.get("true_peak_dbtp"))
 
     return {
-        "schema": MASTERING_SCHEMA, "status": status, "technical_ready": technical_ready,
+        "schema": MASTERING_SCHEMA,
+        "compatibility": {
+            "legacy_schema": MASTERING_LEGACY_SCHEMA,
+            "legacy_fields_preserved": True,
+        },
+        "status": status, "technical_ready": technical_ready,
         "measurement_engine": {"canonical": "ffmpeg-ebur128", "canonical_standard": "ITU-R BS.1770 / EBU R128", "crosscheck": "pyloudnorm", "true_peak_fallback": "4x soxr oversampling"},
         "format": format_info, "loudness": loudness, "loudness_crosscheck": crosscheck,
         "peaks": {**sample_qc, "true_peak_dbtp": loudness.get("true_peak_dbtp"), "true_peak_channel": loudness.get("true_peak_channel")},
