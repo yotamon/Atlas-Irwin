@@ -4,6 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 type Source = "original" | "candidate" | "reference" | "mono";
 type ReferenceOption = { label: string; url: string; lufs: number | null };
+export type MasteringSuggestedLoop = {
+  label: string;
+  start: number;
+  end: number;
+  reason: string;
+};
 type CandidateGraph = {
   context: AudioContext;
   stereoGain: GainNode;
@@ -32,12 +38,14 @@ export function MasteringListenLab({
   originalLufs,
   candidateLufs,
   references = [],
+  suggestedLoops = [],
 }: {
   originalUrl: string;
   candidateUrl: string;
   originalLufs: number | null;
   candidateLufs: number | null;
   references?: ReferenceOption[];
+  suggestedLoops?: MasteringSuggestedLoop[];
 }) {
   const originalRef = useRef<HTMLAudioElement | null>(null);
   const candidateRef = useRef<HTMLAudioElement | null>(null);
@@ -323,6 +331,19 @@ export function MasteringListenLab({
     setCurrentTime(value);
   }
 
+  async function auditionSuggestedLoop(item: MasteringSuggestedLoop) {
+    const safeStart = Math.max(0, item.start);
+    const safeEnd = Math.max(safeStart + 1, item.end);
+    if (active === "reference") {
+      await chooseSource("candidate");
+    }
+    setLoop({ start: safeStart, end: safeEnd });
+    if (originalRef.current) originalRef.current.currentTime = safeStart;
+    if (candidateRef.current) candidateRef.current.currentTime = safeStart;
+    setCurrentTime(safeStart);
+    setError("");
+  }
+
   function toggleLoop() {
     if (loop) {
       setLoop(null);
@@ -379,6 +400,25 @@ export function MasteringListenLab({
           <span>Loudness match</span>
         </label>
       </div>
+
+      {suggestedLoops.length ? (
+        <div className="mastering-listen-suggestions" aria-label="Suggested listening moments">
+          <span className="section-label">Listen where the master changed most</span>
+          <div className="mastering-listen-suggestion-list">
+            {suggestedLoops.map((item, index) => (
+              <button
+                className="text-button"
+                type="button"
+                key={`${item.label}-${index}`}
+                onClick={() => void auditionSuggestedLoop(item)}
+                title={item.reason}
+              >
+                {item.label} · {formatTime(item.start)}–{formatTime(item.end)}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {references.length ? (
         <label className="mastering-reference-select">
