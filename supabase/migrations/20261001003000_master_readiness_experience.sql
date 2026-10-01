@@ -1,4 +1,4 @@
-﻿-- Master Readiness Experience
+-- Master Readiness Experience
 -- One canonical readiness path across Track, Active Mastering and Distribution.
 
 alter table public.track_mastering_jobs

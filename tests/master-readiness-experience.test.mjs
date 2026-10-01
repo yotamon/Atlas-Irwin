@@ -155,12 +155,13 @@ test("Listen Lab keeps matched A/B comparison and finding audition accessible", 
 
 
 test("external mastering references reuse the canonical audio worker without creating Music tracks", async () => {
-  const [queue, callback, uploader, actions, migration] = await Promise.all([
+  const [queue, callback, uploader, actions, migration, grantsMigration] = await Promise.all([
     source("lib/mastering/reference-jobs.ts"),
     source("app/api/studio/mastering/references/callback/route.ts"),
     source("components/studio/media-uploader.tsx"),
     source("app/studio/mastering-reference-actions.ts"),
     source("supabase/migrations/20261001003000_master_readiness_experience.sql"),
+    source("supabase/migrations/20261001003001_mastering_references_data_api_grants.sql"),
   ]);
 
   assert.match(queue, /jobType: "analyze_audio"/);
@@ -186,6 +187,11 @@ test("external mastering references reuse the canonical audio worker without cre
   assert.match(actions, /kickMasteringReferenceQueue/);
   assert.match(migration, /mastering_references_pending_idx/);
   assert.match(migration, /mastering_references_uploaded_asset_uidx/);
+  assert.match(grantsMigration, /revoke all on table public\.mastering_references from anon/);
+  assert.match(grantsMigration, /grant select, insert, update, delete on table public\.mastering_references to authenticated/);
+  assert.match(grantsMigration, /grant all on table public\.mastering_references to service_role/);
+  assert.match(grantsMigration, /to authenticated/);
+  assert.match(grantsMigration, /\(select auth\.uid\(\)\) = owner_id/);
 });
 
 test("Mastering reference UI exposes analysis lifecycle and automatic refresh", async () => {

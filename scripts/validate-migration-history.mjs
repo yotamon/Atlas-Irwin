@@ -4,6 +4,9 @@ import { pathToFileURL } from "node:url";
 
 const MIGRATION_DIR = "supabase/migrations";
 const MIGRATION_RE = /^(\d{14})_([a-z0-9]+(?:_[a-z0-9]+)*)\.sql$/;
+const UTF8_BOM = Buffer.from([0xef, 0xbb, 0xbf]);
+const PENDING_BOM_NORMALIZATION_PATH =
+  "supabase/migrations/20261001003000_master_readiness_experience.sql";
 
 export function parseMigrationPath(filePath) {
   const normalized = filePath.replaceAll("\\", "/");
@@ -11,6 +14,16 @@ export function parseMigrationPath(filePath) {
   const match = MIGRATION_RE.exec(filename);
   if (!match) return null;
   return { path: normalized, filename, version: match[1], name: match[2] };
+}
+
+export function isAllowedPendingBomNormalization({ filePath, baseContent, currentContent }) {
+  const normalized = filePath.replaceAll("\\", "/");
+  if (normalized !== PENDING_BOM_NORMALIZATION_PATH) return false;
+  if (!Buffer.isBuffer(baseContent) || !Buffer.isBuffer(currentContent)) return false;
+  if (baseContent.length < UTF8_BOM.length) return false;
+  if (!baseContent.subarray(0, UTF8_BOM.length).equals(UTF8_BOM)) return false;
+  if (currentContent.subarray(0, UTF8_BOM.length).equals(UTF8_BOM)) return false;
+  return baseContent.subarray(UTF8_BOM.length).equals(currentContent);
 }
 
 export function parseNameStatus(output) {
@@ -83,14 +96,32 @@ function git(args) {
   }).trim();
 }
 
+function gitBuffer(args) {
+  return execFileSync("git", args, {
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+}
+
 export function validateRepositoryMigrationHistory(baseRef) {
   const basePaths = git(["ls-tree", "-r", "--name-only", baseRef, "--", MIGRATION_DIR])
     .split(/\r?\n/)
     .map((value) => value.trim())
     .filter(Boolean);
-  const changes = parseNameStatus(
+  const rawChanges = parseNameStatus(
     git(["diff", "--name-status", "--find-renames", `${baseRef}...HEAD`, "--", MIGRATION_DIR]),
   );
+  const changes = rawChanges.filter((change) => {
+    if (change.status !== "M" || change.paths.length !== 1) return true;
+    const filePath = change.paths[0];
+    if (filePath.replaceAll("\\", "/") !== PENDING_BOM_NORMALIZATION_PATH) return true;
+    try {
+      const baseContent = gitBuffer(["show", `${baseRef}:${filePath}`]);
+      const currentContent = gitBuffer(["show", `HEAD:${filePath}`]);
+      return !isAllowedPendingBomNormalization({ filePath, baseContent, currentContent });
+    } catch {
+      return true;
+    }
+  });
   return validateMigrationChanges({ basePaths, changes });
 }
 
