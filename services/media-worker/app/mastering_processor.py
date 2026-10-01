@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from .main import download, sha256_file, upload_file
 from .mastering_contracts import build_v2_target_contract
+from .mastering_dynamics import build_dynamics_plan
 from .mastering_evaluation import build_perceptual_delta, evaluate_change_budget
 from .mastering_inspector import analyze_mastering
 from .mastering_references import (
@@ -22,6 +23,7 @@ from .mastering_references import (
     weighted_reference_bands,
     weighted_reference_value,
 )
+from .mastering_tonal import build_tonal_plan
 
 ACTIVE_MASTERING_SCHEMA = "ensemblis.active_mastering.v1"
 FFMPEG_BINARY = imageio_ffmpeg.get_ffmpeg_exe()
@@ -194,41 +196,25 @@ def build_processing_plan(
     reference_signatures: list[dict[str, Any]],
 ) -> dict[str, Any]:
     source_signature = _record(source_inspector.get("reference_signature"))
-    current_bands = _record(source_signature.get("band_relative_db"))
     selection = select_references(source_signature, reference_signatures)
-    reference_bands = (
+    reference_broad = (
         weighted_reference_bands(selection, "band_relative_db")
         if target.get("reference_source") == "similar_trusted_references"
         else {}
     )
-
-    eq_moves: list[dict[str, Any]] = []
-    for key, (frequency_hz, q) in BAND_EQ.items():
-        current = _number(current_bands.get(key))
-        reference = _number(reference_bands.get(key))
-        if current is None or reference is None:
-            continue
-        gain_db = _clamp((reference - current) * 0.35, -1.5, 1.5)
-        if abs(gain_db) < 0.25:
-            continue
-        eq_moves.append({
-            "band": key,
-            "frequency_hz": frequency_hz,
-            "q": q,
-            "gain_db": round(gain_db, 2),
-            "reason": "similar_trusted_reference_tonal_alignment",
-        })
-
-    dynamics = _record(source_inspector.get("dynamics"))
-    plr = _number(dynamics.get("peak_to_loudness_ratio_lu"))
-    crest = _number(dynamics.get("crest_factor_db"))
-    ratio = PRESET_TARGETS.get(preset, PRESET_TARGETS["balanced"])["compression_ratio"]
-    compression_enabled = (
-        preset != "dynamic"
-        and ratio > 1.0
-        and (plr is None or plr > 10.5)
-        and (crest is None or crest > 9.5)
+    reference_fine = (
+        weighted_reference_bands(selection, "perceptual_envelope_db")
+        if target.get("reference_source") == "similar_trusted_references"
+        else {}
     )
+    tonal = build_tonal_plan(
+        preset=preset,
+        source_inspector=source_inspector,
+        target=target,
+        reference_bands=reference_fine,
+        legacy_reference_bands=reference_broad,
+    )
+    dynamics_plan = build_dynamics_plan(preset, source_inspector, target)
 
     issues = source_inspector.get("issues") or []
     phase_risk = any(
@@ -237,21 +223,15 @@ def build_processing_plan(
     )
 
     return {
-        "schema": ACTIVE_MASTERING_SCHEMA,
-        "eq_moves": eq_moves,
-        "highpass_hz": 0.0 if preset == "streaming_safe" else 20.0,
-        "compression": {
-            "enabled": compression_enabled,
-            "threshold_dbfs": -18.0,
-            "ratio": ratio if compression_enabled else 1.0,
-            "attack_ms": 20.0,
-            "release_ms": 180.0,
-            "reason": "gentle_glue_only_when_dynamic_headroom_exists" if compression_enabled else "preserve_existing_dynamics",
-        },
+        "schema": "ensemblis.active_mastering.v2",
+        "eq_moves": tonal["eq_moves"],
+        "highpass_hz": tonal["highpass_hz"],
+        "tonal": tonal,
+        "compression": dynamics_plan,
         "stereo": {
             "mode": "preserve",
             "phase_risk_detected": phase_risk,
-            "note": "Active v1 never applies blind stereo widening or low-end narrowing.",
+            "note": "V2 still forbids blind widening. Corrective M/S is introduced only behind measured translation evidence.",
         },
         "loudness": {
             "integrated_lufs": target["integrated_lufs"],
