@@ -14,6 +14,7 @@ import imageio_ffmpeg
 from pydantic import BaseModel, Field
 
 from .main import download, sha256_file, upload_file
+from .mastering_contracts import build_v2_target_contract
 from .mastering_inspector import analyze_mastering
 
 ACTIVE_MASTERING_SCHEMA = "ensemblis.active_mastering.v1"
@@ -133,7 +134,16 @@ def build_mastering_target(
     source_lra = _number(source_dynamics.get("loudness_range_lu"))
     max_lra = _clamp(max(source_lra or 0.0, 11.0), 7.0, 18.0)
 
+    v2_contract = build_v2_target_contract(
+        preset=preset,
+        preferred_lufs=target_lufs,
+        true_peak_dbtp=true_peak,
+        source_inspector=source_inspector,
+    )
+
     return {
+        "schema": v2_contract["schema"],
+        "candidate_schema": v2_contract["candidate_schema"],
         "preset": preset if preset in PRESET_TARGETS else "balanced",
         "integrated_lufs": round(target_lufs, 2),
         "true_peak_dbtp": round(true_peak, 2),
@@ -145,6 +155,11 @@ def build_mastering_target(
         "preserve_source": preset == "streaming_safe",
         "static_gain_db": round(static_gain_db, 2) if preset == "streaming_safe" else None,
         "source_true_peak_dbtp": round(source_true_peak, 2) if source_true_peak is not None else None,
+        "loudness_range": v2_contract["loudness_range"],
+        "true_peak": v2_contract["true_peak"],
+        "change_budget": v2_contract["change_budget"],
+        "source_resolution": v2_contract["source_resolution"],
+        "decision_policy": v2_contract["decision_policy"],
     }
 
 
@@ -213,8 +228,19 @@ def build_processing_plan(
             "integrated_lufs": target["integrated_lufs"],
             "true_peak_dbtp": target["true_peak_dbtp"],
             "max_lra_lu": target["max_lra_lu"],
-            "engine": "static_gain" if preset == "streaming_safe" else "ffmpeg_loudnorm_two_pass",
+            "engine": "static_gain" if preset == "streaming_safe" else "ffmpeg_oversampled_alimiter",
+            "measurement_engine": "ffmpeg_loudnorm_measurement_only" if preset != "streaming_safe" else None,
             "gain_db": target.get("static_gain_db") if preset == "streaming_safe" else None,
+        },
+        "limiter": {
+            "enabled": preset != "streaming_safe",
+            "engine": "ffmpeg_alimiter",
+            "oversampling_factor": 4,
+            "attack_ms": 5.0,
+            "release_ms": 80.0,
+            "auto_level": False,
+            "latency_compensation": True,
+            "reason": "explicit_peak_control_without_loudnorm_render_fallback" if preset != "streaming_safe" else "bypass_for_source_preservation",
         },
     }
 
@@ -261,11 +287,17 @@ def _filter_chain(plan: dict[str, Any]) -> str:
     return ",".join(filters)
 
 
-def _render_premaster(source: Path, output: Path, plan: dict[str, Any]) -> None:
+def _render_premaster(
+    source: Path,
+    output: Path,
+    plan: dict[str, Any],
+    *,
+    sample_rate_hz: int,
+) -> None:
     process = _run_ffmpeg([
         "-loglevel", "error", "-y", "-i", str(source), "-vn",
         "-af", _filter_chain(plan) or "anull",
-        "-ar", "48000", "-ac", "2", "-c:a", "pcm_s24le", str(output),
+        "-ar", str(sample_rate_hz), "-ac", "2", "-c:a", "pcm_s24le", str(output),
     ])
     if process.returncode != 0:
         raise RuntimeError(f"Premaster DSP failed: {process.stderr[-1200:]}")
@@ -292,46 +324,87 @@ def _measure_loudnorm(path: Path, target: dict[str, Any]) -> dict[str, Any]:
     return _parse_loudnorm_json(process.stderr)
 
 
-def _render_static_gain(path: Path, output: Path, gain_db: float) -> None:
+def _render_static_gain(
+    path: Path,
+    output: Path,
+    gain_db: float,
+    *,
+    sample_rate_hz: int,
+) -> None:
     filter_value = "anull" if abs(gain_db) < 0.001 else f"volume={gain_db:.3f}dB"
     process = _run_ffmpeg([
         "-loglevel", "error", "-y", "-i", str(path), "-vn",
         "-af", filter_value,
-        "-ar", "48000", "-ac", "2",
+        "-ar", str(sample_rate_hz), "-ac", "2",
         "-c:a", "flac", "-compression_level", "12", "-sample_fmt", "s32",
+        "-bits_per_raw_sample", "24",
         str(output),
     ])
     if process.returncode != 0:
         raise RuntimeError(f"Static-gain mastering render failed: {process.stderr[-1200:]}")
 
 
-def _render_loudnorm(path: Path, output: Path, target: dict[str, Any], measured: dict[str, Any]) -> None:
-    def required(key: str) -> float:
-        value = _number(measured.get(key))
-        if value is None:
-            raise RuntimeError(f"FFmpeg loudnorm measurement missing {key}.")
-        return value
+def _render_explicit_limiter(
+    path: Path,
+    output: Path,
+    target: dict[str, Any],
+    measured: dict[str, Any],
+    *,
+    sample_rate_hz: int,
+) -> dict[str, Any]:
+    input_lufs = _number(measured.get("input_i"))
+    if input_lufs is None:
+        raise RuntimeError("FFmpeg loudness measurement missing input_i.")
 
-    loudnorm = (
-        f"loudnorm=I={float(target['integrated_lufs']):.2f}:"
-        f"TP={float(target['true_peak_dbtp']):.2f}:"
-        f"LRA={float(target['max_lra_lu']):.2f}:"
-        f"measured_I={required('input_i'):.3f}:"
-        f"measured_TP={required('input_tp'):.3f}:"
-        f"measured_LRA={required('input_lra'):.3f}:"
-        f"measured_thresh={required('input_thresh'):.3f}:"
-        f"offset={required('target_offset'):.3f}:"
-        "linear=true:print_format=summary"
-    )
+    preferred_lufs = float(target["integrated_lufs"])
+    loudness_range = _record(target.get("loudness_range"))
+    hard_max_gain = _number(loudness_range.get("hard_max_gain_db"))
+    if hard_max_gain is None:
+        hard_max_gain = 6.0
+
+    requested_gain_db = preferred_lufs - input_lufs
+    applied_gain_db = _clamp(requested_gain_db, -12.0, hard_max_gain)
+    ceiling_dbtp = float(target["true_peak_dbtp"])
+    limit_linear = 10.0 ** (ceiling_dbtp / 20.0)
+    oversampled_rate_hz = min(max(sample_rate_hz * 4, sample_rate_hz), 192000)
+    oversampling_factor = oversampled_rate_hz / float(sample_rate_hz)
+
+    filters = [
+        f"volume={applied_gain_db:.4f}dB",
+        f"aresample={oversampled_rate_hz}",
+        (
+            "alimiter="
+            f"limit={limit_linear:.8f}:attack=5:release=80:"
+            "level=false:latency=true"
+        ),
+        f"aresample={sample_rate_hz}",
+    ]
     process = _run_ffmpeg([
         "-loglevel", "error", "-y", "-i", str(path), "-vn",
-        "-af", loudnorm,
-        "-ar", "48000", "-ac", "2",
+        "-af", ",".join(filters),
+        "-ar", str(sample_rate_hz), "-ac", "2",
         "-c:a", "flac", "-compression_level", "12", "-sample_fmt", "s32",
+        "-bits_per_raw_sample", "24",
         str(output),
     ])
     if process.returncode != 0:
-        raise RuntimeError(f"Final loudness render failed: {process.stderr[-1200:]}")
+        raise RuntimeError(f"Explicit-limiter mastering render failed: {process.stderr[-1200:]}")
+
+    return {
+        "engine": "ffmpeg_oversampled_alimiter",
+        "measurement_engine": "ffmpeg_loudnorm_measurement_only",
+        "input_integrated_lufs": round(input_lufs, 3),
+        "requested_gain_db": round(requested_gain_db, 3),
+        "applied_gain_db": round(applied_gain_db, 3),
+        "hard_max_gain_db": round(hard_max_gain, 3),
+        "ceiling_dbtp": round(ceiling_dbtp, 3),
+        "oversampled_rate_hz": oversampled_rate_hz,
+        "oversampling_factor": round(oversampling_factor, 3),
+        "attack_ms": 5.0,
+        "release_ms": 80.0,
+        "auto_level": False,
+        "latency_compensation": True,
+    }
 
 
 def _encode_flac_variant(
@@ -362,6 +435,7 @@ def _ensure_storage_envelope(
     output: Path,
     workdir: Path,
     *,
+    sample_rate_hz: int = 48000,
     max_bytes: int = MAX_MASTERING_UPLOAD_BYTES,
 ) -> dict[str, Any]:
     current_size = output.stat().st_size
@@ -369,16 +443,19 @@ def _ensure_storage_envelope(
         return {
             "profile": "flac_24",
             "bit_depth": 24,
-            "sample_rate_hz": 48000,
+            "sample_rate_hz": sample_rate_hz,
             "fallback_applied": False,
             "file_size": current_size,
             "max_upload_bytes": max_bytes,
         }
 
-    variants = (
-        ("flac_16_dithered", 16, 48000),
-        ("flac_16_44k_dithered", 16, 44100),
-    )
+    variants: list[tuple[str, int, int]] = [
+        ("flac_16_native_dithered", 16, sample_rate_hz),
+    ]
+    if sample_rate_hz > 48000:
+        variants.append(("flac_16_48k_dithered", 16, 48000))
+    if sample_rate_hz != 44100:
+        variants.append(("flac_16_44k_dithered", 16, 44100))
     for profile, bit_depth, sample_rate_hz in variants:
         candidate = workdir / f"{profile}.flac"
         _encode_flac_variant(
@@ -419,9 +496,19 @@ def _candidate_checks(after: dict[str, Any], target: dict[str, Any], before: dic
     plr_loss = (before_plr - after_plr) if before_plr is not None and after_plr is not None else None
 
     preserve_source = bool(target.get("preserve_source"))
-    loudness_tolerance = 0.35 if preserve_source else 0.75
-    dynamics_tolerance = 0.75 if preserve_source else 1.75
-    loudness_ok = integrated is not None and abs(integrated - float(target["integrated_lufs"])) <= loudness_tolerance
+    loudness_range = _record(target.get("loudness_range"))
+    min_lufs = _number(loudness_range.get("min_lufs"))
+    max_lufs = _number(loudness_range.get("max_lufs"))
+    if preserve_source or min_lufs is None or max_lufs is None:
+        loudness_tolerance = 0.35 if preserve_source else 0.75
+        loudness_ok = integrated is not None and abs(integrated - float(target["integrated_lufs"])) <= loudness_tolerance
+    else:
+        loudness_ok = integrated is not None and min_lufs - 0.10 <= integrated <= max_lufs + 0.10
+
+    change_budget = _record(target.get("change_budget"))
+    dynamics_tolerance = _number(change_budget.get("max_plr_loss_lu"))
+    if dynamics_tolerance is None:
+        dynamics_tolerance = 0.75 if preserve_source else 1.75
     peak_ok = true_peak is not None and true_peak <= float(target["true_peak_dbtp"]) + 0.20
     dynamics_ok = plr_loss is None or plr_loss <= dynamics_tolerance
     return {
@@ -441,17 +528,34 @@ def _render_candidate(
     before: dict[str, Any],
     target: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    source_resolution = _record(target.get("source_resolution"))
+    sample_rate_hz = int(_number(source_resolution.get("sample_rate_hz")) or 48000)
     if bool(target.get("preserve_source")):
         gain_db = _number(target.get("static_gain_db")) or 0.0
-        _render_static_gain(premaster, output, gain_db)
+        _render_static_gain(
+            premaster,
+            output,
+            gain_db,
+            sample_rate_hz=sample_rate_hz,
+        )
         measured = {
             "engine": "static_gain",
             "gain_db": round(gain_db, 3),
+            "sample_rate_hz": sample_rate_hz,
             "reason": "minimum_attenuation_for_true_peak_headroom",
         }
     else:
-        measured = _measure_loudnorm(premaster, target)
-        _render_loudnorm(premaster, output, target, measured)
+        loudness_measurement = _measure_loudnorm(premaster, target)
+        measured = {
+            **loudness_measurement,
+            **_render_explicit_limiter(
+                premaster,
+                output,
+                target,
+                loudness_measurement,
+                sample_rate_hz=sample_rate_hz,
+            ),
+        }
     after = analyze_mastering(output, music_map)
     checks = _candidate_checks(after, target, before)
     return measured, after, checks
@@ -471,8 +575,15 @@ def master_audio(
         before = analyze_mastering(source, music_map)
     target = build_mastering_target(preset, before, reference_signatures)
     plan = build_processing_plan(preset, before, target, reference_signatures)
+    source_resolution = _record(target.get("source_resolution"))
+    native_sample_rate_hz = int(_number(source_resolution.get("sample_rate_hz")) or 48000)
     premaster = workdir / "premaster.wav"
-    _render_premaster(source, premaster, plan)
+    _render_premaster(
+        source,
+        premaster,
+        plan,
+        sample_rate_hz=native_sample_rate_hz,
+    )
 
     iterations: list[dict[str, Any]] = []
     measured, after, checks = _render_candidate(premaster, output, music_map, before, target)
@@ -500,7 +611,11 @@ def master_audio(
         })
         target = safer_target
 
-    delivery = _ensure_storage_envelope(output, workdir)
+    delivery = _ensure_storage_envelope(
+        output,
+        workdir,
+        sample_rate_hz=native_sample_rate_hz,
+    )
     if delivery["fallback_applied"]:
         after = analyze_mastering(output, music_map)
         checks = _candidate_checks(after, target, before)
@@ -541,8 +656,10 @@ def master_audio(
             "Streaming-safe mastering uses transparent static attenuation for true-peak headroom instead of squeezing peaks to preserve the original loudness.",
             "Trusted-reference tonal matching is only applied when at least three explicit mastering references exist.",
             "The stored candidate uses the lossless FLAC codec so release-grade mastering can stay within bounded object-storage limits without perceptual/lossy codec compression.",
-            "If a 24-bit candidate exceeds the storage envelope, Ensemblis uses a dithered 16-bit PCM-in-FLAC delivery fallback and re-verifies the stored waveform.",
-            "Active v1 preserves stereo by default and does not perform blind widening or destructive stem remixing.",
+            "Creative mastering measures EBU R128 loudness first, then uses explicit oversampled lookahead limiting instead of loudnorm as the final waveform processor.",
+            "Canonical renders preserve the source sample rate and use 24-bit PCM-in-FLAC before any temporary storage-tier compatibility fallback.",
+            "If a 24-bit candidate exceeds the current storage envelope, Ensemblis still uses the existing dithered 16-bit compatibility fallback and re-verifies the stored waveform until canonical storage is decoupled in the next V2 storage step.",
+            "Active Mastering preserves stereo by default and does not perform blind widening or destructive stem remixing.",
         ],
     }
 
