@@ -89,7 +89,9 @@ test("the durable automation cycle senses before ranking next actions", async ()
   assert.equal(cron.includes("fillOneMissingScheduledAsset"), false);
   assert.ok(cron.includes('import { after } from "next/server"'));
   assert.ok(cron.includes("after(async () =>"));
-  assert.ok(cron.includes("export const maxDuration = 55"));
+  assert.ok(cron.includes("export const maxDuration = 300"));
+  const vercel = JSON.parse(await readFile("vercel.json", "utf8"));
+  assert.equal(vercel.fluid, true);
 
   const audienceCode = await readFile("lib/marketing/audience.ts", "utf8");
   assert.ok(audienceCode.includes("Replies are never auto-sent") === false);
