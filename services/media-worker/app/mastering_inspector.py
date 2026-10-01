@@ -990,7 +990,12 @@ def _evaluate(*, format_info: dict[str, Any], loudness: dict[str, Any], sample_q
     return issues
 
 
-def analyze_mastering(path: Path, music_map: dict[str, Any]) -> dict[str, Any]:
+def analyze_mastering(
+    path: Path,
+    music_map: dict[str, Any],
+    *,
+    include_codec_stress: bool = True,
+) -> dict[str, Any]:
     try:
         audio, sample_rate = sf.read(str(path), always_2d=True, dtype="float32")
     except Exception as exc:
@@ -1023,7 +1028,7 @@ def analyze_mastering(path: Path, music_map: dict[str, Any]) -> dict[str, Any]:
     rhythm_confidence = _finite((((music_map.get("analysis") or {}).get("confidence") or {}).get("rhythm")))
     beat_stability = analyze_beat_stability([int(value) for value in music_map.get("beats_ms") or []], global_bpm=_finite(music_map.get("bpm")), sections=sections, rhythm_confidence=rhythm_confidence)
     temporal_stability = _temporal_stability(audio, sample_rate, sections)
-    codec_stress = _codec_stress(path, loudness)
+    codec_stress = _codec_stress(path, loudness) if include_codec_stress else []
     issues = _evaluate(format_info=format_info, loudness=loudness, sample_qc=sample_qc, stereo=stereo, stereo_windows=stereo_windows, spectral=spectral, beat_stability=beat_stability, codec_stress=codec_stress)
     critical = [item for item in issues if item.get("severity") == "critical"]
     review = [item for item in issues if item.get("severity") == "review"]
@@ -1041,6 +1046,7 @@ def analyze_mastering(path: Path, music_map: dict[str, Any]) -> dict[str, Any]:
         "dynamics": dynamics, "transients": transients, "stereo": stereo, "stereo_timeline": stereo_windows, "tonal_balance": spectral,
         "beat_stability": beat_stability, "temporal_stability": temporal_stability, "codec_stress": codec_stress,
         "platform_previews": {"spotify": _spotify_playback(integrated, true_peak)},
+        "analysis_scope": "full" if include_codec_stress else "candidate_core",
         "reference_signature": {
             "integrated_lufs": loudness.get("integrated_lufs"), "true_peak_dbtp": loudness.get("true_peak_dbtp"),
             "loudness_range_lu": dynamics.get("loudness_range_lu"), "peak_to_loudness_ratio_lu": dynamics.get("peak_to_loudness_ratio_lu"),
