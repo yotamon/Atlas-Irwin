@@ -4,6 +4,7 @@ import asyncio
 import json
 import math
 import re
+import shutil
 import subprocess
 from pathlib import Path
 from statistics import median
@@ -14,6 +15,7 @@ import imageio_ffmpeg
 from pydantic import BaseModel, Field
 
 from .main import download, sha256_file, upload_file
+from .mastering_candidates import build_candidate_family, select_candidate
 from .mastering_contracts import build_v2_target_contract
 from .mastering_dynamics import build_dynamics_plan
 from .mastering_evaluation import build_perceptual_delta, evaluate_change_budget
@@ -570,6 +572,8 @@ def _render_candidate(
     music_map: dict[str, Any],
     before: dict[str, Any],
     target: dict[str, Any],
+    *,
+    include_codec_stress: bool = True,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     source_resolution = _record(target.get("source_resolution"))
     sample_rate_hz = int(_number(source_resolution.get("sample_rate_hz")) or 48000)
@@ -599,7 +603,11 @@ def _render_candidate(
                 sample_rate_hz=sample_rate_hz,
             ),
         }
-    after = analyze_mastering(output, music_map)
+    after = analyze_mastering(
+        output,
+        music_map,
+        include_codec_stress=include_codec_stress,
+    )
     checks = _candidate_checks(after, target, before, measured)
     return measured, after, checks
 
@@ -629,29 +637,33 @@ def master_audio(
     )
 
     iterations: list[dict[str, Any]] = []
-    measured, after, checks = _render_candidate(premaster, output, music_map, before, target)
-    iterations.append({
-        "iteration": 1,
-        "target": dict(target),
-        "loudnorm_measurement": measured,
-        "checks": checks,
-    })
+    optimizer: dict[str, Any] | None = None
 
-    if not checks["pass"]:
-        safer_target = dict(target)
-        safer_target["true_peak_dbtp"] = round(min(float(target["true_peak_dbtp"]) - 0.5, -1.5), 2)
-        safer_true_peak = dict(_record(target.get("true_peak")))
-        safer_true_peak["ceiling_dbtp"] = safer_target["true_peak_dbtp"]
-        safer_target["true_peak"] = safer_true_peak
+    if bool(target.get("preserve_source")):
+        measured, after, checks = _render_candidate(
+            premaster,
+            output,
+            music_map,
+            before,
+            target,
+        )
+        iterations.append({
+            "iteration": 1,
+            "candidate_id": "source_preserving",
+            "candidate_role": "recommended",
+            "target": dict(target),
+            "render_measurement": measured,
+            "checks": checks,
+        })
 
-        loudness_shift = 0.0
-        if bool(target.get("preserve_source")):
+        if not checks["pass"]:
+            safer_target = dict(target)
+            safer_target["true_peak_dbtp"] = round(min(float(target["true_peak_dbtp"]) - 0.5, -1.5), 2)
+            safer_true_peak = dict(_record(target.get("true_peak")))
+            safer_true_peak["ceiling_dbtp"] = safer_target["true_peak_dbtp"]
+            safer_target["true_peak"] = safer_true_peak
             safer_target["static_gain_db"] = round(float(target.get("static_gain_db") or 0.0) - 0.5, 2)
             loudness_shift = -0.5
-        elif not checks["loudness_in_range"] or not checks["dynamics_preserved"]:
-            loudness_shift = -0.35
-
-        if loudness_shift:
             safer_target["integrated_lufs"] = round(float(target["integrated_lufs"]) + loudness_shift, 2)
             safer_range = dict(_record(target.get("loudness_range")))
             for key in ("preferred_lufs", "min_lufs", "max_lufs"):
@@ -659,14 +671,74 @@ def master_audio(
                 if value is not None:
                     safer_range[key] = round(value + loudness_shift, 2)
             safer_target["loudness_range"] = safer_range
-        measured, after, checks = _render_candidate(premaster, output, music_map, before, safer_target)
-        iterations.append({
-            "iteration": 2,
-            "target": dict(safer_target),
-            "loudnorm_measurement": measured,
-            "checks": checks,
-        })
-        target = safer_target
+            measured, after, checks = _render_candidate(
+                premaster,
+                output,
+                music_map,
+                before,
+                safer_target,
+            )
+            iterations.append({
+                "iteration": 2,
+                "candidate_id": "source_preserving_safer",
+                "candidate_role": "safer",
+                "target": dict(safer_target),
+                "render_measurement": measured,
+                "checks": checks,
+            })
+            target = safer_target
+    else:
+        rendered_candidates: list[dict[str, Any]] = []
+        for index, candidate in enumerate(build_candidate_family(target), start=1):
+            candidate_target = _record(candidate.get("target"))
+            candidate_path = workdir / f"mastering-candidate-{index:02d}.flac"
+            candidate_measurement, candidate_after, candidate_checks = _render_candidate(
+                premaster,
+                candidate_path,
+                music_map,
+                before,
+                candidate_target,
+                include_codec_stress=False,
+            )
+            row = {
+                "id": candidate.get("id"),
+                "role": candidate.get("role"),
+                "reason": candidate.get("reason"),
+                "path": candidate_path,
+                "target": candidate_target,
+                "measurement": candidate_measurement,
+                "after": candidate_after,
+                "checks": candidate_checks,
+            }
+            rendered_candidates.append(row)
+            iterations.append({
+                "iteration": index,
+                "candidate_id": candidate.get("id"),
+                "candidate_role": candidate.get("role"),
+                "target": dict(candidate_target),
+                "render_measurement": candidate_measurement,
+                "checks": candidate_checks,
+            })
+
+        optimizer = select_candidate(rendered_candidates)
+        selected = _record(optimizer.get("selected"))
+        selected_path = selected.get("path")
+        if not isinstance(selected_path, Path):
+            raise RuntimeError("Candidate optimizer returned no render path.")
+        shutil.copyfile(selected_path, output)
+        target = _record(selected.get("target"))
+        measured = _record(selected.get("measurement"))
+        # Full verification, including codec stress, is run only on the exact
+        # candidate that may be shown/promoted. Intermediate candidates use the
+        # deterministic core inspector to keep worker cost bounded.
+        after = analyze_mastering(output, music_map)
+        checks = _candidate_checks(after, target, before, measured)
+        optimizer = {
+            key: value
+            for key, value in optimizer.items()
+            if key != "selected"
+        }
+        optimizer["selected_checks_full"] = checks
 
     delivery = _ensure_storage_envelope(
         output,
@@ -690,6 +762,7 @@ def master_audio(
         "before": before,
         "after": after,
         "iterations": iterations,
+        "optimizer": optimizer,
         "delivery": {
             **delivery,
             "container": "FLAC",
