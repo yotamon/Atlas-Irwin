@@ -38,6 +38,7 @@ _CHANGE_BUDGETS: dict[str, dict[str, float]] = {
     "streaming_safe": {
         "max_plr_loss_lu": 0.75,
         "max_transient_loss_db": 0.35,
+        "max_short_term_compression_delta_lu": 0.5,
         "max_spectral_envelope_distance": 0.08,
         "max_stereo_correlation_delta": 0.04,
         "max_mono_fold_down_regression_db": 0.15,
@@ -48,6 +49,7 @@ _CHANGE_BUDGETS: dict[str, dict[str, float]] = {
     "balanced": {
         "max_plr_loss_lu": 1.5,
         "max_transient_loss_db": 1.0,
+        "max_short_term_compression_delta_lu": 1.25,
         "max_spectral_envelope_distance": 0.22,
         "max_stereo_correlation_delta": 0.08,
         "max_mono_fold_down_regression_db": 0.4,
@@ -58,6 +60,7 @@ _CHANGE_BUDGETS: dict[str, dict[str, float]] = {
     "punchy": {
         "max_plr_loss_lu": 1.9,
         "max_transient_loss_db": 1.35,
+        "max_short_term_compression_delta_lu": 1.75,
         "max_spectral_envelope_distance": 0.25,
         "max_stereo_correlation_delta": 0.08,
         "max_mono_fold_down_regression_db": 0.4,
@@ -68,6 +71,7 @@ _CHANGE_BUDGETS: dict[str, dict[str, float]] = {
     "dynamic": {
         "max_plr_loss_lu": 1.0,
         "max_transient_loss_db": 0.65,
+        "max_short_term_compression_delta_lu": 0.9,
         "max_spectral_envelope_distance": 0.18,
         "max_stereo_correlation_delta": 0.06,
         "max_mono_fold_down_regression_db": 0.3,
