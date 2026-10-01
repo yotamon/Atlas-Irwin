@@ -29,7 +29,8 @@ from .mastering_references import (
 from .mastering_stereo import build_stereo_plan
 from .mastering_tonal import build_tonal_plan
 
-ACTIVE_MASTERING_SCHEMA = "ensemblis.active_mastering.v1"
+ACTIVE_MASTERING_SCHEMA = "ensemblis.active_mastering.v2"
+ACTIVE_MASTERING_LEGACY_SCHEMA = "ensemblis.active_mastering.v1"
 FFMPEG_BINARY = imageio_ffmpeg.get_ffmpeg_exe()
 # Supabase Free projects cap individual Storage objects at 50 MB globally.
 # Keep a small transport margin so signed uploads never sit on the plan boundary.
@@ -840,6 +841,10 @@ def master_audio(
 
     return {
         "schema": ACTIVE_MASTERING_SCHEMA,
+        "compatibility": {
+            "legacy_schema": ACTIVE_MASTERING_LEGACY_SCHEMA,
+            "legacy_fields_preserved": True,
+        },
         "preset": preset if preset in PRESET_TARGETS else "balanced",
         "target": target,
         "plan": plan,
