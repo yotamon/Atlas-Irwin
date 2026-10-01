@@ -68,7 +68,7 @@ function masteringSuggestedLoops(value: Json): MasteringSuggestedLoop[] {
     }))
     .filter((row) => row.startMs !== null && row.endMs !== null && row.mono !== null)
     .sort((a, b) => Number(a.mono) - Number(b.mono))[0];
-  if (monoSensitive?.startMs !== null && monoSensitive?.endMs !== null) {
+  if (monoSensitive && monoSensitive.startMs !== null && monoSensitive.endMs !== null) {
     loops.push({
       label: "Mono-sensitive moment",
       start: monoSensitive.startMs / 1000,
@@ -104,7 +104,7 @@ function masteringSuggestedLoops(value: Json): MasteringSuggestedLoop[] {
     }))
     .filter((section) => section.startMs !== null && section.endMs !== null && section.bass !== null)
     .sort((a, b) => Number(b.bass) - Number(a.bass))[0];
-  if (bassSection?.startMs !== null && bassSection?.endMs !== null) {
+  if (bassSection && bassSection.startMs !== null && bassSection.endMs !== null) {
     loops.push({
       label: `Bass-heavy · ${bassSection.label}`,
       start: bassSection.startMs / 1000,
