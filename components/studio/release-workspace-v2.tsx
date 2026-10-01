@@ -4,6 +4,7 @@ import { ObjectHeader } from "@/components/studio/object-header";
 import { ObjectActionBar, type ObjectAction } from "@/components/studio/ux-v4-widgets";
 import { ReleaseForm } from "@/components/studio/release-form";
 import { ReleaseTracklist } from "@/components/studio/release-tracklist";
+import { ReleaseMasteringCoherence } from "@/components/studio/release-mastering-coherence";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { lifecycleLabel, releaseLifecycle } from "@/lib/marketing/release-lifecycle";
 import { deriveReleaseMission } from "@/lib/studio/release-mission";
@@ -125,6 +126,7 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
 
     {activeStage === "overview" ? <div className="release-mission-overview">
       <ReleaseTracklist releaseId={release.id} artistId={artistId} tracks={tracks} vaultTracks={vaultTracks} />
+      <ReleaseMasteringCoherence artistId={artistId} tracks={tracks} vaultTracks={vaultTracks} />
 
       <section className="release-mission-hero" data-status={mission.status}>
         <div>
