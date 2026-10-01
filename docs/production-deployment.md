@@ -22,3 +22,22 @@ After merging a production-facing change:
 5. Only then verify the behavior on the production domain.
 
 If GitHub has advanced but Vercel has not created a deployment, treat production as stale and investigate the Git integration or trigger a fresh `main` Git event rather than diagnosing the old production bundle as current code.
+## Database recovery and upgrade gate
+
+A production database/platform upgrade is not considered safe merely because the application deployment is healthy.
+
+Before a Supabase/PostgreSQL upgrade or other high-risk database operation:
+
+1. Run the protected **Production Database Recovery Drill** workflow.
+2. Require exact restored critical row counts and public RLS/policy fingerprint.
+3. Require zero critical ownership/lineage orphans.
+4. Require the representative Storage object SHA-256 restore check to pass.
+5. Confirm the workflow created and checksummed an independent logical backup.
+6. Confirm Supabase upgrade eligibility and the intended target version.
+7. Confirm canonical production migration parity is exact.
+8. Record the recovery point and expected RPO/RTO in `docs/operations/restore-drill-log.md`.
+
+After the upgrade, repeat migration parity, CI/product contracts, browser smoke, production health/error checks and Supabase advisor readback before declaring the database healthy.
+
+The full procedure is in `docs/operations/backup-and-restore.md`.
+
