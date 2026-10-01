@@ -93,11 +93,15 @@ def build_mastering_target(
     ]
     catalog_lufs = _catalog_median(valid_refs, "integrated_lufs")
     source_loudness = _record(source_inspector.get("loudness"))
+    source_peaks = _record(source_inspector.get("peaks"))
     source_lufs = _number(source_loudness.get("integrated_lufs"))
+    source_true_peak = _number(source_loudness.get("true_peak_dbtp"))
+    if source_true_peak is None:
+        source_true_peak = _number(source_peaks.get("true_peak_dbtp"))
     target_lufs = selected["integrated_lufs"]
     reference_source = "preset"
+    static_gain_db = 0.0
     if preset == "streaming_safe":
-        target_lufs = source_lufs if source_lufs is not None else selected["integrated_lufs"]
         reference_source = "source_preservation"
     elif catalog_lufs is not None and len(valid_refs) >= 3:
         target_lufs = _clamp((target_lufs * 0.55) + (catalog_lufs * 0.45), -13.0, -8.5)
@@ -115,6 +119,13 @@ def build_mastering_target(
         true_peak = -2.0 if source_lufs is not None and source_lufs > -14.0 else -1.0
         if codec_risk:
             true_peak = min(true_peak, -2.0)
+        if source_true_peak is not None:
+            static_gain_db = min(0.0, true_peak - source_true_peak)
+        target_lufs = (
+            source_lufs + static_gain_db
+            if source_lufs is not None
+            else selected["integrated_lufs"] + static_gain_db
+        )
     elif codec_risk:
         true_peak = min(true_peak, -1.8)
 
@@ -132,6 +143,8 @@ def build_mastering_target(
         "catalog_integrated_lufs": round(catalog_lufs, 2) if catalog_lufs is not None else None,
         "codec_headroom_guard": codec_risk,
         "preserve_source": preset == "streaming_safe",
+        "static_gain_db": round(static_gain_db, 2) if preset == "streaming_safe" else None,
+        "source_true_peak_dbtp": round(source_true_peak, 2) if source_true_peak is not None else None,
     }
 
 
@@ -200,7 +213,8 @@ def build_processing_plan(
             "integrated_lufs": target["integrated_lufs"],
             "true_peak_dbtp": target["true_peak_dbtp"],
             "max_lra_lu": target["max_lra_lu"],
-            "engine": "ffmpeg_loudnorm_two_pass",
+            "engine": "static_gain" if preset == "streaming_safe" else "ffmpeg_loudnorm_two_pass",
+            "gain_db": target.get("static_gain_db") if preset == "streaming_safe" else None,
         },
     }
 
@@ -276,6 +290,19 @@ def _measure_loudnorm(path: Path, target: dict[str, Any]) -> dict[str, Any]:
     if process.returncode != 0:
         raise RuntimeError(f"Loudness measurement failed: {process.stderr[-1200:]}")
     return _parse_loudnorm_json(process.stderr)
+
+
+def _render_static_gain(path: Path, output: Path, gain_db: float) -> None:
+    filter_value = "anull" if abs(gain_db) < 0.001 else f"volume={gain_db:.3f}dB"
+    process = _run_ffmpeg([
+        "-loglevel", "error", "-y", "-i", str(path), "-vn",
+        "-af", filter_value,
+        "-ar", "48000", "-ac", "2",
+        "-c:a", "flac", "-compression_level", "12", "-sample_fmt", "s32",
+        str(output),
+    ])
+    if process.returncode != 0:
+        raise RuntimeError(f"Static-gain mastering render failed: {process.stderr[-1200:]}")
 
 
 def _render_loudnorm(path: Path, output: Path, target: dict[str, Any], measured: dict[str, Any]) -> None:
@@ -414,8 +441,17 @@ def _render_candidate(
     before: dict[str, Any],
     target: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-    measured = _measure_loudnorm(premaster, target)
-    _render_loudnorm(premaster, output, target, measured)
+    if bool(target.get("preserve_source")):
+        gain_db = _number(target.get("static_gain_db")) or 0.0
+        _render_static_gain(premaster, output, gain_db)
+        measured = {
+            "engine": "static_gain",
+            "gain_db": round(gain_db, 3),
+            "reason": "minimum_attenuation_for_true_peak_headroom",
+        }
+    else:
+        measured = _measure_loudnorm(premaster, target)
+        _render_loudnorm(premaster, output, target, measured)
     after = analyze_mastering(output, music_map)
     checks = _candidate_checks(after, target, before)
     return measured, after, checks
@@ -450,7 +486,10 @@ def master_audio(
     if not checks["pass"]:
         safer_target = dict(target)
         safer_target["true_peak_dbtp"] = round(min(float(target["true_peak_dbtp"]) - 0.5, -1.5), 2)
-        if not bool(target.get("preserve_source")) and (not checks["loudness_in_range"] or not checks["dynamics_preserved"]):
+        if bool(target.get("preserve_source")):
+            safer_target["static_gain_db"] = round(float(target.get("static_gain_db") or 0.0) - 0.5, 2)
+            safer_target["integrated_lufs"] = round(float(target["integrated_lufs"]) - 0.5, 2)
+        elif not checks["loudness_in_range"] or not checks["dynamics_preserved"]:
             safer_target["integrated_lufs"] = round(float(target["integrated_lufs"]) - 0.35, 2)
         measured, after, checks = _render_candidate(premaster, output, music_map, before, safer_target)
         iterations.append({
@@ -499,6 +538,7 @@ def master_audio(
         },
         "notes": [
             "No generative audio is used. Ensemblis adjusts a constrained mastering DSP chain and verifies the rendered waveform.",
+            "Streaming-safe mastering uses transparent static attenuation for true-peak headroom instead of squeezing peaks to preserve the original loudness.",
             "Trusted-reference tonal matching is only applied when at least three explicit mastering references exist.",
             "The stored candidate uses the lossless FLAC codec so release-grade mastering can stay within bounded object-storage limits without perceptual/lossy codec compression.",
             "If a 24-bit candidate exceeds the storage envelope, Ensemblis uses a dithered 16-bit PCM-in-FLAC delivery fallback and re-verifies the stored waveform.",

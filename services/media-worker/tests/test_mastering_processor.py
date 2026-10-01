@@ -15,7 +15,7 @@ fake_main.upload_file = lambda *args, **kwargs: None
 fake_main.sha256_file = lambda *args, **kwargs: "test"
 with patch.dict(sys.modules, {"app.main": fake_main}):
     from app import mastering_processor as mastering_processor_module
-    from app.mastering_processor import _ensure_storage_envelope, build_mastering_target, build_processing_plan
+    from app.mastering_processor import _ensure_storage_envelope, _render_candidate, build_mastering_target, build_processing_plan
 
 
 def _inspector(*, lufs: float = -7.5, true_peak: float = -0.1, plr: float = 9.0, crest: float = 8.5):
@@ -106,13 +106,16 @@ class ActiveMasteringPlanTest(unittest.TestCase):
         plan = build_processing_plan("streaming_safe", source, target, refs)
 
         self.assertEqual(target["reference_source"], "source_preservation")
-        self.assertEqual(float(target["integrated_lufs"]), -9.7)
         self.assertTrue(target["preserve_source"])
         self.assertLessEqual(float(target["true_peak_dbtp"]), -2.0)
+        self.assertEqual(float(target["static_gain_db"]), -1.9)
+        self.assertEqual(float(target["integrated_lufs"]), -11.6)
         self.assertEqual(plan["eq_moves"], [])
         self.assertEqual(float(plan["highpass_hz"]), 0.0)
         self.assertFalse(plan["compression"]["enabled"])
         self.assertEqual(float(plan["compression"]["ratio"]), 1.0)
+        self.assertEqual(plan["loudness"]["engine"], "static_gain")
+        self.assertEqual(float(plan["loudness"]["gain_db"]), -1.9)
 
     def test_streaming_safe_codec_risk_never_reduces_peak_headroom(self) -> None:
         source = _inspector(lufs=-15.5)
@@ -120,6 +123,43 @@ class ActiveMasteringPlanTest(unittest.TestCase):
         target = build_mastering_target("streaming_safe", source, _references(3))
         self.assertLessEqual(float(target["true_peak_dbtp"]), -2.0)
         self.assertTrue(target["codec_headroom_guard"])
+
+    def test_streaming_safe_production_shape_uses_gain_not_peak_squeezing(self) -> None:
+        source = _inspector(lufs=-13.1, true_peak=-1.0, plr=12.1, crest=13.458)
+        target = build_mastering_target("streaming_safe", source, [])
+        self.assertEqual(float(target["true_peak_dbtp"]), -2.0)
+        self.assertEqual(float(target["static_gain_db"]), -1.0)
+        self.assertEqual(float(target["integrated_lufs"]), -14.1)
+
+    def test_streaming_safe_renderer_never_calls_loudnorm(self) -> None:
+        source = _inspector(lufs=-13.1, true_peak=-1.0, plr=12.1, crest=13.458)
+        target = build_mastering_target("streaming_safe", source, [])
+        expected_after = {
+            "technical_ready": True,
+            "issue_counts": {"critical": 0},
+            "loudness": {"integrated_lufs": -14.1, "true_peak_dbtp": -2.0},
+            "peaks": {"clipping_samples": 0},
+            "dynamics": {"peak_to_loudness_ratio_lu": 12.1},
+        }
+
+        with patch.object(mastering_processor_module, "_render_static_gain") as static_render, patch.object(
+            mastering_processor_module, "_measure_loudnorm", side_effect=AssertionError("loudnorm must not run")
+        ), patch.object(
+            mastering_processor_module, "analyze_mastering", return_value=expected_after
+        ):
+            measured, after, checks = _render_candidate(
+                Path("premaster.wav"),
+                Path("mastered.flac"),
+                {},
+                source,
+                target,
+            )
+
+        static_render.assert_called_once_with(Path("premaster.wav"), Path("mastered.flac"), -1.0)
+        self.assertEqual(measured["engine"], "static_gain")
+        self.assertEqual(after, expected_after)
+        self.assertTrue(checks["pass"])
+        self.assertTrue(checks["dynamics_preserved"])
 
     def test_storage_envelope_keeps_small_24_bit_flac(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

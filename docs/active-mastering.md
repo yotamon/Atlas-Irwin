@@ -20,12 +20,14 @@ Canonical master
   -> Mastering Inspector evidence
   -> contextual intent + trusted-reference target builder
   -> constrained DSP plan
-     - streaming_safe: no cleanup EQ, catalog EQ or compression
+     - streaming_safe: no cleanup EQ, catalog EQ or compression; static attenuation only when true-peak headroom requires it
      - creative directions: 20 Hz cleanup + bounded trusted-reference EQ when enough references exist
      - gentle compression only when dynamic headroom exists
      - no blind stereo widening
   -> 48 kHz / 24-bit premaster
-  -> FFmpeg loudnorm two-pass render
+  -> render
+     - streaming_safe: transparent static gain, preserving PLR/dynamics
+     - creative directions: FFmpeg loudnorm two-pass
   -> Mastering Inspector re-analysis
   -> acceptance checks
   -> optional safer second render
@@ -37,7 +39,7 @@ Canonical master
 
 ## Mastering intents
 
-- **Streaming-safe**: source-preserving corrective path for measured true-peak/codec headroom risk. It keeps source integrated loudness, disables catalog EQ and compression, and chooses true-peak headroom from measured loudness/risk.
+- **Streaming-safe**: source-preserving corrective path for measured true-peak/codec headroom risk. It disables catalog EQ and compression and uses only the minimum static attenuation needed to reach the computed true-peak target. Integrated loudness follows that same gain change rather than using peak-squeezing to force the source back to its original LUFS.
 - **Balanced**: clean, controlled and release-ready. Default target around -10 LUFS with conservative true-peak headroom.
 - **Punchy**: slightly more forward target around -9 LUFS, but compression is skipped when the source is already dynamically constrained.
 - **Dynamic**: target around -11.5 LUFS and never adds master-bus compression.
@@ -54,7 +56,7 @@ A candidate must satisfy all of the following before it can be promoted:
 - integrated loudness within the computed target range;
 - dynamics not materially degraded versus the source.
 
-If the first render does not pass, the processor performs one safer iteration with more peak headroom and, when needed, a slightly lower loudness target. A non-passing result is still available for review/download, but cannot replace the canonical master.
+If the first render does not pass, the processor performs one safer iteration with more peak headroom. Creative directions may also use a slightly lower loudness target; streaming-safe instead applies an equal additional static attenuation so PLR and transient shape remain intact. A non-passing result is still available for review/download, is tagged as review-required rather than distribution-ready, and cannot replace the canonical master.
 
 The verified delivery file uses the lossless FLAC codec. Ensemblis normally keeps 24-bit / 48 kHz precision; on bounded object-storage tiers it deterministically falls back to dithered 16-bit PCM encoded in FLAC (48 kHz first, then 44.1 kHz only if required). The fallback does reduce bit depth, so result metadata records that source precision was not fully preserved. Any fallback is re-analyzed from the exact stored waveform before promotion is allowed. This avoids perceptual/lossy codec compression, and Distribution already accepts both WAV and FLAC masters.
 
