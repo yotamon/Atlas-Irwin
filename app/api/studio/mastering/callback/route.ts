@@ -44,6 +44,7 @@ function cleanRequestPayload(value: Record<string, unknown>) {
   const next = { ...value };
   delete next[MEDIA_WORKER_CALLBACK_HASH_KEY];
   delete next.upload_url;
+  delete next.chunk_uploads;
   return next;
 }
 
@@ -125,8 +126,18 @@ export async function POST(request: Request) {
 
     const path = typeof requestPayload.upload_path === "string" ? requestPayload.upload_path : job.output_path;
     const bucket = typeof requestPayload.upload_bucket === "string" ? requestPayload.upload_bucket : job.output_bucket;
-    const publicUrl = typeof requestPayload.public_url === "string" ? requestPayload.public_url : "";
     const output = record(result.output);
+    const storage = record(result.storage);
+    const storageMode = typeof storage.storage_mode === "string" ? storage.storage_mode : "single_object";
+    const directPublicUrl = typeof requestPayload.direct_public_url === "string"
+      ? requestPayload.direct_public_url
+      : typeof requestPayload.public_url === "string"
+        ? requestPayload.public_url
+        : "";
+    const chunkedPublicUrl = typeof requestPayload.chunked_public_url === "string"
+      ? requestPayload.chunked_public_url
+      : "";
+    const publicUrl = storageMode === "chunked_lossless" ? chunkedPublicUrl : directPublicUrl;
     const finalChecks = record(result.final_checks);
     const verifiedForDistribution = finalChecks.pass === true;
     if (!path || !bucket || !publicUrl) throw new Error("Active Mastering callback is missing output lineage.");
@@ -176,15 +187,23 @@ export async function POST(request: Request) {
           source_master_url: job.source_audio_url,
           mastering_schema: result.schema ?? null,
           final_checks: finalChecks,
+          storage_mode: storageMode,
+          chunk_manifest: Array.isArray(storage.chunk_manifest) ? storage.chunk_manifest : [],
+          canonical_file_size: typeof output.file_size === "number" ? output.file_size : null,
+          canonical_sha256: typeof output.sha256 === "string" ? output.sha256 : null,
         }),
       }).select("*").single();
       if (created.error || !created.data) throw new Error(created.error?.message || "Could not register mastered output.");
       asset = created.data;
     }
 
+    const cleanPayload = {
+      ...cleanRequestPayload(requestPayload),
+      public_url: publicUrl,
+    };
     const update = await db.from("track_mastering_jobs").update({
       status: "completed",
-      request_payload: json(cleanRequestPayload(requestPayload)),
+      request_payload: json(cleanPayload),
       result_payload: json(result),
       output_asset_id: asset.id,
       error: null,
