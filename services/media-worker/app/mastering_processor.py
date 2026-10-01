@@ -542,6 +542,76 @@ def _split_mastering_chunks(
     return chunks
 
 
+_CODEC_PREVIEW_ENCODERS: dict[str, tuple[list[str], str]] = {
+    "aac_256": (["-c:a", "aac", "-b:a", "256k"], ".m4a"),
+    "opus_160": (["-c:a", "libopus", "-b:a", "160k", "-vbr", "on"], ".ogg"),
+}
+
+
+def _render_codec_preview(source: Path, target: Path, profile: str) -> None:
+    spec = _CODEC_PREVIEW_ENCODERS.get(profile)
+    if spec is None:
+        raise ValueError(f"Unsupported mastering codec preview: {profile}")
+    encoder_args, _ = spec
+    process = _run_ffmpeg([
+        "-loglevel", "error", "-y", "-i", str(source), "-vn",
+        *encoder_args,
+        str(target),
+    ], timeout=120)
+    if process.returncode != 0 or not target.exists() or target.stat().st_size <= 0:
+        raise RuntimeError(
+            f"Mastering codec preview {profile} failed: {process.stderr[-600:]}"
+        )
+
+
+async def _render_and_upload_codec_previews(
+    payload: dict[str, Any],
+    output: Path,
+    workdir: Path,
+) -> list[dict[str, Any]]:
+    slots_raw = payload.get("codec_preview_uploads")
+    slots = [item for item in slots_raw if isinstance(item, dict)] if isinstance(slots_raw, list) else []
+    previews: list[dict[str, Any]] = []
+    for slot in slots[:4]:
+        profile = str(slot.get("id") or "")
+        spec = _CODEC_PREVIEW_ENCODERS.get(profile)
+        if spec is None:
+            continue
+        upload_url = str(slot.get("upload_url") or "")
+        public_url = str(slot.get("public_url") or "")
+        storage_path = str(slot.get("storage_path") or "")
+        mime_type = str(slot.get("mime_type") or "")
+        suffix = spec[1]
+        target = workdir / f"mastering-preview-{profile}{suffix}"
+        if not upload_url or not public_url or not storage_path or not mime_type:
+            previews.append({
+                "profile": profile,
+                "status": "unavailable",
+                "reason": "preview_upload_envelope_incomplete",
+            })
+            continue
+        try:
+            await asyncio.to_thread(_render_codec_preview, output, target, profile)
+            await upload_file(upload_url, target, mime_type)
+            previews.append({
+                "profile": profile,
+                "status": "ready",
+                "public_url": public_url,
+                "storage_path": storage_path,
+                "mime_type": mime_type,
+                "file_size": target.stat().st_size,
+                "sha256": sha256_file(target),
+                "source": "exact_selected_master",
+            })
+        except Exception as exc:
+            previews.append({
+                "profile": profile,
+                "status": "unavailable",
+                "reason": str(exc)[:280],
+            })
+    return previews
+
+
 async def _upload_mastering_output(
     payload: dict[str, Any],
     output: Path,
@@ -978,6 +1048,11 @@ async def execute_mastering(request: MasteringWorkerRequest) -> None:
                 workdir,
             )
             result["storage"] = storage_result
+            result["codec_previews"] = await _render_and_upload_codec_previews(
+                payload,
+                output,
+                workdir,
+            )
         await _callback(request, "completed", result)
     except Exception as exc:
         message = str(exc)[:2200] or "Active Mastering failed."
