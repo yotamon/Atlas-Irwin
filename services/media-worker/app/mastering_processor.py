@@ -236,7 +236,8 @@ def build_processing_plan(
         "limiter": {
             "enabled": preset != "streaming_safe",
             "engine": "ffmpeg_alimiter",
-            "oversampling_factor": 4,
+            "requested_oversampling_factor": 4,
+            "max_oversampled_rate_hz": 192000,
             "attack_ms": 5.0,
             "release_ms": 80.0,
             "auto_level": False,
