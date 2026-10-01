@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { asMasteringClient } from "@/lib/mastering/jobs";
 import { createServiceClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -95,7 +96,8 @@ function responseHeaders(input: {
 async function resolveMasteringAsset(jobId: string) {
   if (!/^[0-9a-f-]{36}$/i.test(jobId)) return null;
   const service = createServiceClient();
-  const job = await service.from("track_mastering_jobs")
+  const mastering = asMasteringClient(service);
+  const job = await mastering.from("track_mastering_jobs")
     .select("output_asset_id,status")
     .eq("id", jobId)
     .eq("status", "completed")
@@ -172,6 +174,15 @@ async function serve(request: Request, jobId: string, headOnly: boolean) {
             });
             if (!response.ok || !response.body) {
               throw new Error(`Could not read mastering chunk ${chunk.index}.`);
+            }
+
+            const wantsWholeChunk = localStart === 0 && localEnd === chunk.size - 1;
+            if (response.status === 200 && !wantsWholeChunk) {
+              // Some object/CDN paths may ignore Range. Slice defensively so
+              // Ensemblis still honors the canonical FLAC byte range exactly.
+              const bytes = new Uint8Array(await response.arrayBuffer());
+              controller.enqueue(bytes.slice(localStart, localEnd + 1));
+              continue;
             }
 
             const reader = response.body.getReader();
