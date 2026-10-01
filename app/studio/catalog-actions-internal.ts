@@ -553,8 +553,8 @@ export async function registerMediaUpload(form: FormData) {
     title: z.string().max(200).parse(value(form, "title")),
     description: z.string().max(2000).parse(value(form, "description")),
     tags: parseTags(value(form, "tags")),
-    upload_source: "media_library",
-    source_kind: "upload",
+    upload_source: visibility === "private" ? "mastering_reference" : "media_library",
+    source_kind: visibility === "private" ? "mastering_reference_upload" : "upload",
   };
   const duplicateResult = contentHash
     ? await supabase.from("media_assets").select("*").eq("owner_id", user.id).eq("content_hash", contentHash).eq("visibility", visibility).limit(1).maybeSingle()
