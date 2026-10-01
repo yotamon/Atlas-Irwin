@@ -498,8 +498,12 @@ export async function createMediaUploadTarget(form: FormData) {
   const mimeType = z.string().min(1).max(200).parse(value(form, "mime_type"));
   if (!isCompatibleMediaType(assetType, mimeType)) throw new Error("That role is not compatible with this file format.");
   const storageScope = z.enum(["public", "mastering_reference"]).parse(value(form, "storage_scope") || "public");
-  const maxBytes = storageScope === "mastering_reference" ? 48_000_000 : 104_857_600;
-  z.coerce.number().int().positive().max(maxBytes).parse(value(form, "file_size"));
+  const fileSize = z.coerce.number().int().positive();
+  if (storageScope === "mastering_reference") {
+    fileSize.max(48_000_000).parse(value(form, "file_size"));
+  } else {
+    fileSize.max(104857600).parse(value(form, "file_size"));
+  }
   const originalName = z.string().min(1).max(500).parse(value(form, "original_name"));
   const safeName = originalName.normalize("NFKD").replace(/[^a-zA-Z0-9._-]/g, "-").replace(/-+/g, "-");
   const bucketName = storageScope === "mastering_reference" ? "studio-private" : "public-media";
