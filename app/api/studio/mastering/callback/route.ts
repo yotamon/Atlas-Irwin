@@ -52,6 +52,40 @@ function scheduleCleanup() {
   after(scheduleMediaWorkerSandboxCleanup());
 }
 
+function uploadedStoragePaths(
+  requestPayload: Record<string, unknown>,
+  result: Record<string, unknown>,
+) {
+  const storage = record(result.storage);
+  if (storage.storage_mode === "chunked_lossless" && Array.isArray(storage.chunk_manifest)) {
+    return storage.chunk_manifest.flatMap((entry) => {
+      const row = record(entry);
+      return typeof row.storage_path === "string" && row.storage_path ? [row.storage_path] : [];
+    });
+  }
+  const path = typeof requestPayload.upload_path === "string" ? requestPayload.upload_path : "";
+  return path ? [path] : [];
+}
+
+async function cleanupUploadedMaster(
+  service: ReturnType<typeof createServiceClient>,
+  requestPayload: Record<string, unknown>,
+  result: Record<string, unknown>,
+) {
+  const bucket = typeof requestPayload.upload_bucket === "string" ? requestPayload.upload_bucket : "";
+  const paths = uploadedStoragePaths(requestPayload, result);
+  if (!bucket || !paths.length) return;
+  const cleanup = await service.storage.from(bucket).remove(paths);
+  if (cleanup.error) {
+    console.error("[mastering-callback] stale output cleanup failed", {
+      bucket,
+      count: paths.length,
+      message: cleanup.error.message,
+    });
+  }
+}
+
+
 export async function POST(request: Request) {
   const payload = record(await request.json().catch(() => null));
   const jobId = typeof payload.job_id === "string" ? payload.job_id : "";
@@ -112,6 +146,7 @@ export async function POST(request: Request) {
     if (current.error) throw new Error(current.error.message);
     if (!current.data || current.data.audio_url !== job.source_audio_url) {
       const message = "The canonical source master changed while this candidate was rendering. The late result was kept out of the active workflow.";
+      await cleanupUploadedMaster(service, requestPayload, result);
       await db.from("track_mastering_jobs").update({
         status: "cancelled",
         request_payload: json(cleanRequestPayload(requestPayload)),
