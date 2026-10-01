@@ -497,36 +497,59 @@ export async function createMediaUploadTarget(form: FormData) {
   const assetType = mediaTypeSchema.parse(value(form, "asset_type"));
   const mimeType = z.string().min(1).max(200).parse(value(form, "mime_type"));
   if (!isCompatibleMediaType(assetType, mimeType)) throw new Error("That role is not compatible with this file format.");
-  z.coerce.number().int().positive().max(104857600).parse(value(form, "file_size"));
+  const storageScope = z.enum(["public", "mastering_reference"]).parse(value(form, "storage_scope") || "public");
+  const fileSize = z.coerce.number().int().positive();
+  if (storageScope === "mastering_reference") {
+    fileSize.max(48_000_000).parse(value(form, "file_size"));
+  } else {
+    fileSize.max(104857600).parse(value(form, "file_size"));
+  }
   const originalName = z.string().min(1).max(500).parse(value(form, "original_name"));
   const safeName = originalName.normalize("NFKD").replace(/[^a-zA-Z0-9._-]/g, "-").replace(/-+/g, "-");
-  const bucketName = "public-media";
-  const storagePath = `${user.id}/library/${crypto.randomUUID()}-${safeName}`;
+  const bucketName = storageScope === "mastering_reference" ? "studio-private" : "public-media";
+  const folder = storageScope === "mastering_reference" ? "mastering-references" : "library";
+  const storagePath = `${user.id}/${folder}/${crypto.randomUUID()}-${safeName}`;
   const { data, error } = await supabase.storage.from(bucketName).createSignedUploadUrl(storagePath);
   if (error || !data) throw new Error(error?.message || "Could not prepare the secure upload.");
-  return { bucketName, storagePath: data.path, token: data.token };
+  return {
+    bucketName,
+    storagePath: data.path,
+    token: data.token,
+    visibility: storageScope === "mastering_reference" ? "private" as const : "public" as const,
+  };
 }
 
 export async function discardMediaUpload(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
-  const bucketName = z.literal("public-media").parse(value(form, "bucket_name"));
+  const bucketName = z.enum(["public-media", "studio-private"]).parse(value(form, "bucket_name"));
   const storagePath = z.string().min(1).max(1000).parse(value(form, "storage_path"));
-  if (!storagePath.startsWith(`${user.id}/library/`) || storagePath.includes("..")) return;
+  const allowedPrefix = bucketName === "studio-private"
+    ? `${user.id}/mastering-references/`
+    : `${user.id}/library/`;
+  if (!storagePath.startsWith(allowedPrefix) || storagePath.includes("..")) return;
   await supabase.storage.from(bucketName).remove([storagePath]);
 }
 
 export async function registerMediaUpload(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
-  const visibility = "public" as const;
-  const bucketName = z.literal("public-media").parse(value(form, "bucket_name"));
+  const visibility = z.enum(["public", "private"]).parse(value(form, "visibility") || "public");
+  const bucketName = z.enum(["public-media", "studio-private"]).parse(value(form, "bucket_name"));
+  if ((visibility === "private") !== (bucketName === "studio-private")) {
+    throw new Error("Media visibility does not match its storage bucket.");
+  }
   const storagePath = z.string().min(1).max(1000).parse(value(form, "storage_path"));
-  if (!storagePath.startsWith(`${user.id}/library/`) || storagePath.includes("..")) {
+  const allowedPrefix = visibility === "private"
+    ? `${user.id}/mastering-references/`
+    : `${user.id}/library/`;
+  if (!storagePath.startsWith(allowedPrefix) || storagePath.includes("..")) {
     throw new Error("Invalid media storage path.");
   }
   const assetType = mediaTypeSchema.parse(value(form, "asset_type"));
   const mimeType = z.string().min(1).max(200).parse(value(form, "mime_type"));
   if (!isCompatibleMediaType(assetType, mimeType)) throw new Error("That role is not compatible with this file format.");
-  const fileSize = z.coerce.number().int().positive().max(104857600).parse(value(form, "file_size"));
+  const fileSize = z.coerce.number().int().positive()
+    .max(visibility === "private" ? 48_000_000 : 104_857_600)
+    .parse(value(form, "file_size"));
   const contentHash = value(form, "content_hash") || null;
   if (contentHash && !/^[a-f0-9]{64}$/.test(contentHash)) throw new Error("Invalid media fingerprint.");
   const metadata = {
@@ -534,8 +557,8 @@ export async function registerMediaUpload(form: FormData) {
     title: z.string().max(200).parse(value(form, "title")),
     description: z.string().max(2000).parse(value(form, "description")),
     tags: parseTags(value(form, "tags")),
-    upload_source: "media_library",
-    source_kind: "upload",
+    upload_source: visibility === "private" ? "mastering_reference" : "media_library",
+    source_kind: visibility === "private" ? "mastering_reference_upload" : "upload",
   };
   const duplicateResult = contentHash
     ? await supabase.from("media_assets").select("*").eq("owner_id", user.id).eq("content_hash", contentHash).eq("visibility", visibility).limit(1).maybeSingle()

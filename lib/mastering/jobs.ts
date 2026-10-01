@@ -19,6 +19,11 @@ import type { Database, Json } from "@/types/database";
 import type { MasteringDatabase, TrackMasteringJob } from "@/types/mastering-database";
 
 const MASTERING_BUCKET = "public-media";
+const MASTERING_CHUNK_SLOT_COUNT = 14;
+const MASTERING_CODEC_PREVIEWS = [
+  { id: "aac_256", suffix: "aac-256.m4a", mimeType: "audio/mp4" },
+  { id: "opus_160", suffix: "opus-160.ogg", mimeType: "audio/ogg" },
+] as const;
 
 export function asMasteringClient(client: SupabaseClient<Database> | SupabaseClient<MasteringDatabase>) {
   return client as unknown as SupabaseClient<MasteringDatabase>;
@@ -38,11 +43,29 @@ function withoutCredential(value: Record<string, unknown>) {
   const next = { ...value };
   delete next[MEDIA_WORKER_CALLBACK_HASH_KEY];
   delete next.upload_url;
+  delete next.chunk_uploads;
+  delete next.codec_preview_uploads;
   return next;
+}
+
+export function masteringChunkPaths(path: string, count = MASTERING_CHUNK_SLOT_COUNT) {
+  const base = path.toLowerCase().endsWith(".flac") ? path.slice(0, -5) : path;
+  return Array.from(
+    { length: count },
+    (_, index) => `${base}/chunks/part-${String(index).padStart(3, "0")}.bin`,
+  );
 }
 
 export function masteringOutputPath(job: Pick<TrackMasteringJob, "owner_id" | "artist_id" | "track_vault_id" | "id">) {
   return `mastering/${job.owner_id}/${job.artist_id}/${job.track_vault_id}/${job.id}.flac`;
+}
+
+export function masteringCodecPreviewPaths(path: string) {
+  const base = path.toLowerCase().endsWith(".flac") ? path.slice(0, -5) : path;
+  return MASTERING_CODEC_PREVIEWS.map((preview) => ({
+    ...preview,
+    storagePath: `${base}/previews/${preview.suffix}`,
+  }));
 }
 
 export async function kickMasteringQueue() {
@@ -74,17 +97,50 @@ export async function kickMasteringQueue() {
   const credential = createMediaWorkerCallbackCredential();
   const basePayload = withoutCredential(record(job.request_payload));
 
-  const upload = await service.storage.from(job.output_bucket || MASTERING_BUCKET).createSignedUploadUrl(path);
+  const bucket = job.output_bucket || MASTERING_BUCKET;
+  const upload = await service.storage.from(bucket).createSignedUploadUrl(path);
   if (upload.error || !upload.data?.signedUrl) {
     throw new Error(upload.error?.message || "Could not create Active Mastering upload URL.");
   }
-  const publicUrl = service.storage.from(job.output_bucket || MASTERING_BUCKET).getPublicUrl(path).data.publicUrl;
+
+  const chunkPaths = masteringChunkPaths(path);
+  const chunkSlots = await Promise.all(chunkPaths.map(async (storagePath) => {
+    const signed = await service.storage.from(bucket).createSignedUploadUrl(storagePath);
+    if (signed.error || !signed.data?.signedUrl) {
+      throw new Error(signed.error?.message || "Could not create Active Mastering chunk upload URL.");
+    }
+    return {
+      storage_path: storagePath,
+      upload_url: signed.data.signedUrl,
+    };
+  }));
+
+  const codecPreviewSlots = await Promise.all(masteringCodecPreviewPaths(path).map(async (preview) => {
+    const signed = await service.storage.from(bucket).createSignedUploadUrl(preview.storagePath);
+    if (signed.error || !signed.data?.signedUrl) {
+      throw new Error(signed.error?.message || "Could not create mastering codec-preview upload URL.");
+    }
+    return {
+      id: preview.id,
+      mime_type: preview.mimeType,
+      storage_path: preview.storagePath,
+      upload_url: signed.data.signedUrl,
+      public_url: service.storage.from(bucket).getPublicUrl(preview.storagePath).data.publicUrl,
+    };
+  }));
+
+  const directPublicUrl = service.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+  const chunkedPublicUrl = `${getSiteUrl()}/api/media/mastering/${job.id}`;
   const requestPayload = {
     ...basePayload,
     upload_url: upload.data.signedUrl,
-    upload_bucket: job.output_bucket || MASTERING_BUCKET,
+    chunk_uploads: chunkSlots,
+    codec_preview_uploads: codecPreviewSlots,
+    upload_bucket: bucket,
     upload_path: path,
-    public_url: publicUrl,
+    public_url: directPublicUrl,
+    direct_public_url: directPublicUrl,
+    chunked_public_url: chunkedPublicUrl,
     [MEDIA_WORKER_CALLBACK_HASH_KEY]: credential.hash,
   };
 

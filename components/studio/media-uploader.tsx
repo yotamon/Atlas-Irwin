@@ -180,6 +180,7 @@ export function MediaUploader({
   const dragDepth = useRef(0);
   const masterIntake = vaultMode || musicIntakeMode;
   const referenceIntake = masteringReferenceMode;
+  const uploadLimit = referenceIntake ? 48_000_000 : PUBLIC_LIMIT;
   const audioOnly = masterIntake || releaseMasterMode || referenceIntake;
   const singleAudio = releaseMasterMode || referenceIntake;
   const trackScopedMaster = Boolean(releaseMasterMode && trackId);
@@ -195,14 +196,14 @@ export function MediaUploader({
   function addFiles(files: FileList | File[]) {
     const source = Array.from(files);
     const rejectedEmpty = source.filter((file) => file.size <= 0);
-    const rejectedSize = source.filter((file) => file.size > PUBLIC_LIMIT);
+    const rejectedSize = source.filter((file) => file.size > uploadLimit);
     const rejectedType = source.filter((file) => audioOnly && !file.type.startsWith("audio/"));
     const rejected = new Set([...rejectedEmpty, ...rejectedSize, ...rejectedType]);
     const next = source.filter((file) => !rejected.has(file));
 
     const messages = [
       rejectedType.length ? `${rejectedType.length} non-audio file${rejectedType.length === 1 ? " was" : "s were"} skipped. This workflow accepts audio masters only.` : "",
-      rejectedSize.length ? `${rejectedSize.length} file${rejectedSize.length === 1 ? " exceeds" : "s exceed"} the ${humanSize(PUBLIC_LIMIT)} per-file limit.` : "",
+      rejectedSize.length ? `${rejectedSize.length} file${rejectedSize.length === 1 ? " exceeds" : "s exceed"} the ${humanSize(uploadLimit)} per-file limit.` : "",
       rejectedEmpty.length ? `${rejectedEmpty.length} empty file${rejectedEmpty.length === 1 ? " was" : "s were"} skipped.` : "",
     ].filter(Boolean);
     setSelectionError(messages.join(" "));
@@ -246,8 +247,8 @@ export function MediaUploader({
     let completedThisRun = 0;
 
     async function processItem(index: number, item: UploadItem) {
-      if (item.file.size > PUBLIC_LIMIT) {
-        setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, state: "error", message: `This file exceeds the ${humanSize(PUBLIC_LIMIT)} upload limit.` } : entry));
+      if (item.file.size > uploadLimit) {
+        setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, state: "error", message: `This file exceeds the ${humanSize(uploadLimit)} upload limit.` } : entry));
         return;
       }
 
@@ -280,6 +281,7 @@ export function MediaUploader({
         targetForm.set("mime_type", item.file.type);
         targetForm.set("file_size", String(item.file.size));
         targetForm.set("original_name", item.file.name);
+        targetForm.set("storage_scope", referenceIntake ? "mastering_reference" : "public");
         const preparedTarget = await createMediaUploadTarget(targetForm);
         setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, target: preparedTarget } : entry));
         return preparedTarget;
@@ -366,7 +368,7 @@ export function MediaUploader({
         Object.entries({
           storage_path: uploadTarget.storagePath,
           bucket_name: uploadTarget.bucketName,
-          visibility: "public",
+          visibility: uploadTarget.visibility ?? (referenceIntake ? "private" : "public"),
           asset_type: item.role,
           mime_type: item.file.type,
           file_size: String(item.file.size),
@@ -437,7 +439,7 @@ export function MediaUploader({
                   ? "Master attached. Ensemblis is analyzing its structure and strongest hooks."
                   : "Master attached. Analysis can be retried from the release when the media worker is available."
             : referenceIntake
-              ? "Reference uploaded. Ensemblis is measuring it for mastering comparison."
+              ? "Reference uploaded privately. Ensemblis is measuring it for mastering comparison."
               : musicIntakeMode
               ? "Master added to Music. Ensemblis is understanding its structure and strongest moments."
               : vaultMode
@@ -539,8 +541,8 @@ export function MediaUploader({
       >
         <FiUploadCloud aria-hidden />
         <strong>{referenceIntake ? "Drop a mastering reference here" : releaseMasterMode ? trackScopedMaster ? "Drop this track's master here" : "Drop the release master here" : musicIntakeMode ? "Drop mastered tracks here" : vaultMode ? "Drop unreleased masters here" : "Drop media here"}</strong>
-        <span>{referenceIntake ? "Audio only. Ensemblis measures it for mastering comparison and does not add it to Music." : releaseMasterMode ? trackScopedMaster ? "WAV, MP3 or another audio master. It stays attached to this exact song and receives its own Music Intelligence." : "WAV, MP3 or another audio master. Ensemblis will attach it to this release and analyze its structure and strongest hooks." : musicIntakeMode ? "Audio only. Title is optional; Ensemblis starts understanding structure and strongest moments automatically." : vaultMode ? "Audio masters only. Each file becomes an independent Vault track." : "Images, video, audio, masters, stems, or ZIP files"}</span>
-        <small>Maximum {humanSize(PUBLIC_LIMIT)} per file. Large files resume safely and automatically switch to a secure direct upload if the resumable route cannot complete.</small>
+        <span>{referenceIntake ? "Audio only. Ensemblis keeps it in private Studio storage, measures it for mastering comparison, and does not add it to Music." : releaseMasterMode ? trackScopedMaster ? "WAV, MP3 or another audio master. It stays attached to this exact song and receives its own Music Intelligence." : "WAV, MP3 or another audio master. Ensemblis will attach it to this release and analyze its structure and strongest hooks." : musicIntakeMode ? "Audio only. Title is optional; Ensemblis starts understanding structure and strongest moments automatically." : vaultMode ? "Audio masters only. Each file becomes an independent Vault track." : "Images, video, audio, masters, stems, or ZIP files"}</span>
+        <small>Maximum {humanSize(uploadLimit)} per file. Large files resume safely and automatically switch to a secure direct upload if the resumable route cannot complete.</small>
         <span className="button media-dropzone-cta" aria-hidden="true">{pickerLabel}</span>
       </label>
       <input
@@ -583,7 +585,7 @@ export function MediaUploader({
                     : <progress className="upload-progress" aria-label={`Uploading ${item.file.name}`} />
                 ) : null}
               </span>
-              <select aria-label={`Use for ${item.file.name}`} value={item.role} disabled={masterIntake || releaseMasterMode || busy || item.state === "done"} onChange={(event) => setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, role: event.target.value as MediaType, state: entry.state === "error" || entry.state === "paused" ? "ready" : entry.state, message: undefined, target: undefined, progress: undefined, recovery: undefined } : entry))}>{compatibleMediaTypes(item.file.type).map((type) => <option value={type} key={type}>{MEDIA_TYPE_LABELS[type]}</option>)}</select>
+              <select aria-label={`Use for ${item.file.name}`} value={item.role} disabled={masterIntake || releaseMasterMode || referenceIntake || busy || item.state === "done"} onChange={(event) => setItems((current) => current.map((entry, itemIndex) => itemIndex === index ? { ...entry, role: event.target.value as MediaType, state: entry.state === "error" || entry.state === "paused" ? "ready" : entry.state, message: undefined, target: undefined, progress: undefined, recovery: undefined } : entry))}>{compatibleMediaTypes(item.file.type).map((type) => <option value={type} key={type}>{MEDIA_TYPE_LABELS[type]}</option>)}</select>
               {!busy && item.state !== "done" ? <button type="button" aria-label={`Remove ${item.file.name}`} data-tooltip={`Remove ${item.file.name}`} onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}><FiX /></button> : null}
             </div>
           ))}

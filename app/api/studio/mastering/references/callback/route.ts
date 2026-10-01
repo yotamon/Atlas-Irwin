@@ -100,11 +100,12 @@ export async function POST(request: Request) {
     const sourceAudio = record(musicMap.source_audio);
     const sourceUrl = typeof sourceAudio.url === "string" ? sourceAudio.url : null;
     const sourceAssetId = typeof sourceAudio.media_asset_id === "string" ? sourceAudio.media_asset_id : null;
-    if (!reference.audio_url || sourceUrl !== reference.audio_url) {
+    if (reference.media_asset_id) {
+      if (!sourceAssetId || sourceAssetId !== reference.media_asset_id) {
+        throw new Error("Reference analysis media lineage does not match the uploaded reference.");
+      }
+    } else if (!reference.audio_url || sourceUrl !== reference.audio_url) {
       throw new Error("Reference analysis belongs to a different audio source and was discarded.");
-    }
-    if (reference.media_asset_id && sourceAssetId && sourceAssetId !== reference.media_asset_id) {
-      throw new Error("Reference analysis media lineage does not match the uploaded reference.");
     }
 
     const inspector = record(musicMap.mastering_inspector);

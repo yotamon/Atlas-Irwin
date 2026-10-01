@@ -4,6 +4,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 type Source = "original" | "candidate" | "reference" | "mono";
 type ReferenceOption = { label: string; url: string; lufs: number | null };
+export type MasteringCodecPreview = {
+  profile: string;
+  url: string;
+  mimeType: string | null;
+};
+export type MasteringSuggestedLoop = {
+  label: string;
+  start: number;
+  end: number;
+  reason: string;
+};
 type CandidateGraph = {
   context: AudioContext;
   stereoGain: GainNode;
@@ -32,12 +43,16 @@ export function MasteringListenLab({
   originalLufs,
   candidateLufs,
   references = [],
+  suggestedLoops = [],
+  codecPreviews = [],
 }: {
   originalUrl: string;
   candidateUrl: string;
   originalLufs: number | null;
   candidateLufs: number | null;
   references?: ReferenceOption[];
+  suggestedLoops?: MasteringSuggestedLoop[];
+  codecPreviews?: MasteringCodecPreview[];
 }) {
   const originalRef = useRef<HTMLAudioElement | null>(null);
   const candidateRef = useRef<HTMLAudioElement | null>(null);
@@ -323,6 +338,19 @@ export function MasteringListenLab({
     setCurrentTime(value);
   }
 
+  async function auditionSuggestedLoop(item: MasteringSuggestedLoop) {
+    const safeStart = Math.max(0, item.start);
+    const safeEnd = Math.max(safeStart + 1, item.end);
+    if (active === "reference") {
+      await chooseSource("candidate");
+    }
+    setLoop({ start: safeStart, end: safeEnd });
+    if (originalRef.current) originalRef.current.currentTime = safeStart;
+    if (candidateRef.current) candidateRef.current.currentTime = safeStart;
+    setCurrentTime(safeStart);
+    setError("");
+  }
+
   function toggleLoop() {
     if (loop) {
       setLoop(null);
@@ -380,6 +408,25 @@ export function MasteringListenLab({
         </label>
       </div>
 
+      {suggestedLoops.length ? (
+        <div className="mastering-listen-suggestions" aria-label="Suggested listening moments">
+          <span className="section-label">Listen where the master changed most</span>
+          <div className="mastering-listen-suggestion-list">
+            {suggestedLoops.map((item, index) => (
+              <button
+                className="text-button"
+                type="button"
+                key={`${item.label}-${index}`}
+                onClick={() => void auditionSuggestedLoop(item)}
+                title={item.reason}
+              >
+                {item.label} · {formatTime(item.start)}–{formatTime(item.end)}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       {references.length ? (
         <label className="mastering-reference-select">
           <span>Reference track</span>
@@ -418,6 +465,28 @@ export function MasteringListenLab({
           </span>
         ) : null}
       </div>
+
+      {codecPreviews.length ? (
+        <details className="studio-advanced-details mastering-codec-previews">
+          <summary>
+            <span>Hear real codec stress previews</span>
+            <small>AAC/Opus encodes generated from this exact selected master.</small>
+          </summary>
+          <p className="v2-muted-copy">
+            These are real derived encodes for artifact/headroom audition. They are not simulations and they never replace the lossless canonical master.
+          </p>
+          <div className="mastering-codec-preview-list">
+            {codecPreviews.map((preview) => (
+              <label key={preview.profile}>
+                <strong>{preview.profile === "aac_256" ? "AAC · 256 kbps" : preview.profile === "opus_160" ? "Opus · 160 kbps" : preview.profile}</strong>
+                <audio controls preload="none" src={preview.url}>
+                  {preview.mimeType ? <source src={preview.url} type={preview.mimeType} /> : null}
+                </audio>
+              </label>
+            ))}
+          </div>
+        </details>
+      ) : null}
 
       <p className="v2-muted-copy">
         A/B stay sample-position synchronized. Mono is a browser-side fold-down of the candidate for translation checks.

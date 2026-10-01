@@ -6,6 +6,8 @@ import { z } from "zod";
 import { analyzeVaultTrack } from "@/app/studio/growth-media-actions";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { asMasteringClient, kickMasteringQueue, masteringOutputPath } from "@/lib/mastering/jobs";
+import { deriveMasterReadiness } from "@/lib/mastering/readiness";
+import { buildMasteringPreferenceProfile, masteringPreferenceWorkerPayload } from "@/lib/mastering/preferences";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asGrowthClient } from "@/lib/studio/growth-db";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
@@ -45,7 +47,7 @@ export async function createActiveMaster(form: FormData) {
   const trackId = z.uuid().parse(String(form.get("track_id") ?? ""));
   const preset = presetSchema.parse(String(form.get("preset") ?? "balanced")) as MasteringPreset;
 
-  const [trackResult, referencesResult, activeResult] = await Promise.all([
+  const [trackResult, referencesResult, activeResult, preferenceJobsResult] = await Promise.all([
     growth.from("track_vault")
       .select("id,title,audio_url,media_asset_id,audio_profile")
       .eq("id", trackId)
@@ -67,10 +69,18 @@ export async function createActiveMaster(form: FormData) {
       .in("status", ["planned", "queued", "running"])
       .limit(1)
       .maybeSingle(),
+    mastering.from("track_mastering_jobs")
+      .select("id,preset,result_payload")
+      .eq("owner_id", user.id)
+      .eq("artist_id", artist.artistId)
+      .eq("status", "completed")
+      .order("completed_at", { ascending: false })
+      .limit(20),
   ]);
   if (trackResult.error || !trackResult.data) throw new Error(trackResult.error?.message || "Track not found.");
   if (referencesResult.error) throw new Error(referencesResult.error.message);
   if (activeResult.error) throw new Error(activeResult.error.message);
+  if (preferenceJobsResult.error) throw new Error(preferenceJobsResult.error.message);
   if (activeResult.data) return { jobId: activeResult.data.id, deduplicated: true };
 
   const track = trackResult.data;
@@ -78,6 +88,16 @@ export async function createActiveMaster(form: FormData) {
   const inspector = record(record(track.audio_profile).mastering_inspector);
   if (!Object.keys(inspector).length) {
     throw new Error("Run Track Intelligence first so Active Mastering has deterministic mastering evidence.");
+  }
+  const readiness = deriveMasterReadiness(track.audio_profile, {
+    audioUrl: track.audio_url,
+    mediaAssetId: track.media_asset_id,
+  });
+  if (readiness.sourceMatchesCurrent === false || readiness.masterability === "unavailable" || readiness.masterability === "pending") {
+    throw new Error("Run fresh Track Intelligence on the current waveform before creating a mastering candidate.");
+  }
+  if (readiness.masterability === "source_repair_required") {
+    throw new Error("This source needs repair or replacement before mastering. Ensemblis will not master over a blocking source defect.");
   }
 
   const references = (referencesResult.data ?? [])
@@ -92,6 +112,13 @@ export async function createActiveMaster(form: FormData) {
     track_vault_id: track.id,
   } as Pick<TrackMasteringJob, "id" | "owner_id" | "artist_id" | "track_vault_id">;
   const outputPath = masteringOutputPath(draft);
+  const preferenceProfile = buildMasteringPreferenceProfile(
+    (preferenceJobsResult.data ?? []).map((job) => ({
+      id: job.id,
+      preset: job.preset,
+      result_payload: job.result_payload,
+    })),
+  );
   const requestPayload = {
     audio_url: track.audio_url,
     preset,
@@ -99,6 +126,7 @@ export async function createActiveMaster(form: FormData) {
     reference_signatures: references,
     source_audio_url: track.audio_url,
     source_media_asset_id: track.media_asset_id,
+    artist_mastering_preferences: masteringPreferenceWorkerPayload(preferenceProfile),
   };
   const inserted = await mastering.from("track_mastering_jobs").insert({
     id,
@@ -122,6 +150,49 @@ export async function createActiveMaster(form: FormData) {
   return { jobId: id, deduplicated: false };
 }
 
+export async function keepOriginalMaster(form: FormData) {
+  const { supabase, user } = await requireStudioAdmin();
+  const artist = await resolveActiveArtistContext(supabase, user);
+  const mastering = asMasteringClient(supabase);
+  const jobId = z.uuid().parse(String(form.get("job_id") ?? ""));
+
+  const jobResult = await mastering.from("track_mastering_jobs")
+    .select("*")
+    .eq("id", jobId)
+    .eq("owner_id", user.id)
+    .eq("artist_id", artist.artistId)
+    .eq("status", "completed")
+    .single();
+  if (jobResult.error || !jobResult.data) {
+    throw new Error(jobResult.error?.message || "Mastering candidate not found.");
+  }
+  const job = jobResult.data as TrackMasteringJob;
+  const result = record(job.result_payload);
+  const existingDecision = record(result.artist_decision);
+  if (existingDecision.decision === "approved") {
+    throw new Error("This candidate was already approved as the canonical master. Mastering decisions are immutable evidence.");
+  }
+  if (existingDecision.decision === "kept_original") {
+    return { keptOriginal: true, jobId: job.id, deduplicated: true };
+  }
+  const decidedAt = new Date().toISOString();
+  const nextResult = {
+    ...result,
+    artist_decision: {
+      decision: "kept_original",
+      decided_at: decidedAt,
+      source: "explicit_keep_original",
+    },
+  };
+  const update = await mastering.from("track_mastering_jobs").update({
+    result_payload: json(nextResult),
+    updated_at: decidedAt,
+  }).eq("id", job.id).eq("owner_id", user.id).eq("artist_id", artist.artistId);
+  if (update.error) throw new Error(update.error.message);
+  revalidatePath(`/studio/music/${job.track_vault_id}`);
+  return { keptOriginal: true, jobId: job.id };
+}
+
 export async function promoteActiveMaster(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveActiveArtistContext(supabase, user);
@@ -141,6 +212,13 @@ export async function promoteActiveMaster(form: FormData) {
   const job = jobResult.data as TrackMasteringJob;
   const request = record(job.request_payload);
   const result = record(job.result_payload);
+  const existingDecision = record(result.artist_decision);
+  if (existingDecision.decision === "kept_original") {
+    throw new Error("You already chose to keep the original for this candidate. Create a fresh candidate before changing that decision.");
+  }
+  if (existingDecision.decision === "approved") {
+    return { promoted: true, trackId: job.track_vault_id, deduplicated: true };
+  }
   const checks = record(result.final_checks);
   const publicUrl = typeof request.public_url === "string" ? request.public_url : "";
   if (!job.output_asset_id || !publicUrl) throw new Error("This mastering candidate has no registered output asset.");
@@ -186,6 +264,26 @@ export async function promoteActiveMaster(form: FormData) {
       .eq("owner_id", user.id)
       .eq("artist_id", artist.artistId);
     if (releaseUpdate.error) throw new Error(releaseUpdate.error.message);
+  }
+
+  const approvedAt = new Date().toISOString();
+  const approvedResult = {
+    ...result,
+    artist_decision: {
+      decision: "approved",
+      decided_at: approvedAt,
+      source: "canonical_promotion",
+    },
+  };
+  const preferenceUpdate = await mastering.from("track_mastering_jobs").update({
+    result_payload: json(approvedResult),
+    updated_at: approvedAt,
+  }).eq("id", job.id).eq("owner_id", user.id).eq("artist_id", artist.artistId);
+  if (preferenceUpdate.error) {
+    console.error("[active-mastering] canonical promotion succeeded but preference evidence could not be recorded", {
+      jobId: job.id,
+      message: preferenceUpdate.error.message,
+    });
   }
 
   const analysisForm = new FormData();

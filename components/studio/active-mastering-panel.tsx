@@ -52,31 +52,54 @@ export async function ActiveMasteringPanel({
       .eq("track_vault_id", trackId)
       .order("created_at", { ascending: false }),
     db.from("mastering_references")
-      .select("label,audio_url,reference_signature,track_vault_id,created_at")
+      .select("label,audio_url,media_asset_id,reference_signature,track_vault_id,created_at")
       .eq("owner_id", user.id)
       .eq("artist_id", artist.artistId)
       .eq("active", true)
       .eq("status", "ready")
-      .not("audio_url", "is", null)
       .order("created_at", { ascending: false })
       .limit(12),
   ]);
   if (jobs.error) throw new Error(jobs.error.message);
   if (referencesResult.error) throw new Error(referencesResult.error.message);
 
-  const references = (referencesResult.data ?? [])
-    .filter((reference) => reference.track_vault_id !== trackId && reference.audio_url)
-    .map((reference) => {
-      const signature = record(reference.reference_signature);
-      const lufs = typeof signature.integrated_lufs === "number" && Number.isFinite(signature.integrated_lufs)
-        ? signature.integrated_lufs
-        : null;
-      return {
-        label: reference.label,
-        url: reference.audio_url!,
-        lufs,
-      };
-    });
+  const referenceRows = (referencesResult.data ?? [])
+    .filter((reference) => reference.track_vault_id !== trackId);
+  const referenceAssetIds = [...new Set(referenceRows
+    .map((reference) => reference.media_asset_id)
+    .filter((value): value is string => Boolean(value)))];
+  const referenceAssetsResult = referenceAssetIds.length
+    ? await supabase.from("media_assets")
+        .select("id,bucket_name,storage_path,public_url,visibility")
+        .eq("owner_id", user.id)
+        .in("id", referenceAssetIds)
+    : { data: [], error: null };
+  if (referenceAssetsResult.error) throw new Error(referenceAssetsResult.error.message);
+  const referenceAssets = new Map((referenceAssetsResult.data ?? []).map((asset) => [asset.id, asset]));
+
+  const references = (await Promise.all(referenceRows.map(async (reference) => {
+    let url = reference.audio_url;
+    if (!url && reference.media_asset_id) {
+      const asset = referenceAssets.get(reference.media_asset_id);
+      if (asset?.visibility === "private") {
+        const signed = await supabase.storage.from(asset.bucket_name).createSignedUrl(asset.storage_path, 60 * 60);
+        if (!signed.error && signed.data?.signedUrl) url = signed.data.signedUrl;
+      } else if (asset?.public_url) {
+        url = asset.public_url;
+      }
+    }
+    if (!url) return null;
+
+    const signature = record(reference.reference_signature);
+    const lufs = typeof signature.integrated_lufs === "number" && Number.isFinite(signature.integrated_lufs)
+      ? signature.integrated_lufs
+      : null;
+    return {
+      label: reference.label,
+      url,
+      lufs,
+    };
+  }))).filter((reference): reference is { label: string; url: string; lufs: number | null } => Boolean(reference));
 
   const serialized = (jobs.data ?? []).map((job) => {
     const request = record(job.request_payload);

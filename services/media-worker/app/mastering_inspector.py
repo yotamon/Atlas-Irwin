@@ -13,7 +13,8 @@ import numpy as np
 import pyloudnorm as pyln
 import soundfile as sf
 
-MASTERING_SCHEMA = "ensemblis.mastering_inspector.v1"
+MASTERING_SCHEMA = "ensemblis.mastering_inspector.v2"
+MASTERING_LEGACY_SCHEMA = "ensemblis.mastering_inspector.v1"
 SPOTIFY_PROFILE_VERSION = "spotify-artist-guidance-2026-09"
 BAND_RANGES_HZ = {
     "sub_20_80": (20.0, 80.0),
@@ -22,6 +23,20 @@ BAND_RANGES_HZ = {
     "mid_500_2500": (500.0, 2500.0),
     "presence_2500_6000": (2500.0, 6000.0),
     "air_6000_16000": (6000.0, 16000.0),
+}
+PERCEPTUAL_BANDS_HZ = {
+    "sub_20_40": (20.0, 40.0),
+    "sub_40_80": (40.0, 80.0),
+    "bass_80_160": (80.0, 160.0),
+    "bass_160_315": (160.0, 315.0),
+    "low_mid_315_630": (315.0, 630.0),
+    "mid_630_1250": (630.0, 1250.0),
+    "upper_mid_1250_2500": (1250.0, 2500.0),
+    "presence_2500_4000": (2500.0, 4000.0),
+    "presence_4000_6000": (4000.0, 6000.0),
+    "air_6000_10000": (6000.0, 10000.0),
+    "air_10000_16000": (10000.0, 16000.0),
+    "ultra_16000_20000": (16000.0, 20000.0),
 }
 
 
@@ -306,18 +321,135 @@ def _spectral_profile(audio: np.ndarray, sample_rate: int) -> dict[str, Any]:
     power = np.square(np.abs(stft))
     spectrum = np.mean(power, axis=1)
     freqs = librosa.fft_frequencies(sr=sample_rate, n_fft=n_fft)
-    energy: dict[str, float] = {}
-    for name, (low, high) in BAND_RANGES_HZ.items():
-        high = min(high, sample_rate / 2.0)
-        mask = (freqs >= low) & (freqs < high)
-        energy[name] = float(np.sum(spectrum[mask]))
+
+    def band_energy(ranges: dict[str, tuple[float, float]]) -> dict[str, float]:
+        result: dict[str, float] = {}
+        for name, (low, high) in ranges.items():
+            upper = min(high, sample_rate / 2.0)
+            mask = (freqs >= low) & (freqs < upper)
+            result[name] = float(np.sum(spectrum[mask])) if np.any(mask) else 0.0
+        return result
+
+    energy = band_energy(BAND_RANGES_HZ)
     total = sum(energy.values()) or 1.0
+    perceptual_energy = band_energy(PERCEPTUAL_BANDS_HZ)
+    perceptual_total = sum(perceptual_energy.values()) or 1.0
     return {
         "spectral_centroid_hz": round(float(np.mean(librosa.feature.spectral_centroid(y=mono, sr=sample_rate))), 1),
         "rolloff_95_hz": round(float(np.mean(librosa.feature.spectral_rolloff(y=mono, sr=sample_rate, roll_percent=0.95))), 1),
         "band_balance": {name: round(value / total, 5) for name, value in energy.items()},
         "band_relative_db": {name: round(10.0 * math.log10(max(value / total, 1e-12)), 3) for name, value in energy.items()},
+        "perceptual_envelope_db": {
+            name: round(10.0 * math.log10(max(value / perceptual_total, 1e-12)), 3)
+            for name, value in perceptual_energy.items()
+        },
+        "perceptual_band_count": len(PERCEPTUAL_BANDS_HZ),
     }
+
+
+def _transient_profile(audio: np.ndarray, sample_rate: int) -> dict[str, Any]:
+    mono = np.mean(audio, axis=1).astype(np.float32)
+    if mono.size < max(1024, sample_rate // 4):
+        return {
+            "status": "insufficient_evidence",
+            "onset_density_per_second": None,
+            "onset_strength_median": None,
+            "onset_strength_p95": None,
+            "transient_crest_median_db": None,
+            "transient_crest_p90_db": None,
+        }
+
+    hop_length = 512
+    onset = librosa.onset.onset_strength(
+        y=mono,
+        sr=sample_rate,
+        hop_length=hop_length,
+    )
+    onset = np.asarray(onset, dtype=np.float64)
+    finite_onset = onset[np.isfinite(onset)]
+    if finite_onset.size:
+        onset_median = float(np.median(finite_onset))
+        onset_p95 = float(np.percentile(finite_onset, 95))
+        onset_mad = float(np.median(np.abs(finite_onset - onset_median)))
+        threshold = onset_median + max(0.25, 2.5 * onset_mad)
+        if finite_onset.size >= 3:
+            peaks = (
+                (finite_onset[1:-1] > finite_onset[:-2])
+                & (finite_onset[1:-1] >= finite_onset[2:])
+                & (finite_onset[1:-1] >= threshold)
+            )
+            onset_count = int(np.sum(peaks))
+        else:
+            onset_count = 0
+    else:
+        onset_median = 0.0
+        onset_p95 = 0.0
+        onset_count = 0
+
+    duration_seconds = mono.size / float(max(sample_rate, 1))
+    frame = max(256, int(round(sample_rate * 0.05)))
+    hop = max(128, frame // 2)
+    crest_values: list[float] = []
+    for start in range(0, max(1, mono.size - frame + 1), hop):
+        window = mono[start:start + frame]
+        if window.size < frame // 2:
+            continue
+        rms = float(np.sqrt(np.mean(np.square(window))))
+        peak = float(np.max(np.abs(window)))
+        if rms <= 1e-9 or peak <= 1e-9:
+            continue
+        crest_values.append(_db(peak) - _db(rms))
+
+    return {
+        "status": "completed",
+        "onset_density_per_second": round(onset_count / max(duration_seconds, 1e-9), 3),
+        "onset_strength_median": round(onset_median, 4),
+        "onset_strength_p95": round(onset_p95, 4),
+        "transient_crest_median_db": round(float(np.median(crest_values)), 3) if crest_values else None,
+        "transient_crest_p90_db": round(float(np.percentile(crest_values, 90)), 3) if crest_values else None,
+        "analysis_note": "Transient evidence combines spectral-flux onset activity with short-window crest distribution. It is descriptive and is used for before/after preservation checks, not as a genre target.",
+    }
+
+
+def _section_mastering_signatures(
+    audio: np.ndarray,
+    sample_rate: int,
+    sections: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    signatures: list[dict[str, Any]] = []
+    duration_ms = int(round(len(audio) / max(sample_rate, 1) * 1000.0))
+    for index, section in enumerate(sections[:16]):
+        if not isinstance(section, dict):
+            continue
+        try:
+            start_ms = max(0, int(section.get("start_ms") or 0))
+            end_ms = min(duration_ms, int(section.get("end_ms") or 0))
+        except (TypeError, ValueError):
+            continue
+        if end_ms - start_ms < 2000:
+            continue
+        start = int(round(start_ms * sample_rate / 1000.0))
+        end = int(round(end_ms * sample_rate / 1000.0))
+        window = audio[start:end]
+        if window.size == 0:
+            continue
+        spectral = _spectral_profile(window, sample_rate)
+        transients = _transient_profile(window, sample_rate)
+        qc = _sample_qc(window, sample_rate)
+        signatures.append({
+            "id": str(section.get("id") or f"section-{index + 1}"),
+            "label": str(section.get("label") or section.get("type") or f"Section {index + 1}"),
+            "start_ms": start_ms,
+            "end_ms": end_ms,
+            "duration_ms": end_ms - start_ms,
+            "rms_dbfs": qc.get("rms_dbfs"),
+            "crest_factor_db": qc.get("crest_factor_db"),
+            "band_relative_db": spectral.get("band_relative_db"),
+            "perceptual_envelope_db": spectral.get("perceptual_envelope_db"),
+            "onset_density_per_second": transients.get("onset_density_per_second"),
+            "transient_crest_p90_db": transients.get("transient_crest_p90_db"),
+        })
+    return signatures
 
 
 def _dynamics(audio: np.ndarray, sample_rate: int, loudness: dict[str, Any], sample_qc: dict[str, Any]) -> dict[str, Any]:
@@ -859,15 +991,21 @@ def _evaluate(*, format_info: dict[str, Any], loudness: dict[str, Any], sample_q
     return issues
 
 
-def analyze_mastering(path: Path, music_map: dict[str, Any]) -> dict[str, Any]:
+def analyze_mastering(
+    path: Path,
+    music_map: dict[str, Any],
+    *,
+    include_codec_stress: bool = True,
+    include_section_signatures: bool = True,
+) -> dict[str, Any]:
     try:
         audio, sample_rate = sf.read(str(path), always_2d=True, dtype="float32")
     except Exception as exc:
         issue = _issue(severity="critical", category="technical_defect", code="decode_failed", message=f"Mastering Inspector could not decode the source audio: {str(exc)[:180]}")
-        return {"schema": MASTERING_SCHEMA, "status": "fix_before_release", "technical_ready": False, "issues": [issue], "beat_stability": analyze_beat_stability([int(value) for value in music_map.get("beats_ms") or []], global_bpm=_finite(music_map.get("bpm")), sections=[item for item in music_map.get("sections") or [] if isinstance(item, dict)], rhythm_confidence=_finite((((music_map.get("analysis") or {}).get("confidence") or {}).get("rhythm"))))}
+        return {"schema": MASTERING_SCHEMA, "compatibility": {"legacy_schema": MASTERING_LEGACY_SCHEMA, "legacy_fields_preserved": True}, "status": "fix_before_release", "technical_ready": False, "issues": [issue], "beat_stability": analyze_beat_stability([int(value) for value in music_map.get("beats_ms") or []], global_bpm=_finite(music_map.get("bpm")), sections=[item for item in music_map.get("sections") or [] if isinstance(item, dict)], rhythm_confidence=_finite((((music_map.get("analysis") or {}).get("confidence") or {}).get("rhythm"))))}
     if audio.size == 0:
         issue = _issue(severity="critical", category="technical_defect", code="empty_audio", message="The decoded master contains no audio samples.")
-        return {"schema": MASTERING_SCHEMA, "status": "fix_before_release", "technical_ready": False, "issues": [issue]}
+        return {"schema": MASTERING_SCHEMA, "compatibility": {"legacy_schema": MASTERING_LEGACY_SCHEMA, "legacy_fields_preserved": True}, "status": "fix_before_release", "technical_ready": False, "issues": [issue]}
 
     format_info = _format_info(path, sample_rate, audio.shape[1])
     sample_qc = _sample_qc(audio, sample_rate)
@@ -885,12 +1023,18 @@ def analyze_mastering(path: Path, music_map: dict[str, Any]) -> dict[str, Any]:
     crosscheck["integrated_delta_lu"] = _round(check_lufs - canonical_lufs, 3) if canonical_lufs is not None and check_lufs is not None else None
     stereo, stereo_windows = _windowed_stereo(audio, sample_rate)
     spectral = _spectral_profile(audio, sample_rate)
+    transients = _transient_profile(audio, sample_rate)
     dynamics = _dynamics(audio, sample_rate, loudness, sample_qc)
     sections = [item for item in music_map.get("sections") or [] if isinstance(item, dict)]
+    section_signatures = (
+        _section_mastering_signatures(audio, sample_rate, sections)
+        if include_section_signatures
+        else []
+    )
     rhythm_confidence = _finite((((music_map.get("analysis") or {}).get("confidence") or {}).get("rhythm")))
     beat_stability = analyze_beat_stability([int(value) for value in music_map.get("beats_ms") or []], global_bpm=_finite(music_map.get("bpm")), sections=sections, rhythm_confidence=rhythm_confidence)
     temporal_stability = _temporal_stability(audio, sample_rate, sections)
-    codec_stress = _codec_stress(path, loudness)
+    codec_stress = _codec_stress(path, loudness) if include_codec_stress else []
     issues = _evaluate(format_info=format_info, loudness=loudness, sample_qc=sample_qc, stereo=stereo, stereo_windows=stereo_windows, spectral=spectral, beat_stability=beat_stability, codec_stress=codec_stress)
     critical = [item for item in issues if item.get("severity") == "critical"]
     review = [item for item in issues if item.get("severity") == "review"]
@@ -901,20 +1045,30 @@ def analyze_mastering(path: Path, music_map: dict[str, Any]) -> dict[str, Any]:
     true_peak = _finite(loudness.get("true_peak_dbtp"))
 
     return {
-        "schema": MASTERING_SCHEMA, "status": status, "technical_ready": technical_ready,
+        "schema": MASTERING_SCHEMA,
+        "compatibility": {
+            "legacy_schema": MASTERING_LEGACY_SCHEMA,
+            "legacy_fields_preserved": True,
+        },
+        "status": status, "technical_ready": technical_ready,
         "measurement_engine": {"canonical": "ffmpeg-ebur128", "canonical_standard": "ITU-R BS.1770 / EBU R128", "crosscheck": "pyloudnorm", "true_peak_fallback": "4x soxr oversampling"},
         "format": format_info, "loudness": loudness, "loudness_crosscheck": crosscheck,
         "peaks": {**sample_qc, "true_peak_dbtp": loudness.get("true_peak_dbtp"), "true_peak_channel": loudness.get("true_peak_channel")},
-        "dynamics": dynamics, "stereo": stereo, "stereo_timeline": stereo_windows, "tonal_balance": spectral,
+        "dynamics": dynamics, "transients": transients, "stereo": stereo, "stereo_timeline": stereo_windows, "tonal_balance": spectral,
         "beat_stability": beat_stability, "temporal_stability": temporal_stability, "codec_stress": codec_stress,
         "platform_previews": {"spotify": _spotify_playback(integrated, true_peak)},
+        "analysis_scope": "full" if include_codec_stress else "candidate_core",
         "reference_signature": {
             "integrated_lufs": loudness.get("integrated_lufs"), "true_peak_dbtp": loudness.get("true_peak_dbtp"),
             "loudness_range_lu": dynamics.get("loudness_range_lu"), "peak_to_loudness_ratio_lu": dynamics.get("peak_to_loudness_ratio_lu"),
             "crest_factor_db": dynamics.get("crest_factor_db"), "band_relative_db": spectral.get("band_relative_db"),
+            "perceptual_envelope_db": spectral.get("perceptual_envelope_db"),
+            "transient_crest_p90_db": transients.get("transient_crest_p90_db"),
+            "onset_density_per_second": transients.get("onset_density_per_second"),
             "stereo_correlation": stereo.get("correlation"), "band_side_share": stereo.get("band_side_share"),
             "tempo_median_bpm": beat_stability.get("median_bpm"), "tempo_span_bpm": beat_stability.get("central_90_span_bpm"),
             "tempo_classification": beat_stability.get("classification"),
+            "section_signatures": section_signatures,
         },
         "issues": issues,
         "issue_counts": {"critical": len(critical), "review": len(review) + len(temporal_review), "info": len([item for item in issues if item.get("severity") == "info"])},

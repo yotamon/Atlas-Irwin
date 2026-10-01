@@ -1,6 +1,14 @@
 ﻿import type { Json } from "@/types/database";
 
 export type MasterReadinessStatus = "pending" | "ready" | "review" | "fix_required" | "unavailable";
+export type MasterabilityDiagnosis =
+  | "ready_as_is"
+  | "streaming_safety_only"
+  | "masterable"
+  | "mix_review_recommended"
+  | "source_repair_required"
+  | "pending"
+  | "unavailable";
 export type MasterDistributionGate = "pass" | "review" | "block" | "waiting" | "unverified";
 export type MasterActionKind =
   | "keep"
@@ -32,6 +40,8 @@ export type MasterReadiness = {
   technicalReady: boolean | null;
   distributionGate: MasterDistributionGate;
   primaryAction: MasterActionKind | null;
+  masterability: MasterabilityDiagnosis;
+  masterabilityReason: string;
   findings: MasterFinding[];
   reviewCount: number;
   blockerCount: number;
@@ -207,6 +217,86 @@ function choosePrimaryAction(findings: MasterFinding[], status: MasterReadinessS
   return status === "review" ? "listen" : "keep";
 }
 
+function diagnoseMasterability(
+  status: MasterReadinessStatus,
+  findings: MasterFinding[],
+  technicalReady: boolean | null,
+): { masterability: MasterabilityDiagnosis; masterabilityReason: string } {
+  if (status === "pending") {
+    return {
+      masterability: "pending",
+      masterabilityReason: "Fresh waveform evidence is still being measured.",
+    };
+  }
+  if (status === "unavailable") {
+    return {
+      masterability: "unavailable",
+      masterabilityReason: "The current waveform does not yet have trustworthy mastering evidence.",
+    };
+  }
+
+  const audible = findings.filter((finding) => finding.severity !== "info");
+  const critical = audible.filter((finding) => finding.severity === "critical");
+  if (
+    status === "fix_required"
+    || critical.length
+    || audible.some((finding) => ["replace_source", "repair_source"].includes(finding.actionKind))
+  ) {
+    return {
+      masterability: "source_repair_required",
+      masterabilityReason: "A source-level defect must be resolved before creative mastering can be evaluated safely.",
+    };
+  }
+
+  const review = audible.filter((finding) => finding.severity === "review");
+  const streamingCodes = new Set(["true_peak_hot", "spotify_loud_master_headroom", "codec_headroom"]);
+  if (
+    review.length > 0
+    && review.every((finding) => streamingCodes.has(finding.code) && finding.masteringCanHelp)
+  ) {
+    return {
+      masterability: "streaming_safety_only",
+      masterabilityReason: "The source is technically usable; only transparent peak/codec headroom correction is indicated.",
+    };
+  }
+
+  const upstreamReview = review.some((finding) => (
+    !finding.masteringCanHelp
+    && (
+      finding.category === "tempo"
+      || finding.category === "render_stability"
+      || finding.category === "technical"
+      || finding.category === "creative"
+    )
+  ));
+  if (upstreamReview) {
+    return {
+      masterability: "mix_review_recommended",
+      masterabilityReason: "The source is distributable, but at least one finding is better judged in the mix/source than hidden by mastering.",
+    };
+  }
+
+  if (status === "ready") {
+    return {
+      masterability: "ready_as_is",
+      masterabilityReason: "No corrective mastering is indicated. Creative mastering remains optional.",
+    };
+  }
+
+  if (technicalReady !== false) {
+    return {
+      masterability: "masterable",
+      masterabilityReason: "The stereo source is technically healthy enough for bounded creative mastering and listening comparison.",
+    };
+  }
+
+  return {
+    masterability: "unavailable",
+    masterabilityReason: "Masterability cannot be established from the current evidence.",
+  };
+}
+
+
 function copyFor(status: MasterReadinessStatus, findings: MasterFinding[]) {
   const audible = findings.filter((finding) => finding.severity !== "info").length;
   if (status === "ready") return {
@@ -248,6 +338,7 @@ export function deriveMasterReadiness(
       technicalReady: null,
       distributionGate: "waiting",
       primaryAction: null,
+      ...diagnoseMasterability("pending", [], null),
       findings: [],
       reviewCount: 0,
       blockerCount: 0,
@@ -265,6 +356,7 @@ export function deriveMasterReadiness(
       technicalReady: null,
       distributionGate: "unverified",
       primaryAction: "retry_analysis",
+      ...diagnoseMasterability("unavailable", [], null),
       findings: [],
       reviewCount: 0,
       blockerCount: 0,
@@ -282,6 +374,7 @@ export function deriveMasterReadiness(
       technicalReady: null,
       distributionGate: "unverified",
       primaryAction: "retry_analysis",
+      ...diagnoseMasterability("unavailable", [], null),
       findings: [],
       reviewCount: 0,
       blockerCount: 0,
@@ -309,12 +402,14 @@ export function deriveMasterReadiness(
             ? "unavailable"
             : "unavailable";
   const copy = copyFor(status, findings);
+  const technicalReady = typeof inspector.technical_ready === "boolean" ? inspector.technical_ready : null;
   return {
     status,
     ...copy,
-    technicalReady: typeof inspector.technical_ready === "boolean" ? inspector.technical_ready : null,
+    technicalReady,
     distributionGate: status === "fix_required" ? "block" : status === "review" ? "review" : status === "ready" ? "pass" : "unverified",
     primaryAction: choosePrimaryAction(findings, status),
+    ...diagnoseMasterability(status, findings, technicalReady),
     findings,
     reviewCount,
     blockerCount,

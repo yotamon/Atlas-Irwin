@@ -15,11 +15,12 @@ test("Artist Memory is structured, source-backed and bounded by consumer", async
     '"performance_learning"',
     '"strategic_constraint"',
     '"provenance_compliance"',
-    'kind: "brand_setting" | "creative_memory" | "moment_calibration" | "verified_learning"',
+    'kind: "brand_setting" | "creative_memory" | "moment_calibration" | "verified_learning" | "mastering_preference"',
     "consumers: ArtistMemoryConsumer[]",
     'label: "explicit"',
     'lifecycle: input.expired ? "expired" : "active"',
   ]) assert.ok(domain.includes(snippet), `Artist Memory contract is missing ${snippet}`);
+  assert.ok(domain.includes('"mastering"'), "Mastering preference evidence must have an explicit bounded consumer policy");
   assert.equal(domain.includes("chat_history"), false, "Artist Memory must not become opaque chat history");
 });
 

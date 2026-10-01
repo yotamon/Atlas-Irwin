@@ -6,7 +6,7 @@ import { mediaWorkerDispatchFailure } from "@/lib/media-worker/failures";
 
 export const MEDIA_WORKER_CALLBACK_HASH_KEY = "__atlas_callback_token_sha256";
 const MEDIA_WORKER_RUNTIME_VERSION = 12;
-const MEDIA_WORKER_BOOTSTRAP_VERSION = 10;
+const MEDIA_WORKER_BOOTSTRAP_VERSION = 11;
 const MEDIA_WORKER_SANDBOX_GENERATION = 2;
 const MEDIA_WORKER_PYTHON_VERSION = "3.13.14";
 const MEDIA_WORKER_SANDBOX_IMAGE = "vercel/sandbox/universal:latest";
@@ -238,6 +238,16 @@ files = {
     "app/audio_intelligence_providers.py": f"{base}/app/audio_intelligence_providers.py",
     "app/mastering_inspector.py": f"{base}/app/mastering_inspector.py",
     "app/mastering_processor.py": f"{base}/app/mastering_processor.py",
+    "app/mastering_candidates.py": f"{base}/app/mastering_candidates.py",
+    "app/mastering_character.py": f"{base}/app/mastering_character.py",
+    "app/mastering_contracts.py": f"{base}/app/mastering_contracts.py",
+    "app/mastering_dynamics.py": f"{base}/app/mastering_dynamics.py",
+    "app/mastering_evaluation.py": f"{base}/app/mastering_evaluation.py",
+    "app/mastering_preferences.py": f"{base}/app/mastering_preferences.py",
+    "app/mastering_references.py": f"{base}/app/mastering_references.py",
+    "app/mastering_resonance.py": f"{base}/app/mastering_resonance.py",
+    "app/mastering_stereo.py": f"{base}/app/mastering_stereo.py",
+    "app/mastering_tonal.py": f"{base}/app/mastering_tonal.py",
     "app/stem_intelligence.py": f"{base}/app/stem_intelligence.py",
     "app/stem_intelligence_v3.py": f"{base}/app/stem_intelligence_v3.py",
     "app/social_finishing.py": f"{base}/app/social_finishing.py",

@@ -1,0 +1,37 @@
+.root {
+  display: grid;
+  gap: var(--en-space-3);
+  padding: var(--en-space-4);
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-lg);
+  background: color-mix(in srgb, var(--en-surface-raised) 82%, transparent);
+}
+
+.copy {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.copy strong {
+  color: var(--en-ink);
+  font-size: var(--en-text-sm);
+}
+
+.copy small {
+  max-width: 58rem;
+  color: var(--en-muted);
+  line-height: var(--en-leading-body);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--en-space-2);
+}
+
+.error {
+  margin: 0;
+  color: var(--en-danger);
+  font-size: var(--en-text-xs);
+}

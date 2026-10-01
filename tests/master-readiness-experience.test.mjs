@@ -120,39 +120,40 @@ test("one PR enforces exact track lineage, trusted references and targeted strea
   assert.match(safeDistribution, /before Ensemblis prepares distribution/);
 });
 
-test("Active Mastering uses a bounded lossless storage envelope and never persists signed upload credentials", async () => {
-  const [processor, jobs, callback, controls, panel, errors, workerMain, automix] = await Promise.all([
+test("Active Mastering preserves canonical fidelity across bounded storage and never persists signed upload credentials", async () => {
+  const [processor, jobs, callback, canonicalRoute, controls, panel, workerMain, automix] = await Promise.all([
     source("services/media-worker/app/mastering_processor.py"),
     source("lib/mastering/jobs.ts"),
     source("app/api/studio/mastering/callback/route.ts"),
+    source("app/api/media/mastering/[jobId]/route.ts"),
     source("components/studio/active-mastering-controls.tsx"),
     source("components/studio/active-mastering-panel.tsx"),
-    source("lib/mastering/job-error.ts"),
     source("services/media-worker/app/main.py"),
     source("services/media-worker/app/automix.py"),
   ]);
 
   assert.match(processor, /MAX_MASTERING_UPLOAD_BYTES = 48_000_000/);
+  assert.match(processor, /MASTERING_CHUNK_BYTES = 45_000_000/);
   assert.match(processor, /"-c:a", "flac"/);
-  assert.match(processor, /dither_method=triangular/);
-  assert.match(processor, /_ensure_storage_envelope/);
-  assert.match(processor, /def _render_static_gain/);
-  assert.match(processor, /"engine": "static_gain"/);
-  assert.match(processor, /minimum_attenuation_for_true_peak_headroom/);
-  assert.match(processor, /"lossless_codec": True/);
-  assert.match(processor, /"source_precision_preserved": not bool\(delivery\["fallback_applied"\]\)/);
-  assert.match(processor, /upload_file\(upload_url, output, "audio\/flac"\)/);
-  assert.match(jobs, /masteringOutputPath[\s\S]*?\.flac/);
-  assert.match(callback, /mimeType = isFlac \? "audio\/flac" : "audio\/wav"/);
+  assert.match(processor, /"storage_mode": "chunked_lossless"/);
+  assert.match(processor, /def _split_mastering_chunks/);
+  assert.match(processor, /def _upload_mastering_output/);
+  assert.match(processor, /"source_precision_preserved": True/);
+  assert.doesNotMatch(processor, /dither_method=triangular/);
+  assert.doesNotMatch(processor, /flac_16_/);
+  assert.match(jobs, /masteringChunkPaths/);
+  assert.match(jobs, /chunk_uploads: chunkSlots/);
+  assert.match(callback, /delete next\.chunk_uploads/);
+  assert.match(callback, /chunk_manifest/);
   assert.match(callback, /asset_type: "master_audio"/);
   assert.match(callback, /verifiedForDistribution \? "distribution-ready" : "review-required"/);
-  assert.doesNotMatch(callback, /asset_type: "audio_master"/);
-  assert.match(callback, /\[mastering-callback\] completion failed/);
-  assert.match(callback, /original_name:[\s\S]*?extension/);
+  assert.match(canonicalRoute, /Accept-Ranges/);
+  assert.match(canonicalRoute, /Content-Range/);
+  assert.match(canonicalRoute, /chunk\.storage_path/);
+  assert.match(canonicalRoute, /response\.status === 200 && !wantsWholeChunk/);
   assert.match(controls, /Retry \{failed\.preset/);
   assert.doesNotMatch(controls, /Download 24-bit WAV/);
   assert.doesNotMatch(panel, /Download rendered WAV/);
-  assert.match(errors, /lossless candidate was larger than the current storage limit/);
   assert.match(workerMain, /Never include response\.url here/);
   assert.match(workerMain, /Media upload failed/);
   const uploadGuard = workerMain.match(/def raise_upload_error[\s\S]*?async def upload_file/)?.[0] ?? "";

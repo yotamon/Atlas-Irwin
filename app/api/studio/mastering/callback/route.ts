@@ -44,12 +44,68 @@ function cleanRequestPayload(value: Record<string, unknown>) {
   const next = { ...value };
   delete next[MEDIA_WORKER_CALLBACK_HASH_KEY];
   delete next.upload_url;
+  delete next.chunk_uploads;
+  delete next.codec_preview_uploads;
   return next;
 }
 
 function scheduleCleanup() {
   after(scheduleMediaWorkerSandboxCleanup());
 }
+
+function uploadedStoragePaths(
+  requestPayload: Record<string, unknown>,
+  result: Record<string, unknown>,
+) {
+  const paths = new Set<string>();
+  const storage = record(result.storage);
+  if (storage.storage_mode === "chunked_lossless" && Array.isArray(storage.chunk_manifest)) {
+    for (const entry of storage.chunk_manifest) {
+      const row = record(entry);
+      if (typeof row.storage_path === "string" && row.storage_path) paths.add(row.storage_path);
+    }
+  }
+
+  // A chunk upload can fail after earlier parts already reached Storage but
+  // before the worker can return a completed manifest. The server prepared all
+  // possible slots, so removing the whole envelope is safe and prevents orphan
+  // objects. Supabase removal is tolerant of paths that were never uploaded.
+  if (Array.isArray(requestPayload.chunk_uploads)) {
+    for (const entry of requestPayload.chunk_uploads) {
+      const row = record(entry);
+      if (typeof row.storage_path === "string" && row.storage_path) paths.add(row.storage_path);
+    }
+  }
+  if (Array.isArray(requestPayload.codec_preview_uploads)) {
+    for (const entry of requestPayload.codec_preview_uploads) {
+      const row = record(entry);
+      if (typeof row.storage_path === "string" && row.storage_path) paths.add(row.storage_path);
+    }
+  }
+
+  const directPath = typeof requestPayload.upload_path === "string" ? requestPayload.upload_path : "";
+  if (directPath) paths.add(directPath);
+  return [...paths];
+}
+
+async function cleanupUploadedMaster(
+  service: ReturnType<typeof createServiceClient>,
+  requestPayload: Record<string, unknown>,
+  result: Record<string, unknown>,
+) {
+  const bucket = typeof requestPayload.upload_bucket === "string" ? requestPayload.upload_bucket : "";
+  const paths = uploadedStoragePaths(requestPayload, result);
+  if (!bucket || !paths.length) return;
+  const cleanup = await service.storage.from(bucket).remove(paths);
+  if (cleanup.error) {
+    console.error("[mastering-callback] stale output cleanup failed", {
+      bucket,
+      count: paths.length,
+      message: cleanup.error.message,
+    });
+  }
+}
+
 
 export async function POST(request: Request) {
   const payload = record(await request.json().catch(() => null));
@@ -87,6 +143,7 @@ export async function POST(request: Request) {
 
   if (status === "failed") {
     const message = callbackError || "Active Mastering worker job failed.";
+    await cleanupUploadedMaster(service, requestPayload, result);
     const update = await db.from("track_mastering_jobs").update({
       status: "failed",
       request_payload: json(cleanRequestPayload(requestPayload)),
@@ -111,6 +168,7 @@ export async function POST(request: Request) {
     if (current.error) throw new Error(current.error.message);
     if (!current.data || current.data.audio_url !== job.source_audio_url) {
       const message = "The canonical source master changed while this candidate was rendering. The late result was kept out of the active workflow.";
+      await cleanupUploadedMaster(service, requestPayload, result);
       await db.from("track_mastering_jobs").update({
         status: "cancelled",
         request_payload: json(cleanRequestPayload(requestPayload)),
@@ -125,8 +183,18 @@ export async function POST(request: Request) {
 
     const path = typeof requestPayload.upload_path === "string" ? requestPayload.upload_path : job.output_path;
     const bucket = typeof requestPayload.upload_bucket === "string" ? requestPayload.upload_bucket : job.output_bucket;
-    const publicUrl = typeof requestPayload.public_url === "string" ? requestPayload.public_url : "";
     const output = record(result.output);
+    const storage = record(result.storage);
+    const storageMode = typeof storage.storage_mode === "string" ? storage.storage_mode : "single_object";
+    const directPublicUrl = typeof requestPayload.direct_public_url === "string"
+      ? requestPayload.direct_public_url
+      : typeof requestPayload.public_url === "string"
+        ? requestPayload.public_url
+        : "";
+    const chunkedPublicUrl = typeof requestPayload.chunked_public_url === "string"
+      ? requestPayload.chunked_public_url
+      : "";
+    const publicUrl = storageMode === "chunked_lossless" ? chunkedPublicUrl : directPublicUrl;
     const finalChecks = record(result.final_checks);
     const verifiedForDistribution = finalChecks.pass === true;
     if (!path || !bucket || !publicUrl) throw new Error("Active Mastering callback is missing output lineage.");
@@ -176,15 +244,24 @@ export async function POST(request: Request) {
           source_master_url: job.source_audio_url,
           mastering_schema: result.schema ?? null,
           final_checks: finalChecks,
+          codec_previews: Array.isArray(result.codec_previews) ? result.codec_previews : [],
+          storage_mode: storageMode,
+          chunk_manifest: Array.isArray(storage.chunk_manifest) ? storage.chunk_manifest : [],
+          canonical_file_size: typeof output.file_size === "number" ? output.file_size : null,
+          canonical_sha256: typeof output.sha256 === "string" ? output.sha256 : null,
         }),
       }).select("*").single();
       if (created.error || !created.data) throw new Error(created.error?.message || "Could not register mastered output.");
       asset = created.data;
     }
 
+    const cleanPayload = {
+      ...cleanRequestPayload(requestPayload),
+      public_url: publicUrl,
+    };
     const update = await db.from("track_mastering_jobs").update({
       status: "completed",
-      request_payload: json(cleanRequestPayload(requestPayload)),
+      request_payload: json(cleanPayload),
       result_payload: json(result),
       output_asset_id: asset.id,
       error: null,
