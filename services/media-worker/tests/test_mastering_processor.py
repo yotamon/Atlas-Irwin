@@ -66,7 +66,9 @@ class ActiveMasteringPlanTest(unittest.TestCase):
         target_two = build_mastering_target("balanced", source, _references(2))
         target_three = build_mastering_target("balanced", source, _references(3))
         self.assertEqual(target_two["reference_source"], "preset")
-        self.assertEqual(target_three["reference_source"], "artist_catalog")
+        self.assertEqual(target_three["reference_source"], "similar_trusted_references")
+        self.assertEqual(int(target_three["selected_reference_count"]), 3)
+        self.assertTrue(target_three["reference_intelligence"]["automatic_influence"])
         self.assertGreaterEqual(float(target_three["integrated_lufs"]), -13.0)
         self.assertLessEqual(float(target_three["integrated_lufs"]), -8.5)
 
