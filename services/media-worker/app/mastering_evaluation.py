@@ -33,15 +33,29 @@ def build_perceptual_delta(
     after_dynamics = _record(after.get("dynamics"))
     before_stereo = _record(before.get("stereo"))
     after_stereo = _record(after.get("stereo"))
+    before_transients = _record(before.get("transients"))
+    after_transients = _record(after.get("transients"))
     before_signature = _record(before.get("reference_signature"))
     after_signature = _record(after.get("reference_signature"))
-    before_bands = _record(before_signature.get("band_relative_db"))
-    after_bands = _record(after_signature.get("band_relative_db"))
+    before_fine_bands = _record(before_signature.get("perceptual_envelope_db"))
+    after_fine_bands = _record(after_signature.get("perceptual_envelope_db"))
+    before_bands = before_fine_bands or _record(before_signature.get("band_relative_db"))
+    after_bands = after_fine_bands or _record(after_signature.get("band_relative_db"))
 
     before_plr = _number(before_dynamics.get("peak_to_loudness_ratio_lu"))
     after_plr = _number(after_dynamics.get("peak_to_loudness_ratio_lu"))
-    before_crest = _number(before_dynamics.get("crest_factor_db"))
-    after_crest = _number(after_dynamics.get("crest_factor_db"))
+    before_crest = _number(before_transients.get("transient_crest_p90_db"))
+    after_crest = _number(after_transients.get("transient_crest_p90_db"))
+    transient_metric = "transient_crest_p90_db"
+    if before_crest is None or after_crest is None:
+        before_crest = _number(before_dynamics.get("crest_factor_db"))
+        after_crest = _number(after_dynamics.get("crest_factor_db"))
+        transient_metric = "overall_crest_factor_db_fallback"
+
+    before_psr = _number(before_dynamics.get("psr_median_lu"))
+    after_psr = _number(after_dynamics.get("psr_median_lu"))
+    before_spread = _number(before_dynamics.get("relative_dynamic_spread_db"))
+    after_spread = _number(after_dynamics.get("relative_dynamic_spread_db"))
 
     before_corr = _number(before_stereo.get("correlation"))
     after_corr = _number(after_stereo.get("correlation"))
@@ -92,8 +106,15 @@ def build_perceptual_delta(
         "plr_loss_lu": round(_positive_loss(before_plr, after_plr), 3)
         if _positive_loss(before_plr, after_plr) is not None
         else None,
-        "crest_factor_loss_db": round(_positive_loss(before_crest, after_crest), 3)
+        "transient_crest_loss_db": round(_positive_loss(before_crest, after_crest), 3)
         if _positive_loss(before_crest, after_crest) is not None
+        else None,
+        "transient_metric": transient_metric,
+        "psr_median_loss_lu": round(_positive_loss(before_psr, after_psr), 3)
+        if _positive_loss(before_psr, after_psr) is not None
+        else None,
+        "short_term_dynamic_spread_loss_db": round(_positive_loss(before_spread, after_spread), 3)
+        if _positive_loss(before_spread, after_spread) is not None
         else None,
         "band_delta_db": band_delta_db,
         "mean_abs_band_delta_db": round(mean_abs_band_delta_db, 3)
@@ -115,9 +136,9 @@ def build_perceptual_delta(
         if limiter_gain_reduction is not None
         else None,
         "measurement_note": (
-            "Crest-factor loss is an interim transient-preservation proxy. "
-            "Inspector V2 will add direct onset/transient metrics before this "
-            "proxy is retired."
+            "Transient preservation prefers Inspector V2 short-window crest evidence and "
+            "falls back to overall crest only for legacy analyses. PSR and short-term "
+            "dynamic-spread losses remain separate so density changes are not hidden by PLR."
         ),
     }
 
@@ -159,9 +180,14 @@ def evaluate_change_budget(
         label="Peak-to-loudness ratio loss",
     )
     check(
-        key="crest_factor_loss_db",
+        key="transient_crest_loss_db",
         budget_key="max_transient_loss_db",
-        label="Transient/crest loss",
+        label="Transient crest loss",
+    )
+    check(
+        key="psr_median_loss_lu",
+        budget_key="max_short_term_compression_delta_lu",
+        label="Short-term PSR compression",
     )
     check(
         key="spectral_envelope_distance",
