@@ -26,7 +26,9 @@ Remove request-time orchestration and Sandbox quota exhaustion as critical-path 
 3. make at most one shared-worker dispatch attempt;
 4. seed idempotent artist-scoped maintenance jobs into `automation_jobs`;
 5. execute due maintenance jobs one at a time within an explicit wall-clock budget;
-6. return before the 55-second route limit with remaining work still queued.
+6. return the cron HTTP response immediately via `after()` while durable work continues inside the function lifecycle;
+7. run on explicit Vercel Fluid Compute with a 300-second Hobby-safe function cap, a 180-second internal heartbeat budget and 90 seconds of headroom before claiming another job;
+8. leave any remaining work queued for a later heartbeat rather than depending on one invocation to drain the system.
 
 ### Maintenance job types
 
@@ -58,10 +60,14 @@ No maintenance job may operate on sibling artists when an artist scope is suppli
 
 ### Budget contract
 
+- Vercel Fluid Compute is explicit in `vercel.json`;
+- the Marketing route is capped at 300 seconds;
+- the durable heartbeat uses a 180-second internal deadline;
 - claim one job at a time;
-- check the deadline before the next claim;
-- never pre-claim a batch that may outlive the request;
+- stop claiming new work when less than 90 seconds of heartbeat budget remains;
+- never pre-claim a batch that may outlive the invocation;
 - retry failures through existing `automation_jobs.run_after` semantics;
+- recurring maintenance that exhausts its retry budget is rescheduled for its next cadence rather than becoming permanently dead behind its idempotency key;
 - return counts plus `budgetExhausted` instead of timing out.
 
 ## Workstream B — Shared Media Worker capacity circuit
@@ -137,4 +143,5 @@ Run at minimum:
 - Sandbox 402/429/quota failures do not set Mastering/AutoMix/media jobs to terminal failed.
 - A capacity result prevents additional shared-worker dispatch attempts in that heartbeat.
 - Content Factory quota exhaustion returns a normal deferred result, not HTTP 500.
-- Production logs after deployment show no Marketing 55-second timeout and no tight-loop Sandbox quota failures during the soak window.
+- Production logs after deployment show no Marketing invocation timeout and no tight-loop Sandbox quota failures during the soak window.
+- The deployed Marketing route reports a 300-second max duration under explicit Fluid Compute, while the internal durable heartbeat remains bounded to 180 seconds.

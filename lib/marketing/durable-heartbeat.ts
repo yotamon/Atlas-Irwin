@@ -13,7 +13,7 @@ import { createMarketingServiceClient } from "./db";
 import { MARKETING_MAINTENANCE_JOBS } from "./maintenance";
 import { kickMarketingMediaWorkerQueue } from "./media-worker-queue";
 
-const DEFAULT_HEARTBEAT_BUDGET_MS = 40_000;
+const DEFAULT_HEARTBEAT_BUDGET_MS = 180_000;
 const SEED_CONCURRENCY = 12;
 
 type QueueKickResult = {
@@ -134,7 +134,7 @@ export async function runDurableMarketingHeartbeat(input: {
   maxMaintenanceJobs?: number;
 } = {}) {
   const startedAt = Date.now();
-  const budgetMs = Math.max(15_000, Math.min(input.budgetMs ?? DEFAULT_HEARTBEAT_BUDGET_MS, 40_000));
+  const budgetMs = Math.max(15_000, Math.min(input.budgetMs ?? DEFAULT_HEARTBEAT_BUDGET_MS, 180_000));
   const deadline = startedAt + budgetMs;
 
   const musicIngestion = await runStep("music ingestion follow-up", () =>

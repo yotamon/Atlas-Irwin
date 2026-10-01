@@ -4,10 +4,10 @@ import { runDurableMarketingHeartbeat } from "@/lib/marketing/durable-heartbeat"
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-// Return to the cron caller immediately, then use the remaining function window for
-// bounded durable work. Production has demonstrated an effective ~55-second ceiling,
-// so continuation must come from persisted jobs rather than a longer assumed runtime.
-export const maxDuration = 55;
+// Return to the cron caller immediately, then use Fluid Compute's Hobby-safe function
+// window for bounded durable work. Durable jobs remain the source of truth if an invocation
+// ends early; the larger window prevents provider I/O from being killed by our old 55s cap.
+export const maxDuration = 300;
 
 export async function GET(request: Request) {
   const auth = await authorizeMarketingCron(request);

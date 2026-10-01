@@ -11,7 +11,7 @@ test("marketing cron delegates maintenance to a bounded durable heartbeat", () =
   assert.match(route, /runDurableMarketingHeartbeat/);
   assert.match(route, /import \{ after \} from "next\/server"/);
   assert.match(route, /after\(async \(\) =>/);
-  assert.match(route, /maxDuration\s*=\s*55/);
+  assert.match(route, /maxDuration\s*=\s*300/);
   assert.match(route, /durable-post-response-heartbeat/);
   for (const direct of [
     "reconcileMarketingState",
@@ -43,12 +43,14 @@ test("durable marketing heartbeat seeds idempotent artist-scoped maintenance job
   assert.match(source, /maintenance:radar/);
   assert.match(source, /maintenance:next_best_actions/);
   assert.match(source, /maintenance:manager_execution/);
-  assert.match(heartbeat, /DEFAULT_HEARTBEAT_BUDGET_MS\s*=\s*40_000/);
-  assert.match(heartbeat, /Math\.min\([\s\S]*40_000\)/);
+  assert.match(heartbeat, /DEFAULT_HEARTBEAT_BUDGET_MS\s*=\s*180_000/);
+  assert.match(heartbeat, /Math\.min\([\s\S]*180_000\)/);
   assert.match(heartbeat, /deadline|budgetMs/);
   assert.match(heartbeat, /runDueAutomationJobsWithinBudget/);
   const automation = read("lib/marketing/automation.ts");
-  assert.match(automation, /AUTOMATION_JOB_START_HEADROOM_MS\s*=\s*15_000/);
+  assert.match(automation, /AUTOMATION_JOB_START_HEADROOM_MS\s*=\s*90_000/);
+  const vercel = JSON.parse(read("vercel.json"));
+  assert.equal(vercel.fluid, true);
 });
 
 test("automation executor claims maintenance work incrementally instead of preclaiming an unbounded batch", () => {

@@ -488,7 +488,7 @@ async function collectMetricsJob(job: ScopedAutomationJob) {
 }
 
 const AUTOMATION_LEASE_MS = 10 * 60 * 1000;
-const AUTOMATION_JOB_START_HEADROOM_MS = 15_000;
+const AUTOMATION_JOB_START_HEADROOM_MS = 90_000;
 
 function jobScope(job: ScopedAutomationJob): MarketingExecutionScope {
   return { ownerId: job.owner_id, artistId: job.artist_id };
