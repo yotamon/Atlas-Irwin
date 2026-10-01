@@ -3,6 +3,7 @@ import "server-only";
 import { kickAutoMixQueue } from "@/lib/automix/jobs";
 import { kickAutoMixPreviewQueue } from "@/lib/automix/previews";
 import { kickMasteringQueue } from "@/lib/mastering/jobs";
+import { kickMasteringReferenceQueue } from "@/lib/mastering/reference-jobs";
 import { kickMediaWorkerQueue } from "@/lib/media-worker/queue";
 import { recoverStrandedMusicIngestionFollowUp } from "@/lib/music-intelligence/ingestion-follow-up";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -59,6 +60,15 @@ async function runSharedWorkerRecovery() {
   const mastering = await runStep("mastering queue", () => kickMasteringQueue());
   results.mastering = mastering;
   if (sharedWorkerBlocked(mastering)) return { blockedBy: "mastering", results };
+
+  const masteringReference = await runStep(
+    "mastering reference queue",
+    () => kickMasteringReferenceQueue(),
+  );
+  results.masteringReference = masteringReference;
+  if (sharedWorkerBlocked(masteringReference)) {
+    return { blockedBy: "masteringReference", results };
+  }
 
   const autoMix = await runStep("AutoMix queue", () => kickAutoMixQueue());
   results.autoMix = autoMix;

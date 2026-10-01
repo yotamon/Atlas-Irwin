@@ -87,13 +87,14 @@ test("all shared worker queues preserve work when provider capacity is unavailab
   for (const file of [
     "lib/media-worker/queue.ts",
     "lib/mastering/jobs.ts",
+    "lib/mastering/reference-jobs.ts",
     "lib/automix/jobs.ts",
     "lib/automix/previews.ts",
     "lib/marketing/media-worker-queue.ts",
   ]) {
     const source = read(file);
     assert.match(source, /mediaWorkerCapacity|capacity/i, `${file} has no capacity branch`);
-    assert.match(source, /status:\s*"planned"|status:\s*"queued"/, `${file} does not return work to a durable pending state`);
+    assert.match(source, /status:\s*"planned"|status:\s*"queued"|status:\s*"pending"/, `${file} does not return work to a durable pending state`);
   }
 });
 
@@ -101,6 +102,25 @@ test("marketing shared-worker dispatch stops after a capacity result", () => {
   const heartbeat = read("lib/marketing/durable-heartbeat.ts");
   assert.match(heartbeat, /reason\s*===\s*"capacity"|workerBlocked|sharedWorkerBlocked/);
   assert.match(heartbeat, /if \(sharedWorkerBlocked\(mediaWorker\)\) return/);
+  assert.match(heartbeat, /kickMasteringReferenceQueue/);
+  assert.match(heartbeat, /if \(sharedWorkerBlocked\(masteringReference\)\)[\s\S]*blockedBy: "masteringReference"/);
+});
+
+test("Mastering Reference analysis persists provider-capacity backoff and joins every shared-worker recovery path", () => {
+  const queue = read("lib/mastering/reference-jobs.ts");
+  const cron = read("app/api/cron/media-worker/route.ts");
+  const sandbox = read("lib/media-worker/sandbox.ts");
+
+  assert.match(queue, /isMediaWorkerCapacityError/);
+  assert.match(queue, /mediaWorkerCapacityBlocked/);
+  assert.match(queue, /mediaWorkerCapacityErrorMessage/);
+  assert.match(queue, /mediaWorkerCapacityRetryAfter/);
+  assert.match(queue, /reason:\s*"capacity"/);
+  assert.match(queue, /status:\s*"pending"/);
+
+  assert.match(cron, /kickMasteringReferenceQueue/);
+  assert.match(sandbox, /kickMasteringReferenceQueue/);
+  assert.doesNotMatch(sandbox, /\bdispatched\s*=\s*result\.dispatched/);
 });
 
 test("Content Factory checks for actual work before creating Sandbox and treats quota as deferred", () => {
