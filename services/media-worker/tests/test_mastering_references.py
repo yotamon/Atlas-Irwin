@@ -104,6 +104,21 @@ class MasteringReferenceIntelligenceV2Test(unittest.TestCase):
         selection = select_references(source, refs)
         self.assertFalse(selection["automatic_influence"])
 
+    def test_v2_source_can_still_use_legacy_six_band_references(self) -> None:
+        source = _signature()
+        refs = []
+        for shift in (0.1, -0.2, 0.3):
+            item = _signature(shift=shift)
+            item.pop("perceptual_envelope_db", None)
+            item.pop("section_signatures", None)
+            item.pop("onset_density_per_second", None)
+            refs.append(item)
+
+        selection = select_references(source, refs)
+        self.assertTrue(selection["automatic_influence"])
+        self.assertEqual(selection["selected_count"], 3)
+        self.assertTrue(all(row["spectral_resolution"] == "legacy" for row in selection["ranked"]))
+
     def test_weighted_reference_values_favor_more_similar_reference(self) -> None:
         source = _signature()
         close = _signature(lufs=-10.0, shift=0.1)
