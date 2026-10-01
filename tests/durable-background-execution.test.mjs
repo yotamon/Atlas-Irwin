@@ -43,8 +43,12 @@ test("durable marketing heartbeat seeds idempotent artist-scoped maintenance job
   assert.match(source, /maintenance:radar/);
   assert.match(source, /maintenance:next_best_actions/);
   assert.match(source, /maintenance:manager_execution/);
+  assert.match(heartbeat, /DEFAULT_HEARTBEAT_BUDGET_MS\s*=\s*40_000/);
+  assert.match(heartbeat, /Math\.min\([\s\S]*40_000\)/);
   assert.match(heartbeat, /deadline|budgetMs/);
   assert.match(heartbeat, /runDueAutomationJobsWithinBudget/);
+  const automation = read("lib/marketing/automation.ts");
+  assert.match(automation, /AUTOMATION_JOB_START_HEADROOM_MS\s*=\s*15_000/);
 });
 
 test("automation executor claims maintenance work incrementally instead of preclaiming an unbounded batch", () => {
@@ -66,6 +70,14 @@ test("durable automation recovers stale leases and reschedules recurring mainten
   assert.match(automation, /recoverStaleAutomationJobs/);
   assert.match(automation, /\.eq\("status",\s*"running"\)/);
   assert.match(automation, /lease expired/);
+  assert.match(automation, /marketingMaintenanceCadenceMs/);
+  assert.match(automation, /attempt_count:\s*0/);
+  assert.match(automation, /status:\s*"queued"/);
+});
+
+test("recurring maintenance remains schedulable after its retry budget is used", () => {
+  const automation = read("lib/marketing/automation.ts");
+  assert.match(automation, /function recurringMaintenanceRecovery/);
   assert.match(automation, /marketingMaintenanceCadenceMs/);
   assert.match(automation, /attempt_count:\s*0/);
   assert.match(automation, /status:\s*"queued"/);

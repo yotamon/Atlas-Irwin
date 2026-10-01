@@ -488,10 +488,22 @@ async function collectMetricsJob(job: ScopedAutomationJob) {
 }
 
 const AUTOMATION_LEASE_MS = 10 * 60 * 1000;
-const AUTOMATION_JOB_START_HEADROOM_MS = 90_000;
+const AUTOMATION_JOB_START_HEADROOM_MS = 15_000;
 
 function jobScope(job: ScopedAutomationJob): MarketingExecutionScope {
   return { ownerId: job.owner_id, artistId: job.artist_id };
+}
+
+function recurringMaintenanceRecovery(job: ScopedAutomationJob, now = Date.now()) {
+  const cadenceMs = marketingMaintenanceCadenceMs(job.job_type);
+  if (!isMarketingMaintenanceJob(job.job_type) || cadenceMs === null) return null;
+  return {
+    status: "queued" as const,
+    locked_at: null,
+    completed_at: null,
+    run_after: new Date(now + cadenceMs).toISOString(),
+    attempt_count: 0,
+  };
 }
 
 async function processJob(job: ScopedAutomationJob) {
@@ -559,17 +571,22 @@ async function recoverStaleAutomationJobs(artistId?: string) {
   for (const row of stale ?? []) {
     const job = row as ScopedAutomationJob;
     const exhausted = job.attempt_count >= job.max_attempts;
-    const { error: updateError } = await client.from("automation_jobs").update({
-      status: exhausted ? "failed" : "queued",
+    const recurringRecovery = exhausted ? recurringMaintenanceRecovery(job) : null;
+    const terminalFailure = exhausted && !recurringRecovery;
+    const { error: updateError } = await client.from("automation_jobs").update(recurringRecovery ? {
+      ...recurringRecovery,
+      error: "Recurring marketing maintenance lease expired after exhausting its retry budget; rescheduled for the next cadence.",
+    } : {
+      status: terminalFailure ? "failed" : "queued",
       locked_at: null,
-      run_after: exhausted ? job.run_after : new Date().toISOString(),
-      completed_at: exhausted ? new Date().toISOString() : null,
-      error: exhausted
+      run_after: terminalFailure ? job.run_after : new Date().toISOString(),
+      completed_at: terminalFailure ? new Date().toISOString() : null,
+      error: terminalFailure
         ? "Automation job lease expired after the maximum number of attempts."
         : "Automation job lease expired before completion; queued for safe recovery.",
     }).eq("id", job.id).eq("status", "running");
     if (updateError) throw new Error(updateError.message);
-    if (exhausted) terminal += 1;
+    if (terminalFailure) terminal += 1;
     else recovered += 1;
   }
   return { recovered, terminal };
@@ -602,16 +619,22 @@ async function settleClaimedAutomationJob(
     return { completed: 1, failed: 0, rescheduled: recurring ? 1 : 0 };
   } catch (jobError) {
     const terminal = job.attempt_count >= job.max_attempts;
+    const recurringRecovery = terminal ? recurringMaintenanceRecovery(job) : null;
+    const terminalFailure = terminal && !recurringRecovery;
     const backoffHours = Math.min(24, Math.max(1, 2 ** Math.max(0, job.attempt_count - 1)));
-    const { error: retryError } = await client.from("automation_jobs").update({
-      status: terminal ? "failed" : "queued",
+    const message = jobError instanceof Error ? jobError.message : "Automation job failed.";
+    const { error: retryError } = await client.from("automation_jobs").update(recurringRecovery ? {
+      ...recurringRecovery,
+      error: `Recurring marketing maintenance exhausted its retry budget; rescheduled for the next cadence. Last error: ${message}`,
+    } : {
+      status: terminalFailure ? "failed" : "queued",
       locked_at: null,
-      completed_at: terminal ? new Date().toISOString() : null,
+      completed_at: terminalFailure ? new Date().toISOString() : null,
       run_after: new Date(Date.now() + backoffHours * 60 * 60 * 1000).toISOString(),
-      error: jobError instanceof Error ? jobError.message : "Automation job failed.",
+      error: message,
     }).eq("id", job.id).eq("owner_id", job.owner_id).eq("artist_id", job.artist_id);
     if (retryError) throw new Error(retryError.message);
-    return { completed: 0, failed: 1, rescheduled: 0 };
+    return { completed: 0, failed: 1, rescheduled: recurringRecovery ? 1 : 0 };
   }
 }
 
