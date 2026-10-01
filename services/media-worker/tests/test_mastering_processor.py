@@ -223,53 +223,37 @@ class ActiveMasteringPlanTest(unittest.TestCase):
         self.assertGreater(float(target["loudness_range"]["max_lufs"]), float(target["integrated_lufs"]))
         self.assertGreater(float(target["change_budget"]["max_limiter_gain_reduction_db"]), 0.0)
 
-    def test_storage_envelope_keeps_small_24_bit_flac(self) -> None:
+    def test_storage_envelope_keeps_small_native_24_bit_flac(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             output = root / "mastered.flac"
             output.write_bytes(b"x" * 90)
             result = _ensure_storage_envelope(output, root, sample_rate_hz=44100, max_bytes=100)
-            self.assertEqual(result["profile"], "flac_24")
+            self.assertEqual(result["profile"], "flac_24_native")
+            self.assertEqual(result["storage_mode"], "single_object")
+            self.assertEqual(result["bit_depth"], 24)
             self.assertEqual(result["sample_rate_hz"], 44100)
+            self.assertTrue(result["source_precision_preserved"])
             self.assertFalse(result["fallback_applied"])
             self.assertEqual(output.stat().st_size, 90)
 
-    def test_storage_envelope_falls_back_to_dithered_16_bit_flac(self) -> None:
+    def test_storage_envelope_chunks_large_master_without_quality_reduction(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             output = root / "mastered.flac"
-            output.write_bytes(b"x" * 180)
+            original = b"0123456789" * 18
+            output.write_bytes(original)
+            result = _ensure_storage_envelope(output, root, sample_rate_hz=96000, max_bytes=100)
 
-            def fake_encode(_source: Path, target: Path, *, bit_depth: int, sample_rate_hz: int) -> None:
-                self.assertEqual(bit_depth, 16)
-                target.write_bytes(b"y" * (80 if sample_rate_hz == 48000 else 70))
-
-            with patch.object(mastering_processor_module, "_encode_flac_variant", side_effect=fake_encode):
-                result = _ensure_storage_envelope(output, root, sample_rate_hz=48000, max_bytes=100)
-
-            self.assertEqual(result["profile"], "flac_16_native_dithered")
-            self.assertEqual(result["bit_depth"], 16)
-            self.assertEqual(result["sample_rate_hz"], 48000)
-            self.assertTrue(result["fallback_applied"])
-            self.assertEqual(output.stat().st_size, 80)
-
-    def test_storage_envelope_can_reduce_sample_rate_without_lossy_audio(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            output = root / "mastered.flac"
-            output.write_bytes(b"x" * 180)
-
-            def fake_encode(_source: Path, target: Path, *, bit_depth: int, sample_rate_hz: int) -> None:
-                target.write_bytes(b"y" * (120 if sample_rate_hz == 48000 else 90))
-
-            with patch.object(mastering_processor_module, "_encode_flac_variant", side_effect=fake_encode):
-                result = _ensure_storage_envelope(output, root, sample_rate_hz=48000, max_bytes=100)
-
-            self.assertEqual(result["profile"], "flac_16_44k_dithered")
-            self.assertEqual(result["bit_depth"], 16)
-            self.assertEqual(result["sample_rate_hz"], 44100)
-            self.assertTrue(result["fallback_applied"])
-            self.assertEqual(output.stat().st_size, 90)
+            self.assertEqual(result["profile"], "flac_24_native_chunked")
+            self.assertEqual(result["storage_mode"], "chunked_lossless")
+            self.assertEqual(result["bit_depth"], 24)
+            self.assertEqual(result["sample_rate_hz"], 96000)
+            self.assertEqual(result["chunk_size_bytes"], 100)
+            self.assertEqual(result["chunk_count"], 2)
+            self.assertTrue(result["source_precision_preserved"])
+            self.assertFalse(result["fallback_applied"])
+            self.assertEqual(output.read_bytes(), original)
 
 
 if __name__ == "__main__":
