@@ -935,6 +935,7 @@ async def _callback(request: MasteringWorkerRequest, status: str, result: dict[s
 
 async def execute_mastering(request: MasteringWorkerRequest) -> None:
     await _callback(request, "running", {})
+    result: dict[str, Any] = {}
     try:
         payload = request.payload
         audio_url = str(payload.get("audio_url") or "")
@@ -975,4 +976,4 @@ async def execute_mastering(request: MasteringWorkerRequest) -> None:
         await _callback(request, "completed", result)
     except Exception as exc:
         message = str(exc)[:2200] or "Active Mastering failed."
-        await _callback(request, "failed", {}, message)
+        await _callback(request, "failed", result, message)
