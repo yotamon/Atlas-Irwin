@@ -1,6 +1,7 @@
 # Active Mastering V2 Implementation Program
 
 **Status:** Planned; implementation will remain in one draft PR until the complete vertical slice is validated  
+**Execution PR:** [#279 — Active Mastering V2: adaptive mastering program](https://github.com/yotamon/Atlas-Irwin/pull/279)  
 **Scope:** Master Readiness → mastering decision engine → deterministic DSP → candidate optimization → listening validation → promotion → release coherence  
 **Canonical baseline:** [Active Mastering Studio](active-mastering.md) and [Master Readiness Experience](master-readiness-experience.md)  
 **Product architecture:** Ensemblis UX V4  
