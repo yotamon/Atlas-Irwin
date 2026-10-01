@@ -704,7 +704,7 @@ def _render_candidate(
         output,
         music_map,
         include_codec_stress=include_codec_stress,
-        include_section_signatures=False,
+        include_section_signatures=include_codec_stress,
     )
     checks = _candidate_checks(after, target, before, measured)
     return measured, after, checks
@@ -851,7 +851,7 @@ def master_audio(
         after = analyze_mastering(
             output,
             music_map,
-            include_section_signatures=False,
+            include_section_signatures=True,
         )
         checks = _candidate_checks(after, target, before, measured)
         optimizer = {
