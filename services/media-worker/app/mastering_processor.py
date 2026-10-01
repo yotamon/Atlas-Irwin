@@ -340,7 +340,15 @@ def _filter_chain(plan: dict[str, Any]) -> str:
     stereo = _record(plan.get("stereo"))
     side_level = _number(stereo.get("side_level"))
     if stereo.get("enabled") and side_level is not None and side_level < 0.999:
-        filters.append(f"stereotools=mode=lr>lr:slev={side_level:.6f}")
+        crossover_hz = _number(stereo.get("crossover_hz")) or 180.0
+        prefix = ",".join(filters)
+        if prefix:
+            prefix += ","
+        return (
+            f"{prefix}acrossover=split={crossover_hz:.1f}:order=8th[master_low][master_high];"
+            f"[master_low]stereotools=mode=lr>lr:slev={side_level:.6f}[master_low_fixed];"
+            "[master_low_fixed][master_high]amix=inputs=2:normalize=0:dropout_transition=0"
+        )
     return ",".join(filters)
 
 
