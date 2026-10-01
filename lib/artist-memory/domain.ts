@@ -16,7 +16,8 @@ export type ArtistMemoryConsumer =
   | "video_director"
   | "campaign_planning"
   | "growth"
-  | "audience_assistance";
+  | "audience_assistance"
+  | "mastering";
 
 export type ArtistMemoryEffect = "rank_only" | "suggest_only" | "brief_only" | "prepare_copy_only";
 
@@ -78,10 +79,18 @@ export const ARTIST_MEMORY_CONSUMER_POLICY: Record<ArtistMemoryConsumer, ArtistM
     minimumLearnedConfidence: 0.8,
     description: "May prepare artist-consistent wording only. It cannot infer consent, sensitive traits, identity merges or permission to send.",
   },
+  mastering: {
+    consumer: "mastering",
+    allowedClasses: ["preference_evidence"],
+    maxEffect: "suggest_only",
+    maxItems: 4,
+    minimumLearnedConfidence: 0.5,
+    description: "May nudge creative mastering targets or tighten change budgets from explicit approved/kept-original decisions. It cannot loosen technical safety, change streaming-safe behavior or promote a candidate.",
+  },
 };
 
 export type ArtistMemorySource = {
-  kind: "brand_setting" | "creative_memory" | "moment_calibration" | "verified_learning";
+  kind: "brand_setting" | "creative_memory" | "moment_calibration" | "verified_learning" | "mastering_preference";
   id: string | null;
   label: string;
   href: string;
@@ -274,6 +283,82 @@ export function momentCalibrationMemoryItem(input: {
     expiresAt: null,
     consumers: ["moment_ranking", "creative_direction", "video_director", "campaign_planning"],
   };
+}
+
+export function masteringPreferenceMemoryItems(input: {
+  evidenceCount: number;
+  approvedCount: number;
+  keptOriginalCount: number;
+  preferredCreativeLufs: number | null;
+  preferredLimiterGainReductionDb: number | null;
+  preferredEqEnergy: number | null;
+  confidence: number;
+  observedAt?: string | null;
+}): ArtistMemoryItem[] {
+  if (input.evidenceCount < 2 || input.confidence < 0.5) return [];
+  const items: ArtistMemoryItem[] = [];
+  const source = {
+    kind: "mastering_preference" as const,
+    id: null,
+    label: `${input.evidenceCount} explicit mastering decision${input.evidenceCount === 1 ? "" : "s"}`,
+    href: "/studio/music",
+    observedAt: input.observedAt ?? null,
+  };
+  const confidence = {
+    score: clamp01(input.confidence),
+    label: confidenceLabel(input.confidence),
+    sampleSize: input.evidenceCount,
+  };
+  const common = {
+    source,
+    confidence,
+    lifecycle: "active" as const,
+    expiresAt: null,
+    consumers: ["mastering"] as ArtistMemoryConsumer[],
+  };
+
+  if (input.preferredCreativeLufs !== null) {
+    items.push({
+      id: "mastering:creative-loudness",
+      class: "preference_evidence",
+      title: "Mastering loudness preference",
+      value: `Approved creative masters cluster around ${input.preferredCreativeLufs.toFixed(1)} LUFS.`,
+      summary: "Derived only from explicit mastering approvals. Future creative targets may move slightly toward this history, but technical safety and the cleanest acceptable loudness remain authoritative.",
+      ...common,
+    });
+  }
+
+  if (input.preferredLimiterGainReductionDb !== null || input.preferredEqEnergy !== null) {
+    const details = [
+      input.preferredLimiterGainReductionDb !== null
+        ? `typical approved peak-control pressure ≈ ${input.preferredLimiterGainReductionDb.toFixed(1)} dB`
+        : "",
+      input.preferredEqEnergy !== null
+        ? `typical approved EQ movement ≈ ${input.preferredEqEnergy.toFixed(1)} dB total`
+        : "",
+    ].filter(Boolean);
+    items.push({
+      id: "mastering:change-tolerance",
+      class: "preference_evidence",
+      title: "Mastering change tolerance",
+      value: details.join(" · "),
+      summary: "Approved candidates can tighten future processing budgets. Learned preference evidence is never allowed to loosen technical safety limits.",
+      ...common,
+    });
+  }
+
+  if (!items.length) {
+    items.push({
+      id: "mastering:decision-history",
+      class: "preference_evidence",
+      title: "Mastering decision history",
+      value: `${input.approvedCount} approved · ${input.keptOriginalCount} original kept`,
+      summary: "Explicit mastering decisions are retained as bounded artist-specific evidence without inventing a universal quality score.",
+      ...common,
+    });
+  }
+
+  return items;
 }
 
 export function verifiedLearningMemoryItem(input: {
