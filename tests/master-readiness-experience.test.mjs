@@ -136,12 +136,16 @@ test("Active Mastering uses a bounded lossless storage envelope and never persis
   assert.match(processor, /"-c:a", "flac"/);
   assert.match(processor, /dither_method=triangular/);
   assert.match(processor, /_ensure_storage_envelope/);
+  assert.match(processor, /def _render_static_gain/);
+  assert.match(processor, /"engine": "static_gain"/);
+  assert.match(processor, /minimum_attenuation_for_true_peak_headroom/);
   assert.match(processor, /"lossless_codec": True/);
   assert.match(processor, /"source_precision_preserved": not bool\(delivery\["fallback_applied"\]\)/);
   assert.match(processor, /upload_file\(upload_url, output, "audio\/flac"\)/);
   assert.match(jobs, /masteringOutputPath[\s\S]*?\.flac/);
   assert.match(callback, /mimeType = isFlac \? "audio\/flac" : "audio\/wav"/);
   assert.match(callback, /asset_type: "master_audio"/);
+  assert.match(callback, /verifiedForDistribution \? "distribution-ready" : "review-required"/);
   assert.doesNotMatch(callback, /asset_type: "audio_master"/);
   assert.match(callback, /\[mastering-callback\] completion failed/);
   assert.match(callback, /original_name:[\s\S]*?extension/);

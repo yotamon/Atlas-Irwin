@@ -165,7 +165,7 @@ export function ActiveMasteringControls({
               <div>
                 <span className="section-label">Recommended fix</span>
                 <strong>Streaming-safe master</strong>
-                <p>Preserve the current balance and loudness while creating safer reconstruction and codec headroom.</p>
+                <p>Preserve the current balance and dynamics while applying only the minimum transparent level reduction needed for safer true-peak and codec headroom.</p>
               </div>
               <SubmitButton className="button primary" pendingLabel="Creating streaming-safe master…" disabled={!sourceAudioUrl}>
                 Create streaming-safe master

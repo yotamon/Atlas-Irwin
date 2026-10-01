@@ -127,6 +127,8 @@ export async function POST(request: Request) {
     const bucket = typeof requestPayload.upload_bucket === "string" ? requestPayload.upload_bucket : job.output_bucket;
     const publicUrl = typeof requestPayload.public_url === "string" ? requestPayload.public_url : "";
     const output = record(result.output);
+    const finalChecks = record(result.final_checks);
+    const verifiedForDistribution = finalChecks.pass === true;
     if (!path || !bucket || !publicUrl) throw new Error("Active Mastering callback is missing output lineage.");
     const container = typeof output.container === "string" ? output.container.toUpperCase() : "";
     const isFlac = container === "FLAC" || path.toLowerCase().endsWith(".flac");
@@ -165,7 +167,7 @@ export async function POST(request: Request) {
           original_name: `ensemblis-${job.preset}-master-${job.id}.${extension}`,
           title: `Ensemblis ${job.preset} master`,
           description: `${bitDepth ? `${bitDepth}-bit ` : ""}${isFlac ? "lossless FLAC" : "WAV"} rendered by Ensemblis Active Mastering${sampleRateHz ? ` at ${Math.round(sampleRateHz / 100) / 10} kHz` : ""}.`,
-          tags: ["active-mastering", job.preset, "distribution-ready"],
+          tags: ["active-mastering", job.preset, verifiedForDistribution ? "distribution-ready" : "review-required"],
           upload_source: "atlas_media_worker",
           source_kind: "active_mastering_candidate",
           mastering_job_id: job.id,
@@ -173,7 +175,7 @@ export async function POST(request: Request) {
           artist_id: job.artist_id,
           source_master_url: job.source_audio_url,
           mastering_schema: result.schema ?? null,
-          final_checks: result.final_checks ?? null,
+          final_checks: finalChecks,
         }),
       }).select("*").single();
       if (created.error || !created.data) throw new Error(created.error?.message || "Could not register mastered output.");
