@@ -155,12 +155,14 @@ class MasteringV2AudioRenderTest(unittest.TestCase):
             self.assertGreater(aac.stat().st_size, 1000)
             self.assertGreater(opus.stat().st_size, 1000)
 
-    def test_corrective_stereo_filter_reduces_side_energy_without_widening(self) -> None:
+    def test_corrective_stereo_filter_reduces_only_low_band_side_energy(self) -> None:
         sample_rate = 48000
         frames = sample_rate * 2
         t = np.arange(frames, dtype=np.float64) / sample_rate
-        mid = 0.35 * np.sin(2.0 * np.pi * 700.0 * t)
-        side = 0.45 * np.sin(2.0 * np.pi * 90.0 * t)
+        mid = 0.30 * np.sin(2.0 * np.pi * 700.0 * t)
+        low_side = 0.35 * np.sin(2.0 * np.pi * 90.0 * t)
+        high_side = 0.20 * np.sin(2.0 * np.pi * 3200.0 * t)
+        side = low_side + high_side
         stereo = np.column_stack((mid + side, mid - side)).astype(np.float32)
 
         with tempfile.TemporaryDirectory() as directory:
@@ -174,15 +176,30 @@ class MasteringV2AudioRenderTest(unittest.TestCase):
                 "resonance": {"enabled": False, "moves": []},
                 "compression": {"enabled": False},
                 "character": {"enabled": False},
-                "stereo": {"enabled": True, "side_level": 0.88},
+                "stereo": {
+                    "enabled": True,
+                    "side_level": 0.88,
+                    "crossover_hz": 180.0,
+                },
             }
             _render_premaster(source, output, plan, sample_rate_hz=sample_rate)
             rendered, rendered_rate = sf.read(output, always_2d=True, dtype="float32")
 
-            before_side = np.sqrt(np.mean(np.square((stereo[:, 0] - stereo[:, 1]) * 0.5)))
-            after_side = np.sqrt(np.mean(np.square((rendered[:, 0] - rendered[:, 1]) * 0.5)))
+            before_side = (stereo[:, 0] - stereo[:, 1]) * 0.5
+            after_side = (rendered[:, 0] - rendered[:, 1]) * 0.5
+            freqs = np.fft.rfftfreq(frames, d=1.0 / sample_rate)
+            before_fft = np.abs(np.fft.rfft(before_side))
+            after_fft = np.abs(np.fft.rfft(after_side))
+
+            def amplitude_at(hz: float, spectrum: np.ndarray) -> float:
+                index = int(np.argmin(np.abs(freqs - hz)))
+                return float(spectrum[index])
+
+            low_ratio = amplitude_at(90.0, after_fft) / max(amplitude_at(90.0, before_fft), 1e-12)
+            high_ratio = amplitude_at(3200.0, after_fft) / max(amplitude_at(3200.0, before_fft), 1e-12)
             self.assertEqual(rendered_rate, sample_rate)
-            self.assertLess(after_side, before_side * 0.95)
+            self.assertLess(low_ratio, 0.94)
+            self.assertAlmostEqual(high_ratio, 1.0, delta=0.03)
 
     def test_creative_master_runs_end_to_end_with_candidate_optimizer(self) -> None:
         sample_rate = 44100
