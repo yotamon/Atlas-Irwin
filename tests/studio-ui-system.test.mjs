@@ -46,6 +46,13 @@ test("Studio tokens own shared page, density, control and icon geometry", async 
     "--en-icon-sm",
     "--en-icon-md",
     "--en-icon-lg",
+    "--en-space-7",
+    "--en-radius-md",
+    "--en-success",
+    "--en-positive",
+    "--en-shadow",
+    "--en-surface-inset",
+    "--en-surface-inset-compact",
   ]) {
     assert.match(css, new RegExp(`${token.replaceAll("-", "\\-")}\\s*:`), `${token} must be canonical`);
   }
@@ -114,4 +121,30 @@ test("Studio hardening keeps legacy split layouts inside the usable workspace", 
   assert.match(css, /:where\(\.growth-recommendation, \.growth-bottleneck\)\s*\{[^}]*min-height:\s*0/s);
   assert.match(css, /@media \(max-width:\s*1240px\)[^{]*\{[\s\S]*?\.growth-command-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
   assert.match(css, /@media \(max-width:\s*1180px\)[^{]*\{[\s\S]*?\.track-object-overview\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+});
+
+
+test("Framed Studio surfaces always keep content away from their edges", async () => {
+  const patterns = await source("app/studio/design-system/patterns.css");
+  const compositions = await source("app/studio/design-system/compositions.css");
+
+  assert.match(patterns, /\.track-object-primary,[\s\S]*?\.distribution-section[\s\S]*?\)\s*\{[^}]*padding:\s*var\(--en-surface-inset\)/);
+  assert.match(patterns, /\.v2-provider-lock\s*\{[^}]*padding:\s*var\(--en-surface-inset-compact\)/);
+  assert.match(compositions, /\.growth-recommendation\s*\{[^}]*padding:\s*var\(--en-surface-inset\)/);
+  assert.match(compositions, /\.growth-bottleneck\s*\{[^}]*padding:\s*var\(--en-surface-inset\)/);
+  assert.match(compositions, /\.inbox-approval-section\s*\{[^}]*padding-inline:\s*var\(--en-surface-inset\)/);
+  assert.match(compositions, /\.inbox-protected-section\s*\{[^}]*padding-inline:\s*var\(--en-surface-inset\)/);
+});
+
+test("Canonical spacing aliases cover migrated Studio styles", async () => {
+  const tokens = await source("app/studio/design-system/tokens.css");
+  for (const token of [
+    "--en-space-7",
+    "--en-radius-md",
+    "--en-success",
+    "--en-positive",
+    "--en-shadow",
+  ]) {
+    assert.match(tokens, new RegExp(`${token.replaceAll("-", "\\-")}\\s*:`), `${token} must resolve in the canonical token layer`);
+  }
 });
