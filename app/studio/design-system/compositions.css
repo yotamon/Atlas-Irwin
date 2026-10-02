@@ -376,11 +376,13 @@
 }
 
 .studio-root .growth-recommendation {
+  padding: var(--en-surface-inset);
   border-left: 2px solid var(--en-accent);
   background: linear-gradient(135deg, var(--en-accent-soft), var(--en-surface) 44%);
 }
 
 .studio-root .growth-bottleneck {
+  padding: var(--en-surface-inset);
   border-left: 2px solid var(--en-violet);
   background: linear-gradient(135deg, var(--en-violet-soft), var(--en-surface) 44%);
 }
@@ -396,10 +398,12 @@
 }
 
 .studio-root .inbox-approval-section {
+  padding-inline: var(--en-surface-inset);
   border-left: 2px solid var(--en-accent);
 }
 
 .studio-root .inbox-protected-section {
+  padding-inline: var(--en-surface-inset);
   border-left: 2px solid var(--en-danger);
 }
 

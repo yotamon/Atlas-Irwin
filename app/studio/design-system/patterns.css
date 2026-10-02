@@ -26,6 +26,34 @@
   box-shadow: none;
 }
 
+/* Framed components must own an inset. This prevents the recurring state where
+   canonical surface chrome wins over legacy padding and leaves content touching
+   a rounded border. Structural v2 sections are normalized later and the
+   ai-budget-track is a meter, not a content surface. */
+.studio-root :where(
+  .v2-focus-card,
+  .v2-release-card,
+  .v2-create-card,
+  .catalog-card,
+  .kanban-card,
+  .today-v3-section,
+  .today-v3-next,
+  .track-object-primary,
+  .track-object-decision,
+  .library-reusable-strip,
+  .fan-graph-section,
+  .audience-polish-queue,
+  .growth-north-star-main,
+  .video-project-card,
+  .distribution-section
+) {
+  padding: var(--en-surface-inset);
+}
+
+.studio-root .v2-provider-lock {
+  padding: var(--en-surface-inset-compact);
+}
+
 .studio-root :where(
   .v2-focus-card,
   .v2-release-card,
