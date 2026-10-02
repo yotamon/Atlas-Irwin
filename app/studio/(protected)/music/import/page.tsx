@@ -39,7 +39,7 @@ export default async function MusicImportPage({ searchParams }: { searchParams: 
     <div className="studio-v2-page growth-import-page music-import-page">
       <PageHeader
         title="Add mastered music"
-        description={`Upload ${artist.artistName}'s mastered tracks. Title is optional; Ensemblis starts understanding structure and strongest moments automatically.`}
+        description={`Upload ${artist.artistName}'s mastered tracks. Title is optional; Ensemblis starts understanding structure and strongest sections automatically.`}
         action={<Link className="button" href={onboarding ? href("/studio/onboarding") : href("/studio/music")}>{onboarding ? "Continue activation" : "Back to Music"}</Link>}
       />
 
@@ -54,7 +54,7 @@ export default async function MusicImportPage({ searchParams }: { searchParams: 
           <span className={`v2-dot ${worker.configured ? "connected" : ""}`} aria-hidden />
         </div>
         <p className="v2-muted-copy">
-          Upload the real master and move on. Track Intelligence maps musical structure, energy and strongest moments without asking you to score the song by hand.
+          Upload the real master and move on. Analysis maps musical structure, energy and strongest sections without asking you to score the song by hand.
         </p>
         {!worker.configured ? (
           <div className="notice">

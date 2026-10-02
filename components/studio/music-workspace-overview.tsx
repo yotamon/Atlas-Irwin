@@ -1,8 +1,7 @@
-/* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
-import { MusicIntelligencePreview } from "@/components/studio/music-intelligence-preview";
 import { Status } from "@/components/studio/ui";
 import { TrackPreview } from "@/components/studio/track-preview";
+import { ContinueWidget } from "@/components/studio/ux-v4-widgets";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { describeMusicIngestionProgress } from "@/lib/studio/track-analysis-state";
 import type { VaultTrack } from "@/types/growth-database";
@@ -28,29 +27,6 @@ type TrackSummary = {
   display_order: number;
 };
 
-function titleCase(value: string) {
-  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function shortDate(value: string | null) {
-  if (!value) return "No date";
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "Europe/Berlin",
-  }).format(new Date(`${value.slice(0, 10)}T12:00:00Z`));
-}
-
-function hasMusicMap(track: VaultTrack) {
-  return Boolean(
-    track.audio_profile
-    && typeof track.audio_profile === "object"
-    && !Array.isArray(track.audio_profile)
-    && Object.keys(track.audio_profile).length,
-  );
-}
-
 function ingestionProgress(track: VaultTrack) {
   return describeMusicIngestionProgress({
     hasMaster: Boolean(track.audio_url),
@@ -60,215 +36,153 @@ function ingestionProgress(track: VaultTrack) {
   });
 }
 
+function normalized(value: string) {
+  return value.trim().toLowerCase();
+}
+
 export function MusicWorkspaceOverview({
   artistId,
- artistName,
+  artistName,
   vaultTracks,
   releases,
   tracks,
+  query = "",
 }: {
   artistId: string;
   artistName: string;
   vaultTracks: VaultTrack[];
   releases: ReleaseSummary[];
   tracks: TrackSummary[];
+  query?: string;
 }) {
-  const unreleased = vaultTracks.filter((track) => !track.linked_release_id);
-  const focusTrack = unreleased[0] ?? null;
-  const focusProgress = focusTrack ? ingestionProgress(focusTrack) : null;
-  const remaining = focusTrack ? unreleased.filter((track) => track.id !== focusTrack.id) : unreleased;
-  const analyzedCount = unreleased.filter(hasMusicMap).length;
-  const masteredCount = unreleased.filter((track) => Boolean(track.audio_url)).length;
-  const trackCountByRelease = new Map<string, number>();
+  const href = (path: string) => ensemblisArtistHref(path, artistId);
   const releaseById = new Map(releases.map((release) => [release.id, release]));
-  const vaultByTrack = new Map(vaultTracks.filter((track) => track.linked_track_id).map((track) => [track.linked_track_id as string, track]));
-  for (const track of tracks) {
-    trackCountByRelease.set(track.release_id, (trackCountByRelease.get(track.release_id) ?? 0) + 1);
-  }
-  const addHref = ensemblisArtistHref("/studio/music?view=add", artistId);
-  const importHref = ensemblisArtistHref("/studio/music/import", artistId);
-  const generateHref = ensemblisArtistHref("/studio/music?view=generate", artistId);
-  const automixHref = ensemblisArtistHref("/studio/music/automix", artistId);
-  const mixableCatalogTracks = tracks.filter((track) => Boolean(track.audio_url));
-  const trackHref = (trackId: string) => ensemblisArtistHref(`/studio/music/${trackId}`, artistId);
-  const createHref = (trackId: string) => ensemblisArtistHref(`/studio/create?intent=asset&track=${trackId}`, artistId);
+  const vaultByTrack = new Map(
+    vaultTracks
+      .filter((track) => track.linked_track_id)
+      .map((track) => [track.linked_track_id as string, track]),
+  );
+  const q = normalized(query);
+
+  const unreleased = vaultTracks.filter((track) => !track.linked_release_id);
+  const attention = unreleased
+    .map((track) => ({ track, progress: ingestionProgress(track) }))
+    .filter(({ track, progress }) => !track.audio_url || progress.phase === "needs_attention" || progress.phase === "needs_input")
+    .slice(0, 3);
+
+  const catalogRows = tracks.map((track) => {
+      const vault = vaultByTrack.get(track.id) ?? null;
+      const release = releaseById.get(track.release_id);
+      const audioUrl = vault?.audio_url || track.audio_url;
+      const progress = vault ? ingestionProgress(vault) : null;
+      return {
+        key: `catalog:${track.id}`,
+        title: track.title,
+        version: track.version,
+        releaseTitle: release?.title ?? "Release",
+        audioUrl,
+        state: progress?.label ?? (audioUrl ? "Master ready" : "Needs master"),
+        stateTone: !audioUrl || progress?.phase === "needs_attention" ? "attention" as const : "success" as const,
+        detail: progress?.detail ?? (audioUrl ? "Ready to use across Ensemblis." : "Add the canonical master to continue."),
+        href: href(`/studio/music/${vault?.id ?? track.id}`),
+      };
+    })
+    .filter((row) => !q || normalized(`${row.title} ${row.releaseTitle} ${row.version ?? ""}`).includes(q));
+
+  const unreleasedRows = unreleased
+    .map((track) => {
+      const progress = ingestionProgress(track);
+      return {
+        key: `vault:${track.id}`,
+        title: track.title,
+        version: track.version,
+        releaseTitle: "Unreleased",
+        audioUrl: track.audio_url,
+        state: progress.label,
+        stateTone: !track.audio_url || progress.phase === "needs_attention" ? "attention" as const : progress.phase === "ready" ? "success" as const : "neutral" as const,
+        detail: progress.detail,
+        href: href(`/studio/music/${track.id}`),
+      };
+    })
+    .filter((row) => !q || normalized(`${row.title} ${row.version ?? ""}`).includes(q));
+
+  const rows = [...unreleasedRows, ...catalogRows];
 
   return (
-    <div className="music-workspace-overview">
-      <section className="music-workspace-summary" aria-label={`${artistName} music summary`}>
-        <div><strong>{unreleased.length}</strong><span>unreleased</span></div>
-        <div><strong>{masteredCount}</strong><span>unreleased masters ready</span></div>
-        <div><strong>{analyzedCount}</strong><span>unreleased understood</span></div>
-        <div><strong>{tracks.length}</strong><span>catalog tracks</span></div>
-      </section>
-
-      <section className="v2-section music-catalog-tracks" aria-labelledby="catalog-tracks-heading">
-        <div className="v2-section-heading">
-          <div>
-            <span className="section-label">Catalog tracks</span>
-            <h2 id="catalog-tracks-heading">Every released or release-bound song</h2>
-            <p>Open the exact song directly. A release is its collection context, not a separate copy of the music.</p>
-          </div>
-          <Link href={ensemblisArtistHref("/studio/releases", artistId)}>Browse releases</Link>
-        </div>
-        {tracks.length ? (
-          <form className="music-catalog-mix-form" action="/studio/music/automix" method="get">
-            <input type="hidden" name="artist" value={artistId} />
-            <input type="hidden" name="source" value="catalog" />
-            <div className="v2-inbox music-catalog-track-list">
-              {tracks.map((track) => {
-                const vault = vaultByTrack.get(track.id) ?? null;
-                const release = releaseById.get(track.release_id);
-                const hasMaster = Boolean(track.audio_url || vault?.audio_url);
-                const mixReady = Boolean(track.audio_url);
-                const exactHref = trackHref(vault?.id ?? track.id);
-                const progress = vault ? ingestionProgress(vault) : null;
-                return (
-                  <div className="v2-inbox-item music-catalog-track-row" key={track.id}>
-                    <label className="music-catalog-mix-select">
-                      <input
-                        type="checkbox"
-                        name="track"
-                        value={track.id}
-                        disabled={!mixReady}
-                        aria-label={mixReady ? `Select ${track.title} for a mix` : `${track.title} is not ready for AutoMix`}
-                      />
-                      <span className="music-track-rank">{String(track.track_number ?? track.display_order + 1).padStart(2, "0")}</span>
-                      <span className="music-track-copy">
-                        <strong>{track.title}{track.version ? ` · ${track.version}` : ""}</strong>
-                        <small>{release?.title ?? "Release"} · {mixReady ? "Ready for AutoMix" : progress?.detail ?? (hasMaster ? "Catalog master still syncing" : "Master needed")}</small>
-                      </span>
-                    </label>
-                    <Status tone={!hasMaster || progress?.phase === "needs_attention" ? "attention" : "success"}>{progress?.label ?? (hasMaster ? "Master ready" : "Needs master")}</Status>
-                    <Link className="music-row-link" href={exactHref}>Open →</Link>
-                  </div>
-                );
-              })}
-            </div>
-            {mixableCatalogTracks.length >= 2 ? (
-              <div className="music-catalog-mix-actions">
-                <span>Select the mastered tracks you want, then start with that exact pool.</span>
-                <button className="button primary" type="submit">Mix selected tracks</button>
-              </div>
-            ) : null}
-          </form>
-        ) : (
-          <div className="v2-calm-state compact"><strong>No catalog tracks yet.</strong><p>Add a release or keep working with unreleased masters below.</p></div>
-        )}
-      </section>
-
-      <div className="music-workspace-focus-grid">
-        <section className="v2-section music-workspace-focus">
-          <div className="v2-section-heading">
+    <div className="music-v5-library">
+      {attention.length ? (
+        <section className="music-v5-continue" aria-labelledby="music-needs-attention">
+          <div className="v2-section-heading compact">
             <div>
-              <span className="section-label">Unreleased focus</span>
-              <h2>{focusTrack ? focusTrack.title : "Add the music Ensemblis should understand"}</h2>
+              <span className="section-label">Continue</span>
+              <h2 id="music-needs-attention">Music that needs your attention</h2>
             </div>
-            {focusProgress ? <span className="music-score">{focusProgress.progress}%</span> : null}
           </div>
-
-          {focusTrack ? (
-            <>
-              <div className="music-track-meta-line">
-                <span>{titleCase(focusTrack.status)}</span>
-                <span>{focusProgress?.label ?? "Preparing"}</span>
-                {focusTrack.version ? <span>{focusTrack.version}</span> : null}
-              </div>
-              <p className="v2-muted-copy">{focusProgress?.detail}</p>
-              {focusTrack.audio_url && !hasMusicMap(focusTrack) ? <TrackPreview src={focusTrack.audio_url} label={`${focusTrack.title} master`} /> : null}
-              {hasMusicMap(focusTrack) ? (
-                <MusicIntelligencePreview audioUrl={focusTrack.audio_url} musicMap={focusTrack.audio_profile} />
-              ) : (
-                <div className="v2-calm-state compact">
-                  <strong>{focusTrack.audio_url ? "No action needed while Ensemblis is listening." : "Master audio is missing."}</strong>
-                  <p>{focusTrack.audio_url ? "Track Intelligence will appear here automatically when it is ready." : "Add the mastered source instead of filling in manual scores."}</p>
-                </div>
-              )}
-              <div className="actions">
-                <Link className="button primary" href={trackHref(focusTrack.id)}>Open track</Link>
-                {hasMusicMap(focusTrack) ? <Link className="button" href={createHref(focusTrack.id)}>Create from this track</Link> : null}
-              </div>
-            </>
-          ) : (
-            <div className="v2-calm-state compact">
-              <strong>No unreleased music is waiting here.</strong>
-              <p>Add an existing master, prepare a release, or create something new.</p>
-              <Link className="button primary" href={importHref}>Add mastered track</Link>
-            </div>
-          )}
+          <div className="en-continue-grid">
+            {attention.map(({ track, progress }) => (
+              <ContinueWidget
+                key={track.id}
+                eyebrow="Track"
+                title={track.title}
+                detail={progress.detail}
+                status={progress.label}
+                tone={progress.phase === "needs_attention" ? "danger" : "attention"}
+                href={href(`/studio/music/${track.id}`)}
+                actionLabel="Open"
+              />
+            ))}
+          </div>
         </section>
+      ) : null}
 
-        <aside className="v2-section music-catalog-glance">
-          <div className="v2-section-heading">
-            <div><span className="section-label">Releases</span><h2>Catalog collections</h2></div>
-            <Link href={ensemblisArtistHref("/studio/releases", artistId)}>All releases</Link>
-          </div>
-          {releases.length ? (
-            <div className="music-catalog-list">
-              {releases.slice(0, 6).map((release) => (
-                <Link href={ensemblisArtistHref(`/studio/releases/${release.id}`, artistId)} key={release.id}>
-                  <span className="music-catalog-artwork">
-                    {release.artwork_url ? <img src={release.artwork_url} alt={release.cover_alt || ""} /> : release.title.slice(0, 1).toUpperCase()}
-                  </span>
-                  <span>
-                    <strong>{release.title}</strong>
-                    <small>{release.status} · {trackCountByRelease.get(release.id) ?? 0} track{(trackCountByRelease.get(release.id) ?? 0) === 1 ? "" : "s"} · {shortDate(release.release_date)}</small>
-                  </span>
-                  <b aria-hidden>→</b>
-                </Link>
-              ))}
-            </div>
-          ) : (
-            <div className="v2-calm-state compact"><strong>No releases yet.</strong><p>When a track becomes a release, its music context stays connected.</p></div>
-          )}
-        </aside>
-      </div>
+      <form className="music-v5-search" action="/studio/music">
+        <input type="hidden" name="artist" value={artistId} />
+        <label>
+          <span className="sr-only">Search music</span>
+          <input
+            type="search"
+            name="q"
+            placeholder={`Search ${artistName}'s tracks…`}
+            defaultValue={query}
+            autoComplete="off"
+          />
+        </label>
+        <button className="button" type="submit">Search</button>
+        {query ? <Link className="text-button" href={href("/studio/music")}>Clear</Link> : null}
+      </form>
 
-      <section className="v2-section music-unreleased-section">
+      <section className="v2-section music-v5-track-collection" aria-labelledby="music-tracks-heading">
         <div className="v2-section-heading">
           <div>
-            <span className="section-label">Unreleased music</span>
-            <h2>{remaining.length ? `${remaining.length} more track${remaining.length === 1 ? "" : "s"}` : focusTrack ? "One clear track in focus" : "Your unreleased music"}</h2>
+            <span className="section-label">Tracks</span>
+            <h2 id="music-tracks-heading">{query ? `Results for “${query}”` : "Your music"}</h2>
+            <p>{query ? `${rows.length} matching track${rows.length === 1 ? "" : "s"}.` : "Open a song to play it, understand its state and choose what to do next."}</p>
           </div>
-          <Link href={importHref}>Add master</Link>
+          <Link className="button primary" href={href("/studio/music?view=add")}>Add music</Link>
         </div>
-        {remaining.length ? (
-          <div className="music-track-list">
-            {remaining.map((track, index) => {
-              const progress = ingestionProgress(track);
-              return (
-                <div className="music-track-row" key={track.id}>
-                  <span className="music-track-rank">{String(index + 2).padStart(2, "0")}</span>
-                  <span className="music-track-copy">
-                    <strong>{track.title}</strong>
-                    <small>{titleCase(track.status)} · {progress.label}{track.version ? ` · ${track.version}` : ""}</small>
-                  </span>
-                  {track.audio_url ? <TrackPreview src={track.audio_url} label={track.title} compact /> : <span className="music-track-missing">No master</span>}
-                  <span className="music-score small">{progress.progress}%</span>
-                  <Link className="music-row-link" href={trackHref(track.id)}>Open →</Link>
+
+        {rows.length ? (
+          <div className="music-v5-track-list">
+            {rows.map((row) => (
+              <article className="music-v5-track-row" key={row.key}>
+                <div className="music-v5-track-identity">
+                  <small>{row.releaseTitle}</small>
+                  <strong>{row.title}{row.version ? ` · ${row.version}` : ""}</strong>
+                  <span>{row.detail}</span>
                 </div>
-              );
-            })}
+                {row.audioUrl ? <TrackPreview src={row.audioUrl} label={row.title} compact /> : <span className="music-track-missing">No master</span>}
+                <Status tone={row.stateTone}>{row.state}</Status>
+                <Link className="button" href={row.href}>Open</Link>
+              </article>
+            ))}
           </div>
         ) : (
-          <div className="v2-calm-state compact inline">
-            <strong>{focusTrack ? "Nothing else needs your attention." : "No mastered tracks yet."}</strong>
-            <p>{focusTrack ? "Music stays quiet when there is no second decision to make." : "Upload a real master and let Ensemblis do the analytical work automatically."}</p>
+          <div className="v2-calm-state compact">
+            <strong>{query ? "No matching tracks." : "No music yet."}</strong>
+            <p>{query ? "Try a different title, or clear the search." : "Add a mastered track and Ensemblis will start understanding it automatically."}</p>
+            {query ? <Link className="button" href={href("/studio/music")}>Clear search</Link> : <Link className="button primary" href={href("/studio/music?view=add")}>Add music</Link>}
           </div>
         )}
-      </section>
-
-      <section className="music-workspace-create-callout">
-        <div>
-          <span className="section-label">Use the catalog</span>
-          <h2>Turn the music into the next useful asset.</h2>
-          <p>Create a professional DJ mix from mastered catalog tracks, add more music, or generate a new draft when AI is part of this artist&apos;s process.</p>
-        </div>
-        <div className="actions">
-          {mixableCatalogTracks.length >= 2 ? <Link className="button primary" href={automixHref}>Create DJ mix</Link> : null}
-          <Link className={mixableCatalogTracks.length >= 2 ? "button" : "button primary"} href={addHref}>Add music</Link>
-          <Link className="button" href={generateHref}>Create with AI</Link>
-        </div>
       </section>
     </div>
   );

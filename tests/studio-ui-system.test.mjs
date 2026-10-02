@@ -98,3 +98,20 @@ test("Legacy v2 structural sections are normalized to editorial surfaces", async
   assert.match(css, /background:\s*transparent/);
   assert.match(css, /data-surface="feature"/);
 });
+
+
+test("Processing state styles the status marker without collapsing its label", async () => {
+  const css = await source("app/studio/design-system/motion.css");
+  assert.match(css, /ensemblis-processing-steps li > span:first-child/);
+  assert.match(css, /ensemblis-processing-steps li > span:nth-child\(2\)[^{]*\{[^}]*min-width:\s*0/s);
+  assert.match(css, /ensemblis-processing h2[^{]*\{[^}]*max-width:\s*min\(15ch,\s*100%\)[^}]*overflow-wrap:\s*break-word/s);
+  assert.doesNotMatch(css, /ensemblis-processing-steps li > span,\s*\n\.ensemblis-loading \.ensemblis-processing-steps li > span\s*\{/);
+});
+
+test("Studio hardening keeps legacy split layouts inside the usable workspace", async () => {
+  const css = await source("app/studio/design-system/ux-hardening.css");
+  assert.match(css, /:where\(\.studio-page, \.studio-v2-page\) > \*\s*\{[^}]*min-width:\s*0[^}]*max-width:\s*100%/s);
+  assert.match(css, /:where\(\.growth-recommendation, \.growth-bottleneck\)\s*\{[^}]*min-height:\s*0/s);
+  assert.match(css, /@media \(max-width:\s*1240px\)[^{]*\{[\s\S]*?\.growth-command-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+  assert.match(css, /@media \(max-width:\s*1180px\)[^{]*\{[\s\S]*?\.track-object-overview\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+});

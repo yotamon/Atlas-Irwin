@@ -7,6 +7,7 @@ import { loadArtistOperatingContext } from "@/lib/artist-operating/server";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { requireArtistContext } from "@/lib/studio/artist-context";
 import { recommendCreativeDirections } from "@/lib/studio/creative-directions";
+import { resolveCreateOutcomeIntent } from "@/lib/studio/create-outcomes";
 import { momentEvidenceSummary } from "@/lib/studio/evidence-labels";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { curateReleaseMoments } from "@/lib/studio/moments-curator";
@@ -24,7 +25,7 @@ function deliverableLabel(platform: string, format: string) {
   return `${platform} ${format}`.replace(/Instagram Instagram/i, "Instagram");
 }
 
-export default async function CreatePage({ searchParams }: { searchParams: Promise<{ track?: string; release?: string; moment?: string }> }) {
+export default async function CreatePage({ searchParams }: { searchParams: Promise<{ track?: string; release?: string; moment?: string; outcome?: string }> }) {
   const params = await searchParams;
   const artist = await requireArtistContext();
   const supabase = await createClient();
@@ -64,7 +65,11 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
       ? curation.curated.filter((moment) => moment.track_id === requestedTrack.id)
       : curation.curated;
   const directionMoments = requestedMoments.length ? requestedMoments : curation.curated;
-  const directions = recommendCreativeDirections({ moments: directionMoments, activeReleaseId: activeRelease?.id ?? null });
+  const preferredOutcome = resolveCreateOutcomeIntent(params.outcome);
+  const rankedDirections = recommendCreativeDirections({ moments: directionMoments, activeReleaseId: activeRelease?.id ?? null });
+  const directions = preferredOutcome
+    ? rankedDirections.toSorted((left, right) => Number(right.outcome.id === preferredOutcome.id) - Number(left.outcome.id === preferredOutcome.id) || left.rank - right.rank)
+    : rankedDirections;
   const sourceHierarchy = creativeSourceHierarchy(operatingContext.profile);
   const backAction = requestedTrack
     ? { href: href(`/studio/music/${requestedTrack.id}`), label: "Back to track" }
@@ -104,9 +109,9 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
           <div>
             <span className="section-label">Creating for</span>
             <strong>{activeRelease.title}</strong>
-            <small>{requestedMoment ? `${requestedTrack?.title || "Track"} · ${requestedMoment.label}` : requestedTrack ? requestedTrack.title : "Best approved musical Moments"}</small>
+            <small>{requestedMoment ? `${requestedTrack?.title || "Track"} · ${requestedMoment.label}` : requestedTrack ? requestedTrack.title : "Best approved musical sections"}</small>
           </div>
-          <Link href={href(`/studio/releases/${activeRelease.id}?stage=create#moments`)}>Review source Moments</Link>
+          <Link href={href(`/studio/releases/${activeRelease.id}?stage=create#moments`)}>Review source sections</Link>
         </section>
       ) : null}
 
@@ -116,7 +121,7 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
             <div>
               <span className="section-label">Recommended for this music</span>
               <h2>What do you want to make?</h2>
-              <p>{requestedMoment ? "This is the exact musical Moment you selected. Choose how you want to use it." : "Three strong options, already paired with the musical Moment most likely to make each one work."}</p>
+              <p>{requestedMoment ? "This is the exact musical section you selected. Choose how you want to use it." : "Three strong options, already paired with the musical section most likely to make each one work."}</p>
             </div>
           </div>
 
@@ -129,16 +134,16 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
               const endSeconds = Math.max(startSeconds, moment.end_ms / 1000);
               const evidence = momentEvidenceSummary(moment);
               return (
-                <article className={`create-deliverable-card${direction.rank === 1 ? " is-recommended" : ""}`} key={direction.id}>
+                <article className={`create-deliverable-card${preferredOutcome?.id === direction.outcome.id || (!preferredOutcome && direction.rank === 1) ? " is-recommended" : ""}`} key={direction.id}>
                   <div className="create-deliverable-head">
                     <span>{deliverableLabel(direction.outcome.platform, direction.outcome.format)}</span>
-                    {direction.rank === 1 ? <Status>Best next option</Status> : null}
+                    {preferredOutcome?.id === direction.outcome.id ? <Status>Requested</Status> : !preferredOutcome && direction.rank === 1 ? <Status>Best next option</Status> : null}
                   </div>
                   <h3>{direction.outcome.shortLabel}</h3>
                   <p>{direction.outcome.description}</p>
 
                   <div className="create-source-preview">
-                    <span className="section-label">{requestedMoment ? "Your selected Moment" : "Ensemblis picked"}</span>
+                    <span className="section-label">{requestedMoment ? "Your selected section" : "Ensemblis picked"}</span>
                     <strong>{moment.label}</strong>
                     <small>{track?.title || "Track"} · {momentTime(moment.start_ms)}–{momentTime(moment.end_ms)}</small>
                     {track?.audio_url ? <TrackPreview src={track.audio_url} startSeconds={startSeconds} endSeconds={endSeconds} label={moment.label} compact /> : null}

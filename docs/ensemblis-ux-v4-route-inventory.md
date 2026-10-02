@@ -1,6 +1,8 @@
 # Ensemblis UX V4 Route Inventory
 
-**Status:** Canonical migration inventory
+> **Historical:** Superseded by [`docs/ensemblis-ux-v5-route-inventory.md`](ensemblis-ux-v5-route-inventory.md).
+
+**Status:** Historical V4 migration inventory
 **Reconciled:** 2026-09-24
 **Source:** current protected Studio routes on main + UX V4 implementation branch
 

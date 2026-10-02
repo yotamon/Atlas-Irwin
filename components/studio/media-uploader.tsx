@@ -261,7 +261,7 @@ export function MediaUploader({
         message: resumable
           ? item.state === "paused" ? "Checking saved upload progress…" : "Preparing resumable upload…"
           : releaseMasterMode
-            ? "Uploading master and preparing Music Intelligence…"
+            ? "Uploading master and preparing analysis…"
             : referenceIntake
               ? "Uploading reference for mastering analysis…"
               : masterIntake
@@ -432,16 +432,16 @@ export function MediaUploader({
           recovery: undefined,
           message: releaseMasterMode
             ? trackScopedMaster
-              ? "Master attached to this track. Ensemblis is analyzing its structure and strongest moments."
+              ? "Master attached to this track. Ensemblis is analyzing its structure and strongest sections."
               : releaseMasterResult?.analysisReused
-                ? "Master attached. Existing Music Intelligence was reused instantly."
+                ? "Master attached. Existing analysis was reused instantly."
                 : releaseMasterResult?.analysisQueued
                   ? "Master attached. Ensemblis is analyzing its structure and strongest hooks."
                   : "Master attached. Analysis can be retried from the release when the media worker is available."
             : referenceIntake
               ? "Reference uploaded privately. Ensemblis is measuring it for mastering comparison."
               : musicIntakeMode
-              ? "Master added to Music. Ensemblis is understanding its structure and strongest moments."
+              ? "Master added to Music. Ensemblis is understanding its structure and strongest sections."
               : vaultMode
                 ? "Master is in the Vault. Free audio analysis was queued when the media worker is available."
                 : result.deduplicated
@@ -541,7 +541,7 @@ export function MediaUploader({
       >
         <FiUploadCloud aria-hidden />
         <strong>{referenceIntake ? "Drop a mastering reference here" : releaseMasterMode ? trackScopedMaster ? "Drop this track's master here" : "Drop the release master here" : musicIntakeMode ? "Drop mastered tracks here" : vaultMode ? "Drop unreleased masters here" : "Drop media here"}</strong>
-        <span>{referenceIntake ? "Audio only. Ensemblis keeps it in private Studio storage, measures it for mastering comparison, and does not add it to Music." : releaseMasterMode ? trackScopedMaster ? "WAV, MP3 or another audio master. It stays attached to this exact song and receives its own Music Intelligence." : "WAV, MP3 or another audio master. Ensemblis will attach it to this release and analyze its structure and strongest hooks." : musicIntakeMode ? "Audio only. Title is optional; Ensemblis starts understanding structure and strongest moments automatically." : vaultMode ? "Audio masters only. Each file becomes an independent Vault track." : "Images, video, audio, masters, stems, or ZIP files"}</span>
+        <span>{referenceIntake ? "Audio only. Ensemblis keeps it in private Studio storage, measures it for mastering comparison, and does not add it to Music." : releaseMasterMode ? trackScopedMaster ? "WAV, MP3 or another audio master. It stays attached to this exact song and receives its own analysis." : "WAV, MP3 or another audio master. Ensemblis will attach it to this release and analyze its structure and strongest hooks." : musicIntakeMode ? "Audio only. Title is optional; Ensemblis starts understanding structure and strongest sections automatically." : vaultMode ? "Audio masters only. Each file becomes an independent Vault track." : "Images, video, audio, masters, stems, or ZIP files"}</span>
         <small>Maximum {humanSize(uploadLimit)} per file. Large files resume safely and automatically switch to a secure direct upload if the resumable route cannot complete.</small>
         <span className="button media-dropzone-cta" aria-hidden="true">{pickerLabel}</span>
       </label>
@@ -604,7 +604,7 @@ export function MediaUploader({
         <button className="button primary" type="button" disabled={!items.length || busy || !hasPending} onClick={upload}>
           {actionLabel}
         </button>
-        {completed ? <span>{completed} of {items.length} ready</span> : <span>{releaseMasterMode ? trackScopedMaster ? "This upload changes only this song. Other tracks in the release keep their own masters and analysis." : "The previous master stays in Library history when you replace it." : musicIntakeMode ? "Each master stays reusable in Library. Track Intelligence starts automatically after upload." : vaultMode ? "Upload is reusable in Library; audio analysis does not spend an AI call." : contentItemId ? "Media will be attached to this content item." : "Media is published to the public asset library."}</span>}
+        {completed ? <span>{completed} of {items.length} ready</span> : <span>{releaseMasterMode ? trackScopedMaster ? "This upload changes only this song. Other tracks in the release keep their own masters and analysis." : "The previous master stays in Library history when you replace it." : musicIntakeMode ? "Each master stays reusable in Library. Analysis starts automatically after upload." : vaultMode ? "Upload is reusable in Library; audio analysis does not spend an AI call." : contentItemId ? "Media will be attached to this content item." : "Media is published to the public asset library."}</span>}
       </div>
     </div>
   );

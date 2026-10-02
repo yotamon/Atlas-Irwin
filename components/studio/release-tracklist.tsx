@@ -45,7 +45,7 @@ export function ReleaseTracklist({
         <div>
           <span className="section-label">Music</span>
           <h2 id="release-tracks-heading">{tracks.length ? `${tracks.length} track${tracks.length === 1 ? "" : "s"} in this release` : "Add the music in this release"}</h2>
-          <p>Every song has its own master and Music Intelligence. Open the exact track you want to work on.</p>
+          <p>Every song keeps its own master and analysis. Open the exact track you want to work on.</p>
         </div>
       </div>
 
@@ -87,7 +87,7 @@ export function ReleaseTracklist({
       ) : (
         <div className="v2-calm-state compact">
           <strong>No tracks are attached to this release yet.</strong>
-          <p>Add the track metadata first, then each song can receive its own master and intelligence.</p>
+          <p>Add the track metadata first, then each song can receive its own master and analysis.</p>
         </div>
       )}
     </section>

@@ -40,7 +40,7 @@ export function CatalogTrackWorkspace({
             <span className="section-label">Master audio</span>
             <h2>{hasMaster ? "Use the master that is already attached" : "Add this song's master"}</h2>
             <p>{hasMaster
-              ? "This exact song already has its canonical master. Ensemblis can connect that source to Music Intelligence without uploading the audio again."
+              ? "This exact song already has its canonical master. Ensemblis can connect that source to its analysis without uploading the audio again."
               : "The master you add here belongs only to this song. Other tracks in the release keep their own audio and analysis."}</p>
           </div>
         </div>
@@ -50,7 +50,7 @@ export function CatalogTrackWorkspace({
             <audio className="catalog-track-audio" controls preload="metadata" src={track.audio_url ?? undefined} />
             <div className="v2-calm-state compact">
               <strong>No re-upload needed.</strong>
-              <p>Connect the existing master and Ensemblis will create the per-track intelligence identity, then queue structure, Moments and mastering analysis from this same source.</p>
+              <p>Connect the existing master and Ensemblis will analyze this exact song for structure, strongest sections and mastering from the same source.</p>
               <form action={connectCatalogTrackToIntelligence}>
                 <input type="hidden" name="track_id" value={track.id} />
                 <input type="hidden" name="artist_id" value={artistId} />

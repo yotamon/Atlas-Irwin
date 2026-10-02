@@ -12,8 +12,9 @@ test("Grow keeps synthetic ranking precision internal", async () => {
   assert.doesNotMatch(grow, /\/100 portfolio score/i);
   assert.doesNotMatch(grow, /% confidence/i);
   assert.doesNotMatch(grow, /name="hook_strength"|name="brand_fit"|name="trend_momentum"|name="confidence"/i);
-  assert.match(grow, /evidenceStrengthLabel/);
-  assert.match(grow, /Strong evidence|evidence/i);
+  assert.match(grow, /Recommended next action/);
+  assert.match(grow, /What is holding growth back/);
+  assert.doesNotMatch(grow, /evidenceStrengthLabel/);
   assert.match(evidence, /Strong evidence/);
   assert.match(evidence, /Supported by evidence/);
   assert.match(evidence, /Preliminary evidence/);

@@ -29,10 +29,10 @@ test("legacy polish is migration input while the Design System is the only runti
   }
 });
 
-test("global command search is keyboard accessible, artist aware and object aware", async () => {
+test("intent launcher is keyboard accessible, artist aware and action-first", async () => {
   const palette = await source("components/studio/command-palette.tsx");
   const context = await source("components/studio/context-bar.tsx");
-  const search = await source("app/api/studio/search/route.ts");
+  const intent = await source("app/api/studio/intent/route.ts");
   for (const snippet of [
     'Dialog as BaseDialog',
     "<BaseDialog.Root",
@@ -47,19 +47,17 @@ test("global command search is keyboard accessible, artist aware and object awar
     'event.key === "Home"',
     'event.key === "End"',
     'aria-controls="ensemblis-command-results"',
-    "searchingObjects",
     "AbortController",
-    "ensemblisArtistHref",
-    "New release",
-    "Generate music",
-    "Artist results",
-  ]) assert.ok(palette.includes(snippet), `command palette is missing ${snippet}`);
+    "Finding the right action",
+    "Understanding the request",
+    "/api/studio/intent",
+  ]) assert.ok(palette.includes(snippet), `intent launcher is missing ${snippet}`);
   assert.equal(palette.includes('role="dialog"'), false, "Dialog semantics must come from Base UI rather than hand-authored modal behavior");
   assert.equal(palette.includes('aria-modal="true"'), false, "aria-modal ownership must stay with Base UI");
+  assert.equal(palette.includes('"Tools"'), false, "V5 launcher must not recreate a specialist tool directory");
   assert.ok(context.includes("<CommandPalette artistId={artistId}"));
-  assert.ok(search.includes("resolveArtistContext"));
-  assert.ok(search.includes('.eq("artist_id", artist.artistId)'));
-  for (const sourceName of ['from("releases")', 'from("track_vault")', 'from("campaigns")', 'from("content_items")']) assert.ok(search.includes(sourceName));
+  assert.ok(intent.includes("resolveArtistContext"));
+  assert.ok(intent.includes("resolveStudioIntent"));
 });
 
 test("compact Studio navigation keeps accessible names and coarse-pointer targets", async () => {
@@ -89,31 +87,30 @@ test("protected Studio routes have product-specific transition feedback", async 
   assert.ok(index.includes('"./loading.css" layer(ensemblis-motion)'));
 });
 
-test("Music defaults to source material and makes Add music primary", async () => {
+test("Music is a focused object library and makes Add music primary", async () => {
   const page = await source("app/studio/(protected)/music/page.tsx");
   const overview = await source("components/studio/music-workspace-overview.tsx");
   assert.ok(page.includes('if (view === "add")'));
   assert.ok(page.includes('if (view === "generate")'));
   assert.ok(page.includes(">Add music</Link>"));
-  assert.ok(page.includes("The song comes before the marketing workflow"));
   assert.ok(page.includes("<MusicWorkspaceOverview"));
   assert.ok(page.includes('from("track_vault")'));
   assert.ok(page.includes('.eq("artist_id", artist.artistId)'));
-  assert.ok(overview.includes("Catalog tracks"));
-  assert.ok(overview.includes("Every released or release-bound song"));
-  assert.ok(overview.includes("Unreleased focus"));
-  assert.ok(overview.includes("/studio/music/${trackId}"));
+  assert.ok(overview.includes('type="search"'));
+  assert.ok(overview.includes("Your music"));
+  assert.ok(overview.includes("Music that needs your attention"));
   assert.ok(overview.includes("Add music"));
-  assert.ok(overview.includes("Create with AI"));
+  assert.equal(overview.includes("Catalog collections"), false);
+  assert.equal(overview.includes("Create with AI"), false);
 });
 
-test("track objects have one readable workspace for source, intelligence, stems and lyrics", async () => {
+test("track objects keep source and actions primary while technical detail stays contextual", async () => {
   const track = await source("app/studio/(protected)/music/[id]/page.tsx");
   const header = await source("components/studio/object-header.tsx");
-  for (const snippet of ["<ObjectHeader", 'from("track_vault")', '.eq("artist_id", artist.artistId)', "<MusicIntelligencePreview", "<StemIntelligencePanel", "<LyricsIntelligencePanel", "Technical details"]) assert.ok(track.includes(snippet), `track workspace is missing ${snippet}`);
+  for (const snippet of ["<ObjectHeader", 'from("track_vault")', '.eq("artist_id", artist.artistId)', "<MusicIntelligencePreview", "<StemIntelligencePanel", "<LyricsIntelligencePanel", "<ContextInspector", "Technical details"]) assert.ok(track.includes(snippet), `track workspace is missing ${snippet}`);
   assert.equal(track.includes("Portfolio score"), false, "track workspace must not present Growth scoring as music understanding");
+  assert.equal(track.includes("tabs={tabs}"), false, "anchor links must not masquerade as Track workspace tabs");
   assert.ok(header.includes("ensemblis-object-header"));
-  assert.ok(header.includes("ensemblis-object-tabs"));
 });
 
 test("Track Intelligence exposes a real native waveform plus semantic musical timeline data", async () => {
@@ -183,23 +180,23 @@ test("Media Library uses signed resumable TUS above 6 MB without expanding stora
   assert.equal(Boolean(packageJson.dependencies?.["wavesurfer.js"]), false);
 });
 
-test("release workspace keeps tracks first and exposes V4 facets directly", async () => {
+test("release workspace leads with the release plan and keeps stable V5 facets", async () => {
   const release = await source("components/studio/release-workspace-v2.tsx");
   const releasePage = await source("app/studio/(protected)/releases/[id]/page.tsx");
   const mission = await source("lib/studio/release-mission.ts");
   assert.ok(release.includes("<ObjectHeader"));
   assert.ok(release.includes("<ReleaseTracklist"));
   assert.ok(release.includes("deriveReleaseMission"));
-  assert.ok(release.includes("Release Mission"));
+  assert.ok(release.includes("Release plan"));
   assert.ok(release.includes("This release needs one thing before Ensemblis can move it forward"));
-  assert.ok(release.indexOf("<ReleaseTracklist") < release.indexOf("release-mission-hero"), "tracks must be visible before workflow detail");
+  assert.ok(release.indexOf("release-mission-hero") < release.indexOf("<ReleaseTracklist"), "release plan must appear before track and mastering machinery");
   assert.equal(release.includes("Workflow readiness"), false);
   assert.equal(release.includes("healthScore"), false);
   assert.ok(release.includes("Advanced view"));
   assert.ok(mission.includes('attention: "blocking"'));
   assert.ok(mission.includes('status: "on_track"'));
   for (const stage of ["Overview", "Creative", "Promotion", "Distribution", "Results"]) assert.ok(release.includes(`label: "${stage}"`), `release object lost direct ${stage} facet`);
-  assert.equal(release.includes("Release work"), false, "V4 must not hide normal release facets behind Release work");
+  assert.equal(release.includes("Release work"), false, "V5 must not hide normal release facets behind Release work");
   assert.equal(release.includes('{ label: "Music", href:'), false, "release must not hide tracks behind a duplicate Music tab");
   for (const alias of ['stage === "music"', 'stage === "plan"', 'stage === "create"', 'stage === "publish"', 'stage === "learn"']) assert.ok(release.includes(alias), `legacy release alias lost ${alias}`);
   assert.ok(releasePage.includes('stage === "create" ? <MomentReviewPanel'));
@@ -226,7 +223,7 @@ test("Creative Assets keeps the selected creative dominant and technical control
   assert.ok(css.includes("@media (max-width: 960px)"));
 });
 
-test("Create starts from approved Moments but asks for a deliverable instead of an engine", async () => {
+test("Create starts from approved musical sections and honors the requested deliverable", async () => {
   const create = await source("app/studio/(protected)/create/page.tsx");
   const grow = await source("app/studio/(protected)/growth/page.tsx");
   const audience = await source("app/studio/(protected)/audience/page.tsx");
@@ -236,12 +233,14 @@ test("Create starts from approved Moments but asks for a deliverable instead of 
     '.eq("state", "approved")',
     "What do you want to make?",
     "Ensemblis picked",
-    "Review source Moments",
+    "Review source sections",
     "Other ways to create",
     "Add or create music",
     "Start a release",
     "Continue creative assets",
     "Direct a longer video",
+    "preferredOutcome",
+    "<Status>Requested</Status>",
   ]) assert.ok(create.includes(snippet), `deliverable-first Create is missing ${snippet}`);
   for (const view of ["overview", "opportunities", "performance", "portfolio"]) assert.ok(grow.includes(view));
   assert.ok(grow.includes('label: "Audience"'));

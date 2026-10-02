@@ -11,6 +11,7 @@ export type AiTaskType =
   | "marketing.creative_quality"
   | "community.reply"
   | "metadata.extraction"
+  | "ux.intent_resolution"
   | "music.lyrics_analysis"
   | "video.concepts"
   | "video.production_plan"
@@ -95,6 +96,7 @@ const BASE_TASKS: Record<AiTaskType, Omit<AiTaskPolicy, "models" | "escalationMo
   "marketing.creative_quality": { task: "marketing.creative_quality", label: "Creative quality review", modality: "text", tier: "premium", escalationTier: null, qualityThreshold: 0.94 },
   "community.reply": { task: "community.reply", label: "Community reply", modality: "text", tier: "economy", escalationTier: "balanced", qualityThreshold: 0.88 },
   "metadata.extraction": { task: "metadata.extraction", label: "Metadata extraction", modality: "text", tier: "economy", escalationTier: "balanced", qualityThreshold: 1 },
+  "ux.intent_resolution": { task: "ux.intent_resolution", label: "Intent resolution", modality: "text", tier: "economy", escalationTier: null, qualityThreshold: 1 },
   "music.lyrics_analysis": { task: "music.lyrics_analysis", label: "Lyrics Intelligence", modality: "text", tier: "balanced", escalationTier: "premium", qualityThreshold: 1 },
   "video.concepts": { task: "video.concepts", label: "Video concepts", modality: "text", tier: "balanced", escalationTier: "premium", qualityThreshold: 0.9 },
   "video.production_plan": { task: "video.production_plan", label: "Video production plan", modality: "text", tier: "balanced", escalationTier: "premium", qualityThreshold: 1 },

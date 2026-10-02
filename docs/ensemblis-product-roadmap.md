@@ -6,7 +6,7 @@
 **Product:** Ensemblis  
 **Production reference artist:** Atlas Irwin  
 **Traditional/non-AI acceptance reference:** Cerebero Spinal  
-**Last reconciled:** 2026-10-01
+**Last reconciled:** 2026-10-02
 
 ## 1. North star
 
@@ -250,19 +250,24 @@ Remaining exit work:
 - complete Mission/Needs You explanations of the exact contract boundary;
 - preserve hard overrides for sensitive communication, rights/legal declarations and Distribution.
 
-#### P1.5 Product navigation and artist-context UX - #58 - **V3 foundation complete; V4 interaction reset active**
-Outcome-oriented Ensemblis surfaces with active artist context replaced the old Atlas-specific hierarchy, but dogfooding exposed a deeper discoverability problem: capability is still too often represented as hidden routes, long feature pages or specialist panels that users must know how to find.
+#### P1.5 Product navigation and artist-context UX - #58 - **V5 implemented in draft PR #280; authenticated browser gate pending**
+V4 successfully reduced the primary shell to Today / Music / Grow, made Create a global action, clarified route ownership, improved mobile navigation and moved many specialist surfaces behind progressive disclosure. Dogfooding after V4 and Master Readiness shows that the remaining problem is deeper than navigation: downstream workspaces still expose too much subsystem structure, internal vocabulary and long-page complexity, while the Action Launcher still behaves mainly as keyword commands plus object search.
 
-The canonical next step is [`docs/ensemblis-ux-architecture-v4.md`](ensemblis-ux-architecture-v4.md):
+The canonical target is [`docs/ensemblis-ux-architecture-v5.md`](ensemblis-ux-architecture-v5.md), executed as one coherent draft PR using [`docs/superpowers/plans/2026-10-02-ensemblis-ux-v5.md`](superpowers/plans/2026-10-02-ensemblis-ux-v5.md):
 - keep Today / Music / Grow as the stable primary workspaces;
-- make Create and search/action intent global rather than navigational knowledge;
-- center Tracks, Releases, Mixes and Creative Assets as coherent objects;
-- expose valid actions contextually on those objects;
-- replace long multi-tool pages with guided workflows, widgets and inspectors;
-- preserve specialist capabilities and routes as implementation/advanced layers without making them the default mental model;
-- use AutoMix as the first reference migration from stacked specialist panels to Source → Intent → Build → Review → Render.
+- make intent → object → state → next action the default interaction contract;
+- upgrade the Action Launcher into a real intent resolver that can compose actions with artist-scoped objects and answer bounded status questions;
+- make Music object-first instead of an inventory-first long page;
+- make Track action-first, with analysis/mastering/stems/lyrics detail secondary unless blocking;
+- make Release lifecycle-guided with one next action and facet-specific jobs;
+- preserve Create as outcome-first and pre-resolve source/object context wherever possible;
+- make Grow recommendation-first, with metrics serving explanation rather than defining the page;
+- finish mobile-native object actions, inspectors/sheets and canonical journeys;
+- keep specialist/compatibility routes reachable without making route knowledge necessary.
 
-PR #265 implements the [`Master Readiness`](master-readiness-experience.md) reference vertical slice. Mastering Inspector, Active Mastering and Distribution audio checks now share one canonical Track-centered journey: readiness decision → exact listening evidence → only relevant corrective action → loudness-matched verification → explicit approval → exact-track Distribution gate. Trusted references are explicit, stale waveform evidence fails closed, and the default UI answers whether the current master is ready before exposing creative mastering directions or engineering meters.
+[`docs/ensemblis-ux-v5-route-inventory.md`](ensemblis-ux-v5-route-inventory.md) owns the V5 route visibility/discoverability contract.
+
+PR #265 remains the strongest shipped vertical reference: Master Readiness, Active Mastering and Distribution audio checks share one canonical Track-centered journey with readiness first, exact evidence second, corrective action only when useful, loudness-matched verification, explicit approval and exact-track Distribution gating. V5 generalizes that compression pattern to the rest of the product.
 
 #### P1.6 Rebrand implementation / Atlas decoupling - #59 - **Complete**
 Ensemblis is the product identity. Atlas Irwin remains artist data/reference production content.
@@ -540,7 +545,7 @@ A roadmap issue may remain open after its core foundation ships when the issue's
 | Smart links / pre-save / first-party attribution | P1 | **Core shipped; lifecycle/capture open** | #52 / #143 |
 | Paid Growth experiment engine | P1 | **Core shipped; provider completeness open** | #53 / #143 |
 | Autonomy contracts | P1 | **v1 shipped; boundary coverage open** | #57 / #138 |
-| Navigation / artist-context UX | P1 | **Complete** | #58 / #145 / #148 / #152 |
+| Navigation / artist-context UX | P1 | **V5 implemented; authenticated browser gate pending** | #58 / #145 / #148 / #152 / #280 |
 | Ensemblis rebrand implementation | P1 | **Complete** | #59 |
 | Ensemblis Sites core runtime + Atlas cutover | P1 | **Complete core** | #90 |
 | Distribution last mile / canonical credits | P1 | **Foundation shipped; last mile open** | #56 / #143 |

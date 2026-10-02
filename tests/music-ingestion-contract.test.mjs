@@ -18,7 +18,7 @@ test("Music owns mastered-track intake instead of routing through Growth", async
   const musicPage = await requireSnippets("app/studio/(protected)/music/page.tsx", [
     'href("/studio/music/import")',
     "Add a mastered track",
-    "strongest moments automatically",
+    "strongest sections automatically",
   ]);
   assert.doesNotMatch(musicPage, /\/studio\/growth\?view=portfolio/,
     "Music must not send mastered-track intake to Growth/Portfolio");
@@ -32,7 +32,7 @@ test("master intake is title plus audio while analysis starts automatically", as
   const importPage = await requireSnippets("app/studio/(protected)/music/import/page.tsx", [
     "musicIntakeMode",
     "Title is optional",
-    "starts understanding structure and strongest moments automatically",
+    "starts understanding structure and strongest sections automatically",
     "without asking you to score the song by hand",
   ]);
   assert.doesNotMatch(importPage, /hook_strength|artist_rating|short_form_potential|release_readiness/,
@@ -42,7 +42,7 @@ test("master intake is title plus audio while analysis starts automatically", as
     "musicIntakeMode?: boolean",
     "Drop mastered tracks here",
     "Master added to Music",
-    "Track Intelligence starts automatically after upload",
+    "Analysis starts automatically after upload",
   ]);
 });
 
@@ -58,34 +58,33 @@ test("new master state and analysis are explicitly scoped to the active artist",
     "master intake, release linking and analysis recovery should stay artist-local");
 });
 
-test("Music overview presents both unreleased and release tracks through the shared ingestion model", async () => {
+test("Music overview presents unreleased and release tracks through the shared ingestion model", async () => {
   const overview = await requireSnippets("components/studio/music-workspace-overview.tsx", [
-    "Catalog tracks",
     "describeMusicIngestionProgress",
     "progress?.label",
-    "focusProgress?.label",
-    "Create from this track",
-    "Add master",
+    "Music that needs your attention",
+    "music-v5-track-list",
     "linked_track_id",
+    "vault?.id ?? track.id",
   ]);
   assert.ok(overview.includes("tracks.map"), "release tracks must be directly visible from Music");
-  assert.ok(overview.includes("trackHref(vault?.id ?? track.id)"), "catalog rows must deep-link to the exact track object");
   assert.doesNotMatch(overview, /function analysisStatus|Understanding ready|rankVaultTracks|Portfolio score|Edit portfolio signals|Manage Portfolio/,
     "Music overview must use one ingestion model instead of legacy status copy or Growth ranking");
 });
 
 test("track workspace keeps normal ingestion automatic and recovery secondary", async () => {
   const detail = await requireSnippets("app/studio/(protected)/music/[id]/page.tsx", [
-    "Recommended next move",
-    "Strong moments",
+    "Next action",
+    "Best sections",
     "analysisNeedsRecovery",
-    "Retry Track Intelligence",
+    "Retry analysis",
     "Needs You ·",
     "Normal ingestion is automatic",
     "No action needed.",
+    "<ContextInspector",
   ]);
   assert.doesNotMatch(detail, />Run Track Intelligence</,
-    "track workspace must not present a normal-path manual Track Intelligence CTA");
+    "track workspace must not present a normal-path manual analysis CTA");
   assert.doesNotMatch(detail, /scoreVaultTrack|Portfolio score|Edit portfolio signals|hook_strength|short_form_potential/,
     "track workspace must explain musical understanding rather than expose manual ranking signals");
 });

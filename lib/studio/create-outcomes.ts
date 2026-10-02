@@ -3,7 +3,7 @@ export const CREATE_OUTCOMES = [
     id: "reach",
     label: "Get heard",
     shortLabel: "Stop the scroll",
-    description: "Turn this musical Moment into a concise discovery creative that earns attention before asking for anything else.",
+    description: "Turn this musical section into a concise discovery creative that earns attention before asking for anything else.",
     platform: "Instagram",
     format: "Reel",
     goal: "Reach",
@@ -14,7 +14,7 @@ export const CREATE_OUTCOMES = [
     id: "streams",
     label: "Drive streams",
     shortLabel: "Move listeners to the song",
-    description: "Use the Moment as the payoff, then make the release and listening action obvious without turning the creative into an ad.",
+    description: "Use the section as the payoff, then make the release and listening action obvious without turning the creative into an ad.",
     platform: "Instagram",
     format: "Reel",
     goal: "Streams",
@@ -51,4 +51,17 @@ export type CreateOutcome = (typeof CREATE_OUTCOMES)[number];
 export function resolveCreateOutcome(value: string | null | undefined): CreateOutcome | null {
   if (!value) return null;
   return CREATE_OUTCOMES.find((outcome) => outcome.id === value) ?? null;
+}
+
+export function resolveCreateOutcomeIntent(value: string | null | undefined): CreateOutcome | null {
+  if (!value) return null;
+  const exact = resolveCreateOutcome(value.trim().toLowerCase());
+  if (exact) return exact;
+  const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  if (!normalized) return null;
+  if (/\b(?:lyric|lyrics|words|captioned lyric)\b/.test(normalized)) return resolveCreateOutcome("lyric");
+  if (/\b(?:visualizer|visual|mood|loop|artwork|cover)\b/.test(normalized)) return resolveCreateOutcome("visual");
+  if (/\b(?:stream|streams|spotify|listen|listening)\b/.test(normalized)) return resolveCreateOutcome("streams");
+  if (/\b(?:reel|short|clip|tiktok|instagram|social|promo|post|story|video)\b/.test(normalized)) return resolveCreateOutcome("reach");
+  return null;
 }

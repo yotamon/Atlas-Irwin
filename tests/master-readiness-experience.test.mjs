@@ -105,9 +105,10 @@ test("one PR enforces exact track lineage, trusted references and targeted strea
   assert.match(processor, /preserve_source/);
 
   const readinessPosition = trackPage.indexOf("<MasterReadinessCard");
-  const activePosition = trackPage.indexOf("<ActiveMasteringPanel", readinessPosition);
-  const technicalPosition = trackPage.indexOf("Technical mastering details", activePosition);
-  assert.ok(readinessPosition > -1 && activePosition > readinessPosition && technicalPosition > activePosition);
+  const workspacePosition = trackPage.indexOf("track-v5-workspace", readinessPosition);
+  const activePosition = trackPage.indexOf("<ActiveMasteringPanel", workspacePosition);
+  const technicalPosition = trackPage.indexOf("Engineering details", activePosition);
+  assert.ok(readinessPosition > -1 && workspacePosition > readinessPosition && activePosition > workspacePosition && technicalPosition > activePosition);
 
   assert.match(controls, /Recommended fix/);
   assert.match(controls, /Create streaming-safe master/);
