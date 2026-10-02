@@ -192,6 +192,32 @@ test("V5 keeps specialist routes contained and intentionally undiscoverable", as
   }
 });
 
+test("authenticated V5 browser acceptance covers every canonical journey and cannot silently fake auth", async () => {
+  const e2e = await source("e2e/ensemblis-ux-v5.spec.mjs");
+
+  for (const journey of [
+    "1. new music",
+    "2. mastering a track",
+    "3. Create preserves",
+    "4. a release leads",
+    "5. AutoMix exposes",
+    "6. Grow answers",
+    "7. release Results",
+    "8. Needs You",
+    "9. failed AutoMix render",
+    "10. advanced Track detail",
+    "mobile preserves",
+  ]) {
+    assert.ok(e2e.includes(journey), `browser acceptance lost journey: ${journey}`);
+  }
+
+  assert.ok(e2e.includes("STUDIO_E2E_EMAIL"));
+  assert.ok(e2e.includes("STUDIO_E2E_PASSWORD"));
+  assert.ok(e2e.includes('new URL(page.url()).pathname === "/studio/login"'));
+  assert.ok(e2e.includes("no credentials are configured"));
+  assert.equal(e2e.includes("test.skip(true"), false, "enabled V5 acceptance must fail instead of skipping missing auth/data");
+});
+
 async function pageFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   const nested = await Promise.all(entries.map(async (entry) => {

@@ -18,6 +18,7 @@
     "pretest:studio": "node scripts/check-no-filesystem-catalog-compat.mjs && node scripts/build-studio-css.mjs",
     "test:studio": "node scripts/run-studio-tests.mjs",
     "test:e2e": "playwright test --config=playwright.config.mjs",
+    "test:e2e:studio": "node scripts/run-studio-e2e.mjs",
     "quality:evaluate": "node scripts/evaluate-product-quality.mjs",
     "check:legacy-runtime": "node scripts/check-no-filesystem-catalog-compat.mjs",
     "postinstall": "node scripts/ensure-lightningcss-native.mjs && node scripts/build-studio-css.mjs",
