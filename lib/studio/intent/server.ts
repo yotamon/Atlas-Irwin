@@ -5,6 +5,7 @@ import { runEnsemblisAiTask } from "@/lib/ai/control-plane";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { releaseLifecycle } from "@/lib/marketing/release-lifecycle";
 import type { ArtistContext } from "@/lib/studio/artist-context";
+import { loadArtistOperatingSnapshot } from "@/lib/studio/artist-operating-snapshot";
 import { asGrowthClient } from "@/lib/studio/growth-db";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { deriveReleaseMission } from "@/lib/studio/release-mission";
@@ -108,6 +109,8 @@ async function semanticIntent(input: {
         "Use prepare_release for getting a release ready or preparing it for distribution.",
         "Use release_readiness for questions asking whether a release is ready.",
         "Use release_results for questions asking how a release is performing.",
+        "Use today_priority when the artist asks what to work on, what matters now, or what the next move is.",
+        "Use mix_music for requests to make a DJ mix or set, including when a source track is named.",
         "Use open_object when the request is mainly to find/open something.",
         "Return unknown if the request is unrelated to supported Studio work.",
       ].join(" "),
@@ -400,6 +403,81 @@ async function releaseAnswer(input: {
   };
 }
 
+async function todayPriorityAnswer(input: {
+  db: SupabaseClient<Database>;
+  ownerId: string;
+  artist: ArtistContext;
+}): Promise<StudioIntentResult> {
+  const snapshot = await loadArtistOperatingSnapshot({
+    db: input.db,
+    userId: input.ownerId,
+    artist: input.artist,
+  });
+  const href = (path: string) => ensemblisArtistHref(path, input.artist.artistId);
+  const handsOff = snapshot.operatingContext.profile.marketingInvolvement === "just_make_music";
+
+  if (snapshot.topDecision) {
+    return {
+      id: "intent:today-priority:decision",
+      resultType: "answer",
+      eyebrow: "Best next move",
+      label: snapshot.topDecision.title,
+      detail: snapshot.topDecision.detail,
+      href: href(snapshot.topDecision.href),
+      primary: true,
+    };
+  }
+
+  const missionAction = handsOff ? null : snapshot.primaryMission?.nextAction ?? null;
+  if (missionAction) {
+    return {
+      id: "intent:today-priority:mission",
+      resultType: "answer",
+      eyebrow: "Best next move",
+      label: missionAction.title,
+      detail: snapshot.primaryMission?.summary || missionAction.title,
+      href: href(missionAction.href),
+      primary: true,
+    };
+  }
+
+  const next = handsOff ? snapshot.humanNextAction : snapshot.nextAction;
+  const nextHref = handsOff ? snapshot.humanNextActionHref : snapshot.nextActionHref;
+  if (next && nextHref) {
+    return {
+      id: "intent:today-priority:action",
+      resultType: "answer",
+      eyebrow: "Best next move",
+      label: next.title,
+      detail: next.rationale,
+      href: nextHref,
+      primary: true,
+    };
+  }
+
+  if (snapshot.primaryMission) {
+    return {
+      id: "intent:today-priority:plan",
+      resultType: "answer",
+      eyebrow: "Best next move",
+      label: snapshot.primaryMission.title,
+      detail: snapshot.primaryMission.summary,
+      href: href(snapshot.primaryMission.href),
+      primary: true,
+    };
+  }
+
+  return {
+    id: "intent:today-priority:recommendation",
+    resultType: "answer",
+    eyebrow: "Best next move",
+    label: snapshot.strategy.recommendedMission.title,
+    detail: snapshot.strategy.recommendedMission.rationale,
+    href: href(snapshot.strategy.recommendedMission.href),
+    primary: true,
+  };
+}
+
 async function genericObjectResults(input: {
   db: SupabaseClient<Database>;
   ownerId: string;
@@ -450,9 +528,21 @@ export async function resolveStudioIntent(input: {
   let intent = classifyStudioIntent(input.query);
   let usedSemanticFallback = false;
   const direct = directResult(intent.kind, input.artist.artistId);
-  if (direct.length && !intent.objectQuery) return { intent, results: direct, usedSemanticFallback };
+  const refersToExistingRelease = intent.kind === "prepare_release"
+    && /\b(?:my|the)\s+(?:(?:latest|newest|current|active)\s+)?(?:release|single|album|ep)\b/i.test(input.query);
+  const hasSpecificMixSource = intent.kind === "mix_music" && intent.objectType === "track";
+  if (direct.length && !intent.objectQuery && !refersToExistingRelease && !hasSpecificMixSource) {
+    return { intent, results: direct, usedSemanticFallback };
+  }
 
   const resolveSpecific = async (candidateIntent: ClassifiedStudioIntent) => {
+    if (candidateIntent.kind === "today_priority") {
+      return [await todayPriorityAnswer({
+        db: input.db,
+        ownerId: input.ownerId,
+        artist: input.artist,
+      })];
+    }
     if (candidateIntent.objectType === "track") {
       const tracks = await searchTracks(input.db, input.ownerId, input.artist.artistId, candidateIntent.objectQuery);
       const chosen = chooseByLabel(tracks, candidateIntent.objectQuery);

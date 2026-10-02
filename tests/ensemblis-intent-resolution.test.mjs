@@ -46,6 +46,25 @@ test("common artist goals resolve deterministically before semantic fallback", a
   assert.equal(results.kind, "release_results");
   assert.equal(results.objectType, "release");
   assert.equal(results.objectQuery, "Dancing In Color");
+
+  const priority = classifyStudioIntent("what should I work on today?");
+  assert.equal(priority.kind, "today_priority");
+  assert.equal(priority.objectQuery, "");
+
+  const latestReel = classifyStudioIntent("make a reel from my latest track");
+  assert.equal(latestReel.kind, "create_from_object");
+  assert.equal(latestReel.objectType, "track");
+  assert.equal(latestReel.objectQuery, "");
+  assert.equal(latestReel.desiredOutcome, "reel");
+
+  const latestPromotion = classifyStudioIntent("promote my latest release");
+  assert.equal(latestPromotion.kind, "promote_release");
+  assert.equal(latestPromotion.objectQuery, "");
+
+  const latestMix = classifyStudioIntent("make a DJ mix from my latest track");
+  assert.equal(latestMix.kind, "mix_music");
+  assert.equal(latestMix.objectType, "track");
+  assert.equal(latestMix.objectQuery, "");
 });
 
 test("continuation and connection intents stay bounded and explicit", async () => {

@@ -1,9 +1,10 @@
 ﻿# Ensemblis UX V5 â€” Single PR Execution Plan
 
-**Status:** Implemented in draft PR #280 — automated gates green; authenticated browser acceptance pending
+**Status:** Product implementation merged in PR #280; spacing hardening merged in #281; acceptance hardening active because #280 was merged before authenticated browser acceptance ran
 **Architecture:** `docs/ensemblis-ux-architecture-v5.md`
-**Execution model:** one draft PR from planning through final validation
-**Branch:** `feat/ensemblis-ux-v5`
+**Execution model:** V5 was designed as one draft PR; the premature #280 merge requires one narrow follow-up that only closes acceptance gaps and verified intent edge cases
+**Implementation branch:** `feat/ensemblis-ux-v5`
+**Acceptance follow-up:** `fix/ensemblis-ux-v5-acceptance`
 **Date:** 2026-10-02
 
 ## 1. Goal
@@ -744,31 +745,30 @@ Mitigation:
 - action-to-first-success metrics;
 - browser testing from user goals.
 
-## 20. Final PR review checklist
+## 20. Final V5 review checklist
 
-Before switching Draft â†’ Ready:
-
-- [ ] V5 architecture matches implementation
-- [ ] route inventory matches implementation
-- [ ] Action Launcher is truly intent-aware
-- [ ] Today has one dominant next move
-- [ ] Music is object-first
-- [ ] Track is action-first
-- [ ] Release is lifecycle-guided
-- [ ] Create remains outcome-first
-- [ ] Grow is recommendation-first
-- [ ] mobile canonical journeys pass
-- [ ] specialist routes are secondary/contained
-- [ ] default copy is artist-facing
-- [ ] safety gates are unchanged or stronger
-- [ ] no object/artist lineage regression
-- [ ] no new top-level navigation
-- [ ] TypeScript passes
-- [ ] lint passes
-- [ ] Studio tests pass
-- [ ] build passes
-- [ ] browser smoke passes
-- [ ] final diff reviewed for accidental scope creep
+- [x] V5 architecture matches implementation
+- [x] route inventory matches implementation
+- [x] Action Launcher is intent-aware, including object composition, relative latest/current references and “what should I work on today?”
+- [x] Today has one dominant next move
+- [x] Music is object-first
+- [x] Track is action-first
+- [x] Release is lifecycle-guided
+- [x] Create remains outcome-first
+- [x] Grow is recommendation-first
+- [ ] authenticated mobile canonical journeys pass in a live Studio session
+- [x] specialist routes are secondary/contained
+- [x] default copy is artist-facing
+- [x] safety gates are unchanged or stronger
+- [x] no object/artist lineage regression detected by Studio contracts
+- [x] no new top-level navigation
+- [x] TypeScript passes
+- [x] lint passes with zero errors
+- [x] Studio tests pass
+- [x] production build passes
+- [ ] final authenticated Studio browser acceptance runs against a legitimate account
+- [x] browser acceptance cannot silently pass by skipping missing auth
+- [x] final follow-up diff reviewed for accidental scope creep
 
 ## 21. Merge rule
 
@@ -779,37 +779,26 @@ Merge only when the product can be dogfooded as one coherent V5 experience and t
 
 ## 22. Implementation validation — 2026-10-02
 
-PR #280 now contains the V5 implementation across the planned product surfaces.
+PR #280 shipped the V5 product implementation and PR #281 shipped a focused Studio spacing hardening pass. A post-merge audit then found two classes of incompleteness: the authenticated browser suite covered only four of the ten canonical journeys and silently skipped in generic CI, and several natural Launcher phrases did not preserve relative intent correctly.
 
-Implemented:
-- typed intent classification plus artist-scoped object resolution;
-- bounded semantic fallback through the existing Ensemblis AI control plane;
-- answer/action results for release readiness and results;
-- contextual Today launcher suggestions;
-- object-first Music with Tracks / Releases / Mixes;
-- action-first Track with truthful source-context handoff and secondary technical inspection;
-- lifecycle-guided Release with the release plan before track/engineering detail;
-- outcome-first Create with requested deliverable preselection;
-- recommendation-first Grow using the active artist context;
-- mobile-native action/disclosure styling;
-- simplified default artist-facing terminology;
-- UX telemetry that stores normalized intent/result categories rather than raw creative queries;
-- V5 route/discoverability contracts;
-- authenticated Playwright V5 journey coverage gated behind `PLAYWRIGHT_STUDIO_E2E=1`.
+The acceptance follow-up closes those gaps:
+- the authenticated suite now covers all ten canonical journeys plus mobile and a direct “what should I work on today?” intent;
+- remote Studio acceptance can sign in through the real login form with dedicated test credentials;
+- `npm run test:e2e:studio` fails closed when legitimate authentication is unavailable instead of reporting a misleading green skip;
+- a dedicated manually triggered GitHub workflow requires an explicit Studio base URL and test credentials;
+- generic browser CI is labeled as public/unauthenticated smoke and no longer implies Studio acceptance;
+- the Action Launcher now resolves `today_priority` from the same canonical operating snapshot as Today;
+- relative references such as “my latest track” and “my latest release” resolve to current artist objects instead of searching for an object literally named “latest”;
+- “make a DJ mix from …” resolves to the Mix workflow instead of being misclassified as generic creative generation;
+- no auth bypass, production credential extraction, publishing, spend, rights confirmation or destructive E2E action was added.
 
-Validated on this branch:
-- `node --test tests/ensemblis-intent-resolution.test.mjs tests/ensemblis-ux-v5-contract.test.mjs` → 13/13 passing;
-- `npm run test:studio` → 561/561 passing on the final V5 code head;
+Validation on the acceptance follow-up:
+- focused intent + V5 contracts → 14/14 passing;
+- `npm run test:studio` → 566/566 passing, 0 failures and 0 skips;
 - `npm run typecheck` → passing;
-- `npm run lint` → 0 errors (pre-existing warnings remain outside V5);
+- `npm run lint` → 0 errors, 11 pre-existing warnings;
 - `git diff --check` → passing;
-- `npm run build` → passing on Next.js 16.3.4.
+- `npm run build` → passing on Next.js 16.3.4;
+- generic local browser smoke → 12 passed, 13 authenticated suites intentionally skipped, 1 public-site test blocked because local `.env.local` has no `PUBLIC_CATALOG_OWNER_ID` or `STUDIO_ADMIN_EMAILS`.
 
-Authenticated browser acceptance:
-- the Playwright suite is implemented and can run against a real authenticated Studio environment;
-- local execution was attempted without weakening auth;
-- Vercel CLI materializes the protected Supabase server credentials as empty values, so the existing safe localhost admin path cannot authenticate to production data from this machine;
-- no test-only production bypass was added;
-- PR #280 remains Draft until the authenticated desktop/mobile browser suite runs in an environment where the protected credential or authenticated browser state is legitimately available.
-
-This is an environment acceptance gate, not an unimplemented V5 product workstream.
+Final authenticated acceptance remains an environment gate: this machine currently has neither a usable Studio service-role credential nor dedicated Studio E2E email/password credentials. The new runner and workflow make that limitation explicit and non-bypassable. The product workstreams and automated contracts are complete; the two unchecked checklist items above require a legitimate authenticated Studio session to verify the rendered desktop/mobile experience against real artist data.

@@ -1,7 +1,7 @@
 ﻿# Ensemblis UX Architecture V5
 
-**Status:** Canonical target architecture — implemented in draft PR #280; authenticated browser acceptance pending
-**Supersedes:** `docs/ensemblis-ux-architecture-v4.md` after the V5 PR merges
+**Status:** Canonical architecture — product implementation merged in PR #280 with spacing hardening in #281; authenticated acceptance harness is explicit and fail-closed, with the final live authenticated run pending legitimate test credentials
+**Supersedes:** `docs/ensemblis-ux-architecture-v4.md`
 **Scope:** Ensemblis Studio artist-facing experience
 **Date:** 2026-10-02
 

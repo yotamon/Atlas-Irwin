@@ -115,10 +115,15 @@ jobs:
       - name: Install Chromium runtime
         run: npx playwright install --with-deps chromium
 
-      - name: Run browser smoke suite
+      - name: Run public and unauthenticated browser smoke suite
         run: npm run test:e2e
         env:
           NEXT_PUBLIC_SITE_URL: http://127.0.0.1:3100
+
+      - name: Explain authenticated Studio acceptance boundary
+        run: |
+          echo "The generic smoke job does not claim authenticated Studio acceptance."
+          echo "Run 'npm run test:e2e:studio' with STUDIO_E2E_EMAIL/STUDIO_E2E_PASSWORD or the safe localhost service-role path."
 
       - name: Upload Playwright report on failure
         if: failure()

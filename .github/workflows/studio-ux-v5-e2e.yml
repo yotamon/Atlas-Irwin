@@ -1,0 +1,52 @@
+name: Studio UX V5 acceptance
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  acceptance:
+    name: authenticated Studio journeys
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Require explicit authenticated target
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ vars.STUDIO_E2E_BASE_URL }}
+          STUDIO_E2E_EMAIL: ${{ secrets.STUDIO_E2E_EMAIL }}
+          STUDIO_E2E_PASSWORD: ${{ secrets.STUDIO_E2E_PASSWORD }}
+        run: |
+          test -n "$PLAYWRIGHT_BASE_URL" || (echo "::error::Set repository variable STUDIO_E2E_BASE_URL." && exit 1)
+          test -n "$STUDIO_E2E_EMAIL" || (echo "::error::Set repository secret STUDIO_E2E_EMAIL." && exit 1)
+          test -n "$STUDIO_E2E_PASSWORD" || (echo "::error::Set repository secret STUDIO_E2E_PASSWORD." && exit 1)
+
+      - name: Install dependencies
+        run: npm ci --no-audit
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run all V5 authenticated journeys
+        run: npm run test:e2e:studio
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ vars.STUDIO_E2E_BASE_URL }}
+          STUDIO_E2E_EMAIL: ${{ secrets.STUDIO_E2E_EMAIL }}
+          STUDIO_E2E_PASSWORD: ${{ secrets.STUDIO_E2E_PASSWORD }}
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-v5-playwright-report
+          path: playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7

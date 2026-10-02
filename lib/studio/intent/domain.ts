@@ -9,6 +9,7 @@ export type StudioIntentKind =
   | "promote_release"
   | "release_readiness"
   | "release_results"
+  | "today_priority"
   | "needs_you"
   | "connect_library"
   | "unknown";
@@ -26,6 +27,7 @@ export type ClassifiedStudioIntent = {
 
 const POLITE = /\b(?:please|pls|can you|could you|would you|help me|i want to|i need to|i'd like to|i would like to)\b/gi;
 const POSSESSIVE = /\b(?:my|the)\b/gi;
+const RELATIVE_OBJECT = /\b(?:latest|newest|current|active)\b/gi;
 const SPACE = /\s+/g;
 
 function clean(value: string) {
@@ -40,6 +42,7 @@ function clean(value: string) {
 function cleanObject(value: string) {
   return clean(value)
     .replace(POSSESSIVE, " ")
+    .replace(RELATIVE_OBJECT, " ")
     .replace(/\b(?:track|song|release|single|album|ep|mix|dj set)\b/gi, " ")
     .replace(SPACE, " ")
     .trim();
@@ -50,6 +53,16 @@ function createIntent(query: string): ClassifiedStudioIntent | null {
   const createMatch = query.match(/(?:make|create|generate|turn)\s+(?:me\s+)?(?:an?\s+)?(.+?)\s+(?:from|for|using)\s+(.+)/i);
   if (createMatch) {
     const desiredOutcome = clean(createMatch[1]).replace(/\b(?:content|asset)\b/gi, "").trim() || "creative";
+    if (/^(?:dj\s+)?(?:mix|set)$/i.test(desiredOutcome)) {
+      return {
+        kind: "mix_music",
+        objectType: "track",
+        objectQuery: cleanObject(createMatch[2]),
+        desiredOutcome: null,
+        confidence: "high",
+        source: "deterministic",
+      };
+    }
     return {
       kind: "create_from_object",
       objectType: /release|album|ep|single/i.test(createMatch[2]) ? "release" : "track",
@@ -83,6 +96,10 @@ export function classifyStudioIntent(rawQuery: string): ClassifiedStudioIntent {
 
   if (!query) {
     return { kind: "unknown", objectType: "any", objectQuery: "", desiredOutcome: null, confidence: "low", source: "deterministic" };
+  }
+
+  if (/\b(?:what should i (?:work on|do)|what(?:'s| is) next|next action|best next move|what matters now)\b/.test(lower)) {
+    return { kind: "today_priority", objectType: "any", objectQuery: "", desiredOutcome: null, confidence: "high", source: "deterministic" };
   }
 
   if (/\b(?:what needs me|needs me|needs you|decisions?|approvals?)\b/.test(lower)) {
@@ -148,6 +165,10 @@ export function classifyStudioIntent(rawQuery: string): ClassifiedStudioIntent {
     return { kind: "open_object", objectType: "release", objectQuery: "", desiredOutcome: null, confidence: "high", source: "deterministic" };
   }
 
+  if (/\b(?:latest|newest|current)\s+(?:track|song)\b/.test(lower)) {
+    return { kind: "open_object", objectType: "track", objectQuery: "", desiredOutcome: null, confidence: "high", source: "deterministic" };
+  }
+
   return {
     kind: "open_object",
     objectType: "any",
@@ -177,6 +198,7 @@ export function semanticIntentSchema() {
           "promote_release",
           "release_readiness",
           "release_results",
+          "today_priority",
           "needs_you",
           "connect_library",
           "unknown",
