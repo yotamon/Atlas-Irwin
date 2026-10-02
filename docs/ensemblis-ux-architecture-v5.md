@@ -1,6 +1,6 @@
 ﻿# Ensemblis UX Architecture V5
 
-**Status:** Canonical target architecture â€” implementation active in the UX V5 single-PR program
+**Status:** Canonical target architecture — implemented in draft PR #280; authenticated browser acceptance pending
 **Supersedes:** `docs/ensemblis-ux-architecture-v4.md` after the V5 PR merges
 **Scope:** Ensemblis Studio artist-facing experience
 **Date:** 2026-10-02

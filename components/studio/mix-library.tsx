@@ -33,9 +33,11 @@ function status(job: AutoMixJob) {
 export function MixLibrary({
   artistId,
   jobs,
+  query = "",
 }: {
   artistId: string;
   jobs: AutoMixJob[];
+  query?: string;
 }) {
   const groups = new Map<string, AutoMixJob[]>();
   for (const job of jobs) {
@@ -47,7 +49,12 @@ export function MixLibrary({
     const ordered = revisions.toSorted((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at));
     const render = ordered.find((job) => executionMode(job) === "approved_render");
     return { root, job: render ?? ordered[0], revisions: ordered.length };
-  }).filter((item): item is { root: string; job: AutoMixJob; revisions: number } => Boolean(item.job));
+  }).filter((item): item is { root: string; job: AutoMixJob; revisions: number } => Boolean(item.job))
+    .toSorted((left, right) => {
+      const leftActive = !["completed", "cancelled"].includes(left.job.status);
+      const rightActive = !["completed", "cancelled"].includes(right.job.status);
+      return Number(rightActive) - Number(leftActive) || Date.parse(right.job.updated_at) - Date.parse(left.job.updated_at);
+    });
   return (
     <section className="en-mix-library" aria-labelledby="mix-library-heading">
       <div className="v2-section-heading">
@@ -60,6 +67,17 @@ export function MixLibrary({
           New mix
         </Link>
       </div>
+
+      <form className="music-v5-search" action="/studio/music">
+        <input type="hidden" name="artist" value={artistId} />
+        <input type="hidden" name="view" value="mixes" />
+        <label>
+          <span className="sr-only">Search mixes</span>
+          <input type="search" name="q" placeholder="Search mixes…" defaultValue={query} autoComplete="off" />
+        </label>
+        <button className="button" type="submit">Search</button>
+        {query ? <Link className="text-button" href={ensemblisArtistHref("/studio/music?view=mixes", artistId)}>Clear</Link> : null}
+      </form>
 
       {mixes.length ? (
         <div className="en-continue-grid">

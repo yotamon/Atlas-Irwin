@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CommandPalette } from "@/components/studio/command-palette";
+import { CommandPalette, type CommandPaletteSuggestion } from "@/components/studio/command-palette";
 import { ContinueWidget } from "@/components/studio/ux-v4-widgets";
 import {
   CalmState,
@@ -120,12 +120,12 @@ export default async function TodayPage() {
       : primaryMission
         ? handsOff
           ? { href: "#ensemblis-handling", label: "See what Ensemblis is handling" }
-          : { href: href(primaryMission.href), label: "Open Mission" }
+          : { href: href(primaryMission.href), label: "Open plan" }
         : actionableNext && actionableNextHref
           ? { href: actionableNextHref, label: "Act on this" }
           : handsOff
             ? { href: "#ensemblis-handling", label: "See what Ensemblis is handling" }
-            : { href: href(strategy.recommendedMission.href), label: "Open recommended Mission" };
+            : { href: href(strategy.recommendedMission.href), label: "Open recommendation" };
 
   const remainingDecisions = topDecision
     ? needsYou.filter((item) => item.id !== topDecision.id)
@@ -137,6 +137,32 @@ export default async function TodayPage() {
   ].filter((item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index).slice(0, 6);
   const contextCount = remainingDecisions.length + handling.length + comingUp.length;
   const continueCount = (activeRelease ? 1 : 0) + (latestMix ? 1 : 0) + (latestTrack ? 1 : 0);
+  const launcherSuggestions: CommandPaletteSuggestion[] = [];
+  if (topDecision) launcherSuggestions.push({
+    label: topDecision.title,
+    detail: topDecision.detail,
+    href: href(topDecision.href),
+  });
+  if (primaryMission) launcherSuggestions.push({
+    label: `Continue ${primaryMission.title}`,
+    detail: primaryMission.summary,
+    href: href(primaryMission.href),
+  });
+  if (latestMix) launcherSuggestions.push({
+    label: `Continue ${latestMix.name}`,
+    detail: `${latestMix.trackCount} tracks · ${mixStatus(latestMix.status)}`,
+    href: latestMix.href,
+  });
+  if (latestTrack) launcherSuggestions.push({
+    label: `Open ${latestTrack.title}`,
+    detail: "Play the track, check its state or choose what to do next.",
+    href: href(`/studio/music/${latestTrack.id}`),
+  });
+  if (!launcherSuggestions.length) launcherSuggestions.push({
+    label: "Add music",
+    detail: "Bring in a mastered track or release.",
+    href: href("/studio/music?view=add"),
+  });
 
   return (
     <Page className="ensemblis-today-page">
@@ -146,7 +172,7 @@ export default async function TodayPage() {
         description={`Start, continue or decide what matters for ${artist.artistName}.`}
       />
 
-      <CommandPalette artistId={artist.artistId} variant="launcher" />
+      <CommandPalette artistId={artist.artistId} variant="launcher" suggestions={launcherSuggestions} />
 
       {continueCount ? (
         <section className="today-v4-continue" aria-labelledby="today-v4-continue-heading">
@@ -159,7 +185,7 @@ export default async function TodayPage() {
           <div className="en-continue-grid">
             {activeRelease ? (
               <ContinueWidget
-                eyebrow="Release Mission"
+                eyebrow="Release plan"
                 title={activeRelease.title}
                 detail={primaryMission?.summary || "Open the release and continue from its current state."}
                 status={primaryMission?.label || "Active"}
@@ -198,7 +224,7 @@ export default async function TodayPage() {
           : primaryMission
             ? primaryMission.kind === "release" && activeRelease
               ? `${activeRelease.title} · ${primaryMission.label}`
-              : `Primary Mission · ${primaryMission.label}`
+              : `Primary plan · ${primaryMission.label}`
             : handsOff
               ? "Manager mode"
               : "Recommended next move"}
@@ -213,7 +239,7 @@ export default async function TodayPage() {
               ? <Link href="#ensemblis-handling">{remainingDecisions.length} more decision{remainingDecisions.length === 1 ? "" : "s"}</Link>
               : <Link href={href("/studio/needs-you")}>Decision history</Link>
             : primaryMission?.kind === "release" && activeRelease
-              ? <Link href={href(`/studio/releases/${activeRelease.id}`)}>View release Mission</Link>
+              ? <Link href={href(`/studio/releases/${activeRelease.id}`)}>View release plan</Link>
               : <Link href={href("/studio/growth/strategy")}>Why this strategy?</Link>}
         </>}
       />
@@ -261,7 +287,7 @@ export default async function TodayPage() {
                   <span className="today-v3-working-dot" aria-hidden />
                   <span className="today-v3-row-copy"><strong>{item.title}</strong><span>{item.detail}</span></span>
                   <Status>{item.activity}</Status>
-                </Link>)}</div> : <CalmState title="Nothing is running right now." body="Ensemblis will add the next evidence-backed action when the artist context changes." />}
+                </Link>)}</div> : <CalmState title="Nothing is running right now." body="Ensemblis will add the next useful action when the artist context changes." />}
             </section>
           </div>
 

@@ -63,9 +63,9 @@ test("Music owns release collections and release overview surfaces tracks before
 
   const tracklistPosition = releaseWorkspace.indexOf("<ReleaseTracklist");
   const missionPosition = releaseWorkspace.indexOf('className="release-mission-hero"');
-  assert.ok(tracklistPosition >= 0 && missionPosition > tracklistPosition, "release tracks must appear before mission/workflow detail");
+  assert.ok(missionPosition >= 0 && tracklistPosition > missionPosition, "release plan must appear before track/mastering detail");
   assert.match(releaseWorkspace, /if \(stage === "music"\) return "overview"/);
   assert.doesNotMatch(releaseWorkspace, /label: "Music", href: href\(`\/studio\/releases\/\$\{release\.id\}\?stage=music`\)/);
-  assert.match(tracklist, /Every song has its own master and Music Intelligence/);
+  assert.match(tracklist, /Every song keeps its own master and analysis/);
   assert.match(tracklist, /trackId=\{track\.id\}/);
 });

@@ -87,7 +87,7 @@ test("release tracklist queues the same canonical analysis pipeline per exact tr
 
   assert.ok(releaseWorkspace.includes("ReleaseTracklist"));
   assert.ok(releaseWorkspace.includes("deriveReleaseMission"));
-  assert.ok(releaseTracklist.includes("Every song has its own master and Music Intelligence"));
+  assert.ok(releaseTracklist.includes("Every song keeps its own master and analysis"));
   assert.ok(releaseTracklist.includes("trackId={track.id}"));
   assert.ok(releaseTracklist.includes("releaseMasterMode"));
   assert.ok(releaseMission.includes("#master-audio"));

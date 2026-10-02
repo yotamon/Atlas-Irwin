@@ -818,3 +818,394 @@
     width: 100%;
   }
 }
+
+
+/* Ensemblis UX V5 — intent, object and action hierarchy */
+.en-object-state-summary,
+.en-next-action-widget {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius);
+  background: color-mix(in srgb, var(--en-surface-raised) 55%, transparent);
+}
+
+.en-object-state-summary > div:first-child,
+.en-next-action-widget {
+  min-width: 0;
+}
+
+.en-object-state-summary > div:first-child {
+  display: grid;
+  gap: .45rem;
+}
+
+.en-object-state-summary strong,
+.en-next-action-widget > strong {
+  color: var(--en-ink);
+  font-size: clamp(1rem, 2vw, 1.22rem);
+  letter-spacing: -.02em;
+}
+
+.en-object-state-summary p,
+.en-next-action-widget p {
+  margin: 0;
+  color: var(--en-muted);
+  line-height: 1.5;
+}
+
+.en-object-state-action {
+  flex: 0 0 auto;
+}
+
+.en-next-action-widget {
+  display: grid;
+}
+
+.en-compact-evidence {
+  border-top: 1px solid var(--en-line);
+  padding-top: .7rem;
+}
+
+.en-compact-evidence > summary {
+  width: fit-content;
+  color: var(--en-muted);
+  font-size: .76rem;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.en-compact-evidence > div {
+  margin-top: .7rem;
+}
+
+.ensemblis-command-result-copy {
+  display: grid;
+  min-width: 0;
+  gap: .12rem;
+}
+
+.ensemblis-command-result-copy em {
+  color: var(--en-muted);
+  font-size: .62rem;
+  font-style: normal;
+  font-weight: 760;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.ensemblis-intent-results a.is-primary-intent {
+  border-color: color-mix(in srgb, var(--en-accent) 42%, var(--en-line));
+  background: color-mix(in srgb, var(--en-accent) 8%, var(--en-bg-elevated));
+}
+
+.ensemblis-command-empty {
+  display: grid;
+  gap: .2rem;
+  padding: 1rem;
+  color: var(--en-muted);
+}
+
+.ensemblis-command-empty strong {
+  color: var(--en-ink);
+  font-size: .82rem;
+}
+
+.ensemblis-command-empty span {
+  font-size: .72rem;
+}
+
+.music-v5-library {
+  display: grid;
+  gap: 1.1rem;
+}
+
+.music-v5-continue {
+  display: grid;
+  gap: .7rem;
+}
+
+.music-v5-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: .55rem;
+  max-width: 46rem;
+}
+
+.music-v5-search label {
+  min-width: 0;
+}
+
+.music-v5-search input[type="search"] {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: .65rem .85rem;
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-pill);
+  outline: none;
+  background: var(--en-bg-elevated);
+  color: var(--en-ink);
+  font: inherit;
+}
+
+.music-v5-search input[type="search"]:focus-visible {
+  border-color: var(--en-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--en-accent) 18%, transparent);
+}
+
+.music-v5-track-list {
+  display: grid;
+  gap: .55rem;
+}
+
+.music-v5-track-row {
+  display: grid;
+  grid-template-columns: minmax(13rem, 1.35fr) minmax(11rem, .9fr) auto auto;
+  gap: .85rem;
+  align-items: center;
+  padding: .8rem;
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-sm);
+  background: color-mix(in srgb, var(--en-bg-elevated) 72%, transparent);
+}
+
+.music-v5-track-identity {
+  display: grid;
+  min-width: 0;
+  gap: .1rem;
+}
+
+.music-v5-track-identity small {
+  color: var(--en-muted);
+  font-size: .63rem;
+  font-weight: 720;
+}
+
+.music-v5-track-identity strong {
+  overflow: hidden;
+  color: var(--en-ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.music-v5-track-identity span {
+  overflow: hidden;
+  color: var(--en-muted);
+  font-size: .7rem;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.track-v5-workspace,
+.track-v5-secondary-details > details,
+.release-v5-secondary {
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-sm);
+  background: color-mix(in srgb, var(--en-bg-elevated) 62%, transparent);
+}
+
+.track-v5-workspace > summary,
+.track-v5-secondary-details > details > summary,
+.release-v5-secondary > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 3.25rem;
+  padding: .8rem .9rem;
+  list-style: none;
+  cursor: pointer;
+}
+
+.track-v5-workspace > summary::-webkit-details-marker,
+.track-v5-secondary-details > details > summary::-webkit-details-marker,
+.release-v5-secondary > summary::-webkit-details-marker {
+  display: none;
+}
+
+.track-v5-workspace > summary {
+  display: grid;
+  justify-content: stretch;
+  gap: .15rem;
+}
+
+.track-v5-workspace > summary strong,
+.track-v5-secondary-details summary strong,
+.release-v5-secondary summary strong {
+  color: var(--en-ink);
+  font-size: .8rem;
+}
+
+.track-v5-workspace > summary span,
+.track-v5-secondary-details summary span,
+.release-v5-secondary summary small {
+  color: var(--en-muted);
+  font-size: .68rem;
+}
+
+.track-v5-workspace-body,
+.release-v5-secondary-body {
+  display: grid;
+  gap: 1rem;
+  padding: .2rem .9rem .9rem;
+  border-top: 1px solid var(--en-line);
+}
+
+.track-v5-secondary-details {
+  display: grid;
+  gap: .65rem;
+}
+
+.track-v5-secondary-details > details > :not(summary) {
+  margin-inline: .9rem;
+}
+
+.track-v5-secondary-details > details > :last-child {
+  margin-bottom: .9rem;
+}
+
+.release-v5-secondary > summary > span:first-child {
+  display: grid;
+  gap: .1rem;
+}
+
+.release-v5-secondary > summary > span:first-child small {
+  text-transform: uppercase;
+  letter-spacing: .07em;
+}
+
+.growth-v5-overview {
+  display: grid;
+  gap: 1rem;
+}
+
+.growth-v5-recommendation {
+  border-color: color-mix(in srgb, var(--en-accent) 24%, var(--en-line));
+  background: color-mix(in srgb, var(--en-accent) 5%, var(--en-surface-raised));
+}
+
+.growth-v5-evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.growth-v5-evidence-grid .v2-section {
+  min-height: 0;
+}
+
+@media (max-width: 900px) {
+  .music-v5-track-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .music-v5-track-row > :nth-child(2) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .music-v5-track-row > :nth-child(3) {
+    justify-self: start;
+  }
+
+  .growth-v5-evidence-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .music-v5-search {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .music-v5-search .text-button {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
+  .music-v5-track-row {
+    grid-template-columns: 1fr;
+    gap: .65rem;
+  }
+
+  .music-v5-track-row > :nth-child(2),
+  .music-v5-track-row > :nth-child(3),
+  .music-v5-track-row > :nth-child(4) {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: stretch;
+  }
+
+  .music-v5-track-row > .button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .en-object-action-bar {
+    position: sticky;
+    bottom: calc(var(--ensemblis-mobile-nav-height, 4.5rem) + .65rem);
+    z-index: 20;
+    padding: .45rem;
+    border: 1px solid var(--en-line);
+    border-radius: var(--en-radius);
+    background: color-mix(in srgb, var(--en-bg) 90%, transparent);
+    box-shadow: 0 12px 35px rgba(0,0,0,.28);
+    backdrop-filter: blur(16px);
+  }
+
+  .en-object-action-primary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .en-object-action-primary .button {
+    min-height: 2.75rem;
+    justify-content: center;
+  }
+
+  .track-v5-workspace > summary,
+  .track-v5-secondary-details > details > summary,
+  .release-v5-secondary > summary {
+    min-height: 3.5rem;
+  }
+
+  .en-object-state-summary {
+    display: grid;
+  }
+
+  .en-object-state-action,
+  .en-object-state-action .button {
+    width: 100%;
+  }
+}
+
+
+.ensemblis-dialog.ensemblis-context-inspector {
+  width: min(36rem, calc(100vw - 1rem));
+  max-width: 36rem;
+  height: 100dvh;
+  max-height: 100dvh;
+  margin-left: auto;
+  border-radius: var(--en-radius-lg) 0 0 var(--en-radius-lg);
+}
+
+.ensemblis-context-inspector .ensemblis-dialog-body {
+  overflow-y: auto;
+}
+
+@media (max-width: 700px) {
+  .ensemblis-dialog.ensemblis-context-inspector {
+    width: 100%;
+    max-width: none;
+    height: min(88dvh, 52rem);
+    max-height: 88dvh;
+    margin: auto 0 0;
+    border-radius: var(--en-radius-lg) var(--en-radius-lg) 0 0;
+  }
+}

@@ -6,7 +6,7 @@ async function source(path) {
   return readFile(new URL(`../${path}`, import.meta.url), "utf8");
 }
 
-test("Create recommends three deliverables grounded in the strongest musical Moments", async () => {
+test("Create recommends three deliverables grounded in the strongest musical sections", async () => {
   const create = await source("app/studio/(protected)/create/page.tsx");
   for (const snippet of [
     "What do you want to make?",
@@ -14,7 +14,7 @@ test("Create recommends three deliverables grounded in the strongest musical Mom
     "recommendCreativeDirections",
     "curateReleaseMoments",
     "Create {direction.outcome.format}",
-    "Review source Moments",
+    "Review source sections",
     "startOutcomeCreative",
     "Other ways to create",
     "Ensemblis picked",
@@ -24,7 +24,7 @@ test("Create recommends three deliverables grounded in the strongest musical Mom
   assert.equal(create.includes('href={href(`/studio/production?release=${moment.release_id}&moment=${moment.id}`)}'), false);
 });
 
-test("an explicitly selected Best Moment remains the exact creative source and owns its context", async () => {
+test("an explicitly selected best section remains the exact creative source and owns its context", async () => {
   const [create, moments] = await Promise.all([
     source("app/studio/(protected)/create/page.tsx"),
     source("components/studio/moment-review-panel.tsx"),
@@ -34,7 +34,7 @@ test("an explicitly selected Best Moment remains the exact creative source and o
   assert.match(create, /const requestedTrack = requestedMoment\s*\? trackById\.get\(requestedMoment\.track_id\)/);
   assert.ok(create.includes("const requestedReleaseId = requestedMoment?.release_id ?? params.release ?? requestedTrack?.release_id ?? null"));
   assert.match(create, /const requestedMoments = requestedMoment\s*\? \[requestedMoment\]/);
-  assert.ok(create.includes("Your selected Moment"));
+  assert.ok(create.includes("Your selected section"));
   assert.ok(moments.includes('href={`/studio/create?release=${releaseId}&moment=${moment.id}`}'));
   assert.equal(moments.includes("&track=${moment.track_id}"), false, "Create from this Moment must not fall back to a track-level re-selection");
 });

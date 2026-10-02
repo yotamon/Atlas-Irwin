@@ -18,22 +18,22 @@ import type { AutoMixDatabase } from "@/types/automix-database";
 export default async function MusicPage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: string }>;
+  searchParams: Promise<{ view?: string; q?: string }>;
 }) {
-  const { view } = await searchParams;
+  const { view, q = "" } = await searchParams;
   const { supabase, user } = await requireStudioAdmin();
   const artist = await resolveActiveArtistContext(supabase, user);
   const href = (path: string) => ensemblisArtistHref(path, artist.artistId);
 
   if (view === "mixes") {
     const automix = supabase as unknown as SupabaseClient<AutoMixDatabase>;
-    const jobs = await automix
+    let mixQuery = automix
       .from("automix_jobs")
       .select("*")
       .eq("owner_id", user.id)
-      .eq("artist_id", artist.artistId)
-      .order("updated_at", { ascending: false })
-      .limit(60);
+      .eq("artist_id", artist.artistId);
+    if (q) mixQuery = mixQuery.ilike("name", `%${q.replaceAll("%", "\\%").replaceAll("_", "\\_")}%`);
+    const jobs = await mixQuery.order("updated_at", { ascending: false }).limit(60);
     if (jobs.error) throw new Error(jobs.error.message);
     return (
       <div className="studio-v2-page music-workspace-page">
@@ -43,7 +43,7 @@ export default async function MusicPage({
           action={<Link className="button primary" href={href("/studio/music/automix")}>New mix</Link>}
         />
         <MusicLibraryNav artistId={artist.artistId} active="mixes" />
-        <MixLibrary artistId={artist.artistId} jobs={jobs.data ?? []} />
+        <MixLibrary artistId={artist.artistId} jobs={jobs.data ?? []} query={q} />
       </div>
     );
   }
@@ -68,7 +68,7 @@ export default async function MusicPage({
             <span className="create-intent-copy">
               <small>Existing music</small>
               <strong>Add a mastered track</strong>
-              <span>Upload the real master. Ensemblis will begin understanding its structure and strongest moments automatically.</span>
+              <span>Upload the real master. Ensemblis will begin understanding its structure and strongest sections automatically.</span>
             </span>
             <b>Add master →</b>
           </Link>
@@ -88,7 +88,7 @@ export default async function MusicPage({
             <span className="create-intent-copy">
               <small>Optional AI music</small>
               <strong>Create something new</strong>
-              <span>Generate a musical draft only when that is part of this artist&apos;s chosen creative process. Provider and model settings stay secondary to the idea.</span>
+              <span>Generate a musical draft only when that is part of this artist&apos;s chosen creative process. Technical generation settings stay secondary to the idea.</span>
             </span>
             <b>Create music →</b>
           </Link> : null}
@@ -98,7 +98,7 @@ export default async function MusicPage({
           <div>
             <span className="section-label">Ensemblis principle</span>
             <strong>The song comes before the marketing workflow.</strong>
-            <p>Once a real master exists, Ensemblis can analyze it, propose Moments and use that evidence throughout release, creative and growth decisions.</p>
+            <p>Once a real master exists, Ensemblis can analyze it, find useful sections and use that evidence throughout release, creative and growth decisions.</p>
           </div>
         </aside>
       </div>
@@ -169,7 +169,7 @@ export default async function MusicPage({
       <div className="studio-v2-page music-workspace-page">
         <PageHeader
           title="Create music"
-          description={`Describe the musical idea for ${artist.artistName}. AI music is enabled explicitly for this artist; Ensemblis still keeps the creative intent ahead of provider controls.`}
+          description={`Describe the musical idea for ${artist.artistName}. AI music is enabled explicitly for this artist; Ensemblis still keeps the creative intent ahead of technical controls.`}
           action={<Link className="button" href={href("/studio/music?view=add")}>Back to add music</Link>}
         />
         <MusicGenerator
@@ -213,7 +213,7 @@ export default async function MusicPage({
     <div className="studio-v2-page music-workspace-page">
       <PageHeader
         title="Music"
-        description={`One source-material library for ${artist.artistName}. Tracks are the musical objects; releases are the collections those tracks belong to.`}
+        description={`Find the track, release or mix you want to work on for ${artist.artistName}.`}
         action={<Link className="button primary" href={href("/studio/music?view=add")}>Add music</Link>}
       />
       <MusicLibraryNav artistId={artist.artistId} active="tracks" />
@@ -223,6 +223,7 @@ export default async function MusicPage({
         vaultTracks={vaultResult.data ?? []}
         releases={releasesResult.data ?? []}
         tracks={tracksResult.data ?? []}
+        query={q}
       />
     </div>
   );

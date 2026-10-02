@@ -1,6 +1,6 @@
 ﻿# Ensemblis UX V5 â€” Single PR Execution Plan
 
-**Status:** Ready for implementation
+**Status:** Implemented in draft PR #280 — automated gates green; authenticated browser acceptance pending
 **Architecture:** `docs/ensemblis-ux-architecture-v5.md`
 **Execution model:** one draft PR from planning through final validation
 **Branch:** `feat/ensemblis-ux-v5`
@@ -775,3 +775,41 @@ Before switching Draft â†’ Ready:
 Do not merge because individual workstreams look good.
 
 Merge only when the product can be dogfooded as one coherent V5 experience and the ten canonical journeys pass from the user's goal to a safe, understandable outcome.
+
+
+## 22. Implementation validation — 2026-10-02
+
+PR #280 now contains the V5 implementation across the planned product surfaces.
+
+Implemented:
+- typed intent classification plus artist-scoped object resolution;
+- bounded semantic fallback through the existing Ensemblis AI control plane;
+- answer/action results for release readiness and results;
+- contextual Today launcher suggestions;
+- object-first Music with Tracks / Releases / Mixes;
+- action-first Track with truthful source-context handoff and secondary technical inspection;
+- lifecycle-guided Release with the release plan before track/engineering detail;
+- outcome-first Create with requested deliverable preselection;
+- recommendation-first Grow using the active artist context;
+- mobile-native action/disclosure styling;
+- simplified default artist-facing terminology;
+- UX telemetry that stores normalized intent/result categories rather than raw creative queries;
+- V5 route/discoverability contracts;
+- authenticated Playwright V5 journey coverage gated behind `PLAYWRIGHT_STUDIO_E2E=1`.
+
+Validated on this branch:
+- `node --test tests/ensemblis-intent-resolution.test.mjs tests/ensemblis-ux-v5-contract.test.mjs` → 13/13 passing;
+- `npm run test:studio` → 561/561 passing on the final V5 code head;
+- `npm run typecheck` → passing;
+- `npm run lint` → 0 errors (pre-existing warnings remain outside V5);
+- `git diff --check` → passing;
+- `npm run build` → passing on Next.js 16.3.4.
+
+Authenticated browser acceptance:
+- the Playwright suite is implemented and can run against a real authenticated Studio environment;
+- local execution was attempted without weakening auth;
+- Vercel CLI materializes the protected Supabase server credentials as empty values, so the existing safe localhost admin path cannot authenticate to production data from this machine;
+- no test-only production bypass was added;
+- PR #280 remains Draft until the authenticated desktop/mobile browser suite runs in an environment where the protected credential or authenticated browser state is legitimately available.
+
+This is an environment acceptance gate, not an unimplemented V5 product workstream.

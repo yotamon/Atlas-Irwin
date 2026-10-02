@@ -28,5 +28,5 @@ test("exact track workspace exposes Needs You only through the shared ingestion 
   assert.ok(workspace.includes('ingestion.inputReason === "stems_from_previous_master"'));
   assert.ok(workspace.includes("Needs You ·"));
   assert.equal(workspace.includes(">Run Track Intelligence<"), false);
-  assert.ok(workspace.includes("Advanced analysis controls"));
+  assert.ok(workspace.includes("Analysis controls"));
 });

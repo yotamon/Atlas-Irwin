@@ -34,10 +34,10 @@ test("Today and Release share release truth while Today projects the artist's pr
   assert.ok(today.includes("loadArtistOperatingSnapshot"));
   assert.ok(today.includes("primaryMission?.nextAction"));
   assert.ok(today.includes("primaryMission?.title"));
-  assert.ok(today.includes("Primary Mission ·"));
+  assert.ok(today.includes("Primary plan ·"));
   assert.ok(today.includes("eyebrow={topDecision"));
   assert.ok(today.includes('? "Needs You"'));
-  assert.ok(today.includes("View release Mission"));
+  assert.ok(today.includes("View release plan"));
   assert.ok(snapshot.includes("primaryGoal: operatingContext.profile.primaryGoal"));
   assert.ok(snapshot.includes("releaseMission: activeMission"));
   assert.ok(snapshot.includes("proposedActions: nextActions"));
@@ -45,7 +45,7 @@ test("Today and Release share release truth while Today projects the artist's pr
   assert.ok(snapshot.includes('select("id,title,release_date,active_release,artwork_url,cover_asset,primary_hook,smart_link_url,spotify_url,soundcloud_url,youtube_url,status,is_archived")'));
   assert.ok(snapshot.includes('select("id,release_id,title,audio_url,is_primary")'));
   assert.ok(snapshot.includes('select("id,release_id,status")'));
-  assert.ok(release.includes("Release Mission"));
+  assert.ok(release.includes("Release plan"));
   assert.equal(release.includes("Workflow readiness"), false);
   assert.equal(release.includes("healthScore"), false);
 });

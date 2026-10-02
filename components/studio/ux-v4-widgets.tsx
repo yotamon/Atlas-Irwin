@@ -108,6 +108,69 @@ export function ConnectionWidget({
   );
 }
 
+export function ObjectStateSummary({
+  label,
+  title,
+  detail,
+  tone = "neutral",
+  action,
+}: {
+  label: string;
+  title: ReactNode;
+  detail?: ReactNode;
+  tone?: StatusTone;
+  action?: ReactNode;
+}) {
+  return (
+    <section className="en-object-state-summary" data-tone={tone}>
+      <div>
+        <Status tone={tone}>{label}</Status>
+        <strong>{title}</strong>
+        {detail ? <p>{detail}</p> : null}
+      </div>
+      {action ? <div className="en-object-state-action">{action}</div> : null}
+    </section>
+  );
+}
+
+export function NextActionWidget({
+  eyebrow = "Next",
+  title,
+  detail,
+  action,
+  secondary,
+}: {
+  eyebrow?: string;
+  title: ReactNode;
+  detail: ReactNode;
+  action: ReactNode;
+  secondary?: ReactNode;
+}) {
+  return (
+    <section className="en-next-action-widget">
+      <span className="section-label">{eyebrow}</span>
+      <strong>{title}</strong>
+      <p>{detail}</p>
+      <div className="actions">{action}{secondary}</div>
+    </section>
+  );
+}
+
+export function CompactEvidence({
+  label = "Why this?",
+  children,
+}: {
+  label?: string;
+  children: ReactNode;
+}) {
+  return (
+    <details className="en-compact-evidence">
+      <summary>{label}</summary>
+      <div>{children}</div>
+    </details>
+  );
+}
+
 export type WorkflowStep<T extends string> = {
   id: T;
   label: string;

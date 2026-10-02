@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { StudioToast } from "@/components/studio/toast";
+import { StudioUxTelemetry } from "@/components/studio/ux-telemetry";
 import Link from "next/link";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { dismissOnboardingAction } from "@/app/studio/onboarding/actions";
@@ -46,6 +47,7 @@ export default async function ProtectedStudioLayout({
 
   return (
     <div className="studio-shell">
+      <Suspense fallback={null}><StudioUxTelemetry artistId={artist.artistId} /></Suspense>
       <StudioSidebar artistId={artist.artistId} artists={navigationArtists} />
       <div className="ensemblis-workspace-shell">
         <StudioContextBar artistId={artist.artistId} artistName={artist.artistName} />

@@ -66,7 +66,7 @@ function directionRationale(moment: Moment, outcome: CreateOutcome) {
 
   if (outcome.id === "reach") {
     if (hook >= 0.75 && energy >= 0.65) return "Immediate hook and energy make this the strongest discovery-first treatment.";
-    return "This Moment is ranked for fast recognition and a clear first impression.";
+    return "This section is ranked for fast recognition and a clear first impression.";
   }
   if (outcome.id === "streams") {
     if (hook >= 0.7 && emotion >= 0.6) return "A memorable payoff with emotional weight makes this a strong bridge from social attention to the full track.";
@@ -74,10 +74,10 @@ function directionRationale(moment: Moment, outcome: CreateOutcome) {
   }
   if (outcome.id === "lyric") {
     if (vocal >= 0.7 || moment.source_mode === "lyrics") return "The vocal and lyric evidence is strong enough to let the words lead the creative.";
-    return "This Moment carries enough vocal meaning to support a lyric-led treatment without inventing text.";
+    return "This section carries enough vocal meaning to support a lyric-led treatment without inventing text.";
   }
   if (uniqueness >= 0.7 || moment.source_mode === "stems") return "Distinctive musical texture makes this a strong source for a repeatable visual identity.";
-  return "This Moment is ranked for a recognizable visual loop that can carry across the release campaign.";
+  return "This section is ranked for a recognizable visual loop that can carry across the release campaign.";
 }
 
 export function recommendCreativeDirections({

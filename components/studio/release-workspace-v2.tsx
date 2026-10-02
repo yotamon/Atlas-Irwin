@@ -41,7 +41,7 @@ function resultInsight(metrics: MetricSnapshot[]) {
   if (!streams && !listeners) return "Performance evidence will appear here once listening data is available.";
   if (listeners > 0 && saves / listeners >= 0.15) return "Listeners are saving this release at a strong rate. Keep the song-led creative in rotation instead of changing direction too quickly.";
   if (listeners > 0 && streams / listeners >= 2) return "Repeat listening is visible. Ensemblis should protect the creative angles already sending people back to the song.";
-  return "There is listening activity, but not enough durable intent yet to declare a winning creative angle. Keep testing from the strongest musical Moments.";
+  return "There is listening activity, but not enough durable intent yet to declare a winning creative angle. Keep testing from the strongest musical sections.";
 }
 
 export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, campaign, stage, renderedAt, artistId, playbookTasks = [], providerScheduledCount = 0, vaultTracks = [] }: {
@@ -116,7 +116,7 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
       imageAlt={release.cover_alt || `${release.title} artwork`}
       actions={<ObjectActionBar actions={releaseActions} />}
       facts={[
-        { label: "Mission", value: mission.label },
+        { label: "Release plan", value: mission.label },
         { label: "Needs attention", value: missionAttention.length },
         { label: "Tracks", value: tracks.length },
         { label: "Masters", value: tracks.length ? `${mastersReady}/${tracks.length}` : "None" },
@@ -125,12 +125,9 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
     />
 
     {activeStage === "overview" ? <div className="release-mission-overview">
-      <ReleaseTracklist releaseId={release.id} artistId={artistId} tracks={tracks} vaultTracks={vaultTracks} />
-      <ReleaseMasteringCoherence artistId={artistId} tracks={tracks} vaultTracks={vaultTracks} />
-
       <section className="release-mission-hero" data-status={mission.status}>
         <div>
-          <span className="section-label">Release Mission</span>
+          <span className="section-label">Release plan</span>
           <h2>{mission.status === "blocked" ? "This release needs one thing before Ensemblis can move it forward" : mission.status === "needs_attention" ? "This release is moving. A few useful decisions remain." : "This release is on track"}</h2>
           <p>{mission.summary}</p>
         </div>
@@ -149,6 +146,9 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
         <div className="v2-inbox">{missionAttention.map((item) => <Link className="v2-inbox-item" href={href(item.href)} key={item.key}><div><strong>{item.title}</strong><small>{item.detail}</small></div><b aria-hidden>→</b></Link>)}</div>
       </section> : <div className="v2-calm-state compact"><strong>No release decision is waiting.</strong><p>Ensemblis has enough coherent music, release identity and operating context to keep moving.</p></div>}
 
+      <ReleaseTracklist releaseId={release.id} artistId={artistId} tracks={tracks} vaultTracks={vaultTracks} />
+      <ReleaseMasteringCoherence artistId={artistId} tracks={tracks} vaultTracks={vaultTracks} />
+
       {!release.artwork_url && !release.cover_asset ? <section className="v2-section" id="cover-upload"><div className="v2-section-heading"><div><span className="section-label">Release identity</span><h2>Add the cover artwork</h2></div></div><MediaUploader releaseId={release.id} artistId={artistId} defaultRole="cover" /></section> : null}
 
       <details className="v2-advanced-disclosure release-source-details" id="release-details">
@@ -159,13 +159,13 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
 
       <details className="v2-advanced-disclosure release-specialist-tools">
         <summary>Advanced view · specialist tools</summary>
-        <p className="v2-muted-copy">Legacy migration, exceptional provider controls and debugging tools. Normal release work should not require this workspace.</p>
+        <p className="v2-muted-copy">Legacy migration, exceptional platform controls and debugging tools. Normal release work should not require this workspace.</p>
         <Link className="button" href={href(`/studio/releases/${release.id}?view=advanced`)}>Open specialist workspace</Link>
       </details>
     </div> : null}
 
     {activeStage === "content" ? <div className="release-content-workspace">
-      <section className="release-stage-intro-card v2-section"><div className="v2-section-heading"><div><span className="section-label">Content</span><h2>Make deliverables from the music, not content for its own sake</h2><p>Ensemblis carries the approved Moment, lyrics, stems, artist memory and release context into production automatically.</p></div><Link className="button primary" href={href(`/studio/create?release=${release.id}`)}>Create something</Link></div></section>
+      <section className="release-stage-intro-card v2-section"><div className="v2-section-heading"><div><span className="section-label">Content</span><h2>Make deliverables from the music, not content for its own sake</h2><p>Ensemblis carries the approved section, lyrics, stems, artist context and release context into production automatically.</p></div><Link className="button primary" href={href(`/studio/create?release=${release.id}`)}>Create something</Link></div></section>
       <div className="v2-create-grid release-deliverable-grid">
         <Link className="v2-create-card" href={href(`/studio/create?release=${release.id}`)}><span className="section-label">Fast social creative</span><h2>Reels, lyric cuts and visual loops</h2><p>Choose the deliverable. Ensemblis picks the strongest musical source.</p><strong>Open Create →</strong></Link>
         <Link className="v2-create-card" href={href(`/studio/video?release=${release.id}`)}><span className="section-label">Longer motion</span><h2>Video Director</h2><p>Build a coherent music-video world when the release needs more than a social cut.</p><strong>Direct video →</strong></Link>
@@ -181,7 +181,7 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
     {activeStage === "promotion" ? <div className="release-promotion-workspace">
       <section className="v2-section">
         <div className="v2-section-heading"><div><span className="section-label">Promotion</span><h2>{lifecycle === "catalog" ? "Give this release a reason to be discovered again" : lifecycle === "launch_window" ? "Keep the live release moving while the signal is fresh" : "One promotion plan, anchored to the music and release date"}</h2></div><Link href={href("/studio/growth")}>Open Grow</Link></div>
-        {campaign ? <div className="release-promotion-plan"><div><span>{campaign.status}</span><h3>{campaign.name}</h3><p>{campaign.objective} · success signal: {campaign.primary_kpi}</p></div><Link className="button" href={href(`/studio/campaigns/${campaign.id}`)}>Advanced campaign controls</Link></div> : <div className="v2-calm-state compact"><strong>Ensemblis is preparing the promotion plan.</strong><p>The manager creates the campaign shell from release context. You do not need to configure a campaign engine before useful work can begin.</p></div>}
+        {campaign ? <div className="release-promotion-plan"><div><span>{campaign.status}</span><h3>{campaign.name}</h3><p>{campaign.objective} · success signal: {campaign.primary_kpi}</p></div><Link className="button" href={href(`/studio/campaigns/${campaign.id}`)}>Advanced campaign controls</Link></div> : <div className="v2-calm-state compact"><strong>Ensemblis is preparing the promotion plan.</strong><p>The manager creates the campaign shell from release context. You do not need to configure campaign tools before useful work can begin.</p></div>}
         <div className="v2-plan-timeline">{planned.length ? planned.slice(0,12).map((item) => <Link href={href(`/studio/production?edit=${item.id}`)} key={item.id}><span>{shortDate(item.scheduled_at)}</span><strong>{item.title}</strong><small>{item.platform} · {item.status}</small></Link>) : <p className="v2-muted-copy">Future promotion work will appear here as Ensemblis schedules it. Historical missed moments are not recreated as overdue debt.</p>}</div>
       </section>
       <section className="v2-section"><div className="v2-section-heading"><div><span className="section-label">Release playbook</span><h2>{openPlaybook.length} meaningful checkpoint{openPlaybook.length === 1 ? "" : "s"}</h2></div></div>
@@ -190,7 +190,7 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
     </div> : null}
 
     {activeStage === "distribution" ? <section className="v2-section release-distribution-workspace">
-      <div className="v2-section-heading"><div><span className="section-label">Distribution</span><h2>Get the music live, then keep every listening path coherent</h2><p>DSP delivery, public destinations and campaign publishing belong to this release. Specialist provider controls stay one level deeper.</p></div></div>
+      <div className="v2-section-heading"><div><span className="section-label">Distribution</span><h2>Get the music live, then keep every listening path coherent</h2><p>DSP delivery, public destinations and campaign publishing belong to this release. Specialist platform controls stay one level deeper.</p></div></div>
       <div className="v2-publish-grid">
         <article><span>Music distribution</span><strong>DSP delivery</strong><small>Readiness, rights, provenance, stores and delivery status</small><Link href={href(`/studio/releases/${release.id}/distribution`)}>Open delivery →</Link></article>
         <article><span>Listening destination</span><strong>{[release.spotify_url,release.soundcloud_url,release.youtube_url].filter(Boolean).length}/3 linked</strong><small>Spotify, SoundCloud and YouTube</small><Link href={href(`/studio/releases/${release.id}?view=advanced&tab=music`)}>Manage destinations →</Link></article>
@@ -207,7 +207,7 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
         <article><strong>{saves.toLocaleString()}</strong><span>saves</span><small>Retention intent</small></article>
         <article><strong>{playlistAdds.toLocaleString()}</strong><span>playlist adds</span><small>Durable catalog intent</small></article>
       </div>
-      <div className="release-result-insight"><span className="section-label">Ensemblis read</span><strong>{resultInsight(metrics)}</strong><div className="actions"><Link className="button primary" href={href("/studio/growth?view=opportunities")}>Review opportunities</Link><Link className="button" href={href("/studio/memory")}>What Ensemblis learned</Link></div></div>
+      <div className="release-result-insight"><span className="section-label">What this means</span><strong>{resultInsight(metrics)}</strong><div className="actions"><Link className="button primary" href={href("/studio/growth?view=opportunities")}>Review opportunities</Link><Link className="button" href={href("/studio/memory")}>What Ensemblis knows</Link></div></div>
     </section> : null}
   </div>;
 }

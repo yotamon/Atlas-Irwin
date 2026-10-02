@@ -250,7 +250,7 @@ Remaining exit work:
 - complete Mission/Needs You explanations of the exact contract boundary;
 - preserve hard overrides for sensitive communication, rights/legal declarations and Distribution.
 
-#### P1.5 Product navigation and artist-context UX - #58 - **V4 shell complete; V5 interaction completion active**
+#### P1.5 Product navigation and artist-context UX - #58 - **V5 implemented in draft PR #280; authenticated browser gate pending**
 V4 successfully reduced the primary shell to Today / Music / Grow, made Create a global action, clarified route ownership, improved mobile navigation and moved many specialist surfaces behind progressive disclosure. Dogfooding after V4 and Master Readiness shows that the remaining problem is deeper than navigation: downstream workspaces still expose too much subsystem structure, internal vocabulary and long-page complexity, while the Action Launcher still behaves mainly as keyword commands plus object search.
 
 The canonical target is [`docs/ensemblis-ux-architecture-v5.md`](ensemblis-ux-architecture-v5.md), executed as one coherent draft PR using [`docs/superpowers/plans/2026-10-02-ensemblis-ux-v5.md`](superpowers/plans/2026-10-02-ensemblis-ux-v5.md):
@@ -545,7 +545,7 @@ A roadmap issue may remain open after its core foundation ships when the issue's
 | Smart links / pre-save / first-party attribution | P1 | **Core shipped; lifecycle/capture open** | #52 / #143 |
 | Paid Growth experiment engine | P1 | **Core shipped; provider completeness open** | #53 / #143 |
 | Autonomy contracts | P1 | **v1 shipped; boundary coverage open** | #57 / #138 |
-| Navigation / artist-context UX | P1 | **Complete** | #58 / #145 / #148 / #152 |
+| Navigation / artist-context UX | P1 | **V5 implemented; authenticated browser gate pending** | #58 / #145 / #148 / #152 / #280 |
 | Ensemblis rebrand implementation | P1 | **Complete** | #59 |
 | Ensemblis Sites core runtime + Atlas cutover | P1 | **Complete core** | #90 |
 | Distribution last mile / canonical credits | P1 | **Foundation shipped; last mile open** | #56 / #143 |

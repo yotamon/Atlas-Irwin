@@ -24,7 +24,8 @@ test("automatic ingestion persists and exposes one progress model", async () => 
   assert.ok(progress.includes('label: "Finishing context"'));
   assert.ok(progress.includes('label: "Core intelligence ready"'));
   assert.ok(workspace.includes("describeMusicIngestionProgress"));
-  assert.ok(workspace.includes("progress.progress"));
+  assert.ok(workspace.includes("progress.label"));
+  assert.ok(workspace.includes("progress.detail"));
 });
 
 test("optional artist inputs remain explicit non-error states", async () => {

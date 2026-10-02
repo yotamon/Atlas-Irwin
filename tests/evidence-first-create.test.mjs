@@ -12,7 +12,7 @@ test("Create explains recommended deliverables with evidence instead of pseudo-p
   assert.ok(create.includes("Best next option"));
   assert.ok(create.includes("Why this source?"));
   assert.ok(create.includes("strongest complete musical passages"));
-  assert.ok(create.includes("Your selected Moment"));
+  assert.ok(create.includes("Your selected section"));
   assert.equal(create.includes("Math.round(moment.confidence * 100)"), false);
 });
 
