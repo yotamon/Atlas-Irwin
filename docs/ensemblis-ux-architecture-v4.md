@@ -1,6 +1,8 @@
 # Ensemblis UX Architecture V4
 
-**Status:** Canonical artist-facing interaction architecture  
+> **Historical:** Superseded by [`docs/ensemblis-ux-architecture-v5.md`](ensemblis-ux-architecture-v5.md). V5 is the canonical artist-facing interaction target and preserves the V4 workspace/object foundations while completing intent-first, action-first behavior.
+
+**Status:** Historical V4 architecture
 **Supersedes:** `docs/ensemblis-ux-architecture-v3.md`  
 **Scope:** Ensemblis Studio  
 **Date:** 2026-09-23
