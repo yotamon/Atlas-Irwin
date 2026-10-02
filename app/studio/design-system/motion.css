@@ -308,6 +308,7 @@
   position: relative;
   z-index: 2;
   display: grid;
+  min-width: 0;
   gap: var(--en-space-3);
 }
 
@@ -322,11 +323,12 @@
 
 .studio-root .ensemblis-processing h2,
 .ensemblis-loading .ensemblis-processing h2 {
-  max-width: 12ch;
+  max-width: min(15ch, 100%);
   margin: 0;
   color: var(--en-ink);
-  font: var(--en-weight-semibold) clamp(2rem, 5vw, 4.6rem) / 0.96 var(--font-body), sans-serif;
-  letter-spacing: -0.058em;
+  font: var(--en-weight-semibold) clamp(2rem, 3.5vw, 3.8rem) / 0.98 var(--font-body), sans-serif;
+  letter-spacing: -0.052em;
+  overflow-wrap: break-word;
   text-wrap: balance;
 }
 
@@ -373,17 +375,24 @@
 .ensemblis-loading .ensemblis-processing-steps li {
   display: inline-flex;
   align-items: center;
+  min-width: 0;
   gap: var(--en-space-2);
   color: var(--en-subtle);
   font-size: var(--en-text-xs);
 }
 
-.studio-root .ensemblis-processing-steps li > span,
-.ensemblis-loading .ensemblis-processing-steps li > span {
+.studio-root .ensemblis-processing-steps li > span:first-child,
+.ensemblis-loading .ensemblis-processing-steps li > span:first-child {
+  flex: 0 0 auto;
   width: 0.38rem;
   height: 0.38rem;
   border-radius: 50%;
   background: var(--en-line-strong);
+}
+
+.studio-root .ensemblis-processing-steps li > span:nth-child(2),
+.ensemblis-loading .ensemblis-processing-steps li > span:nth-child(2) {
+  min-width: 0;
 }
 
 .studio-root .ensemblis-processing-steps li[data-state="active"],
@@ -391,8 +400,8 @@
   color: var(--en-ink);
 }
 
-.studio-root .ensemblis-processing-steps li[data-state="active"] > span,
-.ensemblis-loading .ensemblis-processing-steps li[data-state="active"] > span {
+.studio-root .ensemblis-processing-steps li[data-state="active"] > span:first-child,
+.ensemblis-loading .ensemblis-processing-steps li[data-state="active"] > span:first-child {
   background: var(--en-accent);
   box-shadow: 0 0 14px color-mix(in srgb, var(--en-accent) 52%, transparent);
   animation: ensemblis-state-pulse 1.15s ease-in-out infinite;
@@ -403,8 +412,8 @@
   color: var(--en-muted);
 }
 
-.studio-root .ensemblis-processing-steps li[data-state="complete"] > span,
-.ensemblis-loading .ensemblis-processing-steps li[data-state="complete"] > span {
+.studio-root .ensemblis-processing-steps li[data-state="complete"] > span:first-child,
+.ensemblis-loading .ensemblis-processing-steps li[data-state="complete"] > span:first-child {
   background: var(--en-mint);
 }
 
@@ -488,13 +497,13 @@
   .studio-root .ensemblis-processing-visual::after,
   .studio-root .ensemblis-processing-scan,
   .studio-root .ensemblis-processing-wave i,
-  .studio-root .ensemblis-processing-steps li[data-state="active"] > span,
+  .studio-root .ensemblis-processing-steps li[data-state="active"] > span:first-child,
   .ensemblis-loading .ensemblis-processing::before,
   .ensemblis-loading .ensemblis-processing-visual::before,
   .ensemblis-loading .ensemblis-processing-visual::after,
   .ensemblis-loading .ensemblis-processing-scan,
   .ensemblis-loading .ensemblis-processing-wave i,
-  .ensemblis-loading .ensemblis-processing-steps li[data-state="active"] > span {
+  .ensemblis-loading .ensemblis-processing-steps li[data-state="active"] > span:first-child {
     animation: none !important;
   }
 }
