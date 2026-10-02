@@ -313,6 +313,58 @@
   .ensemblis-location-artist { max-width: 7.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
 
+/* Legacy feature layouts must size against the usable workspace, not the raw
+   viewport. These guarantees prevent narrow split columns from forcing text
+   outside their surface beside the persistent desktop sidebar. */
+.studio-root :where(.studio-page, .studio-v2-page) > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.studio-root :where(.track-object-overview, .growth-command-grid) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.studio-root :where(.track-object-overview, .growth-command-grid) > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.studio-root .track-object-decision > strong {
+  max-width: 16ch;
+  font-size: clamp(1.45rem, 2.3vw, 2.25rem);
+  line-height: 1.05;
+  letter-spacing: -0.045em;
+  overflow-wrap: break-word;
+}
+
+.studio-root .track-object-decision > :where(p, a) {
+  max-width: 100%;
+  overflow-wrap: break-word;
+}
+
+.studio-root :where(.growth-recommendation, .growth-bottleneck) {
+  min-width: 0;
+  min-height: 0;
+}
+
+.studio-root .growth-command-grid {
+  align-items: start;
+}
+
+@media (max-width: 1240px) {
+  .studio-root .growth-command-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 1180px) {
+  .studio-root .track-object-overview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* Progress/status announcements should remain visually rich without making the
    whole changing surface a live region. */
 .ensemblis-processing-step-state {
