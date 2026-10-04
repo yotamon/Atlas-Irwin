@@ -91,6 +91,17 @@ export function StudioUxTelemetry({ artistId }: { artistId: string }) {
         workflowStage: detail.workflowStage ?? null,
       });
 
+      if (detail.event === "advanced_opened" && !primaryActionTakenRef.current) {
+        post({
+          artistId,
+          sessionId: sessionId(),
+          event: "advanced_detail_dependency",
+          surface: surfaceFor(window.location.pathname),
+          source: "before_primary_action",
+          frictionKind: "before_primary_action",
+        });
+      }
+
       if (
         detail.event === "launcher_opened"
         && enteredAtRef.current !== null
