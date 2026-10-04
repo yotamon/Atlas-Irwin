@@ -161,6 +161,15 @@ test("paired desktops receive base local processing without a perpetual license"
   assert.ok(issuer.includes('online.add("local.advanced_models")'), "advanced model packs remain Studio-gated");
 });
 
+test("base local DSP does not depend on cloud entitlement refresh", async () => {
+  const native = await source("apps/library-bridge/src-tauri/src/lib.rs");
+  assert.equal(native.includes("fn local_processing_enabled"), false);
+  assert.ok(native.includes("match sidecar_binary.filter(|binary| binary.is_file())"));
+  assert.ok(native.includes("let local_intelligence_available = state"));
+  assert.equal(native.includes('This device is not entitled to local processing.'), false);
+  assert.ok(native.includes("let _ = network::refresh_device_entitlement(&db, true);"));
+});
+
 test("analysis payload schema is strict and versioned", async () => {
   const schema = JSON.parse(await source("contracts/library-bridge-analysis-payload.v1.json"));
   assert.equal(schema.$schema, "https://json-schema.org/draft/2020-12/schema");
