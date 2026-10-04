@@ -127,7 +127,7 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
 
       <section className="release-human-factors-blockers" aria-labelledby="release-blockers-heading">
         <div className="v2-section-heading compact">
-          <div><span className="section-label">Needs attention</span><h2 id="release-blockers-heading">{missionAttention.length ? "Only what can change the release" : "No release decision is waiting"}</h2></div>
+          <div><span className="section-label">Next decisions</span><h2 id="release-blockers-heading">{missionAttention.length ? "Only what can change the release" : "No release decision is waiting"}</h2></div>
           {missionAttention.length ? <span className="v2-count has-items">{missionAttention.length}</span> : null}
         </div>
         {missionAttention.length ? <div className="v2-inbox">{missionAttention.map((item) => <Link className="v2-inbox-item" href={href(item.href)} key={item.key}><div><strong>{item.title}</strong><small>{item.detail}</small></div><b aria-hidden>→</b></Link>)}</div>
