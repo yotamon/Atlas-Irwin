@@ -109,3 +109,26 @@ test("Release header orients without competing with the lifecycle recommendation
   assert.match(release, /ReleaseTracklist/);
   assert.match(release, /ReleaseMasteringCoherence/);
 });
+
+
+test("AutoMix render recovery belongs to the render stage instead of the global workflow", async () => {
+  const workflow = await source("components/studio/automix-workflow.tsx");
+  const catalog = await source("components/studio/set-builder-workspace.tsx");
+  const local = await source("components/studio/local-set-builder-workspace.tsx");
+
+  assert.doesNotMatch(workflow, /<AutoMixRenderRecovery/);
+  for (const builder of [catalog, local]) {
+    const renderStage = builder.lastIndexOf('workflowStage === "render"');
+    const recovery = builder.indexOf("<AutoMixRenderRecovery", renderStage);
+    assert.ok(renderStage >= 0);
+    assert.ok(recovery > renderStage, "render recovery must live inside the render-stage branch");
+  }
+});
+
+test("AutoMix keeps specialist DJ machinery behind one advanced disclosure", async () => {
+  const workflow = await source("components/studio/automix-workflow.tsx");
+  const disclosure = workflow.indexOf("en-automix-advanced");
+  for (const panel of ["<DjIntelligencePanel", "<LibraryBridgePanel", "<RekordboxImportPanel"]) {
+    assert.ok(workflow.indexOf(panel) > disclosure);
+  }
+});
