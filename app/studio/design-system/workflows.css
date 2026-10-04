@@ -855,10 +855,18 @@
   .studio-root .en-workflow-stepper {
     display: flex;
     overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scroll-snap-type: x proximity;
   }
 
   .studio-root .en-workflow-stepper button {
     min-width: 7.5rem;
+    scroll-snap-align: start;
+  }
+
+  .studio-root .en-next-action-widget .actions .button.primary {
+    width: 100%;
+    justify-content: center;
   }
 }
 

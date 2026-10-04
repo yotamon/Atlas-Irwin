@@ -283,5 +283,19 @@ test.describe("Ensemblis UX V5 authenticated acceptance", () => {
     await expect(page.getByRole("heading", { name: "Music" })).toBeVisible();
     await expect(page.getByRole("textbox", { name: "Search music" })).toBeVisible();
     await auditCheckpoint(page, "mobile-music");
+
+    const track = await firstPlayableCatalogTrack(page);
+    await page.goto(track.href);
+    const primaryAction = page.locator(".track-human-factors-recommendation .button.primary").first();
+    await expect(primaryAction).toBeVisible();
+    await auditCheckpoint(page, "mobile-track-primary-action");
+
+    const details = page.getByRole("button", { name: "Technical details" });
+    await details.click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    const dialogBox = await dialog.boundingBox();
+    expect(dialogBox && dialogBox.height >= 760).toBeTruthy();
+    await page.getByRole("button", { name: "Close details" }).click();
   });
 });
