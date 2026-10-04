@@ -97,3 +97,14 @@ test("deliverable cards remain usable on desktop and collapse to one column on s
   assert.ok(css.includes(".studio-root .create-deliverable-grid"));
   assert.ok(css.includes("grid-template-columns: 1fr"));
 });
+
+
+test("only the chosen or top-ranked Create direction owns primary visual weight", async () => {
+  const create = await source("app/studio/(protected)/create/page.tsx");
+  const css = await source("app/studio/design-system/workflows.css");
+
+  assert.ok(create.includes("is-primary-recommendation"));
+  assert.ok(create.includes("is-alternative"));
+  assert.ok(css.includes(".create-deliverable-card.is-primary-recommendation"));
+  assert.ok(css.includes(".create-deliverable-card.is-alternative"));
+});

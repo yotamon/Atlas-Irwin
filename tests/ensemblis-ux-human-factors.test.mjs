@@ -132,3 +132,32 @@ test("AutoMix keeps specialist DJ machinery behind one advanced disclosure", asy
     assert.ok(workflow.indexOf(panel) > disclosure);
   }
 });
+
+
+test("Today renders one ranked primary task instead of equal Continue and Priority blocks", async () => {
+  const today = await source("app/studio/(protected)/page.tsx");
+
+  assert.match(today, /const primaryTodayTask/);
+  assert.match(today, /today-human-factors-primary/);
+  assert.match(today, /today-human-factors-secondary/);
+  assert.match(today, /primaryTodayTask\.kind === "continue"/);
+  assert.match(today, /primaryTodayTask\.kind === "priority"/);
+});
+
+test("Add Music is consequence-first and moves product philosophy behind disclosure", async () => {
+  const music = await source("app/studio/(protected)/music/page.tsx");
+
+  assert.match(music, /Add the music Ensemblis should work from\./);
+  assert.match(music, /How Ensemblis uses your source/);
+  assert.doesNotMatch(music, /Ensemblis principle/);
+  assert.doesNotMatch(music, /The song comes before the marketing workflow\./);
+});
+
+test("Create distinguishes the recommended direction from alternatives", async () => {
+  const create = await source("app/studio/(protected)/create/page.tsx");
+
+  assert.match(create, /isPrimaryDirection/);
+  assert.match(create, /is-primary-recommendation/);
+  assert.match(create, /is-alternative/);
+  assert.match(create, /className=\{isPrimaryDirection \? "button primary" : "button"\}/);
+});
