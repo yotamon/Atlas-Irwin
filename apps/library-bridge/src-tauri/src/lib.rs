@@ -97,24 +97,19 @@ fn local_track_count(db_path: &std::path::Path) -> anyhow::Result<usize> {
     Ok(count.max(0) as usize)
 }
 
-fn local_processing_enabled(db: &BridgeDb) -> bool {
-    let id = device_id(db).ok().flatten();
-    entitlements::has_capability(db, id.as_deref(), "local.processing")
-}
-
 #[tauri::command]
 fn bridge_status(state: State<'_, BridgeState>) -> Result<BridgeStatus, String> {
     let device_id = device_id(&state.db).map_err(command_error)?;
     let entitlement = entitlements::effective_entitlement(&state.db, device_id.as_deref())
         .map_err(command_error)?;
+    // Base local DSP is a property of the bundled native runtime, not of the
+    // cloud licensing service. Entitlements still govern optional premium
+    // capabilities, but a healthy sidecar must never be downgraded to the
+    // metadata-only scanner because entitlement refresh is unavailable.
     let local_intelligence_available = state
         .sidecar_binary
         .as_deref()
-        .is_some_and(|binary| binary.is_file())
-        && entitlement
-            .capabilities
-            .iter()
-            .any(|value| value == "local.processing");
+        .is_some_and(|binary| binary.is_file());
     Ok(BridgeStatus {
         paired: device_id.is_some() && device_credential().map_err(command_error)?.is_some(),
         device_id,
@@ -142,10 +137,7 @@ fn scan_with_available_intelligence(
     sidecar_binary: Option<&std::path::Path>,
     work_root: &std::path::Path,
 ) -> anyhow::Result<ScanSummary> {
-    match sidecar_binary
-        .filter(|binary| binary.is_file())
-        .filter(|_| local_processing_enabled(db))
-    {
+    match sidecar_binary.filter(|binary| binary.is_file()) {
         Some(binary) => {
             scanner::scan_source_with_sidecar(db, source_id, source_kind, path, binary, work_root)
         }
@@ -334,9 +326,6 @@ async fn choose_and_execute_local_runtime_task(
     state: State<'_, BridgeState>,
     task: RuntimeTask,
 ) -> Result<Option<LocalRuntimeTaskResult>, String> {
-    if !local_processing_enabled(&state.db) {
-        return Err("This device is not entitled to local processing.".to_string());
-    }
     let sidecar_binary = state
         .sidecar_binary
         .clone()
@@ -398,7 +387,9 @@ async fn begin_browser_pairing(
                 std::env::consts::OS,
                 env!("CARGO_PKG_VERSION"),
             )?;
-            network::refresh_device_entitlement(&db, true)?;
+            // Pairing establishes the base Local Engine. Premium entitlement
+            // refresh is best-effort so a licensing outage cannot disable local DSP.
+            let _ = network::refresh_device_entitlement(&db, true);
             Ok(paired)
         })
     })
@@ -433,7 +424,9 @@ async fn pair_device(
             std::env::consts::OS,
             env!("CARGO_PKG_VERSION"),
         )?;
-        network::refresh_device_entitlement(&db, true)?;
+        // Pairing establishes the base Local Engine. Premium entitlement
+        // refresh is best-effort so a licensing outage cannot disable local DSP.
+        let _ = network::refresh_device_entitlement(&db, true);
         Ok::<PairResponse, anyhow::Error>(paired)
     })
     .await
