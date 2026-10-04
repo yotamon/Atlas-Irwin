@@ -154,7 +154,7 @@ export default async function GrowthPage({ searchParams }: { searchParams: Promi
 
         <section className="v2-section growth-human-factors-context">
           <div className="v2-section-heading compact">
-            <div><span className="section-label">Current signal</span><h2>{diagnosis ? diagnosis.label : "Learning from the audience"}</h2></div>
+            <div><span className="section-label">What is holding growth back</span><h2>{diagnosis ? diagnosis.label : "Learning from the audience"}</h2></div>
           </div>
           <div className="growth-human-factors-signal">
             <div><strong>{funnel.listeners.toLocaleString()}</strong><span>listeners</span></div>
