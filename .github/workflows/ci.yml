@@ -76,6 +76,14 @@ jobs:
         continue-on-error: true
         run: node --test tests/release-detail-resilience.test.mjs tests/resumable-upload-recovery.test.mjs tests/smart-links-attribution.test.mjs tests/social-channel-planning.test.mjs tests/stem-intelligence.test.mjs tests/strongest-moments-context.test.mjs tests/studio-product-lifecycle.test.mjs tests/studio-ui-system.test.mjs tests/studio-v2-contract.test.mjs tests/studio-v2-workflow.test.mjs tests/track-analysis-design-contract.test.mjs tests/track-intelligence-recovery-contract.test.mjs tests/vercel-build-budget.test.mjs tests/vercel-ignore-build.test.mjs tests/video-director-editor-state.test.mjs tests/video-director-editor.test.mjs tests/video-director-media-palette.test.mjs tests/video-director-media-scope.test.mjs tests/visual-brand-dna-contract.test.mjs
 
+      - name: Diagnose full Studio suite serially
+        continue-on-error: true
+        run: node --test --test-concurrency=1 tests/*.test.mjs
+
+      - name: Diagnose full Studio suite with bounded concurrency
+        continue-on-error: true
+        run: node --test --test-concurrency=4 tests/*.test.mjs
+
       - name: Verify Studio product contracts
         run: npm run test:studio
 
