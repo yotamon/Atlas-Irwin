@@ -39,6 +39,31 @@ function title(value: string) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+export type MasteringStage = "source" | "recommendation" | "processing" | "review" | "result";
+
+export function resolveMasteringStage({
+  sourceRepairRequired,
+  hasActive,
+  hasReviewCandidate,
+  hasCompletedDecision,
+}: {
+  sourceRepairRequired: boolean;
+  hasActive: boolean;
+  hasReviewCandidate: boolean;
+  hasCompletedDecision: boolean;
+}): MasteringStage {
+  if (sourceRepairRequired) return "source";
+  if (hasActive) return "processing";
+  if (hasReviewCandidate) return "review";
+  if (hasCompletedDecision) return "result";
+  return "recommendation";
+}
+
+function jobDecision(job: Job) {
+  const decision = record(record(job.result).artist_decision).decision;
+  return typeof decision === "string" ? decision : null;
+}
+
 function masteringSuggestedLoops(value: Json): MasteringSuggestedLoop[] {
   const result = record(value);
   const after = record(result.after);
@@ -260,27 +285,76 @@ export function ActiveMasteringControls({
   const masteringRecommended = readiness.masterability === "streaming_safety_only" || readiness.primaryAction === "mastering_fix";
   const sourceRepairRequired = readiness.masterability === "source_repair_required";
   const mixReviewRecommended = readiness.masterability === "mix_review_recommended";
+  const reviewCandidate = completed.find((job) => !jobDecision(job)) ?? null;
+  const resultCandidate = completed.find((job) => Boolean(jobDecision(job))) ?? null;
+  const masteringStage = resolveMasteringStage({
+    sourceRepairRequired,
+    hasActive,
+    hasReviewCandidate: Boolean(reviewCandidate),
+    hasCompletedDecision: Boolean(resultCandidate),
+  });
+  const visibleCandidates = masteringStage === "review" && reviewCandidate
+    ? [reviewCandidate]
+    : masteringStage === "result" && resultCandidate
+      ? [resultCandidate]
+      : [];
+  const stageOrder: MasteringStage[] = ["source", "recommendation", "processing", "review", "result"];
+  const stageIndex = stageOrder.indexOf(masteringStage);
+  const stageTitle = masteringStage === "source"
+    ? "Repair the source before mastering"
+    : masteringStage === "processing"
+      ? "Ensemblis is preparing a verified alternative"
+      : masteringStage === "review"
+        ? "Compare the candidate before deciding"
+        : masteringStage === "result"
+          ? "Mastering decision complete"
+          : masteringRecommended
+            ? "Add streaming headroom without changing the character"
+            : mixReviewRecommended
+              ? "Review the mix or source before mastering"
+              : readiness.masterability === "ready_as_is"
+                ? "The current master does not need corrective mastering"
+                : "Master only when you want a deliberate change";
+  const stageDetail = masteringStage === "source"
+    ? "Repair or replace the source first. Ensemblis will not present mastering as a cure for clipping, phase, timing or render problems it cannot safely restore."
+    : masteringStage === "processing"
+      ? "The original stays untouched while Ensemblis renders and re-measures the candidate."
+      : masteringStage === "review"
+        ? "Listen at matched loudness, inspect only the evidence you need, then keep the original or approve the verified candidate."
+        : masteringStage === "result"
+          ? "Your explicit decision is recorded. The selected canonical source remains traceable and reversible through media history."
+          : masteringRecommended
+            ? "The source-preserving path keeps loudness, tone and dynamics as close as possible while creating safer true-peak and codec headroom."
+            : mixReviewRecommended
+              ? "The waveform is distributable, but the current evidence points to a mix/source judgment rather than an automatic mastering correction."
+              : "Balanced, Punchy and Dynamic remain optional creative directions, never requirements just because the tools exist.";
 
   return (
-    <section className={styles.root} id="active-mastering" aria-label="Mastering options">
+    <section className={styles.root} id="active-mastering" aria-label="Mastering options" data-mastering-stage={masteringStage}>
+      <ol className={styles.stageRail} aria-label="Mastering progress">
+        {stageOrder.map((stage, index) => (
+          <li key={stage} data-state={stage === masteringStage ? "current" : index < stageIndex ? "complete" : "upcoming"}>
+            <span>{index < stageIndex ? "✓" : index + 1}</span>
+            <strong>{stage === "source" ? "Source" : stage === "recommendation" ? "Recommendation" : stage === "processing" ? "Process" : stage === "review" ? "Review" : "Result"}</strong>
+          </li>
+        ))}
+      </ol>
+
       <header className={styles.header}>
         <div>
-          <span className="section-label">{latestActive ? "Mastering candidate" : "Optional mastering"}</span>
-          <h3>{latestActive ? "Ensemblis is preparing a verified alternative" : masteringRecommended ? "Add streaming headroom without changing the character" : sourceRepairRequired ? "Mastering is not the right fix for this blocker" : mixReviewRecommended ? "Review the mix or source before mastering" : readiness.masterability === "ready_as_is" ? "The current master does not need corrective mastering" : "Master only when you want a deliberate change"}</h3>
-          <p>{latestActive
-            ? "The original stays untouched. Ensemblis will re-measure the rendered waveform before it can be approved."
-            : masteringRecommended
-              ? "The source-preserving path keeps loudness, tone and dynamics as close as possible while creating safer true-peak and codec headroom."
-              : sourceRepairRequired
-                ? "Repair or replace the source first. Ensemblis will not present mastering as a cure for clipping, phase, timing or render problems it cannot safely restore."
-                : mixReviewRecommended
-                  ? "The waveform is distributable, but the current evidence points to a mix/source judgment rather than an automatic mastering correction."
-                  : "Balanced, Punchy and Dynamic remain available as creative directions, but they are never required just because the tools exist."}</p>
+          <span className="section-label">{masteringStage === "review" ? "Listening decision" : masteringStage === "result" ? "Result" : latestActive ? "Mastering candidate" : "Mastering"}</span>
+          <h3>{stageTitle}</h3>
+          <p>{stageDetail}</p>
         </div>
         {latestActive ? <span className={styles.running}>{latestActive.status === "running" ? "Mastering…" : "Queued"}</span> : null}
       </header>
 
-      {latestActive ? (
+      {masteringStage === "source" ? (
+        <div className={styles.calm}>
+          <strong>Fix the source before creating a new master.</strong>
+          <span>A mastering render could hide symptoms without repairing the underlying audio.</span>
+        </div>
+      ) : masteringStage === "processing" && latestActive ? (
         <ProcessingState
           className={styles.processing}
           compact
@@ -296,7 +370,7 @@ export function ActiveMasteringControls({
             { label: "Verify", state: "waiting" },
           ]}
         />
-      ) : (
+      ) : masteringStage === "recommendation" ? (
         <>
           {masteringRecommended ? (
             <form action={createCandidate} className={styles.recommended}>
@@ -313,12 +387,12 @@ export function ActiveMasteringControls({
             </form>
           ) : (
             <div className={styles.calm}>
-              <strong>{sourceRepairRequired ? "Fix the source before creating a new master." : mixReviewRecommended ? "Resolve the mix/source question before using mastering to change it." : readiness.masterability === "ready_as_is" ? "Keep the current master unless you want a creative change." : "Listen to the findings before deciding whether to change the sound."}</strong>
-              <span>{sourceRepairRequired ? "A mastering render could hide symptoms without repairing the underlying audio." : mixReviewRecommended ? readiness.masterabilityReason : "The original remains the canonical master until you explicitly approve a verified candidate."}</span>
+              <strong>{mixReviewRecommended ? "Resolve the mix/source question before using mastering to change it." : readiness.masterability === "ready_as_is" ? "Keep the current master unless you want a creative change." : "Listen to the findings before deciding whether to change the sound."}</strong>
+              <span>{mixReviewRecommended ? readiness.masterabilityReason : "The original remains the canonical master until you explicitly approve a verified candidate."}</span>
             </div>
           )}
 
-          {!sourceRepairRequired ? <details className={styles.directions}>
+          <details className={styles.directions}>
             <summary>Explore a different mastering direction</summary>
             <p>These are creative alternatives, not release requirements. Compare them at matched loudness before choosing.</p>
             <div className={styles.presets}>
@@ -335,13 +409,13 @@ export function ActiveMasteringControls({
                 </form>
               ))}
             </div>
-          </details> : null}
+          </details>
         </>
-      )}
+      ) : null}
 
       {pollError ? <div className={styles.error} role="status"><strong>Live status paused.</strong><p>{pollError}</p><button type="button" className="text-button" onClick={() => void refreshJobs()}>Retry status</button></div> : null}
 
-      {failed ? (
+      {failed && masteringStage === "recommendation" ? (
         <div className={styles.error} role="alert">
           <strong>The last mastering attempt needs attention.</strong>
           <p>{failed.error || "The mastering worker could not complete the render. The untouched source remains canonical and safe to retry."}</p>
@@ -357,9 +431,9 @@ export function ActiveMasteringControls({
         </div>
       ) : null}
 
-      {completed.length ? (
+      {visibleCandidates.length ? (
         <div className={styles.candidates}>
-          {completed.map((job) => {
+          {visibleCandidates.map((job) => {
             const result = record(job.result);
             const before = record(result.before);
             const after = record(result.after);
