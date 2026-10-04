@@ -37,3 +37,31 @@ test("advanced evidence uses the existing contextual disclosure system", async (
   assert.ok(widgets.includes("export function CompactEvidence"));
   assert.ok(inspector.includes('aria-haspopup="dialog"'));
 });
+
+
+test("Mastering derives one visible stage from canonical readiness and job state", async () => {
+  const controls = await source("components/studio/active-mastering-controls.tsx");
+
+  assert.match(controls, /export type MasteringStage = "source" \| "recommendation" \| "processing" \| "review" \| "result"/);
+  assert.match(controls, /export function resolveMasteringStage/);
+  assert.match(controls, /data-mastering-stage=\{masteringStage\}/);
+  assert.match(controls, /masteringStage === "source"/);
+  assert.match(controls, /masteringStage === "processing"/);
+  assert.match(controls, /masteringStage === "recommendation"/);
+  assert.match(controls, /masteringStage === "review"/);
+  assert.match(controls, /masteringStage === "result"/);
+  assert.match(controls, /visibleCandidates/);
+});
+
+test("Mastering review owns A B listening and final artist decision", async () => {
+  const controls = await source("components/studio/active-mastering-controls.tsx");
+
+  const reviewBranch = controls.indexOf('masteringStage === "review"');
+  const listenLab = controls.indexOf("<MasteringListenLab", reviewBranch);
+  const keepOriginal = controls.indexOf("Keep original", reviewBranch);
+  const approve = controls.indexOf("Use as canonical master", reviewBranch);
+  assert.ok(reviewBranch >= 0);
+  assert.ok(listenLab > reviewBranch);
+  assert.ok(keepOriginal > listenLab);
+  assert.ok(approve > keepOriginal);
+});
