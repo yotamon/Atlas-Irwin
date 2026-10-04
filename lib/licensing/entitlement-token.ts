@@ -77,10 +77,14 @@ async function activateStudioLicense(device: DjLibraryDeviceRow) {
 
 export async function issueDeviceEntitlement(device: DjLibraryDeviceRow) {
   const [license, granted] = await Promise.all([activateStudioLicense(device), activeGrantedCapabilities(device.owner_id)]);
+  // A paired desktop is itself the trusted boundary for base local DSP. Keep
+  // local.processing available while the device can refresh its signed account
+  // entitlement; a perpetual Studio activation extends that capability offline
+  // and unlocks optional advanced model packs.
   const online = new Set<string>(granted);
+  online.add("local.processing");
   const offline = new Set<string>();
   if (license?.activated) {
-    online.add("local.processing");
     online.add("local.advanced_models");
     offline.add("local.processing");
     offline.add("local.advanced_models");
