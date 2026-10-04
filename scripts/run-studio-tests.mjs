@@ -16,7 +16,7 @@ if (!testFiles.length) {
 }
 
 console.log(`Running ${testFiles.length} discovered Studio contract tests.`);
-const result = spawnSync(process.execPath, ["--test", ...testFiles], {
+const result = spawnSync(process.execPath, ["--test", "--test-concurrency=4", ...testFiles], {
   cwd: root,
   stdio: "inherit",
   env: process.env,
