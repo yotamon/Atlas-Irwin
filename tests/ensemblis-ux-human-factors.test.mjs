@@ -212,3 +212,13 @@ test("friction telemetry stays categorical and covers the recovery signals", asy
     assert.equal(client.includes(forbidden), false, `client must not expose ${forbidden}`);
   }
 });
+
+
+test("ContextInspector advanced events contribute to advanced-detail dependency telemetry", async () => {
+  const telemetry = await source("components/studio/ux-telemetry.tsx");
+
+  const advancedEvent = telemetry.indexOf('detail.event === "advanced_opened"');
+  const dependency = telemetry.indexOf('event: "advanced_detail_dependency"', advancedEvent);
+  assert.ok(advancedEvent >= 0, "custom advanced-opened events need an explicit dependency classifier");
+  assert.ok(dependency > advancedEvent, "ContextInspector opens before the primary action must emit dependency telemetry");
+});
