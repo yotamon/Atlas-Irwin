@@ -236,7 +236,9 @@ export default async function TodayPage() {
 
       <CommandPalette artistId={artist.artistId} variant="launcher" suggestions={launcherSuggestions} />
 
-      {primaryTodayTask.kind === "continue" ? (
+      {primaryTodayTask.kind === "priority" ? (
+        <div className="today-human-factors-primary">{priorityHero}</div>
+      ) : (
         <section className="today-human-factors-primary today-v4-continue" aria-labelledby="today-primary-task-heading">
           <SectionHeading
             id="today-primary-task-heading"
@@ -254,8 +256,6 @@ export default async function TodayPage() {
             actionLabel={primaryTodayTask.item.actionLabel}
           />
         </section>
-      ) : (
-        <div className="today-human-factors-primary">{priorityHero}</div>
       )}
 
       {primaryTodayTask.kind === "continue" ? (
