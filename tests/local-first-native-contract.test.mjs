@@ -150,6 +150,17 @@ test("desktop agent automates maintenance while preserving signed licensing and 
   assert.equal(html.includes("Local intelligence"), false);
 });
 
+test("paired desktops receive base local processing without a perpetual license", async () => {
+  const issuer = await source("lib/licensing/entitlement-token.ts");
+  const onlineGrant = issuer.indexOf('online.add("local.processing")');
+  const perpetualGate = issuer.indexOf("if (license?.activated)");
+  assert.ok(onlineGrant >= 0, "paired account entitlements must include local.processing");
+  assert.ok(perpetualGate >= 0);
+  assert.ok(onlineGrant < perpetualGate, "base local processing must not depend on perpetual activation");
+  assert.ok(issuer.includes('offline.add("local.processing")'), "perpetual Studio must preserve local processing offline");
+  assert.ok(issuer.includes('online.add("local.advanced_models")'), "advanced model packs remain Studio-gated");
+});
+
 test("analysis payload schema is strict and versioned", async () => {
   const schema = JSON.parse(await source("contracts/library-bridge-analysis-payload.v1.json"));
   assert.equal(schema.$schema, "https://json-schema.org/draft/2020-12/schema");
