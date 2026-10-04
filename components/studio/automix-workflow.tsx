@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AutoMixRenderRecovery } from "@/components/studio/automix-render-recovery";
 import { ConnectionWidget } from "@/components/studio/ux-v4-widgets";
 import { DjIntelligencePanel } from "@/components/studio/dj-intelligence-panel";
 import { LibraryBridgePanel } from "@/components/studio/library-bridge-panel";
@@ -140,7 +139,6 @@ export function AutoMixWorkflow({
         />
       )}
 
-      <AutoMixRenderRecovery artistId={artistId} />
 
       <details className="v2-advanced-disclosure en-automix-advanced">
         <summary>DJ preferences & connection tools</summary>
