@@ -1,6 +1,6 @@
 [package]
 name = "ensemblis-library-bridge"
-version = "0.2.0"
+version = "0.2.1"
 description = "Local-first music access and execution runtime for Ensemblis"
 authors = ["Yotam Faraggi"]
 edition = "2024"
