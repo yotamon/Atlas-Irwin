@@ -161,3 +161,27 @@ test("Create distinguishes the recommended direction from alternatives", async (
   assert.match(create, /is-alternative/);
   assert.match(create, /className=\{isPrimaryDirection \? "button primary" : "button"\}/);
 });
+
+
+test("mobile keeps contextual detail in a full-height sheet with focus return", async () => {
+  const inspector = await source("components/studio/context-inspector.tsx");
+  const dialog = await source("components/studio/dialog.tsx");
+  const overlays = await source("app/studio/design-system/overlays.css");
+
+  assert.match(inspector, /className="ensemblis-context-inspector"/);
+  assert.match(inspector, /returnFocusRef={triggerRef}/);
+  assert.match(dialog, /finalFocus={returnFocusRef}/);
+  assert.match(overlays, /@media \(max-width: 680px\)[\s\S]*\.ensemblis-dialog\.ensemblis-context-inspector\s*\{[\s\S]*height:\s*calc\(100svh - 1rem\)/);
+  assert.match(overlays, /\.ensemblis-dialog\.ensemblis-context-inspector \.ensemblis-dialog-body\s*\{[^}]*flex:\s*1/s);
+});
+
+test("mobile keeps the primary task action reachable and workflow progress compact", async () => {
+  const workflows = await source("app/studio/design-system/workflows.css");
+  const accessibility = await source("app/studio/design-system/accessibility.css");
+
+  assert.match(workflows, /@media \(max-width: 760px\)[\s\S]*\.en-next-action-widget \.actions \.button\.primary[^\{]*\{[^}]*width:\s*100%/s);
+  assert.match(workflows, /\.en-workflow-stepper\s*\{[^}]*scroll-snap-type:\s*x proximity/s);
+  assert.match(workflows, /\.en-workflow-stepper button\s*\{[^}]*scroll-snap-align:\s*start/s);
+  assert.match(accessibility, /@media \(pointer: coarse\)[\s\S]*min-height:\s*var\(--en-control-lg\)/);
+  assert.match(accessibility, /@media \(prefers-reduced-motion: reduce\)/);
+});
