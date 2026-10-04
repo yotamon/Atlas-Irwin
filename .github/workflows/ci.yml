@@ -32,14 +32,6 @@ jobs:
         timeout-minutes: 8
         run: npm ci --no-audit --fetch-retries=2 --fetch-timeout=60000 --fetch-retry-mintimeout=1000 --fetch-retry-maxtimeout=5000
 
-      - name: Diagnose Studio pretest
-        continue-on-error: true
-        run: npm run pretest:studio
-
-      - name: Diagnose Studio runner directly
-        continue-on-error: true
-        run: node scripts/run-studio-tests.mjs
-
       - name: Verify Studio product contracts
         run: npm run test:studio
 

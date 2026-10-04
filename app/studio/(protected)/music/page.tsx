@@ -67,7 +67,7 @@ export default async function MusicPage({
             <span className="create-intent-copy">
               <small>Existing music</small>
               <strong>Add a mastered track</strong>
-              <span>Upload the master. Analysis starts automatically.</span>
+              <span>Upload the master. Ensemblis finds its strongest sections automatically.</span>
             </span>
             <b>Add master →</b>
           </Link>
