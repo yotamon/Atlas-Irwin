@@ -86,3 +86,26 @@ test("Grow keeps opportunity review and detailed evidence out of the overview ta
   assert.match(grow, /CompactEvidence/);
   assert.doesNotMatch(grow, /growth-v5-overview[\s\S]*growth-opportunity-grid[\s\S]*growth-human-factors-progress/);
 });
+
+
+test("Release overview has one lifecycle recommendation before blockers and readiness", async () => {
+  const release = await source("components/studio/release-workspace-v2.tsx");
+  const recommendation = release.indexOf("release-human-factors-recommendation");
+  const blockers = release.indexOf("release-human-factors-blockers");
+  const readiness = release.indexOf("release-human-factors-readiness");
+  assert.ok(recommendation >= 0);
+  assert.ok(blockers > recommendation);
+  assert.ok(readiness > blockers);
+  assert.match(release, /release-human-factors-details/);
+});
+
+test("Release header orients without competing with the lifecycle recommendation", async () => {
+  const release = await source("components/studio/release-workspace-v2.tsx");
+  const headerStart = release.indexOf("<ObjectHeader");
+  const headerEnd = release.indexOf("/>", headerStart);
+  const header = release.slice(headerStart, headerEnd);
+  assert.doesNotMatch(header, /actions=/);
+  assert.match(release, /release-human-factors-recommendation/);
+  assert.match(release, /ReleaseTracklist/);
+  assert.match(release, /ReleaseMasteringCoherence/);
+});
