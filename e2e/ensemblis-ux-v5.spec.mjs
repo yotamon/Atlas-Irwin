@@ -28,6 +28,15 @@ async function openStudio(page, path = "/studio") {
   await expect(page).not.toHaveURL(/\/studio\/login/);
 }
 
+
+async function auditCheckpoint(page, name) {
+  const image = await page.screenshot({ fullPage: true });
+  await test.info().attach(`ux-${name}`, {
+    body: image,
+    contentType: "image/png",
+  });
+}
+
 async function firstPlayableCatalogTrack(page) {
   await openStudio(page, "/studio/music");
   const rows = page.locator(".music-v5-track-row");
@@ -80,6 +89,7 @@ test.describe("Ensemblis UX V5 authenticated acceptance", () => {
     await openStudio(page, "/studio/music?view=add");
 
     await expect(page.getByRole("heading", { name: "Add music" })).toBeVisible();
+    await auditCheckpoint(page, "01-add-music");
     await expect(page.getByRole("link", { name: /Add a mastered track/i })).toBeVisible();
     await expect(page.getByRole("link", { name: /Add or prepare a release/i })).toBeVisible();
     await expect(page.getByText("The song comes before the marketing workflow.", { exact: true })).toBeVisible();
@@ -91,12 +101,14 @@ test.describe("Ensemblis UX V5 authenticated acceptance", () => {
 
     await expect(page.getByText("Source audio", { exact: true })).toBeVisible();
     await expect(page.getByText("Next action", { exact: true })).toBeVisible();
+    await auditCheckpoint(page, "02-track");
 
     const master = page.getByRole("link", { name: "Master", exact: true });
     await expect(master).toBeVisible();
     await master.click();
 
     await expect(page.getByText("Master Readiness", { exact: true })).toBeVisible();
+    await auditCheckpoint(page, "02-mastering");
     await expect(
       page.getByText("Creative mastering, references, listening comparison and engineering detail", { exact: true }),
     ).toBeVisible();
@@ -114,6 +126,7 @@ test.describe("Ensemblis UX V5 authenticated acceptance", () => {
 
     await expect(page.getByRole("heading", { name: "Create" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "What do you want to make?" })).toBeVisible();
+    await auditCheckpoint(page, "03-create");
     await expect(page.getByText("Requested", { exact: true }).first()).toBeVisible();
   });
 
@@ -122,6 +135,7 @@ test.describe("Ensemblis UX V5 authenticated acceptance", () => {
     await page.goto(release.href);
 
     await expect(page.getByText("Release plan", { exact: true }).first()).toBeVisible();
+    await auditCheckpoint(page, "04-release");
     const plan = page.locator(".release-mission-hero");
     const tracks = page.locator(".release-tracklist");
     await expect(plan).toBeVisible();
@@ -140,6 +154,7 @@ test.describe("Ensemblis UX V5 authenticated acceptance", () => {
     await openStudio(page, "/studio/music/automix");
     await expect(page.getByRole("heading", { name: "AutoMix" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Where should the music come from?" })).toBeVisible();
+    await auditCheckpoint(page, "05-automix");
 
     const catalog = page.getByRole("button", { name: /Ensemblis catalog/i });
     const local = page.getByRole("button", { name: /Local music library|This computer/i });
@@ -161,6 +176,7 @@ test.describe("Ensemblis UX V5 authenticated acceptance", () => {
     const evidence = page.locator(".growth-v5-evidence-grid");
     await expect(recommendation).toBeVisible();
     await expect(page.getByText("Recommended next action", { exact: true })).toBeVisible();
+    await auditCheckpoint(page, "06-grow");
     await expect(page.getByText("Opportunities", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("In motion", { exact: true }).first()).toBeVisible();
 
@@ -184,6 +200,7 @@ test.describe("Ensemblis UX V5 authenticated acceptance", () => {
 
     await expect(page.getByRole("heading", { name: "Needs You" })).toBeVisible();
     await expect(page.getByText("Decision queue", { exact: true })).toBeVisible();
+    await auditCheckpoint(page, "08-needs-you");
     await expect(
       page.getByText(/decision.*worth your attention|Ensemblis can keep moving/i).first(),
     ).toBeVisible();
@@ -265,5 +282,6 @@ test.describe("Ensemblis UX V5 authenticated acceptance", () => {
     await page.getByText("Music", { exact: true }).last().click();
     await expect(page.getByRole("heading", { name: "Music" })).toBeVisible();
     await expect(page.getByRole("textbox", { name: "Search music" })).toBeVisible();
+    await auditCheckpoint(page, "mobile-music");
   });
 });
