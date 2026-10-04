@@ -65,3 +65,24 @@ test("Mastering review owns A B listening and final artist decision", async () =
   assert.ok(keepOriginal > listenLab);
   assert.ok(approve > keepOriginal);
 });
+
+
+test("Grow default surface is recommendation then progress then compact context", async () => {
+  const grow = await source("app/studio/(protected)/growth/page.tsx");
+
+  const recommendation = grow.indexOf("growth-human-factors-recommendation");
+  const progress = grow.indexOf("growth-human-factors-progress");
+  const context = grow.indexOf("growth-human-factors-context");
+  assert.ok(recommendation >= 0);
+  assert.ok(progress > recommendation);
+  assert.ok(context > progress);
+  assert.match(grow, /growth-human-factors-calm/);
+});
+
+test("Grow keeps opportunity review and detailed evidence out of the overview task stack", async () => {
+  const grow = await source("app/studio/(protected)/growth/page.tsx");
+
+  assert.match(grow, /view === "opportunities"/);
+  assert.match(grow, /CompactEvidence/);
+  assert.doesNotMatch(grow, /growth-v5-overview[\s\S]*growth-opportunity-grid[\s\S]*growth-human-factors-progress/);
+});
