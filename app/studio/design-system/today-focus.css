@@ -67,3 +67,30 @@
     display: none;
   }
 }
+
+
+.today-human-factors-primary {
+  display: grid;
+  gap: var(--en-space-4);
+}
+
+.today-human-factors-secondary {
+  margin-top: var(--en-space-5);
+  border-top: 1px solid var(--en-line);
+  border-bottom: 1px solid var(--en-line);
+}
+
+.today-human-factors-secondary > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 4.5rem;
+  padding: var(--en-space-3) 0;
+  cursor: pointer;
+  list-style: none;
+}
+
+.today-human-factors-secondary > summary::-webkit-details-marker { display: none; }
+.today-human-factors-secondary > summary span { display: grid; gap: var(--en-space-1); }
+.today-human-factors-secondary > summary small { color: var(--en-muted); }
+.today-human-factors-secondary-body { padding: 0 0 var(--en-space-5); }

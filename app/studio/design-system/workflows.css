@@ -103,6 +103,21 @@
   border-color: color-mix(in srgb, var(--en-accent) 38%, var(--en-line));
 }
 
+.studio-root .create-deliverable-card.is-primary-recommendation {
+  border-color: color-mix(in srgb, var(--en-accent) 48%, var(--en-line));
+  background: color-mix(in srgb, var(--en-accent-soft) 34%, var(--en-surface));
+}
+
+.studio-root .create-deliverable-card.is-alternative {
+  border-color: color-mix(in srgb, var(--en-line) 86%, transparent);
+  background: color-mix(in srgb, var(--en-surface) 92%, transparent);
+}
+
+.studio-root .create-deliverable-card.is-alternative .create-direction-rationale,
+.studio-root .create-deliverable-card.is-alternative .create-source-preview {
+  color: var(--en-muted);
+}
+
 .studio-root .create-deliverable-card:hover,
 .studio-root .create-deliverable-card:focus-within {
   border-color: var(--en-line-strong);

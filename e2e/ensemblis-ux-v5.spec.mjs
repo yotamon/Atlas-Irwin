@@ -92,7 +92,7 @@ test.describe("Ensemblis UX V5 authenticated acceptance", () => {
     await auditCheckpoint(page, "01-add-music");
     await expect(page.getByRole("link", { name: /Add a mastered track/i })).toBeVisible();
     await expect(page.getByRole("link", { name: /Add or prepare a release/i })).toBeVisible();
-    await expect(page.getByText("The song comes before the marketing workflow.", { exact: true })).toBeVisible();
+    await expect(page.getByText("How Ensemblis uses your source", { exact: true })).toBeVisible();
   });
 
   test("2. mastering a track keeps readiness before engineering controls", async ({ page }) => {

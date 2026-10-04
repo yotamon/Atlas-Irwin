@@ -137,6 +137,40 @@ export default async function TodayPage() {
   ].filter((item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index).slice(0, 6);
   const contextCount = remainingDecisions.length + handling.length + comingUp.length;
   const continueCount = (activeRelease ? 1 : 0) + (latestMix ? 1 : 0) + (latestTrack ? 1 : 0);
+  const primaryContinue = activeRelease
+    ? {
+        eyebrow: "Release plan",
+        title: activeRelease.title,
+        detail: primaryMission?.summary || "Open the release and continue from its current state.",
+        status: primaryMission?.label || "Active",
+        tone: primaryMission?.status === "blocked" ? "danger" as const : primaryMission?.status === "needs_attention" ? "attention" as const : "accent" as const,
+        href: href(`/studio/releases/${activeRelease.id}`),
+        actionLabel: "Continue",
+      }
+    : latestMix
+      ? {
+          eyebrow: "DJ mix",
+          title: latestMix.name,
+          detail: `${latestMix.trackCount} tracks · ~${Math.max(1, Math.round(latestMix.durationMs / 60_000))} min`,
+          status: mixStatus(latestMix.status),
+          tone: mixTone(latestMix.status),
+          href: latestMix.href,
+          actionLabel: "Continue",
+        }
+      : latestTrack
+        ? {
+            eyebrow: "Track",
+            title: latestTrack.title,
+            detail: latestTrack.status.replaceAll("_", " "),
+            status: "Music",
+            tone: "neutral" as const,
+            href: href(`/studio/music/${latestTrack.id}`),
+            actionLabel: "Open",
+          }
+        : null;
+  const primaryTodayTask = topDecision || !primaryContinue
+    ? { kind: "priority" as const }
+    : { kind: "continue" as const, item: primaryContinue };
   const launcherSuggestions: CommandPaletteSuggestion[] = [];
   if (topDecision) launcherSuggestions.push({
     label: topDecision.title,
@@ -164,6 +198,34 @@ export default async function TodayPage() {
     href: href("/studio/music?view=add"),
   });
 
+  const priorityHero = (
+    <PriorityHero
+      eyebrow={topDecision
+        ? "Needs You"
+        : primaryMission
+          ? primaryMission.kind === "release" && activeRelease
+            ? `${activeRelease.title} · ${primaryMission.label}`
+            : `Primary plan · ${primaryMission.label}`
+          : handsOff
+            ? "Manager mode"
+            : "Recommended next move"}
+      title={heroTitle}
+      description={heroDetail}
+      status={heroStatus}
+      tone={heroTone}
+      actions={<>
+        <Link className="button primary" href={heroPrimary.href}>{heroPrimary.label}</Link>
+        {topDecision
+          ? remainingDecisions.length
+            ? <Link href="#ensemblis-handling">{remainingDecisions.length} more decision{remainingDecisions.length === 1 ? "" : "s"}</Link>
+            : <Link href={href("/studio/needs-you")}>Decision history</Link>
+          : primaryMission?.kind === "release" && activeRelease
+            ? <Link href={href(`/studio/releases/${activeRelease.id}`)}>View release plan</Link>
+            : <Link href={href("/studio/growth/strategy")}>Why this strategy?</Link>}
+      </>}
+    />
+  );
+
   return (
     <Page className="ensemblis-today-page">
       <PageHeader
@@ -174,15 +236,41 @@ export default async function TodayPage() {
 
       <CommandPalette artistId={artist.artistId} variant="launcher" suggestions={launcherSuggestions} />
 
-      {continueCount ? (
-        <section className="today-v4-continue" aria-labelledby="today-v4-continue-heading">
+      {primaryTodayTask.kind === "continue" ? (
+        <section className="today-human-factors-primary today-v4-continue" aria-labelledby="today-primary-task-heading">
           <SectionHeading
-            id="today-v4-continue-heading"
+            id="today-primary-task-heading"
             eyebrow="Pick up where you left off"
             title="Continue"
             compact
           />
-          <div className="en-continue-grid">
+          <ContinueWidget
+            eyebrow={primaryTodayTask.item.eyebrow}
+            title={primaryTodayTask.item.title}
+            detail={primaryTodayTask.item.detail}
+            status={primaryTodayTask.item.status}
+            tone={primaryTodayTask.item.tone}
+            href={primaryTodayTask.item.href}
+            actionLabel={primaryTodayTask.item.actionLabel}
+          />
+        </section>
+      ) : (
+        <div className="today-human-factors-primary">{priorityHero}</div>
+      )}
+
+      {primaryTodayTask.kind === "continue" ? (
+        <details className="today-human-factors-secondary">
+          <summary>
+            <span><strong>Other recommendation</strong><small>Open only if you want to compare it with the work already in progress.</small></span>
+          </summary>
+          <div className="today-human-factors-secondary-body">{priorityHero}</div>
+        </details>
+      ) : continueCount ? (
+        <details className="today-human-factors-secondary">
+          <summary>
+            <span><strong>Continue recent work</strong><small>Resume a release, track or mix without competing with today&apos;s priority.</small></span>
+          </summary>
+          <div className="today-human-factors-secondary-body en-continue-grid">
             {activeRelease ? (
               <ContinueWidget
                 eyebrow="Release plan"
@@ -191,6 +279,16 @@ export default async function TodayPage() {
                 status={primaryMission?.label || "Active"}
                 tone={primaryMission?.status === "blocked" ? "danger" : primaryMission?.status === "needs_attention" ? "attention" : "accent"}
                 href={href(`/studio/releases/${activeRelease.id}`)}
+              />
+            ) : null}
+            {latestMix ? (
+              <ContinueWidget
+                eyebrow="DJ mix"
+                title={latestMix.name}
+                detail={`${latestMix.trackCount} tracks · ~${Math.max(1, Math.round(latestMix.durationMs / 60_000))} min`}
+                status={mixStatus(latestMix.status)}
+                tone={mixTone(latestMix.status)}
+                href={latestMix.href}
               />
             ) : null}
             {latestTrack ? (
@@ -204,45 +302,9 @@ export default async function TodayPage() {
                 actionLabel="Open"
               />
             ) : null}
-            {latestMix ? (
-              <ContinueWidget
-                eyebrow="DJ mix"
-                title={latestMix.name}
-                detail={`${latestMix.trackCount} tracks · ~${Math.max(1, Math.round(latestMix.durationMs / 60_000))} min`}
-                status={mixStatus(latestMix.status)}
-                tone={mixTone(latestMix.status)}
-                href={latestMix.href}
-              />
-            ) : null}
           </div>
-        </section>
+        </details>
       ) : null}
-
-      <PriorityHero
-        eyebrow={topDecision
-          ? "Needs You"
-          : primaryMission
-            ? primaryMission.kind === "release" && activeRelease
-              ? `${activeRelease.title} · ${primaryMission.label}`
-              : `Primary plan · ${primaryMission.label}`
-            : handsOff
-              ? "Manager mode"
-              : "Recommended next move"}
-        title={heroTitle}
-        description={heroDetail}
-        status={heroStatus}
-        tone={heroTone}
-        actions={<>
-          <Link className="button primary" href={heroPrimary.href}>{heroPrimary.label}</Link>
-          {topDecision
-            ? remainingDecisions.length
-              ? <Link href="#ensemblis-handling">{remainingDecisions.length} more decision{remainingDecisions.length === 1 ? "" : "s"}</Link>
-              : <Link href={href("/studio/needs-you")}>Decision history</Link>
-            : primaryMission?.kind === "release" && activeRelease
-              ? <Link href={href(`/studio/releases/${activeRelease.id}`)}>View release plan</Link>
-              : <Link href={href("/studio/growth/strategy")}>Why this strategy?</Link>}
-        </>}
-      />
 
       <details className="today-v3-context" id="ensemblis-handling">
         <summary>

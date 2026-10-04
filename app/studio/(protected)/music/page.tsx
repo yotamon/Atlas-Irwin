@@ -4,6 +4,7 @@ import { MixLibrary } from "@/components/studio/mix-library";
 import { MusicGenerator } from "@/components/studio/music-generator";
 import { MusicLibraryNav } from "@/components/studio/music-library-nav";
 import { MusicWorkspaceOverview } from "@/components/studio/music-workspace-overview";
+import { CompactEvidence } from "@/components/studio/ux-v4-widgets";
 import { PageHeader, Status } from "@/components/studio/ui";
 import { loadArtistOperatingContext } from "@/lib/artist-operating/server";
 import { requireStudioAdmin } from "@/lib/auth/studio";
@@ -56,9 +57,7 @@ export default async function MusicPage({
       <div className="studio-v2-page music-workspace-page">
         <PageHeader
           title="Add music"
-          description={aiMusicAllowed
-            ? `Start with the actual music for ${artist.artistName}. Bring in an existing master or release first; AI generation is available only because this artist explicitly allows it.`
-            : `Start with the actual music for ${artist.artistName}. Bring in the existing master or release; Ensemblis will work from the artist's real source material.`}
+          description="Add the music Ensemblis should work from."
           action={<Link className="button" href={href("/studio/music")}>Back to music</Link>}
         />
 
@@ -68,7 +67,7 @@ export default async function MusicPage({
             <span className="create-intent-copy">
               <small>Existing music</small>
               <strong>Add a mastered track</strong>
-              <span>Upload the real master. Ensemblis will begin understanding its structure and strongest sections automatically.</span>
+              <span>Upload the master. Analysis starts automatically.</span>
             </span>
             <b>Add master →</b>
           </Link>
@@ -78,7 +77,7 @@ export default async function MusicPage({
             <span className="create-intent-copy">
               <small>Catalog</small>
               <strong>Add or prepare a release</strong>
-              <span>Create the canonical release collection and keep every track, master, metadata, artwork, distribution, campaign and outcome connected.</span>
+              <span>Create the release and connect its tracks, artwork and release details.</span>
             </span>
             <b>Add release →</b>
           </Link>
@@ -88,19 +87,16 @@ export default async function MusicPage({
             <span className="create-intent-copy">
               <small>Optional AI music</small>
               <strong>Create something new</strong>
-              <span>Generate a musical draft only when that is part of this artist&apos;s chosen creative process. Technical generation settings stay secondary to the idea.</span>
+              <span>Generate a draft when AI music is part of this artist&apos;s process.</span>
             </span>
             <b>Create music →</b>
           </Link> : null}
         </section>
 
-        <aside className="create-next-action-callout">
-          <div>
-            <span className="section-label">Ensemblis principle</span>
-            <strong>The song comes before the marketing workflow.</strong>
-            <p>Once a real master exists, Ensemblis can analyze it, find useful sections and use that evidence throughout release, creative and growth decisions.</p>
-          </div>
-        </aside>
+        <CompactEvidence label="How Ensemblis uses your source">
+          <p>Once a master exists, Ensemblis can analyze it and reuse that musical evidence across release, creative and growth decisions.</p>
+          {aiMusicAllowed ? <p>AI generation stays optional and never replaces the artist&apos;s real source material by default.</p> : null}
+        </CompactEvidence>
       </div>
     );
   }
