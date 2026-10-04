@@ -27,7 +27,9 @@ A signing-key rotation is an explicit trust event. Existing desktop installation
 
 Studio v1 is represented by a perpetual major-version activation. Activation is enforced server-side under a row lock and permits at most three active devices for an owner/major-version pair. Reissuing a license for an already activated device is idempotent and does not consume another slot.
 
-The signed claims contain short-lived online/account capabilities and perpetual local capabilities. Every actively paired desktop receives `local.processing` in its short-lived signed online entitlement because the desktop bridge itself is the trusted execution boundary for base local DSP. A verified Studio perpetual activation preserves `local.processing` offline and additionally grants `local.advanced_models` online and offline. Processor code never checks `studio_perpetual_v1` directly; it checks the required capability.
+Base local DSP is part of the installed Local Engine and remains available whenever the bundled sidecar runtime is healthy, even if the cloud entitlement service is temporarily unavailable. Signed entitlements govern optional premium capabilities rather than acting as a kill switch for core local analysis.
+
+The server still includes `local.processing` in short-lived online claims for routing/telemetry consistency. A verified Studio perpetual activation preserves that capability offline and additionally grants `local.advanced_models` online and offline. Processor code never checks `studio_perpetual_v1` directly; premium features check their required capability.
 
 ## Issuing a license
 
