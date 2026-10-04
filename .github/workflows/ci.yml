@@ -56,6 +56,26 @@ jobs:
         continue-on-error: true
         run: node --test tests/studio-v2-contract.test.mjs tests/studio-v2-workflow.test.mjs
 
+      - name: Diagnose Studio batch 1
+        continue-on-error: true
+        run: node --test tests/ai-control-plane.test.mjs tests/ai-provider-presets.test.mjs tests/architecture-boundaries.test.mjs tests/artist-first-onboarding.test.mjs tests/artist-memory-consumers.test.mjs tests/artist-operating-system-contract.test.mjs tests/artist-scope-contract.test.mjs tests/audio-metadata-ready.test.mjs tests/automix-design-contract.test.mjs tests/automix-durable-recovery.test.mjs tests/automix-production-hardening-contract.test.mjs tests/automix-set-intelligence-contract.test.mjs tests/automix-terminal-callback-contract.test.mjs tests/autonomous-marketing.test.mjs tests/autonomy-contracts.test.mjs tests/content-factory-runtime.test.mjs tests/creative-memory-contract.test.mjs tests/creative-production-os.test.mjs tests/decision-language-contract.test.mjs tests/distribution-artist-scope.test.mjs
+
+      - name: Diagnose Studio batch 2
+        continue-on-error: true
+        run: node --test tests/distribution-corrections.test.mjs tests/distribution-last-mile-contract.test.mjs tests/distribution-os.test.mjs tests/dj-intelligence-reset.test.mjs tests/dj-library-phase-6-contract.test.mjs tests/dj-library-phase-7-rekordbox.test.mjs tests/dj-library-phase-8-bridge.test.mjs tests/dj-library-phase-8-windows-icon.test.mjs tests/dj-library-phase-9-contract.test.mjs tests/durable-background-execution.test.mjs tests/ensemblis-design-system-contract.test.mjs tests/ensemblis-entry-contract.test.mjs tests/ensemblis-form-system-contract.test.mjs tests/ensemblis-intent-resolution.test.mjs tests/ensemblis-mission-contract.test.mjs tests/ensemblis-sites-contract.test.mjs tests/ensemblis-sites-refresh-contract.test.mjs tests/ensemblis-sites-routing-contract.test.mjs tests/ensemblis-sites-url-safety.test.mjs tests/ensemblis-ux-human-factors.test.mjs
+
+      - name: Diagnose Studio batch 3
+        continue-on-error: true
+        run: node --test tests/ensemblis-ux-polish-contract.test.mjs tests/ensemblis-ux-v5-contract.test.mjs tests/ensemblis-visual-contract.test.mjs tests/evidence-first-create.test.mjs tests/fan-graph-contract.test.mjs tests/invisible-complexity-foundation.test.mjs tests/library-bridge-platform-core.test.mjs tests/local-first-native-contract.test.mjs tests/local-first-platform.test.mjs tests/lyrics-intelligence.test.mjs tests/lyrics-timing.test.mjs tests/marketing-creative-lineage.test.mjs tests/marketing-intelligence-v2.test.mjs tests/marketing-return-path.test.mjs tests/master-readiness-experience.test.mjs tests/mastering-v2.test.mjs tests/media-worker-bootstrap-contract.test.mjs tests/media-worker-ci-contract.test.mjs tests/media-worker-contract-v1.test.mjs tests/media-worker-snapshot-cleanup.test.mjs
+
+      - name: Diagnose Studio batch 4
+        continue-on-error: true
+        run: node --test tests/media-worker-snapshot-retention.test.mjs tests/migration-history-guard.test.mjs tests/moment-calibration-contract.test.mjs tests/moments-v2-curation.test.mjs tests/music-ingestion-contract.test.mjs tests/music-ingestion-pipeline-contract.test.mjs tests/music-ingestion-recovery-contract.test.mjs tests/music-intelligence-sentinel.test.mjs tests/music-intelligence.test.mjs tests/music-release-track-lineage.test.mjs tests/needs-you-canonical-contract.test.mjs tests/outcome-first-create.test.mjs tests/paid-growth-contract.test.mjs tests/platform-foundation.test.mjs tests/product-quality-program.test.mjs tests/production-recovery.test.mjs tests/project-sync-server-contract.test.mjs tests/public-catalog-artist-scope.test.mjs tests/quick-video-contract.test.mjs tests/quick-video-social-delivery-contract.test.mjs
+
+      - name: Diagnose Studio batch 5
+        continue-on-error: true
+        run: node --test tests/release-detail-resilience.test.mjs tests/resumable-upload-recovery.test.mjs tests/smart-links-attribution.test.mjs tests/social-channel-planning.test.mjs tests/stem-intelligence.test.mjs tests/strongest-moments-context.test.mjs tests/studio-product-lifecycle.test.mjs tests/studio-ui-system.test.mjs tests/studio-v2-contract.test.mjs tests/studio-v2-workflow.test.mjs tests/track-analysis-design-contract.test.mjs tests/track-intelligence-recovery-contract.test.mjs tests/vercel-build-budget.test.mjs tests/vercel-ignore-build.test.mjs tests/video-director-editor-state.test.mjs tests/video-director-editor.test.mjs tests/video-director-media-palette.test.mjs tests/video-director-media-scope.test.mjs tests/visual-brand-dna-contract.test.mjs
+
       - name: Verify Studio product contracts
         run: npm run test:studio
 
