@@ -185,3 +185,30 @@ test("mobile keeps the primary task action reachable and workflow progress compa
   assert.match(accessibility, /@media \(pointer: coarse\)[\s\S]*min-height:\s*var\(--en-control-lg\)/);
   assert.match(accessibility, /@media \(prefers-reduced-motion: reduce\)/);
 });
+
+
+test("friction telemetry stays categorical and covers the recovery signals", async () => {
+  const client = await source("lib/studio/ux-telemetry-client.ts");
+  const telemetry = await source("components/studio/ux-telemetry.tsx");
+  const endpoint = await source("app/api/studio/ux-event/route.ts");
+
+  for (const event of [
+    "recommendation_bypass",
+    "navigation_recovery",
+    "workflow_stage",
+    "advanced_detail_dependency",
+  ]) {
+    assert.ok(client.includes(`"${event}"`), `client must expose ${event}`);
+    assert.ok(endpoint.includes(`"${event}"`), `endpoint must accept ${event}`);
+  }
+
+  assert.match(telemetry, /data-workflow-stage/);
+  assert.match(telemetry, /before_primary_action/);
+  assert.match(telemetry, /alternate_action/);
+  assert.match(telemetry, /launcher_opened/);
+
+  for (const forbidden of ["rawQuery", "creativeText", "trackTitle", "promptText"]) {
+    assert.equal(endpoint.includes(forbidden), false, `telemetry must not accept ${forbidden}`);
+    assert.equal(client.includes(forbidden), false, `client must not expose ${forbidden}`);
+  }
+});
