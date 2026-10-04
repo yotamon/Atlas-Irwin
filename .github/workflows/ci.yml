@@ -32,6 +32,30 @@ jobs:
         timeout-minutes: 8
         run: npm ci --no-audit --fetch-retries=2 --fetch-timeout=60000 --fetch-retry-mintimeout=1000 --fetch-retry-maxtimeout=5000
 
+      - name: Diagnose human-factors contract
+        continue-on-error: true
+        run: node --test tests/ensemblis-ux-human-factors.test.mjs
+
+      - name: Diagnose V5 UX contract
+        continue-on-error: true
+        run: node --test tests/ensemblis-ux-v5-contract.test.mjs
+
+      - name: Diagnose UX polish contract
+        continue-on-error: true
+        run: node --test tests/ensemblis-ux-polish-contract.test.mjs
+
+      - name: Diagnose Create contract
+        continue-on-error: true
+        run: node --test tests/outcome-first-create.test.mjs tests/evidence-first-create.test.mjs
+
+      - name: Diagnose Today contracts
+        continue-on-error: true
+        run: node --test tests/artist-operating-system-contract.test.mjs tests/studio-product-lifecycle.test.mjs
+
+      - name: Diagnose Studio V2 contract
+        continue-on-error: true
+        run: node --test tests/studio-v2-contract.test.mjs tests/studio-v2-workflow.test.mjs
+
       - name: Verify Studio product contracts
         run: npm run test:studio
 
