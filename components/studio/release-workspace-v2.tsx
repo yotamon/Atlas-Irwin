@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { MediaUploader } from "@/components/studio/media-uploader";
 import { ObjectHeader } from "@/components/studio/object-header";
-import { ObjectActionBar, type ObjectAction } from "@/components/studio/ux-v4-widgets";
+
 import { ReleaseForm } from "@/components/studio/release-form";
 import { ReleaseTracklist } from "@/components/studio/release-tracklist";
 import { ReleaseMasteringCoherence } from "@/components/studio/release-mastering-coherence";
@@ -85,14 +85,6 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
   });
   const missionAttention = [...mission.blockers, ...mission.recommendations];
   const nextMissionItem = missionAttention[0] ?? mission.optional[0] ?? null;
-  const createHref = href(`/studio/create?release=${release.id}`);
-  const releaseActions: ObjectAction[] = [
-    nextMissionItem
-      ? { label: nextMissionItem.title, href: href(nextMissionItem.href), primary: true }
-      : { label: "Create next asset", href: createHref, primary: true },
-    ...(nextMissionItem?.href === `/studio/create?release=${release.id}` ? [] : [{ label: "Create", href: createHref }]),
-    { label: "Promotion", href: href(`/studio/releases/${release.id}?stage=promotion`) },
-  ];
   const streams = total(metrics, "streams");
   const listeners = total(metrics, "listeners");
   const saves = total(metrics, "saves");
@@ -114,7 +106,6 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
       subtitle={`${release.release_type} · ${shortDate(release.release_date)}`}
       imageUrl={release.artwork_url}
       imageAlt={release.cover_alt || `${release.title} artwork`}
-      actions={<ObjectActionBar actions={releaseActions} />}
       facts={[
         { label: "Release plan", value: mission.label },
         { label: "Needs attention", value: missionAttention.length },
@@ -125,39 +116,51 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
     />
 
     {activeStage === "overview" ? <div className="release-mission-overview">
-      <section className="release-mission-hero" data-status={mission.status}>
+      <section className="release-mission-hero release-human-factors-recommendation" data-status={mission.status}>
         <div>
           <span className="section-label">Release plan</span>
-          <h2>{mission.status === "blocked" ? "This release needs one thing before Ensemblis can move it forward" : mission.status === "needs_attention" ? "This release is moving. A few useful decisions remain." : "This release is on track"}</h2>
+          <h2>{mission.status === "blocked" ? "This release needs one thing before Ensemblis can move it forward" : mission.status === "needs_attention" ? "This release is moving. A useful decision remains." : "This release is on track"}</h2>
           <p>{mission.summary}</p>
         </div>
         {nextMissionItem ? <Link className="button primary" href={href(nextMissionItem.href)}>{nextMissionItem.title}</Link> : <Link className="button primary" href={href(`/studio/create?release=${release.id}`)}>Create next asset</Link>}
       </section>
 
-      <section className="release-mission-checklist" aria-label="Release readiness">
-        <div><span className={hasMasterAudio ? "is-ready" : ""} aria-hidden>●</span><strong>Music</strong><small>{tracks.length ? `${mastersReady}/${tracks.length} masters ready` : "Tracks needed"}</small></div>
-        <div><span className={release.artwork_url || release.cover_asset ? "is-ready" : ""} aria-hidden>●</span><strong>Identity</strong><small>{release.artwork_url || release.cover_asset ? "Artwork ready" : "Artwork needed"}</small></div>
-        <div><span className={campaign ? "is-ready" : ""} aria-hidden>●</span><strong>Promotion</strong><small>{campaign ? "Plan active" : "Plan preparing"}</small></div>
-        <div><span className={release.smart_link_url || release.spotify_url || release.soundcloud_url || release.youtube_url ? "is-ready" : ""} aria-hidden>●</span><strong>Listening</strong><small>{release.smart_link_url || release.spotify_url || release.soundcloud_url || release.youtube_url ? "Destination ready" : "Destination needed"}</small></div>
+      <section className="release-human-factors-blockers" aria-labelledby="release-blockers-heading">
+        <div className="v2-section-heading compact">
+          <div><span className="section-label">Needs attention</span><h2 id="release-blockers-heading">{missionAttention.length ? "Only what can change the release" : "No release decision is waiting"}</h2></div>
+          {missionAttention.length ? <span className="v2-count has-items">{missionAttention.length}</span> : null}
+        </div>
+        {missionAttention.length ? <div className="v2-inbox">{missionAttention.map((item) => <Link className="v2-inbox-item" href={href(item.href)} key={item.key}><div><strong>{item.title}</strong><small>{item.detail}</small></div><b aria-hidden>→</b></Link>)}</div>
+          : <div className="v2-calm-state compact"><strong>Ensemblis can keep moving.</strong><p>The music, identity and operating context are coherent enough for the current lifecycle stage.</p></div>}
+        {!release.artwork_url && !release.cover_asset ? <details className="v2-advanced-disclosure release-human-factors-blocker-action" id="cover-upload" open={nextMissionItem?.href === "#cover-upload" || undefined}><summary>Add cover artwork</summary><MediaUploader releaseId={release.id} artistId={artistId} defaultRole="cover" /></details> : null}
       </section>
 
-      {missionAttention.length ? <section className="today-v3-section">
-        <div className="v2-section-heading compact"><div><span className="section-label">Next decisions</span><h2>Only what can change the release</h2></div><span className="v2-count has-items">{missionAttention.length}</span></div>
-        <div className="v2-inbox">{missionAttention.map((item) => <Link className="v2-inbox-item" href={href(item.href)} key={item.key}><div><strong>{item.title}</strong><small>{item.detail}</small></div><b aria-hidden>→</b></Link>)}</div>
-      </section> : <div className="v2-calm-state compact"><strong>No release decision is waiting.</strong><p>Ensemblis has enough coherent music, release identity and operating context to keep moving.</p></div>}
+      <section className="release-human-factors-readiness" aria-labelledby="release-readiness-heading">
+        <div className="v2-section-heading compact">
+          <div><span className="section-label">Readiness</span><h2 id="release-readiness-heading">Music, identity, promotion and listening path</h2></div>
+        </div>
+        <div className="release-mission-checklist" aria-label="Release readiness">
+          <div><span className={hasMasterAudio ? "is-ready" : ""} aria-hidden>●</span><strong>Music</strong><small>{tracks.length ? `${mastersReady}/${tracks.length} masters ready` : "Tracks needed"}</small></div>
+          <div><span className={release.artwork_url || release.cover_asset ? "is-ready" : ""} aria-hidden>●</span><strong>Identity</strong><small>{release.artwork_url || release.cover_asset ? "Artwork ready" : "Artwork needed"}</small></div>
+          <div><span className={campaign ? "is-ready" : ""} aria-hidden>●</span><strong>Promotion</strong><small>{campaign ? "Plan active" : "Plan preparing"}</small></div>
+          <div><span className={release.smart_link_url || release.spotify_url || release.soundcloud_url || release.youtube_url ? "is-ready" : ""} aria-hidden>●</span><strong>Listening</strong><small>{release.smart_link_url || release.spotify_url || release.soundcloud_url || release.youtube_url ? "Destination ready" : "Destination needed"}</small></div>
+        </div>
 
-      <ReleaseTracklist releaseId={release.id} artistId={artistId} tracks={tracks} vaultTracks={vaultTracks} />
-      <ReleaseMasteringCoherence artistId={artistId} tracks={tracks} vaultTracks={vaultTracks} />
+        <details className="v2-advanced-disclosure release-human-factors-details">
+          <summary>Music & mastering details</summary>
+          <p className="v2-muted-copy">Open the track list or sequence checks only when you need to work on the underlying masters.</p>
+          <ReleaseTracklist releaseId={release.id} artistId={artistId} tracks={tracks} vaultTracks={vaultTracks} />
+          <ReleaseMasteringCoherence artistId={artistId} tracks={tracks} vaultTracks={vaultTracks} />
+        </details>
+      </section>
 
-      {!release.artwork_url && !release.cover_asset ? <section className="v2-section" id="cover-upload"><div className="v2-section-heading"><div><span className="section-label">Release identity</span><h2>Add the cover artwork</h2></div></div><MediaUploader releaseId={release.id} artistId={artistId} defaultRole="cover" /></section> : null}
-
-      <details className="v2-advanced-disclosure release-source-details" id="release-details">
+      <details className="v2-advanced-disclosure release-source-details release-human-factors-details" id="release-details">
         <summary>Release details</summary>
         <p className="v2-muted-copy">Canonical facts Ensemblis uses across distribution, content and promotion.</p>
         <ReleaseForm release={release} releaseDateLocked={releaseDateLocked} artistId={artistId} />
       </details>
 
-      <details className="v2-advanced-disclosure release-specialist-tools">
+      <details className="v2-advanced-disclosure release-specialist-tools release-human-factors-details">
         <summary>Advanced view · specialist tools</summary>
         <p className="v2-muted-copy">Legacy migration, exceptional platform controls and debugging tools. Normal release work should not require this workspace.</p>
         <Link className="button" href={href(`/studio/releases/${release.id}?view=advanced`)}>Open specialist workspace</Link>
