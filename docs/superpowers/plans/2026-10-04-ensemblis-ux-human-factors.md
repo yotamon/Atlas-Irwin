@@ -1,6 +1,6 @@
 # Ensemblis UX Human-Factors Recovery Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Make the existing Ensemblis UX V5 architecture perceptually simple in real use by reducing visible choice, staging multi-step work, and enforcing one obvious next action across the core artist journeys.
 
@@ -47,13 +47,13 @@
 - Consumes: existing V5 canonical journeys and authenticated Studio E2E login contract.
 - Produces: semantic UX assertions and a screenshot-backed baseline audit for the ten canonical journeys.
 
-- [ ] **Step 1: Write failing semantic contract tests**
+- [x] **Step 1: Write failing semantic contract tests**
 
 Add tests that assert the implementation has a single shared action-hierarchy primitive, core default surfaces expose an explicit ranked recommendation/state contract, advanced detail is routed through `ContextInspector` / `CompactEvidence`, and specialist routes remain outside primary navigation.
 
 Do not assert raw counts of arbitrary DOM elements. Assert named component contracts and default/advanced ownership.
 
-- [ ] **Step 2: Run the focused contract and verify it fails**
+- [x] **Step 2: Run the focused contract and verify it fails**
 
 Run:
 
@@ -63,7 +63,7 @@ node --test tests/ensemblis-ux-human-factors.test.mjs
 
 Expected: FAIL because the new shared human-factors contracts do not exist yet.
 
-- [ ] **Step 3: Extend authenticated Playwright acceptance with audit checkpoints**
+- [x] **Step 3: Extend authenticated Playwright acceptance with audit checkpoints**
 
 In `e2e/ensemblis-ux-v5.spec.mjs`, add named checkpoints for:
 
@@ -100,7 +100,7 @@ For each canonical journey record:
 
 Rank findings P0/P1/P2 and use them to confirm the implementation order below.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add tests/ensemblis-ux-human-factors.test.mjs e2e/ensemblis-ux-v5.spec.mjs docs/ensemblis-ux-human-factors-audit.md
@@ -128,7 +128,7 @@ git commit -m "test: establish Ensemblis human-factors baseline"
 - Consumes: `ObjectActionBar`, `ObjectStateSummary`, `NextActionWidget`, `ContextInspector`.
 - Produces: `ObjectActionBar` contract that accepts one explicit primary action and at most two visible secondary actions, with remaining actions supplied through `more`.
 
-- [ ] **Step 1: Add failing Track/action hierarchy assertions**
+- [x] **Step 1: Add failing Track/action hierarchy assertions**
 
 Assert that the Track default composition is ordered as:
 
@@ -138,7 +138,7 @@ Assert detailed mastering/stems/lyrics/engineering content is owned by explicit 
 
 Assert the action bar fails its own development contract when callers attempt multiple primary actions.
 
-- [ ] **Step 2: Run focused tests and verify failure**
+- [x] **Step 2: Run focused tests and verify failure**
 
 ```bash
 node --test tests/ensemblis-ux-human-factors.test.mjs tests/ensemblis-ux-v5-contract.test.mjs tests/track-analysis-design-contract.test.mjs
@@ -146,7 +146,7 @@ node --test tests/ensemblis-ux-human-factors.test.mjs tests/ensemblis-ux-v5-cont
 
 Expected: FAIL on the new hierarchy assertions.
 
-- [ ] **Step 3: Harden `ObjectActionBar`**
+- [x] **Step 3: Harden `ObjectActionBar`**
 
 Keep the public type small:
 
@@ -162,7 +162,7 @@ Normalize rendering so exactly one item may be visually primary. Keep at most tw
 
 Do not silently hide safety-critical choices.
 
-- [ ] **Step 4: Recompose the Track page**
+- [x] **Step 4: Recompose the Track page**
 
 Make the default Track path operational:
 
@@ -178,13 +178,13 @@ Move deep analysis, stems, lyrics, mastering engineering evidence, provenance/pr
 
 Keep analysis recovery visible only when recovery is actually needed.
 
-- [ ] **Step 5: Tighten Track visual hierarchy**
+- [x] **Step 5: Tighten Track visual hierarchy**
 
 Use existing design-system tokens. Reduce competing borders/status pills and give the ranked next action more weight than evidence or secondary capability.
 
 Do not create a new standalone stylesheet unless the existing design-system files cannot express the contract cleanly.
 
-- [ ] **Step 6: Run focused tests**
+- [x] **Step 6: Run focused tests**
 
 ```bash
 node --test tests/ensemblis-ux-human-factors.test.mjs tests/ensemblis-ux-v5-contract.test.mjs tests/track-analysis-design-contract.test.mjs tests/ensemblis-ux-polish-contract.test.mjs
@@ -192,7 +192,7 @@ node --test tests/ensemblis-ux-human-factors.test.mjs tests/ensemblis-ux-v5-cont
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add components/studio/ux-v4-widgets.tsx components/studio/patterns.tsx components/studio/object-header.tsx app/studio/'(protected)'/music/'[id]'/page.tsx app/studio/design-system/patterns.css app/studio/design-system/workflows.css app/studio/design-system/ux-hardening.css tests
@@ -219,7 +219,7 @@ git commit -m "feat: simplify Track decision surface"
 - Consumes: existing readiness derivation, Active Mastering state, `WorkflowStepper`, `ContextInspector`.
 - Produces: one visible mastering stage at a time: source check → recommendation → processing → A/B review → decision → result.
 
-- [ ] **Step 1: Write failing workflow-state tests**
+- [x] **Step 1: Write failing workflow-state tests**
 
 Assert that:
 
@@ -230,13 +230,13 @@ Assert that:
 - engineering criteria remain behind explicit technical detail;
 - Keep original / Approve / Revise are shown only in the review decision stage.
 
-- [ ] **Step 2: Run focused tests and verify failure**
+- [x] **Step 2: Run focused tests and verify failure**
 
 ```bash
 node --test tests/master-readiness-experience.test.mjs tests/mastering-v2.test.mjs tests/ensemblis-ux-human-factors.test.mjs
 ```
 
-- [ ] **Step 3: Introduce one canonical mastering stage resolver**
+- [x] **Step 3: Introduce one canonical mastering stage resolver**
 
 Keep it UI-local and derived from canonical mastering/readiness state; do not persist a new workflow state.
 
@@ -248,19 +248,19 @@ type MasteringStage = "source" | "recommendation" | "processing" | "review" | "r
 
 The resolver must not override domain safety results.
 
-- [ ] **Step 4: Recompose the mastering panel around the current stage**
+- [x] **Step 4: Recompose the mastering panel around the current stage**
 
 Show one primary task per stage. Keep source identity visible. Keep background processing resumable. Put references, engineering evidence, processor telemetry and detailed QA inside explicit inspectors.
 
-- [ ] **Step 5: Preserve source-defect truthfulness**
+- [x] **Step 5: Preserve source-defect truthfulness**
 
 Keep the existing rule that digital clipping/source repair blockers cannot be presented as fixable by mastering. Preserve streaming-safe source-preserving behavior.
 
-- [ ] **Step 6: Run focused tests**
+- [x] **Step 6: Run focused tests**
 
 Same command as Step 2. Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add components/studio/active-mastering-* components/studio/master-readiness-card.tsx components/studio/mastering-* app/studio/design-system/workflows.css tests
@@ -286,7 +286,7 @@ git commit -m "feat: stage the mastering experience"
 - Consumes: existing strategy recommendation, opportunities, active work, audience/performance data.
 - Produces: one default Grow recommendation surface with supporting evidence and specialist views secondary.
 
-- [ ] **Step 1: Add failing Grow contract assertions**
+- [x] **Step 1: Add failing Grow contract assertions**
 
 Assert default Grow has:
 
@@ -298,27 +298,27 @@ Assert default Grow has:
 
 Assert strategy settings, release ordering, raw audience/performance inventory, and paid-test machinery are not peer sections on the default screen.
 
-- [ ] **Step 2: Run focused tests and verify failure**
+- [x] **Step 2: Run focused tests and verify failure**
 
 ```bash
 node --test tests/ensemblis-ux-v5-contract.test.mjs tests/paid-growth-contract.test.mjs tests/ensemblis-ux-human-factors.test.mjs
 ```
 
-- [ ] **Step 3: Recompose `growth/page.tsx`**
+- [x] **Step 3: Recompose `growth/page.tsx`**
 
 Keep the top recommendation authoritative. Move detailed audience/performance evidence behind contextual detail or focused secondary routes. Keep “work already moving” visible only when it helps the user understand progress.
 
 When no recommendation is available, render a calm state instead of a generic CTA.
 
-- [ ] **Step 4: Make secondary Growth routes intentional**
+- [x] **Step 4: Make secondary Growth routes intentional**
 
 `/growth/strategy` and `/growth/paid` remain reachable from relevant context but must not read as required navigation for understanding the default recommendation.
 
-- [ ] **Step 5: Run focused tests**
+- [x] **Step 5: Run focused tests**
 
 Same command as Step 2. Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app/studio/'(protected)'/growth components/studio/patterns.tsx app/studio/design-system tests
@@ -345,7 +345,7 @@ git commit -m "feat: make Grow recommendation-first"
 - Consumes: canonical release snapshot, mission, tracks, content, campaign, distribution and result data.
 - Produces: persistent release identity/state/next action plus single-job facets.
 
-- [ ] **Step 1: Write failing release composition tests**
+- [x] **Step 1: Write failing release composition tests**
 
 Assert Overview exposes:
 
@@ -357,25 +357,25 @@ Assert Overview exposes:
 
 Assert Creative, Promotion, Distribution and Results each render one coherent job and do not duplicate Overview machinery.
 
-- [ ] **Step 2: Run focused tests and verify failure**
+- [x] **Step 2: Run focused tests and verify failure**
 
 ```bash
 node --test tests/ensemblis-ux-v5-contract.test.mjs tests/release-detail-resilience.test.mjs tests/ensemblis-ux-human-factors.test.mjs
 ```
 
-- [ ] **Step 3: Recompose `ReleaseWorkspaceV2`**
+- [x] **Step 3: Recompose `ReleaseWorkspaceV2`**
 
 Keep the release header/lifecycle context persistent. Replace the current multi-module default composition with the Overview contract. Move mastering coherence, creative inventories, provider metadata and historical/result detail into the facet that owns the job or an advanced inspector.
 
-- [ ] **Step 4: Preserve resilience boundaries**
+- [x] **Step 4: Preserve resilience boundaries**
 
 Do not make optional enrichment failures block canonical release access. Keep the current safe behavior in `lib/studio/release-workspace.ts` unchanged unless tests prove a UI contract requires a loader adjustment.
 
-- [ ] **Step 5: Run focused tests**
+- [x] **Step 5: Run focused tests**
 
 Same command as Step 2. Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add components/studio/release-* app/studio/'(protected)'/releases/'[id]' app/studio/design-system tests
@@ -400,31 +400,31 @@ git commit -m "feat: simplify release lifecycle UX"
 - Consumes: existing Music → Intent → Build → Review → Render state and `WorkflowStepper`.
 - Produces: exactly one active stage body plus one advanced DJ tools disclosure.
 
-- [ ] **Step 1: Add failing AutoMix visibility assertions**
+- [x] **Step 1: Add failing AutoMix visibility assertions**
 
 Assert only the active stage is presented as the task body; completed/future stages are represented by the stepper, not simultaneous full panels.
 
 Assert resume state routes to the saved stage and failed render routes to recovery without losing mix context.
 
-- [ ] **Step 2: Run focused tests and verify failure**
+- [x] **Step 2: Run focused tests and verify failure**
 
 ```bash
 node --test tests/automix-design-contract.test.mjs tests/automix-durable-recovery.test.mjs tests/ensemblis-ux-human-factors.test.mjs
 ```
 
-- [ ] **Step 3: Recompose local and catalog builders**
+- [x] **Step 3: Recompose local and catalog builders**
 
 Keep the shared stage IDs `music | intent | build | review | render`. Render one stage body. Keep source/mix identity visible. Preserve existing job state and callbacks; do not create a new persisted stage model.
 
-- [ ] **Step 4: Consolidate advanced DJ tools**
+- [x] **Step 4: Consolidate advanced DJ tools**
 
 Keep DJ intelligence, Rekordbox/library bridge and specialist controls inside one intentional advanced disclosure; do not duplicate them inside normal stages.
 
-- [ ] **Step 5: Run focused tests**
+- [x] **Step 5: Run focused tests**
 
 Same command as Step 2. Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add components/studio/automix-* components/studio/set-builder-workspace.tsx components/studio/local-set-builder-workspace.tsx app/studio/design-system/workflows.css tests
@@ -451,7 +451,7 @@ git commit -m "feat: focus AutoMix stage by stage"
 - Consumes: operating snapshot, Music object collections, Create directions.
 - Produces: calmer default entry surfaces that prefer continuation over capability discovery.
 
-- [ ] **Step 1: Add failing entry-surface tests**
+- [x] **Step 1: Add failing entry-surface tests**
 
 Assert:
 
@@ -460,31 +460,31 @@ Assert:
 - Create visually identifies one best recommendation while keeping alternatives secondary;
 - all three render calm completion states when no action is needed.
 
-- [ ] **Step 2: Run focused tests and verify failure**
+- [x] **Step 2: Run focused tests and verify failure**
 
 ```bash
 node --test tests/ensemblis-ux-v5-contract.test.mjs tests/outcome-first-create.test.mjs tests/ensemblis-ux-human-factors.test.mjs
 ```
 
-- [ ] **Step 3: Rank Today**
+- [x] **Step 3: Rank Today**
 
 Derive one top-of-page task from existing `topDecision`, resumable work and mission state. Keep the other category secondary/collapsed rather than two equal hero blocks.
 
 Do not alter underlying operating-snapshot prioritization unless a real ranking conflict is proven.
 
-- [ ] **Step 4: Tighten Music Add**
+- [x] **Step 4: Tighten Music Add**
 
 Keep Existing music / Release / optional AI generation choices, but reduce explanatory prose to the consequence of each choice. Move policy explanation behind a concise contextual note/details entry.
 
-- [ ] **Step 5: Tighten Create**
+- [x] **Step 5: Tighten Create**
 
 Keep the outcome-first model and three bounded directions, but make rank 1 the obvious default. Alternative cards should read as alternatives, not equal recommendations.
 
-- [ ] **Step 6: Run focused tests**
+- [x] **Step 6: Run focused tests**
 
 Same command as Step 2. Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add app/studio/'(protected)'/page.tsx app/studio/'(protected)'/music app/studio/'(protected)'/create components/studio/music-workspace-overview.tsx app/studio/design-system tests
@@ -512,7 +512,7 @@ git commit -m "feat: compress Studio entry surfaces"
 - Consumes: all migrated journey components.
 - Produces: same mental model at narrow viewport, accessible advanced sheets, reachable primary actions.
 
-- [ ] **Step 1: Add failing mobile/accessibility assertions**
+- [x] **Step 1: Add failing mobile/accessibility assertions**
 
 Cover:
 
@@ -524,13 +524,13 @@ Cover:
 - no color-only state;
 - real tabs vs disclosure semantics.
 
-- [ ] **Step 2: Run focused tests and verify failure**
+- [x] **Step 2: Run focused tests and verify failure**
 
 ```bash
 node --test tests/ensemblis-ux-polish-contract.test.mjs tests/studio-ui-system.test.mjs tests/ensemblis-ux-human-factors.test.mjs
 ```
 
-- [ ] **Step 3: Consolidate responsive hierarchy**
+- [x] **Step 3: Consolidate responsive hierarchy**
 
 Avoid simply stacking every desktop block. On mobile:
 
@@ -549,7 +549,7 @@ npm run test:e2e:studio
 
 Expected: PASS with legitimate auth.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add components/studio/mobile-navigation.tsx components/studio/context-inspector.tsx components/studio/dialog.tsx app/studio/design-system tests e2e/ensemblis-ux-v5.spec.mjs
@@ -573,7 +573,7 @@ git commit -m "feat: consolidate mobile human-factors UX"
 - Consumes: existing normalized UX events.
 - Produces: normalized friction signals for recommendation bypass, navigation recovery, stage abandonment and advanced-detail dependence.
 
-- [ ] **Step 1: Add failing telemetry privacy/shape tests**
+- [x] **Step 1: Add failing telemetry privacy/shape tests**
 
 Add normalized event categories for:
 
@@ -584,25 +584,25 @@ Add normalized event categories for:
 
 Assert no raw creative text or raw launcher query is accepted.
 
-- [ ] **Step 2: Run focused tests and verify failure**
+- [x] **Step 2: Run focused tests and verify failure**
 
 ```bash
 node --test tests/ensemblis-ux-v5-contract.test.mjs tests/ensemblis-ux-human-factors.test.mjs
 ```
 
-- [ ] **Step 3: Add the minimal normalized events**
+- [x] **Step 3: Add the minimal normalized events**
 
 Keep payloads categorical and object IDs only where existing privacy rules permit. Do not introduce full-session replay or raw content capture.
 
-- [ ] **Step 4: Reconcile the route inventory**
+- [x] **Step 4: Reconcile the route inventory**
 
 Update natural discovery and default visibility for any specialist page moved behind an inspector or focused child route. Do not add specialist destinations to primary navigation or Launcher tool-directory results.
 
-- [ ] **Step 5: Run focused tests**
+- [x] **Step 5: Run focused tests**
 
 Same command as Step 2. Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add components/studio app/api/studio/ux-event/route.ts lib/studio/ux-telemetry-client.ts docs/ensemblis-ux-v5-route-inventory.md tests
@@ -622,7 +622,7 @@ git commit -m "feat: measure UX friction without creative-content capture"
 - Consumes: all prior tasks.
 - Produces: final evidence that the redesign is coherent, safe, buildable, and materially simpler.
 
-- [ ] **Step 1: Run the complete automated gate**
+- [x] **Step 1: Run the complete automated gate**
 
 ```bash
 npm run test:studio
@@ -654,7 +654,7 @@ For each canonical journey, compare the final experience against the Task 1 base
 
 Hard gates 2, 3, 4, 7 and 12 must pass for every journey.
 
-- [ ] **Step 4: Inspect regressions manually**
+- [x] **Step 4: Inspect regressions manually**
 
 Verify especially:
 
@@ -665,7 +665,7 @@ Verify especially:
 - no mobile-only context loss;
 - no raw creative-content telemetry.
 
-- [ ] **Step 5: Update audit and plan completion ledger**
+- [x] **Step 5: Update audit and plan completion ledger**
 
 Record:
 
@@ -674,7 +674,7 @@ Record:
 - any acceptance item blocked by external credentials/environment;
 - exact final validation commands/results.
 
-- [ ] **Step 6: Final commit**
+- [x] **Step 6: Final commit**
 
 ```bash
 git add docs tests e2e app components lib
@@ -684,3 +684,40 @@ git commit -m "docs: complete Ensemblis UX human-factors recovery"
 - [ ] **Step 7: Final PR review**
 
 Before marking ready, inspect the full branch diff for accidental scope creep and verify the PR description matches the shipped result.
+
+
+---
+
+## Execution status — 2026-10-04
+
+Tasks 2–9 are implemented and verified. Task 1's semantic baseline/audit instrumentation is complete, but its authenticated screenshot execution was not available. Task 10's automated gate is complete; authenticated visual acceptance remains the only external verification gap.
+
+### Verified
+
+- [x] Track/action hierarchy recovery
+- [x] staged Mastering with source-repair safety preserved
+- [x] recommendation-first Grow
+- [x] lifecycle-guided Release
+- [x] staged AutoMix and render-scoped recovery
+- [x] Today / Music / Create compression
+- [x] mobile/accessibility consolidation
+- [x] normalized friction telemetry and route containment
+- [x] Studio product contracts
+- [x] TypeScript
+- [x] lint
+- [x] public browser smoke
+- [x] production build
+- [x] diff hygiene
+- [x] whole-branch self-review and one RED→GREEN review fix
+
+### Explicitly blocked / not claimed
+
+- [ ] Authenticated baseline screenshot capture
+- [ ] Authenticated mobile E2E
+- [ ] Final authenticated desktop/mobile screenshot scorecard
+
+The dedicated Studio workflow requires an authenticated target. There is no Vercel deployment for `design/ensemblis-ux-human-factors`, no authenticated workflow run exists for it, and the available GitHub connector cannot dispatch the workflow. No authentication bypass was added.
+
+### Final review ruling
+
+Self-review was used because no independent code-review subagent is available in this environment. One Important finding was found: `ContextInspector` opens were omitted from advanced-detail dependency telemetry. A regression test was added at `8afe2b1` (RED) and the fix landed at `f31d29e` (GREEN). No remaining Critical or Important code findings were identified.
