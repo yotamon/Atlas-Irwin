@@ -50,6 +50,7 @@ export function StudioUxTelemetry({ artistId }: { artistId: string }) {
   const searchParams = useSearchParams();
   const enteredAtRef = useRef<number | null>(null);
   const previousSurfaceRef = useRef<string | null>(null);
+  const primaryActionTakenRef = useRef(false);
 
   useEffect(() => {
     const now = performance.now();
@@ -69,6 +70,7 @@ export function StudioUxTelemetry({ artistId }: { artistId: string }) {
     });
     previousSurfaceRef.current = nextSurface;
     enteredAtRef.current = now;
+    primaryActionTakenRef.current = false;
   }, [artistId, pathname, searchParams]);
 
   useEffect(() => {
@@ -85,7 +87,39 @@ export function StudioUxTelemetry({ artistId }: { artistId: string }) {
         resultType: detail.resultType ?? null,
         resolutionSource: detail.resolutionSource ?? null,
         durationMs: detail.durationMs ?? null,
+        frictionKind: detail.frictionKind ?? null,
+        workflowStage: detail.workflowStage ?? null,
       });
+
+      if (detail.event === "advanced_opened" && !primaryActionTakenRef.current) {
+        post({
+          artistId,
+          sessionId: sessionId(),
+          event: "advanced_detail_dependency",
+          surface: surfaceFor(window.location.pathname),
+          source: "before_primary_action",
+          frictionKind: "before_primary_action",
+        });
+      }
+
+      if (
+        detail.event === "launcher_opened"
+        && enteredAtRef.current !== null
+        && !["today", "music", "settings"].includes(surfaceFor(window.location.pathname))
+      ) {
+        const durationMs = Math.max(0, Math.round(performance.now() - enteredAtRef.current));
+        if (durationMs <= 45_000) {
+          post({
+            artistId,
+            sessionId: sessionId(),
+            event: "navigation_recovery",
+            surface: surfaceFor(window.location.pathname),
+            source: "launcher_opened",
+            frictionKind: "launcher_recovery",
+            durationMs,
+          });
+        }
+      }
     }
 
     function onClick(event: MouseEvent) {
@@ -110,13 +144,49 @@ export function StudioUxTelemetry({ artistId }: { artistId: string }) {
                 surface: surfaceFor(window.location.pathname),
                 source: Array.from(details.classList).sort().join(".").slice(0, 120),
               });
+              if (!primaryActionTakenRef.current) {
+                post({
+                  artistId,
+                  sessionId: sessionId(),
+                  event: "advanced_detail_dependency",
+                  surface: surfaceFor(window.location.pathname),
+                  source: "before_primary_action",
+                  frictionKind: "before_primary_action",
+                });
+              }
             }
           }, 0);
         }
       }
 
-      const primary = target.closest("a.button.primary, button.button.primary, .en-object-action-bar a");
+      const workflowStage = target.closest<HTMLElement>("[data-workflow-stage]");
+      if (workflowStage?.dataset.workflowStage) {
+        post({
+          artistId,
+          sessionId: sessionId(),
+          event: "workflow_stage",
+          surface: surfaceFor(window.location.pathname),
+          source: "stepper",
+          workflowStage: workflowStage.dataset.workflowStage,
+        });
+      }
+
+      const alternateAction = target.closest('.en-object-action-bar [data-action-role="secondary"]');
+      if (alternateAction && document.querySelector(".en-next-action-widget")) {
+        post({
+          artistId,
+          sessionId: sessionId(),
+          event: "recommendation_bypass",
+          surface: surfaceFor(window.location.pathname),
+          source: "alternate_action",
+          frictionKind: "alternate_action",
+          durationMs: enteredAtRef.current === null ? null : Math.max(0, Math.round(performance.now() - enteredAtRef.current)),
+        });
+      }
+
+      const primary = target.closest('a.button.primary, button.button.primary, .en-object-action-bar [data-action-role="primary"]');
       if (primary && !target.closest("[data-command-result]")) {
+        primaryActionTakenRef.current = true;
         post({
           artistId,
           sessionId: sessionId(),

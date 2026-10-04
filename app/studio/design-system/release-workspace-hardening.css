@@ -51,3 +51,48 @@
     border-radius: 0;
   }
 }
+
+
+/* Human-factors recovery: the release overview is a lifecycle decision surface. */
+.studio-root .release-mission-overview {
+  width: min(100%, 72rem);
+  margin-inline: auto;
+}
+
+.studio-root .release-human-factors-recommendation {
+  border-color: color-mix(in srgb, var(--en-accent) 42%, var(--en-line));
+}
+
+.studio-root .release-human-factors-blockers,
+.studio-root .release-human-factors-readiness {
+  display: grid;
+  gap: var(--en-space-4);
+  padding-block: var(--en-space-5);
+  border-bottom: 1px solid var(--en-line);
+}
+
+.studio-root .release-human-factors-readiness .release-mission-checklist {
+  margin: 0;
+}
+
+.studio-root .release-human-factors-details {
+  margin-top: var(--en-space-3);
+}
+
+.studio-root .release-human-factors-details > :where(.release-tracklist, .release-mastering-coherence) {
+  margin-top: var(--en-space-4);
+}
+
+.studio-root .release-human-factors-blocker-action {
+  margin-top: var(--en-space-2);
+}
+
+@media (max-width: 720px) {
+  .studio-root .release-mission-hero.release-human-factors-recommendation {
+    align-items: stretch;
+  }
+  .studio-root .release-mission-hero.release-human-factors-recommendation .button {
+    width: 100%;
+    justify-content: center;
+  }
+}

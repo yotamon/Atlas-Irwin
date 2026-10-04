@@ -339,3 +339,22 @@
   .ensemblis-dialog-backdrop,
   .ensemblis-command-backdrop { transition: none; }
 }
+
+
+/* Contextual expert detail becomes a focused mobile sheet instead of a small floating modal. */
+@media (max-width: 680px) {
+  .ensemblis-dialog.ensemblis-context-inspector {
+    display: flex;
+    flex-direction: column;
+    height: calc(100svh - 1rem);
+    max-height: calc(100svh - 1rem);
+    border-radius: var(--en-radius-lg) var(--en-radius-lg) var(--en-radius-sm) var(--en-radius-sm);
+  }
+
+  .ensemblis-dialog.ensemblis-context-inspector .ensemblis-dialog-body {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+    overflow-y: auto;
+  }
+}

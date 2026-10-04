@@ -8,6 +8,7 @@ import {
   saveGrowthSettings,
 } from "@/app/studio/growth-actions";
 import { PageHeader } from "@/components/studio/ui";
+import { CompactEvidence } from "@/components/studio/ux-v4-widgets";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { asMarketingClient } from "@/lib/marketing/db";
@@ -102,7 +103,7 @@ export default async function GrowthPage({ searchParams }: { searchParams: Promi
       </nav>
 
       {view === "overview" ? <div className="growth-v5-overview">
-        <section className="v2-section growth-v5-recommendation">
+        <section className="v2-section growth-v5-recommendation growth-human-factors-recommendation">
           <div className="v2-section-heading">
             <div>
               <span className="section-label">Recommended next action</span>
@@ -118,60 +119,54 @@ export default async function GrowthPage({ searchParams }: { searchParams: Promi
           ) : diagnosis ? (
             <div className="actions"><Link className="button primary" href={href("/studio/growth?view=performance")}>See why and act</Link></div>
           ) : (
-            <div className="actions"><Link className="button" href={href("/studio/music")}>Open Music</Link></div>
-          )}
-        </section>
-
-        <section className="v2-section growth-v5-opportunities">
-          <div className="v2-section-heading">
-            <div><span className="section-label">Opportunities</span><h2>{newOpportunities.length ? `${newOpportunities.length} worth reviewing` : "Nothing new needs a decision"}</h2></div>
-            <Link href={href("/studio/growth?view=opportunities")}>View all</Link>
-          </div>
-          {newOpportunities.length ? (
-            <div className="growth-opportunity-grid">
-              {newOpportunities.slice(0, 3).map((opportunity) => (
-                <article className="growth-opportunity" key={opportunity.id}>
-                  <div className="growth-opportunity-head"><span>{titleCase(opportunity.kind)}</span><strong>{priorityLabel(Number(opportunity.priority))}</strong></div>
-                  <h3>{opportunity.title}</h3>
-                  <p>{opportunity.rationale}</p>
-                  <div className="actions">
-                    <form action={activateGrowthOpportunity}><input type="hidden" name="id" value={opportunity.id} /><button className="button primary" type="submit">Use this opportunity</button></form>
-                    <form action={dismissGrowthOpportunity}><input type="hidden" name="id" value={opportunity.id} /><button className="button" type="submit">Not useful</button></form>
-                  </div>
-                </article>
-              ))}
+            <div className="v2-calm-state compact growth-human-factors-calm">
+              <strong>Nothing needs a growth decision right now.</strong>
+              <p>That is a successful state. Ensemblis will surface a next move when the evidence is strong enough.</p>
             </div>
-          ) : <div className="v2-calm-state compact"><strong>No new opportunity needs you.</strong><p>Ensemblis will surface one when the evidence changes enough to justify a decision.</p></div>}
+          )}
+          <CompactEvidence label="Why this recommendation?">
+            <p>{topCandidate
+              ? topCandidate.reasons.join(" · ")
+              : diagnosis
+                ? `${diagnosis.diagnosis} ${diagnosis.action}`
+                : "There is not enough trustworthy signal to justify changing direction yet."}</p>
+            {newOpportunities.length ? <p><Link href={href("/studio/growth?view=opportunities")}>Review {newOpportunities.length} other opportunit{newOpportunities.length === 1 ? "y" : "ies"}</Link></p> : null}
+          </CompactEvidence>
         </section>
 
-        <section className="v2-section growth-v5-in-motion">
-          <div className="v2-section-heading">
-            <div><span className="section-label">In motion</span><h2>Work already moving</h2></div>
+        <section className="v2-section growth-v5-in-motion growth-human-factors-progress">
+          <div className="v2-section-heading compact">
+            <div><span className="section-label">Already moving</span><h2>Current work</h2></div>
             <Link href={href("/studio/calendar")}>Calendar</Link>
           </div>
           {(scheduledReleases.length || acceptedOpportunities.length || plan.length) ? (
             <div className="growth-queue">
-              {scheduledReleases.slice(0, 3).map((release) => <Link href={href(`/studio/releases/${release.id}`)} className="growth-queue-item locked" key={`release-${release.id}`}><span className="growth-queue-date">{shortDate(release.release_date)}</span><div><small>Release</small><strong>{release.title}</strong><p>{release.status}</p></div><b>Open</b></Link>)}
-              {acceptedOpportunities.slice(0, 3).map((item) => <div className="growth-queue-item" key={`opportunity-${item.id}`}><span className="growth-queue-date">Active</span><div><small>{titleCase(item.kind)}</small><strong>{item.title}</strong><p>{item.rationale}</p></div><span /></div>)}
-              {plan.slice(0, 3).map((item) => {
+              {scheduledReleases.slice(0, 2).map((release) => <Link href={href(`/studio/releases/${release.id}`)} className="growth-queue-item locked" key={`release-${release.id}`}><span className="growth-queue-date">{shortDate(release.release_date)}</span><div><small>Release</small><strong>{release.title}</strong><p>{release.status}</p></div><b>Open</b></Link>)}
+              {acceptedOpportunities.slice(0, 1).map((item) => <div className="growth-queue-item" key={`opportunity-${item.id}`}><span className="growth-queue-date">Active</span><div><small>{titleCase(item.kind)}</small><strong>{item.title}</strong><p>{item.rationale}</p></div><span /></div>)}
+              {plan.slice(0, 1).map((item) => {
                 const track = item.track_vault_id ? vaultById.get(item.track_vault_id) : null;
                 const release = item.release_id ? releaseById.get(item.release_id) : null;
                 return <div className="growth-queue-item" key={item.id}><span className="growth-queue-date">{shortDate(item.target_date)}</span><div><small>{titleCase(item.status)}</small><strong>{track?.title || release?.title || "Planned work"}</strong><p>{item.rationale}</p></div><span /></div>;
               })}
             </div>
-          ) : <div className="v2-calm-state compact"><strong>Nothing extra is running.</strong><p>That is a valid state. Ensemblis will add work when the artist context justifies it.</p></div>}
+          ) : <div className="v2-calm-state compact"><strong>Nothing extra is running.</strong><p>Ensemblis will add work when the artist context justifies it.</p></div>}
         </section>
 
-        <div className="growth-v5-evidence-grid">
-          <section className="v2-section">
-            <div className="v2-section-heading compact"><div><span className="section-label">Audience</span><h2>{funnel.listeners.toLocaleString()} listeners</h2></div><Link href={href("/studio/audience")}>Open Audience</Link></div>
-            <p className="v2-muted-copy">{funnel.saves.toLocaleString()} saves · {funnel.follows.toLocaleString()} follows · {funnel.playlistAdds.toLocaleString()} playlist adds.</p>
-          </section>
-          <section className="v2-section">
-            <div className="v2-section-heading compact"><div><span className="section-label">What is holding growth back</span><h2>{diagnosis ? diagnosis.label : "Need more signal"}</h2></div><Link href={href("/studio/growth?view=performance")}>Performance</Link></div>
-            <p className="v2-muted-copy">{diagnosis ? `${diagnosis.diagnosis} ${diagnosis.action}` : "Ensemblis will explain the bottleneck once there is enough trustworthy performance data."}</p>
-          </section>
-        </div>
+        <section className="v2-section growth-human-factors-context">
+          <div className="v2-section-heading compact">
+            <div><span className="section-label">What is holding growth back</span><h2>{diagnosis ? diagnosis.label : "Learning from the audience"}</h2></div>
+          </div>
+          <div className="growth-human-factors-signal">
+            <div><strong>{funnel.listeners.toLocaleString()}</strong><span>listeners</span></div>
+            <div><strong>{funnel.saves.toLocaleString()}</strong><span>saves</span></div>
+            <div><strong>{funnel.follows.toLocaleString()}</strong><span>follows</span></div>
+          </div>
+          <p className="v2-muted-copy">{diagnosis ? diagnosis.diagnosis : "More trustworthy performance data is needed before Ensemblis names a growth bottleneck."}</p>
+          <div className="actions">
+            <Link href={href("/studio/audience")}>Audience</Link>
+            <Link href={href("/studio/growth?view=performance")}>Performance</Link>
+          </div>
+        </section>
 
         <details className="v2-section v2-compact-section">
           <summary><strong>Advanced growth tools</strong><span>Paid tests, planning controls, campaign detail and learning evidence</span></summary>

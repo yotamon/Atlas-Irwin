@@ -261,3 +261,85 @@
     width: 5rem;
   }
 }
+
+
+/* Human-factors primitives: state is quiet, recommendation is dominant, evidence is secondary. */
+.studio-root .en-object-state-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--en-space-4);
+  padding: var(--en-space-3) 0;
+  border-top: 1px solid var(--en-line);
+  border-bottom: 1px solid var(--en-line);
+}
+
+.studio-root .en-object-state-summary > div {
+  min-width: 0;
+  display: grid;
+  gap: var(--en-space-2);
+}
+
+.studio-root .en-object-state-summary strong {
+  font-size: var(--en-text-lg);
+}
+
+.studio-root .en-object-state-summary p {
+  margin: 0;
+  max-width: 64ch;
+  color: var(--en-muted);
+}
+
+.studio-root .en-next-action-widget {
+  display: grid;
+  gap: var(--en-space-3);
+  padding: clamp(var(--en-space-5), 4vw, var(--en-space-7));
+  border: 1px solid color-mix(in srgb, var(--en-accent) 52%, var(--en-line));
+  border-radius: var(--en-radius-xl);
+  background: color-mix(in srgb, var(--en-accent-soft) 52%, var(--en-surface));
+}
+
+.studio-root .en-next-action-widget > strong {
+  max-width: 22ch;
+  font-size: clamp(1.7rem, 3vw, 2.65rem);
+  line-height: 1.04;
+  letter-spacing: -0.045em;
+}
+
+.studio-root .en-next-action-widget > p {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--en-muted);
+  line-height: var(--en-leading-body);
+}
+
+.studio-root .en-next-action-widget .actions {
+  display: flex;
+  gap: var(--en-space-2);
+  flex-wrap: wrap;
+}
+
+.studio-root .en-object-action-overflow {
+  position: relative;
+}
+
+.studio-root .en-object-action-overflow > summary {
+  min-height: var(--en-control-md);
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--en-muted);
+  font-size: var(--en-text-sm);
+  font-weight: var(--en-weight-semibold);
+}
+
+.studio-root .en-object-action-overflow > div {
+  display: grid;
+  gap: var(--en-space-2);
+  margin-top: var(--en-space-2);
+}
+
+.studio-root .en-object-action-overflow a {
+  color: var(--en-ink);
+  font-size: var(--en-text-sm);
+}

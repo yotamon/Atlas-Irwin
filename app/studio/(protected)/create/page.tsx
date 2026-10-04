@@ -133,11 +133,14 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
               const startSeconds = Math.max(0, moment.start_ms / 1000);
               const endSeconds = Math.max(startSeconds, moment.end_ms / 1000);
               const evidence = momentEvidenceSummary(moment);
+              const isPrimaryDirection = preferredOutcome
+                ? preferredOutcome.id === direction.outcome.id
+                : direction.rank === 1;
               return (
-                <article className={`create-deliverable-card${preferredOutcome?.id === direction.outcome.id || (!preferredOutcome && direction.rank === 1) ? " is-recommended" : ""}`} key={direction.id}>
+                <article className={`create-deliverable-card ${isPrimaryDirection ? "is-recommended is-primary-recommendation" : "is-alternative"}`} key={direction.id}>
                   <div className="create-deliverable-head">
                     <span>{deliverableLabel(direction.outcome.platform, direction.outcome.format)}</span>
-                    {preferredOutcome?.id === direction.outcome.id ? <Status>Requested</Status> : !preferredOutcome && direction.rank === 1 ? <Status>Best next option</Status> : null}
+                    {preferredOutcome?.id === direction.outcome.id ? <Status>Requested</Status> : isPrimaryDirection ? <Status>Best next option</Status> : null}
                   </div>
                   <h3>{direction.outcome.shortLabel}</h3>
                   <p>{direction.outcome.description}</p>
@@ -154,7 +157,7 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
                     <input type="hidden" name="artist_id" value={artist.artistId} />
                     <input type="hidden" name="moment_id" value={moment.id} />
                     <input type="hidden" name="outcome" value={direction.outcome.id} />
-                    <button className="button primary" type="submit" title={`Create ${direction.outcome.format}`}>Create {direction.outcome.format}</button>
+                    <button className={isPrimaryDirection ? "button primary" : "button"} type="submit" title={`Create ${direction.outcome.format}`}>Create {direction.outcome.format}</button>
                   </form>
 
                   <details className="create-evidence-details">

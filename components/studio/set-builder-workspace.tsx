@@ -17,6 +17,7 @@ import {
   FiX,
   FiZap,
 } from "react-icons/fi";
+import { AutoMixRenderRecovery } from "@/components/studio/automix-render-recovery";
 import { WorkflowStepper } from "@/components/studio/ux-v4-widgets";
 import type {
   AutoMixEnergyProfile,
@@ -948,18 +949,21 @@ export function SetBuilderWorkspace({ artistId, artistName, tracks, initialTrack
       ) : null}
 
       {workflowStage === "render" ? (
-        <section className={styles.renderStatus}>
-          <div>
-            <span className="section-label">5 / Render</span>
-            <h3>{latestRender ? ACTIVE.has(latestRender.status) ? "Rendering the approved set." : latestRender.status === "completed" ? "Your mix is ready." : "The render needs attention." : "Ready to render."}</h3>
-            <p>{latestRender?.error || (latestRender ? "The renderer is executing the approved route without replanning." : currentPlan ? `${currentTracks.length} tracks · ${formatDuration(currentPlan.estimated_duration_ms)} · this exact verified plan will be rendered.` : "Review the set first.")}</p>
-          </div>
-          <div className={styles.renderAction}>
-            <button className="button" type="button" disabled={Boolean(activeRender)} onClick={() => setStage("review")}>← Review set</button>
-            {!latestRender || latestRender.status === "failed" || latestRender.status === "cancelled" ? <button className="button button-primary" type="button" disabled={!canEdit || Boolean(busy) || draftDirty || Boolean(activeRender)} onClick={() => void approveRender()}>{busy === "render" || activeRender ? <FiRefreshCw aria-hidden /> : <FiPlay aria-hidden />} Render mix</button> : <strong>{statusLabel(latestRender.status)}</strong>}
-            {latestRender?.output?.public_url ? <a className="button button-primary" href={latestRender.output.public_url} target="_blank" rel="noreferrer">Open rendered mix</a> : null}
-          </div>
-        </section>
+        <div className={styles.renderStage}>
+          <section className={styles.renderStatus}>
+            <div>
+              <span className="section-label">5 / Render</span>
+              <h3>{latestRender ? ACTIVE.has(latestRender.status) ? "Rendering the approved set." : latestRender.status === "completed" ? "Your mix is ready." : "The render needs attention." : "Ready to render."}</h3>
+              <p>{latestRender?.error || (latestRender ? "The renderer is executing the approved route without replanning." : currentPlan ? `${currentTracks.length} tracks · ${formatDuration(currentPlan.estimated_duration_ms)} · this exact verified plan will be rendered.` : "Review the set first.")}</p>
+            </div>
+            <div className={styles.renderAction}>
+              <button className="button" type="button" disabled={Boolean(activeRender)} onClick={() => setStage("review")}>← Review set</button>
+              {!latestRender || latestRender.status === "failed" || latestRender.status === "cancelled" ? <button className="button button-primary" type="button" disabled={!canEdit || Boolean(busy) || draftDirty || Boolean(activeRender)} onClick={() => void approveRender()}>{busy === "render" || activeRender ? <FiRefreshCw aria-hidden /> : <FiPlay aria-hidden />} Render mix</button> : <strong>{statusLabel(latestRender.status)}</strong>}
+              {latestRender?.output?.public_url ? <a className="button button-primary" href={latestRender.output.public_url} target="_blank" rel="noreferrer">Open rendered mix</a> : null}
+            </div>
+          </section>
+          <AutoMixRenderRecovery artistId={artistId} />
+        </div>
       ) : null}
     </section>
   );

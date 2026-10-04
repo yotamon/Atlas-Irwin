@@ -8,6 +8,8 @@ export type ObjectAction = {
   primary?: boolean;
 };
 
+export const MAX_VISIBLE_SECONDARY_ACTIONS = 2;
+
 export function ObjectActionBar({
   actions,
   more,
@@ -16,19 +18,49 @@ export function ObjectActionBar({
   more?: ReactNode;
 }) {
   if (!actions.length && !more) return null;
+
+  const primaryActions = actions.filter((action) => action.primary);
+  if (primaryActions.length > 1) {
+    throw new Error("ObjectActionBar supports only one primary action.");
+  }
+
+  const primaryAction = primaryActions[0] ?? null;
+  const secondaryActions = actions.filter((action) => action !== primaryAction);
+  const visibleActions = [
+    ...(primaryAction ? [primaryAction] : []),
+    ...secondaryActions.slice(0, MAX_VISIBLE_SECONDARY_ACTIONS),
+  ];
+  const overflowActions = secondaryActions.slice(MAX_VISIBLE_SECONDARY_ACTIONS);
+
   return (
     <div className="en-object-action-bar" aria-label="Available actions">
       <div className="en-object-action-primary">
-        {actions.map((action) => (
+        {visibleActions.map((action) => (
           <Link
             className={action.primary ? "button primary" : "button"}
+            data-action-role={action.primary ? "primary" : "secondary"}
             href={action.href}
             key={`${action.label}:${action.href}`}
           >
             {action.label}
           </Link>
         ))}
-      </div>      {more ? <div className="en-object-action-more">{more}</div> : null}
+      </div>
+      {overflowActions.length || more ? (
+        <div className="en-object-action-more">
+          {overflowActions.length ? (
+            <details className="en-object-action-overflow">
+              <summary>More actions</summary>
+              <div>
+                {overflowActions.map((action) => (
+                  <Link data-action-role="secondary" href={action.href} key={`${action.label}:${action.href}`}>{action.label}</Link>
+                ))}
+              </div>
+            </details>
+          ) : null}
+          {more}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -199,6 +231,7 @@ export function WorkflowStepper<T extends string>({
             type="button"
             className={active ? "is-active" : complete ? "is-complete" : undefined}
             aria-current={active ? "step" : undefined}
+            data-workflow-stage={step.id}
             disabled={step.disabled}
             onClick={() => onSelect?.(step.id)}
           >

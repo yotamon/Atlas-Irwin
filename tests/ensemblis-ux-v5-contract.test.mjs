@@ -147,19 +147,17 @@ test("Create preserves object context and honors a requested deliverable", async
   assert.ok(outcomes.includes("reel|short|clip"));
 });
 
-test("Grow is recommendation-first before opportunities, in-motion work and metrics", async () => {
+test("Grow is recommendation-first before progress and compact context", async () => {
   const grow = await source("app/studio/(protected)/growth/page.tsx");
-  const recommendation = grow.indexOf("growth-v5-recommendation");
-  const opportunities = grow.indexOf("growth-v5-opportunities");
-  const inMotion = grow.indexOf("growth-v5-in-motion");
-  const evidence = grow.indexOf("growth-v5-evidence-grid");
+  const recommendation = grow.indexOf("growth-human-factors-recommendation");
+  const inMotion = grow.indexOf("growth-human-factors-progress");
+  const context = grow.indexOf("growth-human-factors-context");
 
   assert.ok(recommendation >= 0);
-  assert.ok(recommendation < opportunities);
-  assert.ok(opportunities < inMotion);
-  assert.ok(inMotion < evidence);
+  assert.ok(recommendation < inMotion);
+  assert.ok(inMotion < context);
   assert.ok(grow.includes("Recommended next action"));
-  assert.ok(grow.includes("What is holding growth back"));
+  assert.ok(grow.includes("Why this recommendation?"));
   assert.ok(grow.includes("Paid tests"));
   assert.equal(grow.includes("Run a bounded paid experiment"), false);
 });

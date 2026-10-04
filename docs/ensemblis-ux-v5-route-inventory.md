@@ -1,7 +1,7 @@
 ﻿# Ensemblis UX V5 Route Inventory
 
 **Status:** Canonical V5 route ownership and discoverability contract — reconciled against PR #280 implementation
-**Date:** 2026-10-02
+**Date:** 2026-10-04
 **Architecture:** `docs/ensemblis-ux-architecture-v5.md`
 
 ## Contract
@@ -101,3 +101,15 @@ A route fails V5 if:
 6. a compatibility route becomes the only path to a user-facing capability.
 
 This inventory must be reconciled again on the final PR head before merge.
+
+
+## Human-factors containment reconciliation — 2026-10-04
+
+The V5 route ownership remains valid after the human-factors recovery.
+
+- Track technical analysis and mastering engineering evidence are intentionally opened from the Track object through contextual disclosure/inspectors rather than advertised as destinations.
+- Grow strategy, paid tests, analytics and campaign machinery remain contextual or advanced; the default Grow surface owns the recommendation.
+- Release engineering detail remains subordinate to the lifecycle Overview and the facet that owns the job.
+- AutoMix DJ intelligence, library bridge and Rekordbox tooling remain advanced within the staged mix workflow.
+- The Action Launcher remains intent/object oriented. Hidden specialist routes are not promoted into a tool directory.
+- Human-factors telemetry records only normalized categories, surfaces, workflow stage IDs and timing. It does not accept raw launcher queries or creative text.

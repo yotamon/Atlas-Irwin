@@ -338,3 +338,9 @@
   .transition { grid-template-columns: auto 1fr; margin-left: 1.6rem; }
   .metrics { grid-column: 2; flex-wrap: wrap; }
 }
+
+
+.renderStage {
+  display: grid;
+  gap: var(--en-space-4);
+}

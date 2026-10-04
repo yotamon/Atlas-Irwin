@@ -286,7 +286,9 @@ test("server refuses mastering over blocking source defects", async () => {
   ]);
   assert.match(actions, /readiness\.masterability === "source_repair_required"/);
   assert.match(actions, /will not master over a blocking source defect/);
-  assert.match(controls, /!sourceRepairRequired \? <details/);
+  assert.match(controls, /masteringStage === "source"/);
+  assert.match(controls, /Fix the source before creating a new master/);
+  assert.match(controls, /masteringStage === "recommendation"/);
 });
 
 test("private mastering references use temporary signed URLs for Listen Lab playback", async () => {

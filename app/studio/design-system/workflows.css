@@ -103,6 +103,21 @@
   border-color: color-mix(in srgb, var(--en-accent) 38%, var(--en-line));
 }
 
+.studio-root .create-deliverable-card.is-primary-recommendation {
+  border-color: color-mix(in srgb, var(--en-accent) 48%, var(--en-line));
+  background: color-mix(in srgb, var(--en-accent-soft) 34%, var(--en-surface));
+}
+
+.studio-root .create-deliverable-card.is-alternative {
+  border-color: color-mix(in srgb, var(--en-line) 86%, transparent);
+  background: color-mix(in srgb, var(--en-surface) 92%, transparent);
+}
+
+.studio-root .create-deliverable-card.is-alternative .create-direction-rationale,
+.studio-root .create-deliverable-card.is-alternative .create-source-preview {
+  color: var(--en-muted);
+}
+
 .studio-root .create-deliverable-card:hover,
 .studio-root .create-deliverable-card:focus-within {
   border-color: var(--en-line-strong);
@@ -840,10 +855,18 @@
   .studio-root .en-workflow-stepper {
     display: flex;
     overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scroll-snap-type: x proximity;
   }
 
   .studio-root .en-workflow-stepper button {
     min-width: 7.5rem;
+    scroll-snap-align: start;
+  }
+
+  .studio-root .en-next-action-widget .actions .button.primary {
+    width: 100%;
+    justify-content: center;
   }
 }
 
@@ -929,5 +952,78 @@
   .studio-root .music-catalog-mix-actions {
     display: grid;
     align-items: start;
+  }
+}
+
+
+/* Track human-factors recovery: one source, one state, one recommendation. */
+.studio-root .track-object-page {
+  --track-reading-width: 72rem;
+}
+
+.studio-root .track-human-factors-source,
+.studio-root .track-human-factors-state,
+.studio-root .track-human-factors-recommendation,
+.studio-root .track-human-factors-actions,
+.studio-root .track-human-factors-summary,
+.studio-root .track-human-factors-release,
+.studio-root .track-v5-mastering {
+  width: min(100%, var(--track-reading-width));
+  margin-inline: auto;
+}
+
+.studio-root .track-human-factors-source {
+  display: grid;
+  gap: var(--en-space-3);
+  padding: 0;
+}
+
+.studio-root .track-human-factors-source h2,
+.studio-root .track-human-factors-source p {
+  margin: 0;
+}
+
+.studio-root .track-human-factors-source p {
+  max-width: 62ch;
+  color: var(--en-muted);
+}
+
+.studio-root .track-human-factors-state {
+  margin-top: var(--en-space-2);
+}
+
+.studio-root .track-human-factors-recommendation {
+  margin-top: var(--en-space-2);
+}
+
+.studio-root .track-human-factors-actions {
+  padding-block: var(--en-space-2) var(--en-space-4);
+  border-bottom: 1px solid var(--en-line);
+}
+
+.studio-root .track-human-factors-summary {
+  display: grid;
+  gap: var(--en-space-4);
+}
+
+.studio-root .track-human-factors-summary .v2-section-heading p {
+  max-width: 62ch;
+}
+
+@media (max-width: 760px) {
+  .studio-root .en-object-state-summary {
+    display: grid;
+  }
+
+  .studio-root .en-next-action-widget {
+    padding: var(--en-space-5);
+  }
+
+  .studio-root .track-human-factors-actions .en-object-action-primary {
+    width: 100%;
+  }
+
+  .studio-root .track-human-factors-actions .button {
+    flex: 1 1 8rem;
   }
 }
