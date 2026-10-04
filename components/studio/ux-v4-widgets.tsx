@@ -38,6 +38,7 @@ export function ObjectActionBar({
         {visibleActions.map((action) => (
           <Link
             className={action.primary ? "button primary" : "button"}
+            data-action-role={action.primary ? "primary" : "secondary"}
             href={action.href}
             key={`${action.label}:${action.href}`}
           >
@@ -52,7 +53,7 @@ export function ObjectActionBar({
               <summary>More actions</summary>
               <div>
                 {overflowActions.map((action) => (
-                  <Link href={action.href} key={`${action.label}:${action.href}`}>{action.label}</Link>
+                  <Link data-action-role="secondary" href={action.href} key={`${action.label}:${action.href}`}>{action.label}</Link>
                 ))}
               </div>
             </details>
@@ -230,6 +231,7 @@ export function WorkflowStepper<T extends string>({
             type="button"
             className={active ? "is-active" : complete ? "is-complete" : undefined}
             aria-current={active ? "step" : undefined}
+            data-workflow-stage={step.id}
             disabled={step.disabled}
             onClick={() => onSelect?.(step.id)}
           >
