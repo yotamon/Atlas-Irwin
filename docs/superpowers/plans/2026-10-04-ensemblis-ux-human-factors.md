@@ -681,7 +681,7 @@ git add docs tests e2e app components lib
 git commit -m "docs: complete Ensemblis UX human-factors recovery"
 ```
 
-- [ ] **Step 7: Final PR review**
+- [x] **Step 7: Final PR review**
 
 Before marking ready, inspect the full branch diff for accidental scope creep and verify the PR description matches the shipped result.
 
