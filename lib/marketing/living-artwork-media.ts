@@ -157,3 +157,98 @@ export async function enqueueLivingArtworkVisualizer(input: {
   await kickMarketingMediaWorkerQueue({ ownerId: input.ownerId, artistId: input.artistId });
   return data as MarketingMediaJob;
 }
+
+function socialReviewFrameTimestamps(durationMs: number) {
+  return [0.08, 0.5, 0.92].map((ratio) =>
+    Math.max(0, Math.min(durationMs - 80, Math.round(durationMs * ratio))),
+  );
+}
+
+export async function enqueueLivingArtworkSocial(input: {
+  ownerId: string;
+  artistId: string;
+  campaignId: string | null;
+  releaseId: string | null;
+  contentItemId: string;
+  loopAssetId: string;
+  loopAssetUrl: string;
+  audioUrl: string;
+  audioStartMs: number;
+  durationMs: number;
+}) {
+  if (!Number.isFinite(input.durationMs) || input.durationMs < 1_000 || input.durationMs > 60_000) {
+    throw new Error("Living Artwork social export must be between 1 and 60 seconds.");
+  }
+  const fingerprint = stableKey(
+    `${input.loopAssetId}|${input.audioUrl}|${input.audioStartMs}|${input.durationMs}`,
+  );
+  const idempotencyKey = `living-artwork:social:${input.contentItemId}:${fingerprint}`;
+  const db = client();
+  const existing = await existingJob(db, input.artistId, idempotencyKey);
+  if (existing) {
+    if (["planned", "queued", "running"].includes(existing.status)) {
+      await kickMarketingMediaWorkerQueue({ ownerId: input.ownerId, artistId: input.artistId });
+    }
+    return existing;
+  }
+
+  const service = createServiceClient();
+  const jobId = randomUUID();
+  const bucket = "public-media";
+  const outputPath = `${input.ownerId}/library/marketing/${input.artistId}/living-artwork/${input.contentItemId}/exports/social-${jobId}.mp4`;
+  const publicUrl = service.storage.from(bucket).getPublicUrl(outputPath).data.publicUrl;
+  const reviewFrames = socialReviewFrameTimestamps(input.durationMs).map((timestampMs, index) => {
+    const framePath = `${input.ownerId}/library/marketing/${input.artistId}/living-artwork/${input.contentItemId}/qc/social-${jobId}-${index + 1}.jpg`;
+    return {
+      index: index + 1,
+      timestamp_ms: timestampMs,
+      upload_bucket: bucket,
+      upload_path: framePath,
+      public_url: service.storage.from(bucket).getPublicUrl(framePath).data.publicUrl,
+    };
+  });
+
+  const { data, error } = await db.from("marketing_media_jobs").insert({
+    id: jobId,
+    owner_id: input.ownerId,
+    artist_id: input.artistId,
+    campaign_id: input.campaignId,
+    release_id: input.releaseId,
+    content_item_id: input.contentItemId,
+    generation_run_id: null,
+    job_type: "finish_social_video",
+    status: "planned",
+    idempotency_key: idempotencyKey,
+    request_payload: json({
+      artist_id: input.artistId,
+      living_artwork_export: "social",
+      source_url: input.loopAssetUrl,
+      source_asset_id: input.loopAssetId,
+      upload_bucket: bucket,
+      upload_path: outputPath,
+      public_url: publicUrl,
+      width: LIVING_ARTWORK_TARGET.width,
+      height: LIVING_ARTWORK_TARGET.height,
+      fps: LIVING_ARTWORK_TARGET.fps,
+      duration_ms: Math.round(input.durationMs),
+      audio_url: input.audioUrl,
+      audio_start_ms: Math.max(0, Math.round(input.audioStartMs)),
+      audio_source: "canonical_track",
+      safe_area: {
+        topPercent: 8,
+        rightPercent: 8,
+        bottomPercent: 18,
+        leftPercent: 8,
+      },
+      overlay_text: null,
+      review_frames: reviewFrames,
+    }),
+    result_payload: json({}),
+    attempt_count: 0,
+    max_attempts: 3,
+  }).select("*").single();
+  if (error || !data) throw new Error(error?.message || "Could not queue Living Artwork social export.");
+
+  await kickMarketingMediaWorkerQueue({ ownerId: input.ownerId, artistId: input.artistId });
+  return data as MarketingMediaJob;
+}
