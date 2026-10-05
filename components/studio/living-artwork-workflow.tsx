@@ -2,7 +2,6 @@ import Link from "next/link";
 import {
   approveLivingArtworkLoop,
   importLivingArtworkLoop,
-  prepareLivingArtworkLoopKit,
   renderLivingArtworkFullTrack,
   renderLivingArtworkSocial,
   repairLivingArtworkLoop,
@@ -14,6 +13,7 @@ import {
   refreshCreativeGeneration,
 } from "@/app/studio/marketing-creative-actions";
 import { CompactEvidence } from "@/components/studio/ux-v4-widgets";
+import { LivingArtworkLoopKitPrep } from "@/components/studio/living-artwork-loop-kit-prep";
 import { ButtonLink, Disclosure, PageHeader, Status } from "@/components/studio/ui";
 import {
   LIVING_ARTWORK_MOTION_PRESETS,
@@ -170,57 +170,15 @@ function MotionAndKitStage({ workspace, artistId }: { workspace: Workspace; arti
           <h2>How should the artwork move?</h2>
           <p>Choose the feeling, not a model. Ensemblis keeps the composition recognizable and writes the loop constraints for you.</p>
 
-          <form action={prepareLivingArtworkLoopKit} className="living-artwork-motion-form">
-            <HiddenContext artistId={artistId} contentItemId={contentId} />
-            <div className="living-artwork-preset-list">
-              {LIVING_ARTWORK_MOTION_PRESETS.map((preset, index) => (
-                <label key={preset.id} className="living-artwork-preset">
-                  <input type="radio" name="motion_preset" value={preset.id} defaultChecked={index === 0} />
-                  <span>
-                    <strong>{preset.label}</strong>
-                    <small>{preset.description}</small>
-                  </span>
-                </label>
-              ))}
-            </div>
-            <button className="button primary" type="submit">Prepare free Loop Kit</button>
-          </form>
+          <LivingArtworkLoopKitPrep
+            artistId={artistId}
+            contentItemId={contentId}
+            sourceUrl={source.url}
+          />
 
           <CompactEvidence label="What is the Loop Kit?">
-            <p>It gives you the exact source image, a loop-aware prompt and the instruction to use the same image as both the first and last frame. Generate the short motion clip in any compatible tool, then bring the MP4 back here for automatic seam checking.</p>
+            <p>Ensemblis first prepares one portrait source frame from the approved artwork without generative AI. That exact frame becomes both the first and last frame instruction, so the generated motion has a stable visual boundary to return to.</p>
           </CompactEvidence>
-
-          <Disclosure label="Generate inside Ensemblis instead">
-            {workspace.nativeLoopGenerationConfigured ? (
-              <form action={prepareContentCreativeGeneration} className="living-artwork-native-form">
-                <HiddenContext artistId={artistId} contentItemId={contentId} />
-                <input type="hidden" name="creative_intent" value="seamless_loop" />
-                <input type="hidden" name="media_kind" value="video" />
-                <label className="field">
-                  <span>Motion</span>
-                  <select name="motion_preset" defaultValue="subtle_pulse">
-                    {LIVING_ARTWORK_MOTION_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
-                  </select>
-                </label>
-                <label className="field">
-                  <span>Quality</span>
-                  <select name="quality" defaultValue="balanced">
-                    <option value="economy">Economy</option>
-                    <option value="balanced">Balanced · recommended</option>
-                    <option value="premium">Premium</option>
-                  </select>
-                </label>
-                <p>Ensemblis will prepare the request first and show the exact provider quote before any paid generation is submitted.</p>
-                <button className="button" type="submit">Prepare native generation</button>
-              </form>
-            ) : (
-              <div className="v2-calm-state compact">
-                <strong>Native loop generation is not connected.</strong>
-                <p>The free Loop Kit remains fully available. Connect a verified start/end-frame provider before trying to generate inside Ensemblis.</p>
-                <ButtonLink href={ensemblisArtistHref("/studio/connections", artistId)}>Open Connections</ButtonLink>
-              </div>
-            )}
-          </Disclosure>
         </div>
       </div>
     </section>
@@ -320,6 +278,33 @@ function MakeLoopStage({ workspace, artistId }: { workspace: Workspace; artistId
       )}
 
       <GenerationState workspace={workspace} artistId={artistId} />
+
+      <Disclosure label="Generate the loop inside Ensemblis instead">
+        {workspace.nativeLoopGenerationConfigured ? (
+          <form action={prepareContentCreativeGeneration} className="living-artwork-native-form">
+            <HiddenContext artistId={artistId} contentItemId={contentId} />
+            <input type="hidden" name="creative_intent" value="seamless_loop" />
+            <input type="hidden" name="media_kind" value="video" />
+            <label className="field">
+              <span>Quality</span>
+              <select name="quality" defaultValue="balanced">
+                <option value="economy">Economy</option>
+                <option value="balanced">Balanced · recommended</option>
+                <option value="premium">Premium</option>
+              </select>
+            </label>
+            <input type="hidden" name="motion_preset" value="subtle_pulse" />
+            <p>The portrait frame and loop prompt are ready. Ensemblis will show the exact provider quote before submitting any paid generation.</p>
+            <button className="button" type="submit">Prepare native generation</button>
+          </form>
+        ) : (
+          <div className="v2-calm-state compact">
+            <strong>Native loop generation is not connected.</strong>
+            <p>Use the free Loop Kit with any compatible tool, or connect a verified start/end-frame provider.</p>
+            <ButtonLink href={ensemblisArtistHref("/studio/connections", artistId)}>Open Connections</ButtonLink>
+          </div>
+        )}
+      </Disclosure>
 
       {workspace.latestFailedJob ? (
         <div className="living-artwork-generation-card">
