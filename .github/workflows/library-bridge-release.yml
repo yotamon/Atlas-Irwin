@@ -3,8 +3,13 @@ name: Library Bridge Release Bundles
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - "library-bridge-v*"
+    paths:
+      - "apps/library-bridge/**"
+      - ".github/workflows/library-bridge-release.yml"
 
 permissions:
   contents: read
