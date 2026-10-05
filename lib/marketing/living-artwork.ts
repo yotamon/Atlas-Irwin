@@ -33,6 +33,7 @@ export const LIVING_ARTWORK_MOTION_PRESETS = [
 
 export type LivingArtworkMotionPresetId = typeof LIVING_ARTWORK_MOTION_PRESETS[number]["id"];
 
+export const LIVING_ARTWORK_SOURCE_FRAME_ROLE = "living_artwork_source_frame";
 export const LIVING_ARTWORK_LOOP_ROLE = "living_artwork_loop";
 export const LIVING_ARTWORK_RAW_LOOP_ROLE = "living_artwork_loop_raw";
 export const LIVING_ARTWORK_FULL_TRACK_ROLE = "living_artwork_full_track";
