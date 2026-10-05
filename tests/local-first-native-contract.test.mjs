@@ -203,7 +203,7 @@ test("release validation includes fully native Windows ARM64 audio runtime", asy
   assert.ok(workflow.includes("--no-binary=imageio-ffmpeg --no-deps imageio-ffmpeg==0.6.0"));
   assert.ok(workflow.includes("--no-binary=python-stretch python-stretch==0.3.1"));
   assert.ok(workflow.includes("verify_windows_arm64_python.py"));
-  assert.ok(workflow.includes("Prepare pinned Windows ARM64 FFmpeg"));
+  assert.ok(workflow.includes("Prepare verified Windows ARM64 FFmpeg"));
   assert.ok(workflow.includes("--ffmpeg-binary apps/library-bridge/renderer/.native-tools/windows-arm64/ffmpeg.exe"));
   assert.ok(workflow.includes("Build and verify Windows ARM64 sidecar"));
   assert.ok(workflow.includes("Build Windows ARM64 Tauri release bundle"));
@@ -241,10 +241,15 @@ test("release validation includes fully native Windows ARM64 audio runtime", asy
   assert.ok(sidecarBuilder.includes('"runtime-check"'));
   assert.ok(sidecarBuilder.includes("read_pe_machine"));
 
-  assert.ok(ffmpegBuilder.includes("autobuild-2026-09-13-14-50"));
-  assert.ok(ffmpegBuilder.includes("ffmpeg-n9.0.1-29-gad500d59cb-winarm64-lgpl-9.0.zip"));
-  assert.ok(ffmpegBuilder.includes("9f33212fbd3a74913034d6f535d712a48969ac5115ccaaae312120c92f517904"));
+  assert.ok(ffmpegBuilder.includes("https://api.github.com/repos/BtbN/FFmpeg-Builds/releases/latest"));
+  assert.ok(ffmpegBuilder.includes("ffmpeg-n9.0-latest-winarm64-lgpl-9.0.zip"));
+  assert.ok(ffmpegBuilder.includes('asset.get("digest")'));
+  assert.ok(ffmpegBuilder.includes('asset.get("size")'));
+  assert.ok(ffmpegBuilder.includes('os.environ.get("GITHUB_TOKEN"'));
+  assert.ok(ffmpegBuilder.includes("written > expected_size"));
+  assert.ok(ffmpegBuilder.includes("actual != expected_sha256"));
   assert.ok(ffmpegBuilder.includes("assert_target_binary_architecture(temp_output, target_triple)"));
+  assert.equal(ffmpegBuilder.includes("autobuild-2026-"), false, "release packaging must not depend on expiring dated BtbN autobuild URLs");
 
   assert.ok(sidecar.includes('os.environ["IMAGEIO_FFMPEG_EXE"]'));
   assert.ok(sidecar.includes('RUNTIME_CHECK_VERSION = "ensemblis.library-bridge.runtime-check.v1"'));
