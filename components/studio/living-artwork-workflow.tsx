@@ -5,6 +5,7 @@ import {
   renderLivingArtworkFullTrack,
   renderLivingArtworkSocial,
   repairLivingArtworkLoop,
+  retryLivingArtworkNormalization,
 } from "@/app/studio/living-artwork-actions";
 import {
   approvePreparedCreativeGeneration,
@@ -304,6 +305,13 @@ function MakeLoopStage({ workspace, artistId }: { workspace: Workspace; artistId
                 : "Short-form export needs another attempt"}
           </strong>
           <p>{workspace.latestFailedJob.error || "The media worker could not complete this step. Your approved sources are still safe."}</p>
+          {workspace.latestFailedJob.job_type === "normalize_loop_video" ? (
+            <form action={retryLivingArtworkNormalization}>
+              <HiddenContext artistId={artistId} contentItemId={contentId} />
+              <input type="hidden" name="media_job_id" value={workspace.latestFailedJob.id} />
+              <button className="button primary" type="submit">Retry loop check</button>
+            </form>
+          ) : null}
         </div>
       ) : null}
 
