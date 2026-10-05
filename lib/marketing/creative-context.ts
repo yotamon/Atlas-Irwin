@@ -100,6 +100,7 @@ function httpUrl(value: string | null | undefined) {
 function referenceScore(link: MediaLink | undefined, asset: MediaAsset, source: CreativeReferenceSource) {
   const role = link?.role || asset.asset_type;
   let score = source === "release" ? 78 : source === "brand" ? 72 : source === "content" ? 64 : 50;
+  if (role === "living_artwork_source") score += 240;
   if (role === "living_artwork_source_frame") score += 110;
   if (role === "cover") score += 42;
   if (role === "alternate_artwork") score += 26;
@@ -112,6 +113,7 @@ function referenceScore(link: MediaLink | undefined, asset: MediaAsset, source: 
 
 function referenceReason(link: MediaLink | undefined, asset: MediaAsset, source: CreativeReferenceSource) {
   const role = link?.role || asset.asset_type;
+  if (role === "living_artwork_source") return "Explicit approved visual selected as the exact Living Artwork identity source.";
   if (source === "release" && role === "cover") return "Primary release artwork and the strongest visual anchor for this campaign.";
   if (source === "release" && role === "alternate_artwork") return "Approved alternate artwork from the same release world.";
   if (source === "release") return `Existing ${role.replaceAll("_", " ")} already attached to this release.`;
