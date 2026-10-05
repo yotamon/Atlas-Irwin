@@ -51,9 +51,10 @@ test("native loop routing requires identical start and end frame media", async (
 
 test("Living Artwork UI is staged and exposes zero-spend plus deterministic export paths", async () => {
   const ui = await read("components/studio/living-artwork-workflow.tsx");
+  const loopKitPrep = await read("components/studio/living-artwork-loop-kit-prep.tsx");
   const actions = await read("app/studio/living-artwork-actions.ts");
 
-  assert.match(ui, /Prepare free Loop Kit/);
+  assert.match(loopKitPrep, /Prepare free Loop Kit/);
   assert.match(ui, /Generate the loop inside Ensemblis instead/);
   assert.match(ui, /Import and check loop/);
   assert.match(ui, /Auto repair seam/);
