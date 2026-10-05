@@ -5,6 +5,8 @@ import {
   selectReleaseVisualSource,
 } from "@/app/studio/release-visual-actions";
 import { ReleaseVisualComposer } from "@/components/studio/release-visual-composer";
+import { ReleaseVisualAnimateButton } from "@/components/studio/release-visual-animate-button";
+import { ReleaseVisualFormatRenderer } from "@/components/studio/release-visual-format-renderer";
 import { ReleaseVisualMessageForm } from "@/components/studio/release-visual-message-form";
 import { ButtonLink, Disclosure, PageHeader, Status } from "@/components/studio/ui";
 import { WorkflowStepper } from "@/components/studio/ux-v4-widgets";
@@ -208,20 +210,42 @@ function UseStage({ workspace, artistId }: { workspace: Workspace; artistId: str
             <Link className="button" href={ensemblisArtistHref(`/studio/library?release=${workspace.release.id}`, artistId)}>View lineage</Link>
           </div>
 
-          <div className="release-visual-next-cards">
-            <article>
-              <span className="section-label">Another format</span>
-              <strong>Story · portrait · square</strong>
-              <p>Reuse the approved composition system instead of cropping the raster.</p>
-              <span className="v2-muted-copy">Format rendering is available from this approved visual family.</span>
-            </article>
-            <article>
-              <span className="section-label">Optional motion</span>
-              <strong>Animate this artwork</strong>
-              <p>Use this exact approved visual as the motion identity anchor in Living Artwork.</p>
-              <span className="v2-muted-copy">Motion stays optional. The approved static visual is already complete.</span>
-            </article>
-          </div>
+          {workspace.approvedSpec ? (
+            <>
+              <div className="release-visual-next-block">
+                <span className="section-label">Another format</span>
+                <h3>Story · portrait · square</h3>
+                <p>Each output is recomposed from the approved design spec. Ensemblis never stretches or crops the wrong raster into a new shape.</p>
+                <ReleaseVisualFormatRenderer
+                  artistId={artistId}
+                  contentItemId={workspace.content.id}
+                  approvedSpec={workspace.approvedSpec}
+                  assets={{
+                    "instagram-story-image": workspace.storyAsset?.public_url ?? undefined,
+                    "instagram-feed-portrait": workspace.feedAsset?.public_url ?? undefined,
+                    "instagram-square": workspace.squareAsset?.public_url ?? undefined,
+                  }}
+                />
+              </div>
+
+              <div className="release-visual-next-block">
+                <span className="section-label">Optional motion</span>
+                <h3>Animate the approved artwork</h3>
+                <p>Living Artwork receives the exact approved 9:16 visual. If Story has not been rendered yet, Ensemblis creates that deterministic format first.</p>
+                <ReleaseVisualAnimateButton
+                  artistId={artistId}
+                  contentItemId={workspace.content.id}
+                  approvedSpec={workspace.approvedSpec}
+                  storyReady={Boolean(workspace.storyAsset?.public_url)}
+                />
+              </div>
+            </>
+          ) : (
+            <div className="v2-calm-state compact">
+              <strong>Approval lineage is incomplete.</strong>
+              <p>Return to Review and approve the current visual before creating derivatives or motion.</p>
+            </div>
+          )}
         </div>
       </div>
     </section>
