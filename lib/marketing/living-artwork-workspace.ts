@@ -51,6 +51,14 @@ export async function loadLivingArtworkWorkspace(input: {
   const sourceReference = context.imageReferences[0] ?? null;
   const sourceUrl = sourceReference?.url ?? context.release.artworkUrl ?? null;
   const sourceAssetId = sourceReference?.assetId ?? null;
+  const { data: sourceAsset, error: sourceAssetError } = sourceAssetId
+    ? await service.from("media_assets")
+      .select("id,width,height,mime_type")
+      .eq("owner_id", input.ownerId)
+      .eq("id", sourceAssetId)
+      .maybeSingle()
+    : { data: null, error: null };
+  if (sourceAssetError) throw new Error(sourceAssetError.message);
 
   let track: { id: string; title: string; audio_url: string | null; duration: number | null } | null = null;
   if (content.moment_id) {
@@ -140,7 +148,7 @@ export async function loadLivingArtworkWorkspace(input: {
 
   const stage = deriveLivingArtworkStage({
     sourceReady: Boolean(sourceUrl),
-    motionReady: Boolean(content.visual_prompt),
+    motionReady: Boolean(content.production_notes?.includes("[living-artwork:v1")),
     processing: Boolean(activeJob) || Boolean(loopGeneration && ["queued", "running"].includes(loopGeneration.status)),
     rawLoopReady: Boolean(candidateLoopAsset),
     approvedLoopReady: Boolean(approvedLoopAsset),
@@ -153,6 +161,10 @@ export async function loadLivingArtworkWorkspace(input: {
       assetId: sourceAssetId,
       url: sourceUrl,
       label: sourceReference?.title || `${context.release.title} artwork`,
+      role: sourceReference?.role ?? "cover",
+      width: sourceAsset?.width ?? null,
+      height: sourceAsset?.height ?? null,
+      exactPortrait: sourceAsset?.width === 1080 && sourceAsset?.height === 1920,
     } : null,
     track,
     stage,
