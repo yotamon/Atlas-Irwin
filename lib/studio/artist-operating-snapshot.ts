@@ -188,7 +188,7 @@ export async function loadArtistOperatingSnapshot({
     operational.from("tasks").select("id,title,due_at,priority,status").eq("owner_id", userId).eq("artist_id", artist.artistId).not("status", "in", '("Done","Skipped")').order("due_at", { ascending: true }).limit(30),
     marketing.from("automation_jobs").select("id,campaign_id,job_type,status,approval_status,run_after").eq("owner_id", userId).eq("artist_id", artist.artistId).not("status", "in", '("completed","failed","cancelled")').order("run_after", { ascending: true }).limit(40),
     marketing.from("publication_jobs").select("id,campaign_id,content_item_id,platform,status,approval_status,scheduled_at").eq("owner_id", userId).eq("artist_id", artist.artistId).not("status", "in", '("published","failed","cancelled")').order("scheduled_at", { ascending: true }).limit(40),
-    marketing.from("content_items").select("id,title,platform,status,asset_url,scheduled_at,release_id").eq("owner_id", userId).eq("artist_id", artist.artistId).not("status", "eq", "Archived").order("scheduled_at", { ascending: true }).limit(100),
+    marketing.from("content_items").select("id,title,platform,status,asset_url,scheduled_at,release_id,production_notes,approval_status,updated_at").eq("owner_id", userId).eq("artist_id", artist.artistId).not("status", "eq", "Archived").order("scheduled_at", { ascending: true }).limit(100),
     marketing.from("marketing_learnings").select("id,status").eq("owner_id", userId).eq("artist_id", artist.artistId).eq("status", "proposed").limit(20),
     autonomy.from("next_best_actions").select("id,title,rationale,action_type,score,status,source_type,payload,expires_at").eq("owner_id", userId).eq("artist_id", artist.artistId).eq("status", "proposed").order("score", { ascending: false }).limit(8),
     autonomy.from("next_best_actions").select("id,title,rationale,action_type,status,source_type,payload,updated_at").eq("owner_id", userId).eq("artist_id", artist.artistId).eq("status", "completed").eq("source_type", "artist_operating_profile").gte("updated_at", sevenDaysAgo.toISOString()).order("updated_at", { ascending: false }).limit(6),
@@ -235,6 +235,22 @@ export async function loadArtistOperatingSnapshot({
   const momentRows = momentsResult.data ?? [];
   const campaigns = campaignsResult.data ?? [];
   const content = contentResult.data ?? [];
+  const latestLivingArtworkRow = content
+    .filter((item) => item.production_notes?.includes("[living-artwork:v1"))
+    .sort((left, right) => Date.parse(right.updated_at) - Date.parse(left.updated_at))[0] ?? null;
+  const latestLivingArtwork = latestLivingArtworkRow ? {
+    id: latestLivingArtworkRow.id,
+    title: latestLivingArtworkRow.title,
+    status: latestLivingArtworkRow.approval_status === "approved"
+      ? "Ready to export"
+      : latestLivingArtworkRow.production_notes
+        ? "In progress"
+        : "Setup",
+    detail: latestLivingArtworkRow.approval_status === "approved"
+      ? "Approved Living Artwork loop · export or reuse it without another generation."
+      : "Living Artwork workflow in progress · continue from the saved source, motion and media state.",
+    href: href(`/studio/create/loop/${latestLivingArtworkRow.id}`),
+  } : null;
   const automation = automationResult.data ?? [];
   const publications = publicationResult.data ?? [];
   const nextActions = nextActionsResult.data ?? [];
@@ -471,6 +487,7 @@ export async function loadArtistOperatingSnapshot({
     activeRelease,
     latestTrack,
     latestMix,
+    latestLivingArtwork,
     activeMission,
     momentRecommendation,
     primaryMission,

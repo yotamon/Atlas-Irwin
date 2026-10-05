@@ -100,6 +100,7 @@ function httpUrl(value: string | null | undefined) {
 function referenceScore(link: MediaLink | undefined, asset: MediaAsset, source: CreativeReferenceSource) {
   const role = link?.role || asset.asset_type;
   let score = source === "release" ? 78 : source === "brand" ? 72 : source === "content" ? 64 : 50;
+  if (role === "living_artwork_source_frame") score += 110;
   if (role === "cover") score += 42;
   if (role === "alternate_artwork") score += 26;
   if (role === "brand_reference") score += 24;

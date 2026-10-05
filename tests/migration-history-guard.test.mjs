@@ -342,7 +342,7 @@ test("latest production recovery baseline matches the 2026-10-01 audited drift",
   const local = readLocalMigrations();
   const localIds = new Set(local.map((migration) => `${migration.version}_${migration.name}`));
 
-  assert.equal(local.length, 150);
+  assert.equal(local.length, 151);
   assert.equal(baseline.auditDate, "2026-10-01");
   assert.equal(baseline.canonicalMigrationCount, local.length);
   assert.equal(baseline.remoteMigrationCount, 147);

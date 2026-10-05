@@ -53,6 +53,7 @@ export default async function TodayPage() {
     activeRelease,
     latestTrack,
     latestMix,
+    latestLivingArtwork,
     primaryMission,
     needsYou,
     topDecision,
@@ -136,8 +137,18 @@ export default async function TodayPage() {
     ...managerPlan.map((item) => ({ ...item, activity: "Planned" })),
   ].filter((item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index).slice(0, 6);
   const contextCount = remainingDecisions.length + handling.length + comingUp.length;
-  const continueCount = (activeRelease ? 1 : 0) + (latestMix ? 1 : 0) + (latestTrack ? 1 : 0);
-  const primaryContinue = activeRelease
+  const continueCount = (latestLivingArtwork ? 1 : 0) + (activeRelease ? 1 : 0) + (latestMix ? 1 : 0) + (latestTrack ? 1 : 0);
+  const primaryContinue = latestLivingArtwork
+    ? {
+        eyebrow: "Living Artwork",
+        title: latestLivingArtwork.title,
+        detail: latestLivingArtwork.detail,
+        status: latestLivingArtwork.status,
+        tone: "accent" as const,
+        href: latestLivingArtwork.href,
+        actionLabel: "Continue",
+      }
+    : activeRelease
     ? {
         eyebrow: "Release plan",
         title: activeRelease.title,
@@ -181,6 +192,11 @@ export default async function TodayPage() {
     label: `Continue ${primaryMission.title}`,
     detail: primaryMission.summary,
     href: href(primaryMission.href),
+  });
+  if (latestLivingArtwork) launcherSuggestions.push({
+    label: `Continue ${latestLivingArtwork.title}`,
+    detail: latestLivingArtwork.detail,
+    href: latestLivingArtwork.href,
   });
   if (latestMix) launcherSuggestions.push({
     label: `Continue ${latestMix.name}`,
@@ -271,6 +287,16 @@ export default async function TodayPage() {
             <span><strong>Continue recent work</strong><small>Resume a release, track or mix without competing with today&apos;s priority.</small></span>
           </summary>
           <div className="today-human-factors-secondary-body en-continue-grid">
+            {latestLivingArtwork ? (
+              <ContinueWidget
+                eyebrow="Living Artwork"
+                title={latestLivingArtwork.title}
+                detail={latestLivingArtwork.detail}
+                status={latestLivingArtwork.status}
+                tone="accent"
+                href={latestLivingArtwork.href}
+              />
+            ) : null}
             {activeRelease ? (
               <ContinueWidget
                 eyebrow="Release plan"

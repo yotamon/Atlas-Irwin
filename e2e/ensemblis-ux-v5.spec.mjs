@@ -130,6 +130,39 @@ test.describe("Ensemblis UX V5 authenticated acceptance", () => {
     await expect(page.getByText("Requested", { exact: true }).first()).toBeVisible();
   });
 
+  test("Living Artwork is discoverable, contextual and zero-spend-first", async ({ page }) => {
+    const track = await firstPlayableCatalogTrack(page);
+    await queryLauncher(page, "visualizer for " + track.title);
+
+    const result = page.getByRole("link", {
+      name: new RegExp("Create from " + escapeRegex(track.title), "i"),
+    }).first();
+    await expect(result).toBeVisible();
+    await result.click();
+
+    await expect(page.getByRole("heading", { name: "What do you want to make?" })).toBeVisible();
+    const visualCard = page.locator(".create-deliverable-card").filter({
+      has: page.getByRole("heading", { name: "Create a memorable visual loop" }),
+    }).first();
+    await expect(visualCard).toBeVisible();
+    await visualCard.getByRole("button", { name: "Create Mood video" }).click();
+
+    await page.waitForURL(/\/studio\/create\/loop\/[0-9a-f-]+/i);
+    await expect(page.getByRole("heading", { name: "Living Artwork" })).toBeVisible();
+    const progress = page.getByRole("navigation", { name: "Workflow progress" });
+    await expect(progress).toBeVisible();
+    for (const step of ["Source", "Motion", "Make loop", "Review loop", "Export"]) {
+      await expect(progress.getByRole("button", { name: new RegExp(step, "i") })).toBeVisible();
+    }
+    await expect(page.getByRole("button", { name: "Prepare free Loop Kit" })).toBeVisible();
+    await auditCheckpoint(page, "living-artwork-desktop");
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.getByRole("heading", { name: "Living Artwork" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Prepare free Loop Kit" })).toBeVisible();
+    await auditCheckpoint(page, "living-artwork-mobile");
+  });
+
   test("4. a release leads with its lifecycle plan and one next move", async ({ page }) => {
     const release = await firstRelease(page);
     await page.goto(release.href);

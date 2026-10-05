@@ -14,6 +14,8 @@ from . import main as worker_main
 from .automix import AutomixWorkerRequest, execute_automix
 from .automix_preview import AutomixPreviewWorkerRequest, execute_automix_preview
 from .mastering_processor import MasteringWorkerRequest, execute_mastering
+from .loop_video import LoopNormalizeWorkerRequest, execute_loop_normalization
+from .loop_visualizer import LoopVisualizerWorkerRequest, execute_loop_visualizer
 from .music_intelligence_v4_runtime import analyze_music as analyze_music_v4
 from .social_finishing import SocialWorkerRequest, execute_social
 from .stem_intelligence_v3 import analyze_stem as analyze_stem_v3
@@ -147,6 +149,8 @@ CONTRACT_JOB_TYPES = frozenset({
     "render_audio_scene",
     "master_audio",
     "finish_social_video",
+    "normalize_loop_video",
+    "render_loop_visualizer",
     "render_automix",
     "render_automix_preview",
 })
@@ -178,6 +182,12 @@ def main() -> None:
         if payload.get("job_type") == "finish_social_video":
             request = SocialWorkerRequest.model_validate(payload)
             executor = execute_social
+        elif payload.get("job_type") == "normalize_loop_video":
+            request = LoopNormalizeWorkerRequest.model_validate(payload)
+            executor = execute_loop_normalization
+        elif payload.get("job_type") == "render_loop_visualizer":
+            request = LoopVisualizerWorkerRequest.model_validate(payload)
+            executor = execute_loop_visualizer
         elif payload.get("job_type") == "master_audio":
             request = MasteringWorkerRequest.model_validate(payload)
             executor = execute_mastering

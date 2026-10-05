@@ -50,6 +50,25 @@ function cleanObject(value: string) {
 
 function createIntent(query: string): ClassifiedStudioIntent | null {
   const lower = query.toLowerCase();
+  const livingArtworkIntent = /\bvisualizer\b/.test(lower) || (
+    /\b(?:animate|loop|looping)\b/.test(lower)
+    && /\b(?:artwork|cover|visual|image)\b/.test(lower)
+  ) || /\b(?:reel|story|short)\s+background\b.*\b(?:artwork|cover|visual|image)\b/.test(lower);
+  if (livingArtworkIntent) {
+    return {
+      kind: "create_from_object",
+      objectType: "any",
+      objectQuery: cleanObject(
+        query
+          .replace(/\b(?:animate|loop|looping|visualizer|make|create|generate|turn)\b/gi, " ")
+          .replace(/\b(?:this|a|an|the|artwork|cover|visual|image|visualizer|loop|reel|story|short|background)\b/gi, " ")
+          .replace(/\b(?:from|for|using|into)\b/gi, " "),
+      ),
+      desiredOutcome: "visual",
+      confidence: "high",
+      source: "deterministic",
+    };
+  }
   const createMatch = query.match(/(?:make|create|generate|turn)\s+(?:me\s+)?(?:an?\s+)?(.+?)\s+(?:from|for|using)\s+(.+)/i);
   if (createMatch) {
     const desiredOutcome = clean(createMatch[1]).replace(/\b(?:content|asset)\b/gi, "").trim() || "creative";

@@ -153,7 +153,7 @@ async function dispatch(db: ReturnType<typeof client>, job: MarketingMediaJob) {
     const dispatchPayload = await freshUploadPayload(requestPayload);
     const result = await dispatchMediaWorkerJob({
       jobId: claimed.id,
-      jobType: "finish_social_video",
+      jobType: claimed.job_type,
       payload: dispatchPayload,
       callbackUrl: `${getSiteUrl()}/api/studio/marketing/media-worker/callback`,
       callbackToken: credential.token,

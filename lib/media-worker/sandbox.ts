@@ -5,8 +5,8 @@ import { Sandbox } from "@vercel/sandbox";
 import { mediaWorkerDispatchFailure } from "@/lib/media-worker/failures";
 
 export const MEDIA_WORKER_CALLBACK_HASH_KEY = "__atlas_callback_token_sha256";
-const MEDIA_WORKER_RUNTIME_VERSION = 12;
-const MEDIA_WORKER_BOOTSTRAP_VERSION = 11;
+const MEDIA_WORKER_RUNTIME_VERSION = 14;
+const MEDIA_WORKER_BOOTSTRAP_VERSION = 13;
 const MEDIA_WORKER_SANDBOX_GENERATION = 2;
 const MEDIA_WORKER_PYTHON_VERSION = "3.13.14";
 const MEDIA_WORKER_SANDBOX_IMAGE = "vercel/sandbox/universal:latest";
@@ -251,6 +251,9 @@ files = {
     "app/stem_intelligence.py": f"{base}/app/stem_intelligence.py",
     "app/stem_intelligence_v3.py": f"{base}/app/stem_intelligence_v3.py",
     "app/social_finishing.py": f"{base}/app/social_finishing.py",
+    "app/loop_video.py": f"{base}/app/loop_video.py",
+    "app/loop_visualizer.py": f"{base}/app/loop_visualizer.py",
+    "app/video_loop.py": f"{base}/app/video_loop.py",
     "app/video_director_finishing.py": f"{base}/app/video_director_finishing.py",
     "app/automix_model.py": f"{base}/app/automix_model.py",
     "app/automix_intelligence.py": f"{base}/app/automix_intelligence.py",
@@ -326,7 +329,9 @@ from app.automix_set_intelligence import SET_INTENT_VERSION
 from app.mastering_processor import MasteringWorkerRequest
 from app.stem_intelligence import ANALYSIS_VERSION
 from app.social_finishing import SocialWorkerRequest
-print("Atlas Media Worker ready", imageio_ffmpeg.get_ffmpeg_exe(), "stem-analysis", ANALYSIS_VERSION, "mastering", MasteringWorkerRequest.__name__, "social-finishing", SocialWorkerRequest.__name__, "automix", AutomixWorkerRequest.__name__, "preview", AutomixPreviewWorkerRequest.__name__, "mixplan", MIXPLAN_VERSION, "set-intent", SET_INTENT_VERSION)
+from app.loop_video import LoopNormalizeWorkerRequest
+from app.loop_visualizer import LoopVisualizerWorkerRequest
+print("Atlas Media Worker ready", imageio_ffmpeg.get_ffmpeg_exe(), "stem-analysis", ANALYSIS_VERSION, "mastering", MasteringWorkerRequest.__name__, "social-finishing", SocialWorkerRequest.__name__, "loop-normalize", LoopNormalizeWorkerRequest.__name__, "loop-render", LoopVisualizerWorkerRequest.__name__, "automix", AutomixWorkerRequest.__name__, "preview", AutomixPreviewWorkerRequest.__name__, "mixplan", MIXPLAN_VERSION, "set-intent", SET_INTENT_VERSION)
 PY
 }
 
@@ -356,6 +361,8 @@ export async function dispatchMediaWorkerJob(input: {
     | "render_audio_scene"
     | "master_audio"
     | "finish_social_video"
+    | "normalize_loop_video"
+    | "render_loop_visualizer"
     | "render_automix"
     | "render_automix_preview";
   payload: Record<string, unknown>;

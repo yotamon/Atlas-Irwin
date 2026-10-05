@@ -11,6 +11,7 @@ export const CREATIVE_QUALITY_PROFILES = ["economy", "balanced", "premium"] as c
 export type CreativeQualityProfile = (typeof CREATIVE_QUALITY_PROFILES)[number];
 export const CREATIVE_MEDIA_KINDS = ["auto", "image", "video"] as const;
 export type CreativeMediaKindPreference = (typeof CREATIVE_MEDIA_KINDS)[number];
+export type CreativeRouteIntent = "standard" | "seamless_loop";
 
 type CreativeAspectRatio = CreativeGenerationRequest["aspectRatio"];
 type CreativeRouteReferenceContext = Pick<CreativeReferenceContext, "imageReferences" | "videoReferences" | "audioReferenceUrl">;
@@ -22,6 +23,7 @@ export type CreativeRouteInput = {
   prompt: string;
   quality: CreativeQualityProfile;
   mediaKind: CreativeMediaKindPreference;
+  creativeIntent?: CreativeRouteIntent;
   aspectRatio?: CreativeAspectRatio;
   audioStart?: number | null;
   audioEnd?: number | null;
@@ -91,7 +93,16 @@ function imageResolution(quality: CreativeQualityProfile) {
   return quality === "economy" ? "720p" as const : "1080p" as const;
 }
 
+function loopModelForQuality(quality: CreativeQualityProfile): HiggsfieldModelId {
+  return quality === "economy"
+    ? "seedance_2_0_mini"
+    : quality === "premium"
+      ? "seedance_2_5"
+      : "seedance_2_0";
+}
+
 function requestedVideoDuration(input: CreativeRouteInput, provider: CreativeProviderId, model: string) {
+  if (input.creativeIntent === "seamless_loop") return 6;
   if (provider === "zai" && model.startsWith("vidu2-")) return 4;
   if (provider === "google" && model.startsWith("veo-3.1-")) return 8;
   const selected = input.audioStart !== null && input.audioStart !== undefined && input.audioEnd !== null && input.audioEnd !== undefined
@@ -108,6 +119,19 @@ function videoResolution(quality: CreativeQualityProfile, provider: CreativeProv
 function referenceMedias(input: CreativeRouteInput, provider: CreativeProviderId, model: string, outputKind: "image" | "video") {
   const medias: VideoProviderMedia[] = [];
   const images = input.context.imageReferences;
+
+  if (input.creativeIntent === "seamless_loop") {
+    if (provider !== "higgsfield") throw new Error("Seamless loop generation requires a verified start/end-frame provider.");
+    const source = images[0];
+    if (!source) throw new Error("Seamless loop generation requires an approved image source.");
+    const info = higgsfieldModel(model as HiggsfieldModelId);
+    if (!info?.supportsStartImage || !info.supportsEndImage) {
+      throw new Error(`${info?.label ?? model} does not have verified first/last-frame support.`);
+    }
+    medias.push({ role: "start_image", url: source.url });
+    medias.push({ role: "end_image", url: source.url });
+    return medias;
+  }
 
   if (provider === "higgsfield") {
     const info = higgsfieldModel(model as HiggsfieldModelId);
@@ -144,28 +168,41 @@ function higgsfieldParams(model: string, input: CreativeRouteInput) {
 }
 
 export function routeMarketingCreative(input: CreativeRouteInput): CreativeRoute {
-  const outputKind = input.mediaKind === "auto" ? autoOutputKind(input.format) : input.mediaKind;
-  const ratio = input.aspectRatio ?? inferredAspectRatio(input.platform, input.format, outputKind);
+  const outputKind = input.creativeIntent === "seamless_loop"
+    ? "video"
+    : input.mediaKind === "auto" ? autoOutputKind(input.format) : input.mediaKind;
+  const ratio = input.creativeIntent === "seamless_loop"
+    ? "9:16" as const
+    : input.aspectRatio ?? inferredAspectRatio(input.platform, input.format, outputKind);
+  if (input.creativeIntent === "seamless_loop" && !providerAvailability().get("higgsfield")) {
+    throw new Error("Native seamless-loop generation is unavailable until a verified start/end-frame provider is connected.");
+  }
   const selected = chooseCandidate(input.quality, outputKind, ratio);
-  let model = selected.candidate.model;
-  if (selected.candidate.provider === "higgsfield" && model === "auto_premium") model = higgsfieldPremiumModel(input);
-  const provider = selected.candidate.provider;
-  const fallbackPrefix = selected.fallbackUsed
+  let model = input.creativeIntent === "seamless_loop"
+    ? loopModelForQuality(input.quality)
+    : selected.candidate.model;
+  const provider: CreativeProviderId = input.creativeIntent === "seamless_loop"
+    ? "higgsfield"
+    : selected.candidate.provider;
+  if (provider === "higgsfield" && model === "auto_premium") model = higgsfieldPremiumModel(input);
+  const fallbackPrefix = input.creativeIntent === "seamless_loop" ? "" : selected.fallbackUsed
     ? `${selected.preferred.label} is not connected, so Ensemblis selected the next ${input.quality} route: `
     : selected.configured
       ? ""
       : `${selected.preferred.label} is the preferred route but is not connected yet. `;
   const compatibilityNote = ratio === "4:5" ? " Native 4:5 compatibility is required for this package." : "";
-  const reason = `${fallbackPrefix}${selected.candidate.label}. ${selected.candidate.reason}${compatibilityNote} ${input.context.imageReferences.length} ranked image reference${input.context.imageReferences.length === 1 ? "" : "s"} are available from visual lineage.`;
+  const reason = input.creativeIntent === "seamless_loop"
+    ? `Living Artwork uses ${higgsfieldModel(model)?.label ?? model} because this route has verified first + last frame support. The same primary artwork is used at both boundaries so motion can close back onto the source composition.`
+    : `${fallbackPrefix}${selected.candidate.label}. ${selected.candidate.reason}${compatibilityNote} ${input.context.imageReferences.length} ranked image reference${input.context.imageReferences.length === 1 ? "" : "s"} are available from visual lineage.`;
 
   if (outputKind === "image") {
     return {
       outputKind,
       assetType: "social_image",
       reason,
-      fallbackUsed: selected.fallbackUsed,
-      preferredProvider: selected.preferred.provider,
-      priceLabel: selected.candidate.priceLabel,
+      fallbackUsed: input.creativeIntent === "seamless_loop" ? false : selected.fallbackUsed,
+      preferredProvider: input.creativeIntent === "seamless_loop" ? "higgsfield" : selected.preferred.provider,
+      priceLabel: input.creativeIntent === "seamless_loop" ? "Higgsfield credit quote" : selected.candidate.priceLabel,
       request: {
         provider,
         operation: "look_image",
@@ -182,9 +219,9 @@ export function routeMarketingCreative(input: CreativeRouteInput): CreativeRoute
     outputKind,
     assetType: "content_video",
     reason,
-    fallbackUsed: selected.fallbackUsed,
-    preferredProvider: selected.preferred.provider,
-    priceLabel: selected.candidate.priceLabel,
+    fallbackUsed: input.creativeIntent === "seamless_loop" ? false : selected.fallbackUsed,
+    preferredProvider: input.creativeIntent === "seamless_loop" ? "higgsfield" : selected.preferred.provider,
+    priceLabel: input.creativeIntent === "seamless_loop" ? "Higgsfield credit quote" : selected.candidate.priceLabel,
     request: {
       provider,
       operation: "shot_video",

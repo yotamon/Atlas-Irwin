@@ -12,6 +12,12 @@ import type { CreativeReferenceContext } from "@/lib/marketing/creative-context"
 import type { CreativeTreatment } from "@/lib/marketing/creative-treatment";
 import type { Json } from "@/types/database";
 import type { MarketingMediaDatabase } from "@/types/marketing-media-database";
+import type { ArtistScopedMusicDatabase } from "@/types/artist-scoped-music-database";
+import {
+  LIVING_ARTWORK_FULL_TRACK_ROLE,
+  LIVING_ARTWORK_LOOP_ROLE,
+  LIVING_ARTWORK_SOCIAL_ROLE,
+} from "@/lib/marketing/living-artwork";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -162,6 +168,228 @@ async function registerFinishedAsset(input: {
   return asset;
 }
 
+
+async function registerLivingArtworkWorkerAsset(input: {
+  jobId: string;
+  jobType: "normalize_loop_video" | "render_loop_visualizer" | "finish_social_video";
+  ownerId: string;
+  artistId: string;
+  campaignId: string | null;
+  releaseId: string | null;
+  contentItemId: string;
+  generationRunId: string | null;
+  requestPayload: Record<string, unknown>;
+  result: Record<string, unknown>;
+}) {
+  const db = createServiceClient();
+  const music = db as unknown as SupabaseClient<ArtistScopedMusicDatabase>;
+  const expectedUrl = typeof input.requestPayload.public_url === "string" ? input.requestPayload.public_url : "";
+  const resultUrl = typeof input.result.public_url === "string" ? input.result.public_url : expectedUrl;
+  if (!expectedUrl || resultUrl !== expectedUrl) throw new Error("Living Artwork worker returned an unexpected output URL.");
+  const bucket = typeof input.requestPayload.upload_bucket === "string" ? input.requestPayload.upload_bucket : "public-media";
+  const path = typeof input.requestPayload.upload_path === "string" ? input.requestPayload.upload_path : "";
+  if (!path) throw new Error("Living Artwork worker output storage path is missing.");
+
+  const { data: existing, error: existingError } = await db.from("media_assets")
+    .select("*")
+    .eq("owner_id", input.ownerId)
+    .contains("metadata", { marketing_media_job_id: input.jobId })
+    .limit(1)
+    .maybeSingle();
+  if (existingError) throw new Error(existingError.message);
+
+  let asset = existing;
+  if (!asset) {
+    const isLoop = input.jobType === "normalize_loop_video";
+    const isFullTrack = input.jobType === "render_loop_visualizer";
+    const { data, error } = await db.from("media_assets").insert({
+      owner_id: input.ownerId,
+      bucket_name: bucket,
+      storage_path: path,
+      public_url: expectedUrl,
+      asset_type: "content_video",
+      mime_type: typeof input.result.mime_type === "string" ? input.result.mime_type : "video/mp4",
+      file_size: Number(input.result.file_size) || null,
+      content_hash: typeof input.result.sha256 === "string" ? input.result.sha256 : null,
+      width: Number(input.result.width) || null,
+      height: Number(input.result.height) || null,
+      duration_ms: Number(input.result.duration_ms) || null,
+      visibility: "public",
+      metadata: json({
+        title: isLoop
+          ? "Living Artwork loop"
+          : isFullTrack
+            ? "Living Artwork full-track visualizer"
+            : "Living Artwork social video",
+        description: isLoop
+          ? "Normalized and seam-checked by Ensemblis Media Worker."
+          : isFullTrack
+            ? "Rendered deterministically from an approved Living Artwork loop and canonical track audio."
+            : "Short-form social video finished deterministically from an approved Living Artwork loop.",
+        tags: ["ensemblis-generated", "living-artwork", isLoop ? "loop" : isFullTrack ? "full-track-visualizer" : "social-export"],
+        artist_id: input.artistId,
+        upload_source: "ensemblis-media-worker",
+        source_kind: isLoop ? "normalized_loop" : isFullTrack ? "loop_visualizer" : "loop_social",
+        marketing_media_job_id: input.jobId,
+        marketing_generation_run_id: input.generationRunId,
+        source_asset_id: typeof input.requestPayload.source_asset_id === "string" ? input.requestPayload.source_asset_id : null,
+        campaign_id: input.campaignId,
+        release_id: input.releaseId,
+        content_item_id: input.contentItemId,
+        seam_state: input.result.seam_state ?? null,
+        seam_similarity: input.result.seam_similarity ?? null,
+        boundary_window_similarity: input.result.boundary_window_similarity ?? null,
+        luminance_delta: input.result.luminance_delta ?? null,
+        color_delta: input.result.color_delta ?? null,
+        frame_count_estimate: Number(input.result.frame_count_estimate) || null,
+        freeze_suspected: input.result.freeze_suspected === true,
+        repaired: input.result.repaired === true,
+        repair_ms: Number(input.result.repair_ms) || 0,
+        audio_source: input.result.audio_source ?? null,
+        audio_processing: input.result.audio_processing ?? null,
+        output_duration_ms: Number(input.result.output_duration_ms) || null,
+        duration_delta_ms: Number(input.result.duration_delta_ms) || null,
+        has_video: input.result.has_video === true,
+        has_audio: input.result.has_audio === true,
+        review_frames: Array.isArray(input.result.review_frames) ? input.result.review_frames : [],
+      }),
+    }).select("*").single();
+    if (error || !data) throw new Error(error?.message || "Living Artwork output could not be registered.");
+    asset = data;
+  }
+  if (!asset?.public_url) throw new Error("Living Artwork output is missing its public URL.");
+
+  const role = input.jobType === "normalize_loop_video"
+    ? LIVING_ARTWORK_LOOP_ROLE
+    : input.jobType === "render_loop_visualizer"
+      ? LIVING_ARTWORK_FULL_TRACK_ROLE
+      : LIVING_ARTWORK_SOCIAL_ROLE;
+  const shouldBePrimary = input.jobType === "render_loop_visualizer";
+  if (shouldBePrimary) {
+    const { error: demoteError } = await music.from("media_links")
+      .update({ is_primary: false })
+      .eq("owner_id", input.ownerId)
+      .eq("artist_id", input.artistId)
+      .eq("content_item_id", input.contentItemId)
+      .eq("role", role);
+    if (demoteError) throw new Error(demoteError.message);
+  }
+
+  const { data: existingLink, error: linkLookupError } = await music.from("media_links")
+    .select("id")
+    .eq("owner_id", input.ownerId)
+    .eq("artist_id", input.artistId)
+    .eq("content_item_id", input.contentItemId)
+    .eq("media_asset_id", asset.id)
+    .eq("role", role)
+    .limit(1)
+    .maybeSingle();
+  if (linkLookupError) throw new Error(linkLookupError.message);
+  const linkRow = {
+    owner_id: input.ownerId,
+    artist_id: input.artistId,
+    media_asset_id: asset.id,
+    release_id: input.releaseId,
+    track_id: null,
+    content_item_id: input.contentItemId,
+    role,
+    display_order: 0,
+    is_primary: shouldBePrimary,
+    caption: input.jobType === "normalize_loop_video"
+      ? "Living Artwork loop candidate"
+      : input.jobType === "render_loop_visualizer"
+        ? "Full-track Living Artwork visualizer"
+        : "Living Artwork social export",
+    alt_text: null,
+  };
+  const { error: linkError } = existingLink
+    ? await music.from("media_links").update(linkRow).eq("id", existingLink.id).eq("artist_id", input.artistId)
+    : await music.from("media_links").insert(linkRow);
+  if (linkError) throw new Error(linkError.message);
+  return asset;
+}
+
+async function reconcileLivingArtworkWorker(input: {
+  job: MarketingMediaDatabase["public"]["Tables"]["marketing_media_jobs"]["Row"];
+  requestPayload: Record<string, unknown>;
+  result: Record<string, unknown>;
+}) {
+  if (
+    input.job.job_type !== "normalize_loop_video"
+    && input.job.job_type !== "render_loop_visualizer"
+    && input.job.job_type !== "finish_social_video"
+  ) {
+    throw new Error("Unsupported Living Artwork reconciliation job.");
+  }
+  const db = marketing();
+  const asset = await registerLivingArtworkWorkerAsset({
+    jobId: input.job.id,
+    jobType: input.job.job_type,
+    ownerId: input.job.owner_id,
+    artistId: input.job.artist_id,
+    campaignId: input.job.campaign_id,
+    releaseId: input.job.release_id,
+    contentItemId: input.job.content_item_id,
+    generationRunId: input.job.generation_run_id,
+    requestPayload: input.requestPayload,
+    result: input.result,
+  });
+
+  if (input.job.generation_run_id && input.job.job_type === "normalize_loop_video") {
+    const { data: run, error: runError } = await db.from("generation_runs")
+      .select("output")
+      .eq("id", input.job.generation_run_id)
+      .eq("owner_id", input.job.owner_id)
+      .eq("artist_id", input.job.artist_id)
+      .maybeSingle();
+    if (runError) throw new Error(runError.message);
+    if (run) {
+      const output = record(run.output);
+      const { error: updateError } = await db.from("generation_runs").update({
+        output: json({
+          ...output,
+          stage: "living_artwork_review",
+          normalizedLoopAssetId: asset.id,
+          normalizedLoopUrl: asset.public_url,
+          loopQuality: input.result,
+        }),
+      }).eq("id", input.job.generation_run_id)
+        .eq("owner_id", input.job.owner_id)
+        .eq("artist_id", input.job.artist_id);
+      if (updateError) throw new Error(updateError.message);
+    }
+  }
+
+  const { error: jobUpdateError } = await db.from("marketing_media_jobs").update({
+    status: "completed",
+    result_payload: json({ ...input.result, media_asset_id: asset.id }),
+    error: null,
+    completed_at: new Date().toISOString(),
+  }).eq("id", input.job.id).eq("artist_id", input.job.artist_id);
+  if (jobUpdateError) throw new Error(jobUpdateError.message);
+
+  const eventType = input.job.job_type === "normalize_loop_video"
+    ? "loop_qc_completed"
+    : "loop_export_completed";
+  const { error: eventError } = await db.from("marketing_events").insert({
+    owner_id: input.job.owner_id,
+    artist_id: input.job.artist_id,
+    campaign_id: input.job.campaign_id,
+    event_type: eventType,
+    entity_type: "content_item",
+    entity_id: input.job.content_item_id,
+    payload: json({
+      mediaJobId: input.job.id,
+      mediaAssetId: asset.id,
+      generationRunId: input.job.generation_run_id,
+      seamState: input.result.seam_state ?? null,
+      repaired: input.result.repaired === true,
+    }),
+  });
+  if (eventError) throw new Error(eventError.message);
+  return asset;
+}
+
 export async function POST(request: Request) {
   const body = record(await request.json().catch(() => ({})));
   const jobId = typeof body.job_id === "string" ? body.job_id : "";
@@ -193,7 +421,7 @@ export async function POST(request: Request) {
   }
 
   if (status === "failed") {
-    const message = callbackError || "Marketing Media Worker finishing failed.";
+    const message = callbackError || "Marketing Media Worker processing failed.";
     const terminal = job.attempt_count >= job.max_attempts;
     const nextStatus = terminal ? "failed" : "planned";
     const { error } = await db.from("marketing_media_jobs").update({
@@ -209,11 +437,37 @@ export async function POST(request: Request) {
       const { data: run } = await db.from("generation_runs").select("output").eq("id", job.generation_run_id).maybeSingle();
       const output = record(run?.output);
       await db.from("generation_runs").update({
-        output: json({ ...output, stage: terminal ? "finishing_failed" : "finishing_retry_queued", finishingError: message }),
+        output: json({
+          ...output,
+          stage: job.job_type === "normalize_loop_video"
+            ? (terminal ? "living_artwork_normalization_failed" : "living_artwork_normalization_retry_queued")
+            : (terminal ? "finishing_failed" : "finishing_retry_queued"),
+          finishingError: message,
+        }),
       }).eq("id", job.generation_run_id);
     }
     cleanup();
     return NextResponse.json({ ok: true, retrying: !terminal });
+  }
+
+  const livingArtworkSocial = job.job_type === "finish_social_video"
+    && requestPayload.living_artwork_export === "social";
+  if (job.job_type === "normalize_loop_video" || job.job_type === "render_loop_visualizer" || livingArtworkSocial) {
+    try {
+      const asset = await reconcileLivingArtworkWorker({ job, requestPayload, result });
+      cleanup();
+      return NextResponse.json({ ok: true, mediaAssetId: asset.id, jobType: job.job_type });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Living Artwork media reconciliation failed.";
+      await db.from("marketing_media_jobs").update({
+        status: "failed",
+        result_payload: json(result),
+        error: message,
+        completed_at: new Date().toISOString(),
+      }).eq("id", job.id).eq("artist_id", job.artist_id);
+      cleanup();
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
   }
 
   try {

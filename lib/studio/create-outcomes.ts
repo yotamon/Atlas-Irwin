@@ -9,6 +9,7 @@ export const CREATE_OUTCOMES = [
     goal: "Reach",
     mediaKind: "video",
     titleSuffix: "discovery cut",
+    workflow: "standard",
   },
   {
     id: "streams",
@@ -20,6 +21,7 @@ export const CREATE_OUTCOMES = [
     goal: "Streams",
     mediaKind: "video",
     titleSuffix: "stream driver",
+    workflow: "standard",
   },
   {
     id: "lyric",
@@ -31,6 +33,7 @@ export const CREATE_OUTCOMES = [
     goal: "Saves",
     mediaKind: "video",
     titleSuffix: "lyric creative",
+    workflow: "standard",
   },
   {
     id: "visual",
@@ -42,6 +45,7 @@ export const CREATE_OUTCOMES = [
     goal: "Saves",
     mediaKind: "video",
     titleSuffix: "visual loop",
+    workflow: "living_artwork",
   },
 ] as const;
 

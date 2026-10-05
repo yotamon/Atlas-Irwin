@@ -13,6 +13,8 @@ import type { CreativeTreatment } from "./creative-treatment";
 import { reviewGeneratedCreativeImage } from "./creative-visual-quality";
 import { storeRemoteMarketingAsset } from "./generated-assets";
 import { enqueueMarketingVideoFinishing } from "./media-production";
+import { enqueueLivingArtworkNormalization } from "./living-artwork-media";
+import { LIVING_ARTWORK_RAW_LOOP_ROLE } from "./living-artwork";
 
 function record(value: Json | unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -162,6 +164,7 @@ export async function applyMarketingCreativeProviderStatus(input: {
   });
 
   const db = createServiceClient();
+  const livingArtworkLoop = inputContext.creativeIntent === "seamless_loop";
   const stored = await storeRemoteMarketingAsset({
     db,
     ownerId: run.owner_id,
@@ -179,6 +182,9 @@ export async function applyMarketingCreativeProviderStatus(input: {
     actualCostUsd,
     outputKind: outputKind as "image" | "video",
     assetType: assetType as "social_image" | "content_video",
+    linkRole: livingArtworkLoop ? LIVING_ARTWORK_RAW_LOOP_ROLE : undefined,
+    makePrimary: livingArtworkLoop ? false : undefined,
+    updateContent: livingArtworkLoop ? false : undefined,
     context: creativeContext,
   });
   const storedAssetUrl = stored.asset.public_url;
@@ -223,6 +229,38 @@ export async function applyMarketingCreativeProviderStatus(input: {
       };
       stage = "creative_qc_pending";
       eventType = "content.ai_asset_qc_pending";
+    }
+  } else if (livingArtworkLoop) {
+    try {
+      const normalizationJob = await enqueueLivingArtworkNormalization({
+        ownerId: run.owner_id,
+        artistId,
+        campaignId: run.campaign_id,
+        releaseId: run.release_id,
+        contentItemId,
+        generationRunId: run.id,
+        rawAssetId: stored.asset.id,
+        rawAssetUrl: storedAssetUrl,
+        repairPolicy: "none",
+      });
+      visualQuality = {
+        status: "loop_normalization_queued",
+        passed: null,
+        normalizationJobId: normalizationJob.id,
+        humanReviewRequired: false,
+        note: "The raw generated loop is blocked from approval until deterministic seam QC completes.",
+      };
+      stage = "living_artwork_normalization_queued";
+      eventType = "loop_imported";
+    } catch (error) {
+      visualQuality = {
+        status: "loop_normalization_unavailable",
+        passed: null,
+        error: error instanceof Error ? error.message : "Loop normalization could not be queued.",
+        humanReviewRequired: false,
+      };
+      stage = "living_artwork_normalization_failed";
+      eventType = "loop_qc_failed";
     }
   } else {
     try {

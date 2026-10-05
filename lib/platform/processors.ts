@@ -104,6 +104,22 @@ export const PROCESSOR_REGISTRY = {
     targets: { cloud: { supported: true, requiresNetwork: true, paidCompute: true, requiredEntitlement: "cloud.compute" } },
     privacy: { requiresRawAudio: false },
   }),
+  "media-worker.normalize-loop-video": descriptor({
+    id: "media-worker.normalize-loop-video",
+    processorVersion: "1",
+    inputKinds: ["asset"],
+    outputKinds: ["video.loop-normalized"],
+    targets: { cloud: { supported: true, requiresNetwork: true, paidCompute: true, requiredEntitlement: "cloud.compute" } },
+    privacy: { requiresRawAudio: false },
+  }),
+  "media-worker.render-loop-visualizer": descriptor({
+    id: "media-worker.render-loop-visualizer",
+    processorVersion: "1",
+    inputKinds: ["asset", "recording"],
+    outputKinds: ["video.visualizer"],
+    targets: { cloud: { supported: true, requiresNetwork: true, paidCompute: true, requiredEntitlement: "cloud.compute" } },
+    privacy: { requiresRawAudio: true },
+  }),
   "media-worker.render-automix": descriptor({
     id: "media-worker.render-automix",
     processorVersion: "1",
@@ -139,6 +155,8 @@ export const MEDIA_WORKER_PROCESSOR_BY_JOB = {
   render_audio_scene: "media-worker.render-audio-scene",
   master_audio: "media-worker.master-audio",
   finish_social_video: "media-worker.finish-social-video",
+  normalize_loop_video: "media-worker.normalize-loop-video",
+  render_loop_visualizer: "media-worker.render-loop-visualizer",
   render_automix: "media-worker.render-automix",
   render_automix_preview: "media-worker.render-automix-preview",
 } as const;

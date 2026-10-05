@@ -83,3 +83,20 @@ test("continuation and connection intents stay bounded and explicit", async () =
   assert.equal(fallback.objectType, "any");
   assert.equal(fallback.confidence, "low");
 });
+
+test("Living Artwork launcher aliases resolve to the visual Create outcome", async () => {
+  const { classifyStudioIntent } = await intentModule();
+  for (const query of [
+    "animate this artwork",
+    "make a looping visual from this cover",
+    "visualizer for Love Like This",
+    "loop this cover",
+    "make a reel background from this artwork",
+  ]) {
+    const result = classifyStudioIntent(query);
+    assert.equal(result.kind, "create_from_object", query);
+    assert.equal(result.desiredOutcome, "visual", query);
+    assert.equal(result.confidence, "high", query);
+  }
+});
+

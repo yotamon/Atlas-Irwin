@@ -11,6 +11,7 @@ from PIL import Image, ImageDraw, ImageFont
 from pydantic import BaseModel, Field
 
 from .main import download, ffmpeg, sha256_file, upload_file, validate_remote_url
+from .video_loop import looped_video_input_args
 
 
 class SocialWorkerRequest(BaseModel):
@@ -149,7 +150,7 @@ async def _render_visual(payload: dict[str, Any], workdir: Path, source: Path, w
     vf = _visual_filter(width, height, fps, focus_x)
     if overlay:
         await ffmpeg(
-            "-stream_loop", "-1", "-i", str(source),
+            *looped_video_input_args(source),
             "-loop", "1", "-i", str(overlay),
             "-t", duration,
             "-filter_complex", f"[0:v]{vf}[base];[base][1:v]overlay=0:0:shortest=1[v]",
@@ -163,7 +164,7 @@ async def _render_visual(payload: dict[str, Any], workdir: Path, source: Path, w
         )
     else:
         await ffmpeg(
-            "-stream_loop", "-1", "-i", str(source),
+            *looped_video_input_args(source),
             "-t", duration,
             "-vf", vf,
             "-an",

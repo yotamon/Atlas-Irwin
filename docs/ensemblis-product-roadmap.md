@@ -6,7 +6,7 @@
 **Product:** Ensemblis  
 **Production reference artist:** Atlas Irwin  
 **Traditional/non-AI acceptance reference:** Cerebero Spinal  
-**Last reconciled:** 2026-10-02
+**Last reconciled:** 2026-10-05
 
 ## 1. North star
 
@@ -103,6 +103,7 @@ The original Atlas-specific architecture has been substantially transformed. `ma
 - verified `Moment → creative → publication → metric → learning` closed-loop learning;
 - Structured Artist Memory foundations and bounded consumers;
 - Quick Video, automatic social delivery and artist-scoped Creative Memory;
+- Living Artwork / loop-first visual creative in PR #286: deterministic portrait source preparation, zero-spend handoff, quoted native loop generation, seam QC/repair, reusable full-track and social exports;
 - canonical Needs You orchestration and an artist-facing Manager read model;
 - persistent artist/domain autonomy contracts v1 with audit events and conservative hard boundaries;
 - native Smart Links, first-party attribution foundations, Fan Graph and explicit permission evidence;
@@ -286,6 +287,21 @@ Remaining exit work:
 
 #### P1.9 Artist-first creative UX - #110 - **Complete**
 PRs #115-#118 shipped Quick Video, shared durable Director state, representative-preview/budget flow, automatic master + socials delivery, exact approved-Moment lineage and artist-scoped Creative Memory retrieval. Director Pro preserves expert controls and existing spend safety.
+
+#### P1.9a Living Artwork / loop-first visual creative - #285 - **Implementation in PR #286; acceptance active**
+Living Artwork extends the existing visual Create outcome rather than adding a new subsystem. The implementation keeps one short approved motion loop as the reusable source of truth.
+
+PR #286 currently includes:
+- deterministic browser-side 1080×1920 source framing from approved artwork;
+- a zero-generative-spend Loop Kit handoff with the same first/last frame contract;
+- native quote-first generation through verified start/end-frame-capable routing;
+- durable loop normalization, boundary-window QC, severe-seam blocking and one bounded deterministic repair attempt;
+- explicit loop approval without replacing unrelated artwork roles;
+- full-track vertical rendering from the approved loop plus canonical audio with no re-mastering;
+- deterministic short-form reuse through the existing social finisher;
+- Media Library lineage, durable retry/recovery, Today/Continue resume and Action Launcher aliases.
+
+Exit gate: all affected TypeScript, Studio contract, database replay, Media Worker/Python, Library Bridge and browser checks must pass before merge.
 
 #### P1.10 Active Mastering V2 - **Planned; single draft PR execution program**
 The production Master Readiness / Active Mastering V1 loop is safe and source-preserving, but its creative DSP remains intentionally conservative. The canonical V2 program is [`docs/active-mastering-v2-plan.md`](active-mastering-v2-plan.md).
