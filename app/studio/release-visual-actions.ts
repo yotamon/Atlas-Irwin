@@ -491,6 +491,31 @@ export async function saveReleaseVisualCandidate(form: FormData) {
   refresh(contentItemId, workspace.release.id);
 }
 
+export async function returnReleaseVisualToDesign(form: FormData) {
+  const { artist, contentItemId } = await context(form);
+  const workspace = await loadReleaseVisualWorkspace({
+    ownerId: artist.userId,
+    artistId: artist.artistId,
+    contentItemId,
+  });
+  const service = createServiceClient();
+  const music = asArtistScopedMusicClient(service);
+  const marketing = asMarketingClient(service);
+  const { error: linkError } = await music.from("media_links").update({ is_primary: false })
+    .eq("owner_id", artist.userId)
+    .eq("artist_id", artist.artistId)
+    .eq("content_item_id", contentItemId)
+    .eq("role", RELEASE_VISUAL_CANDIDATE_ROLE);
+  if (linkError) throw new Error(linkError.message);
+  const { error: contentError } = await marketing.from("content_items").update({
+    approval_status: "not_required",
+  }).eq("id", contentItemId)
+    .eq("owner_id", artist.userId)
+    .eq("artist_id", artist.artistId);
+  if (contentError) throw new Error(contentError.message);
+  refresh(contentItemId, workspace.release.id);
+}
+
 export async function approveReleaseVisual(form: FormData) {
   const { artist, contentItemId } = await context(form);
   const workspace = await loadReleaseVisualWorkspace({
