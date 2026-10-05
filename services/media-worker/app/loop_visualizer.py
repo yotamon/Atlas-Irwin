@@ -156,6 +156,8 @@ async def render_loop_visualizer_job(payload: dict[str, Any], workdir: Path) -> 
         ffmpeg,
         upload_file,
     )
+    if len(review_frame_results) < 3:
+        raise RuntimeError("Full-track visualizer requires at least three temporal QC frames.")
 
     await upload_file(upload_url, output, "video/mp4")
     return {
