@@ -139,7 +139,7 @@ export default async function CreatePage({
                 ? requestedTrack.title
                 : "Release artwork, identity and approved music stay connected"}</small>
           </div>
-          <Link href={href(`/studio/releases/${activeRelease.id}`)}>Open release</Link>
+          {visualRequested ? <Link href={href(`/studio/releases/${activeRelease.id}`)}>Open release</Link> : <Link href={href(`/studio/releases/${activeRelease.id}?stage=create#moments`)}>Review source sections</Link>}
         </section>
       ) : null}
 
@@ -201,10 +201,10 @@ export default async function CreatePage({
           <div className="v2-section-heading">
             <div>
               <span className="section-label">From the music</span>
-              <h2>Music-led creative</h2>
+              <h2>What do you want to make?</h2>
               <p>{requestedMoment
                 ? "This is the exact musical section you selected. Choose how you want to use it."
-                : "These options are paired with the musical section most likely to make each one work."}</p>
+                : "Three strong options, already paired with the musical section most likely to make each one work."}</p>
             </div>
           </div>
 
