@@ -104,7 +104,7 @@ A route fails V5 if:
 
 This inventory must be reconciled again on the final PR head before merge.
 
-PR #290 reserves `/studio/create/visual/[id]` as the contextual Release Visual owner; the route becomes normative only when the implementation in that PR lands.
+PR #290 implements `/studio/create/visual/[id]` as the contextual Release Visual owner and keeps `/studio/create/loop/[id]` as its optional motion continuation.
 
 
 ## Human-factors containment reconciliation — 2026-10-04
