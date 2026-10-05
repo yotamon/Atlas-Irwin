@@ -35,6 +35,12 @@ function json(input: unknown) {
   return input as Json;
 }
 
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
 async function context(form: FormData) {
   const { supabase, user } = await requireStudioAdmin();
   const artistId = uuid.parse(value(form, "artist_id"));
@@ -317,6 +323,39 @@ export async function importLivingArtworkLoop(form: FormData) {
     entity_type: "content_item",
     entity_id: contentItemId,
     payload: json({ source: "external", rawAssetId: asset.id }),
+  });
+  refresh(contentItemId);
+}
+
+export async function retryLivingArtworkNormalization(form: FormData) {
+  const { artist, contentItemId } = await context(form);
+  const jobId = uuid.parse(value(form, "media_job_id"));
+  const workspace = await loadLivingArtworkWorkspace({
+    ownerId: artist.userId,
+    artistId: artist.artistId,
+    contentItemId,
+  });
+  const job = workspace.jobs.find((candidate) =>
+    candidate.id === jobId
+    && candidate.status === "failed"
+    && candidate.job_type === "normalize_loop_video"
+  );
+  if (!job) throw new Error("The failed loop check is no longer retryable from this workflow.");
+  const requestPayload = record(job.request_payload);
+  const rawAssetId = typeof requestPayload.source_asset_id === "string" ? requestPayload.source_asset_id : "";
+  const rawAssetUrl = typeof requestPayload.source_url === "string" ? requestPayload.source_url : "";
+  if (!rawAssetId || !rawAssetUrl) throw new Error("The failed loop check is missing its source lineage.");
+
+  await enqueueLivingArtworkNormalization({
+    ownerId: artist.userId,
+    artistId: artist.artistId,
+    campaignId: workspace.content.campaign_id,
+    releaseId: workspace.content.release_id,
+    contentItemId,
+    generationRunId: job.generation_run_id,
+    rawAssetId,
+    rawAssetUrl,
+    repairPolicy: requestPayload.repair_policy === "auto" ? "auto" : "none",
   });
   refresh(contentItemId);
 }
