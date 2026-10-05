@@ -53,7 +53,7 @@ export default async function TodayPage() {
     activeRelease,
     latestTrack,
     latestMix,
-    latestLivingArtwork,
+    latestVisualCreative,
     primaryMission,
     needsYou,
     topDecision,
@@ -137,15 +137,15 @@ export default async function TodayPage() {
     ...managerPlan.map((item) => ({ ...item, activity: "Planned" })),
   ].filter((item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index).slice(0, 6);
   const contextCount = remainingDecisions.length + handling.length + comingUp.length;
-  const continueCount = (latestLivingArtwork ? 1 : 0) + (activeRelease ? 1 : 0) + (latestMix ? 1 : 0) + (latestTrack ? 1 : 0);
-  const primaryContinue = latestLivingArtwork
+  const continueCount = (latestVisualCreative ? 1 : 0) + (activeRelease ? 1 : 0) + (latestMix ? 1 : 0) + (latestTrack ? 1 : 0);
+  const primaryContinue = latestVisualCreative
     ? {
-        eyebrow: "Living Artwork",
-        title: latestLivingArtwork.title,
-        detail: latestLivingArtwork.detail,
-        status: latestLivingArtwork.status,
+        eyebrow: latestVisualCreative.eyebrow,
+        title: latestVisualCreative.title,
+        detail: latestVisualCreative.detail,
+        status: latestVisualCreative.status,
         tone: "accent" as const,
-        href: latestLivingArtwork.href,
+        href: latestVisualCreative.href,
         actionLabel: "Continue",
       }
     : activeRelease
@@ -193,10 +193,10 @@ export default async function TodayPage() {
     detail: primaryMission.summary,
     href: href(primaryMission.href),
   });
-  if (latestLivingArtwork) launcherSuggestions.push({
-    label: `Continue ${latestLivingArtwork.title}`,
-    detail: latestLivingArtwork.detail,
-    href: latestLivingArtwork.href,
+  if (latestVisualCreative) launcherSuggestions.push({
+    label: `Continue ${latestVisualCreative.title}`,
+    detail: latestVisualCreative.detail,
+    href: latestVisualCreative.href,
   });
   if (latestMix) launcherSuggestions.push({
     label: `Continue ${latestMix.name}`,
@@ -287,14 +287,14 @@ export default async function TodayPage() {
             <span><strong>Continue recent work</strong><small>Resume a release, track or mix without competing with today&apos;s priority.</small></span>
           </summary>
           <div className="today-human-factors-secondary-body en-continue-grid">
-            {latestLivingArtwork ? (
+            {latestVisualCreative ? (
               <ContinueWidget
-                eyebrow="Living Artwork"
-                title={latestLivingArtwork.title}
-                detail={latestLivingArtwork.detail}
-                status={latestLivingArtwork.status}
+                eyebrow={latestVisualCreative.eyebrow}
+                title={latestVisualCreative.title}
+                detail={latestVisualCreative.detail}
+                status={latestVisualCreative.status}
                 tone="accent"
-                href={latestLivingArtwork.href}
+                href={latestVisualCreative.href}
               />
             ) : null}
             {activeRelease ? (
