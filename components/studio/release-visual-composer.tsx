@@ -140,7 +140,7 @@ async function sourceBitmap(url: string) {
   return createImageBitmap(blob);
 }
 
-async function renderReleaseVisual(canvas: HTMLCanvasElement, spec: ReleaseVisualSpec) {
+export async function renderReleaseVisual(canvas: HTMLCanvasElement, spec: ReleaseVisualSpec) {
   await document.fonts.ready;
   if (document.fonts.status !== "loaded") {
     throw new Error("Ensemblis typography is still loading. Try the render again.");
