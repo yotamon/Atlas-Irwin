@@ -56,10 +56,11 @@ async def _extract_boundary_frames(path: Path, workdir: Path) -> tuple[Path, Pat
     return first, last
 
 
-def _boundary_metrics(first_path: Path, last_path: Path) -> dict[str, float | str]:
-    with Image.open(first_path) as first_image, Image.open(last_path) as last_image:
-        first = np.asarray(first_image.convert("RGB"), dtype=np.float32)
-        last = np.asarray(last_image.convert("RGB"), dtype=np.float32)
+def _boundary_metrics_arrays(first: np.ndarray, last: np.ndarray) -> dict[str, float | str]:
+    if first.shape != last.shape:
+        raise ValueError("Loop boundary frames must have matching dimensions.")
+    first = np.asarray(first, dtype=np.float32)
+    last = np.asarray(last, dtype=np.float32)
     rmse = float(np.sqrt(np.mean(np.square(first - last))) / 255.0)
     similarity = max(0.0, min(1.0, 1.0 - rmse))
     luminance_delta = float(abs(first.mean() - last.mean()) / 255.0)
@@ -74,6 +75,17 @@ def _boundary_metrics(first_path: Path, last_path: Path) -> dict[str, float | st
         "luminance_delta": round(luminance_delta, 5),
         "state": state,
     }
+
+
+def _boundary_metrics(first_path: Path, last_path: Path) -> dict[str, float | str]:
+    # Pillow is part of the production worker image, but importing it lazily keeps
+    # unrelated audio-only test profiles able to import the shared worker runner.
+    from PIL import Image
+
+    with Image.open(first_path) as first_image, Image.open(last_path) as last_image:
+        first = np.asarray(first_image.convert("RGB"), dtype=np.float32)
+        last = np.asarray(last_image.convert("RGB"), dtype=np.float32)
+    return _boundary_metrics_arrays(first, last)
 
 
 async def _normalize(source: Path, target: Path, width: int, height: int, fps: int) -> None:
