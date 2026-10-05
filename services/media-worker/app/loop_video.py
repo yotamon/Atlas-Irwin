@@ -88,6 +88,8 @@ def _classify_boundary(endpoint: dict[str, float], window: dict[str, float]) -> 
         return "ready"
     if effective_similarity >= 0.80 and luminance_delta <= 0.12 and color_delta <= 0.14:
         return "repair_available"
+    if effective_similarity < 0.55 or luminance_delta > 0.35 or color_delta > 0.35:
+        return "blocked"
     return "needs_review"
 
 
