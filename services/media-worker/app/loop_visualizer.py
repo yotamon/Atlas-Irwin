@@ -15,7 +15,7 @@ from .video_loop import looped_video_input_args
 
 
 def _duration_from_probe_text(text: str) -> float:
-    match = re.search(r"Duration:\\s*(\\d+):(\\d+):(\\d+(?:\\.\\d+)?)", text)
+    match = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", text)
     if not match:
         raise RuntimeError("Could not determine media duration.")
     hours, minutes, seconds = match.groups()
@@ -42,8 +42,8 @@ async def _probe_media(path: Path) -> dict[str, Any]:
     duration = _duration_from_probe_text(text)
     has_video = "Video:" in text
     has_audio = "Audio:" in text
-    dimensions = re.search(r"Video:.*?,\\s*(\\d{2,5})x(\\d{2,5})(?:[,\\s])", text)
-    fps_match = re.search(r"(\\d+(?:\\.\\d+)?)\\s+fps", text)
+    dimensions = re.search(r"Video:.*?,\s*(\d{2,5})x(\d{2,5})(?:[,\s])", text)
+    fps_match = re.search(r"(\d+(?:\.\d+)?)\s+fps", text)
     return {
         "duration_seconds": duration,
         "has_video": has_video,
