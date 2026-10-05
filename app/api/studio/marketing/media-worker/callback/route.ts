@@ -247,6 +247,11 @@ async function registerLivingArtworkWorkerAsset(input: {
         repair_ms: Number(input.result.repair_ms) || 0,
         audio_source: input.result.audio_source ?? null,
         audio_processing: input.result.audio_processing ?? null,
+        output_duration_ms: Number(input.result.output_duration_ms) || null,
+        duration_delta_ms: Number(input.result.duration_delta_ms) || null,
+        has_video: input.result.has_video === true,
+        has_audio: input.result.has_audio === true,
+        review_frames: Array.isArray(input.result.review_frames) ? input.result.review_frames : [],
       }),
     }).select("*").single();
     if (error || !data) throw new Error(error?.message || "Living Artwork output could not be registered.");
