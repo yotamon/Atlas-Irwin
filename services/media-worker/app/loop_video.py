@@ -171,6 +171,10 @@ async def normalize_loop_video_job(payload: dict[str, Any], workdir: Path) -> di
         repaired_duration = await _probe_duration_seconds(repaired_output)
         repaired_first, repaired_last = await _extract_boundary_frames(repaired_output, workdir)
         after = _boundary_metrics(repaired_first, repaired_last)
+        if after["state"] == "repair_available":
+            # One deterministic repair attempt is the bounded policy. If the seam
+            # remains imperfect, hand the result to the artist rather than looping.
+            after = {**after, "state": "needs_review"}
         output = repaired_output
         duration = repaired_duration
         repaired = True
