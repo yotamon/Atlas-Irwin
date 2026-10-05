@@ -31,6 +31,37 @@ async function existingJob(db: ReturnType<typeof client>, artistId: string, idem
   return data as MarketingMediaJob | null;
 }
 
+async function reuseOrRetryExistingJob(input: {
+  db: ReturnType<typeof client>;
+  job: MarketingMediaJob;
+  ownerId: string;
+  artistId: string;
+}) {
+  let job = input.job;
+  if (job.status === "failed") {
+    const { data, error } = await input.db.from("marketing_media_jobs").update({
+      status: "planned",
+      result_payload: json({}),
+      attempt_count: 0,
+      external_job_id: null,
+      error: null,
+      started_at: null,
+      completed_at: null,
+    }).eq("id", job.id)
+      .eq("owner_id", input.ownerId)
+      .eq("artist_id", input.artistId)
+      .eq("status", "failed")
+      .select("*")
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (data) job = data as MarketingMediaJob;
+  }
+  if (["planned", "queued", "running"].includes(job.status)) {
+    await kickMarketingMediaWorkerQueue({ ownerId: input.ownerId, artistId: input.artistId });
+  }
+  return job;
+}
+
 export async function enqueueLivingArtworkNormalization(input: {
   ownerId: string;
   artistId: string;
@@ -47,10 +78,12 @@ export async function enqueueLivingArtworkNormalization(input: {
   const idempotencyKey = `living-artwork:normalize:${input.rawAssetId}:${repairPolicy}`;
   const existing = await existingJob(db, input.artistId, idempotencyKey);
   if (existing) {
-    if (["planned", "queued", "running"].includes(existing.status)) {
-      await kickMarketingMediaWorkerQueue({ ownerId: input.ownerId, artistId: input.artistId });
-    }
-    return existing;
+    return reuseOrRetryExistingJob({
+      db,
+      job: existing,
+      ownerId: input.ownerId,
+      artistId: input.artistId,
+    });
   }
 
   const service = createServiceClient();
@@ -58,17 +91,6 @@ export async function enqueueLivingArtworkNormalization(input: {
   const bucket = "public-media";
   const outputPath = `${input.ownerId}/library/marketing/${input.artistId}/living-artwork/${input.contentItemId}/loops/${jobId}.mp4`;
   const publicUrl = service.storage.from(bucket).getPublicUrl(outputPath).data.publicUrl;
-  const reviewFrames = [0.08, 0.5, 0.92].map((ratio, index) => {
-    const framePath = `${input.ownerId}/library/marketing/${input.artistId}/living-artwork/${input.contentItemId}/qc/full-track-${jobId}-${index + 1}.jpg`;
-    return {
-      index: index + 1,
-      ratio,
-      upload_bucket: bucket,
-      upload_path: framePath,
-      public_url: service.storage.from(bucket).getPublicUrl(framePath).data.publicUrl,
-    };
-  });
-
   const { data, error } = await db.from("marketing_media_jobs").insert({
     id: jobId,
     owner_id: input.ownerId,
@@ -117,10 +139,12 @@ export async function enqueueLivingArtworkVisualizer(input: {
   const db = client();
   const existing = await existingJob(db, input.artistId, idempotencyKey);
   if (existing) {
-    if (["planned", "queued", "running"].includes(existing.status)) {
-      await kickMarketingMediaWorkerQueue({ ownerId: input.ownerId, artistId: input.artistId });
-    }
-    return existing;
+    return reuseOrRetryExistingJob({
+      db,
+      job: existing,
+      ownerId: input.ownerId,
+      artistId: input.artistId,
+    });
   }
 
   const service = createServiceClient();
@@ -128,6 +152,17 @@ export async function enqueueLivingArtworkVisualizer(input: {
   const bucket = "public-media";
   const outputPath = `${input.ownerId}/library/marketing/${input.artistId}/living-artwork/${input.contentItemId}/exports/full-track-${jobId}.mp4`;
   const publicUrl = service.storage.from(bucket).getPublicUrl(outputPath).data.publicUrl;
+
+  const reviewFrames = [0.08, 0.5, 0.92].map((ratio, index) => {
+    const framePath = `${input.ownerId}/library/marketing/${input.artistId}/living-artwork/${input.contentItemId}/qc/full-track-${jobId}-${index + 1}.jpg`;
+    return {
+      index: index + 1,
+      ratio,
+      upload_bucket: bucket,
+      upload_path: framePath,
+      public_url: service.storage.from(bucket).getPublicUrl(framePath).data.publicUrl,
+    };
+  });
 
   const { data, error } = await db.from("marketing_media_jobs").insert({
     id: jobId,
@@ -192,10 +227,12 @@ export async function enqueueLivingArtworkSocial(input: {
   const db = client();
   const existing = await existingJob(db, input.artistId, idempotencyKey);
   if (existing) {
-    if (["planned", "queued", "running"].includes(existing.status)) {
-      await kickMarketingMediaWorkerQueue({ ownerId: input.ownerId, artistId: input.artistId });
-    }
-    return existing;
+    return reuseOrRetryExistingJob({
+      db,
+      job: existing,
+      ownerId: input.ownerId,
+      artistId: input.artistId,
+    });
   }
 
   const service = createServiceClient();
