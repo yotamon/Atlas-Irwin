@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createMarketingServiceClient } from "./db";
+import { creativeProviderReadiness } from "./creative-providers";
 import { loadCreativeReferenceContext } from "./creative-context";
 import {
   deriveLivingArtworkStage,
@@ -132,6 +133,10 @@ export async function loadLivingArtworkWorkspace(input: {
   if (generationError) throw new Error(generationError.message);
   const loopGeneration = (generationRuns ?? []).find((run) => record(run.input_context).creativeIntent === "seamless_loop") ?? null;
 
+  const nativeLoopGenerationConfigured = creativeProviderReadiness()
+    .some((provider) => provider.id === "higgsfield" && provider.configured);
+  const latestFailedJob = mediaJobRows.find((job) => job.status === "failed") ?? null;
+
   const stage = deriveLivingArtworkStage({
     sourceReady: Boolean(sourceUrl),
     motionReady: Boolean(content.visual_prompt),
@@ -159,5 +164,7 @@ export async function loadLivingArtworkWorkspace(input: {
     approvedLoopLink,
     fullTrackAsset,
     socialAsset,
+    nativeLoopGenerationConfigured,
+    latestFailedJob,
   };
 }
