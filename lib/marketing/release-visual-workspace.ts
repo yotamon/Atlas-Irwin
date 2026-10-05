@@ -162,6 +162,8 @@ export async function loadReleaseVisualWorkspace(input: {
     && run.status === "completed"
     && record(run.output).stage === "release_visual_approved"
   ) ?? null;
+  const approvedSpecValue = approvedRun ? record(approvedRun.input_context).releaseVisualSpec : null;
+  const approvedSpec = isReleaseVisualSpec(approvedSpecValue) ? approvedSpecValue : null;
 
   const draftSpec = parseDraft(content.visual_prompt);
   const stage = deriveReleaseVisualStage({
@@ -190,6 +192,7 @@ export async function loadReleaseVisualWorkspace(input: {
     primaryAsset,
     primaryLink,
     approvedRun,
+    approvedSpec,
     storyAsset: assetForRole(RELEASE_VISUAL_STORY_ROLE),
     feedAsset: assetForRole(RELEASE_VISUAL_FEED_ROLE),
     squareAsset: assetForRole(RELEASE_VISUAL_SQUARE_ROLE),
