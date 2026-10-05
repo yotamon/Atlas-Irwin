@@ -10,9 +10,21 @@ import httpx
 from pydantic import BaseModel, Field
 
 from .main import FFMPEG_BINARY, download, ffmpeg, sha256_file, upload_file, validate_remote_url
+from .video_director_finishing import extract_review_frames
 
 
-async def _probe_duration_seconds(path: Path) -> float:
+def _duration_from_probe_text(text: str) -> float:
+    match = re.search(r"Duration:\\s*(\\d+):(\\d+):(\\d+(?:\\.\\d+)?)", text)
+    if not match:
+        raise RuntimeError("Could not determine media duration.")
+    hours, minutes, seconds = match.groups()
+    duration = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+    if duration <= 0:
+        raise RuntimeError("Media duration must be positive.")
+    return duration
+
+
+async def _probe_media(path: Path) -> dict[str, Any]:
     process = await asyncio.create_subprocess_exec(
         FFMPEG_BINARY,
         "-hide_banner",
@@ -26,12 +38,25 @@ async def _probe_duration_seconds(path: Path) -> float:
     )
     _, stderr = await process.communicate()
     text = stderr.decode("utf-8", errors="replace")
-    match = re.search(r"Duration:\\s*(\\d+):(\\d+):(\\d+(?:\\.\\d+)?)", text)
-    if not match:
-        raise RuntimeError("Could not determine canonical audio duration.")
-    hours, minutes, seconds = match.groups()
-    duration = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
-    if duration <= 0 or duration > 20 * 60:
+    duration = _duration_from_probe_text(text)
+    has_video = "Video:" in text
+    has_audio = "Audio:" in text
+    dimensions = re.search(r"Video:.*?,\\s*(\\d{2,5})x(\\d{2,5})(?:[,\\s])", text)
+    fps_match = re.search(r"(\\d+(?:\\.\\d+)?)\\s+fps", text)
+    return {
+        "duration_seconds": duration,
+        "has_video": has_video,
+        "has_audio": has_audio,
+        "width": int(dimensions.group(1)) if dimensions else None,
+        "height": int(dimensions.group(2)) if dimensions else None,
+        "fps": float(fps_match.group(1)) if fps_match else None,
+    }
+
+
+async def _probe_duration_seconds(path: Path) -> float:
+    probe = await _probe_media(path)
+    duration = float(probe["duration_seconds"])
+    if duration > 20 * 60:
         raise RuntimeError("Canonical audio duration must be between 1 second and 20 minutes.")
     return duration
 
@@ -106,6 +131,34 @@ async def render_loop_visualizer_job(payload: dict[str, Any], workdir: Path) -> 
     if not output.exists() or output.stat().st_size <= 0:
         raise RuntimeError("Full-track visualizer render produced no output.")
 
+    output_probe = await _probe_media(output)
+    if not output_probe["has_video"] or not output_probe["has_audio"]:
+        raise RuntimeError("Full-track visualizer output is missing its required video or audio stream.")
+    output_duration_ms = round(float(output_probe["duration_seconds"]) * 1000)
+    duration_delta_ms = abs(output_duration_ms - duration_ms)
+    if duration_delta_ms > 750:
+        raise RuntimeError("Full-track visualizer output duration does not match canonical audio.")
+
+    raw_review_frames = payload.get("review_frames")
+    requested_review_frames = raw_review_frames if isinstance(raw_review_frames, list) else []
+    resolved_review_frames: list[dict[str, Any]] = []
+    for frame in requested_review_frames[:6]:
+        if not isinstance(frame, dict):
+            continue
+        ratio = float(frame.get("ratio") or 0.0)
+        ratio = min(0.98, max(0.0, ratio))
+        resolved_review_frames.append({
+            **frame,
+            "timestamp_ms": max(0, min(duration_ms - 80, round(duration_ms * ratio))),
+        })
+    review_frame_results = await extract_review_frames(
+        output,
+        resolved_review_frames,
+        workdir,
+        ffmpeg,
+        upload_file,
+    )
+
     await upload_file(upload_url, output, "video/mp4")
     return {
         "uploaded": True,
@@ -114,11 +167,16 @@ async def render_loop_visualizer_job(payload: dict[str, Any], workdir: Path) -> 
         "mime_type": "video/mp4",
         "sha256": await asyncio.to_thread(sha256_file, output),
         "duration_ms": duration_ms,
+        "output_duration_ms": output_duration_ms,
+        "duration_delta_ms": duration_delta_ms,
         "requested_duration_ms": requested_duration_ms,
         "duration_source": "canonical_audio_probe",
-        "width": width,
-        "height": height,
-        "fps": fps,
+        "width": output_probe["width"] or width,
+        "height": output_probe["height"] or height,
+        "fps": output_probe["fps"] or fps,
+        "has_video": output_probe["has_video"],
+        "has_audio": output_probe["has_audio"],
+        "review_frames": review_frame_results,
         "audio_source": "canonical_track",
         "audio_processing": "delivery_codec_only",
         "looped_source": True,
