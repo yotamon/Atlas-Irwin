@@ -36,6 +36,7 @@ export type LivingArtworkMotionPresetId = typeof LIVING_ARTWORK_MOTION_PRESETS[n
 export const LIVING_ARTWORK_LOOP_ROLE = "living_artwork_loop";
 export const LIVING_ARTWORK_RAW_LOOP_ROLE = "living_artwork_loop_raw";
 export const LIVING_ARTWORK_FULL_TRACK_ROLE = "living_artwork_full_track";
+export const LIVING_ARTWORK_SOCIAL_ROLE = "living_artwork_social";
 
 export const LIVING_ARTWORK_TARGET = {
   width: 1080,
