@@ -70,6 +70,12 @@ function seamCopy(state: string | null) {
     title: "The loop is valid, but the seam is visibly uncertain.",
     detail: "Play the boundary a few times. You can approve it if the creative transition is intentional, or replace it with another source loop.",
   };
+  if (state === "blocked") return {
+    status: "Blocked",
+    tone: "danger" as const,
+    title: "This seam is too discontinuous to approve.",
+    detail: "Replace the short source loop. Ensemblis keeps the original file for lineage, but it will not allow this version to become the reusable approved loop.",
+  };
   return {
     status: "Needs review",
     tone: "neutral" as const,
@@ -339,7 +345,8 @@ function MakeLoopStage({ workspace, artistId }: { workspace: Workspace; artistId
 function ReviewStage({ workspace, artistId }: { workspace: Workspace; artistId: string }) {
   const asset = workspace.candidateLoopAsset;
   if (!asset?.public_url) return <MakeLoopStage workspace={workspace} artistId={artistId} />;
-  const qc = seamCopy(seamState(asset));
+  const state = seamState(asset);
+  const qc = seamCopy(state);
   const metadata = record(asset.metadata);
   const repaired = metadata.repaired === true;
 
@@ -354,33 +361,50 @@ function ReviewStage({ workspace, artistId }: { workspace: Workspace; artistId: 
           <p>{qc.detail}</p>
           {repaired ? <p className="living-artwork-helper">This version includes a small deterministic seam repair. No additional AI generation was used.</p> : null}
 
-          <div className="actions">
-            {seamState(asset) === "repair_available" ? (
-              <form action={repairLivingArtworkLoop}>
-                <HiddenContext artistId={artistId} contentItemId={workspace.content.id} />
-                <input type="hidden" name="media_asset_id" value={asset.id} />
-                <button className="button primary" type="submit">Auto repair seam</button>
-              </form>
-            ) : (
-              <form action={approveLivingArtworkLoop}>
-                <HiddenContext artistId={artistId} contentItemId={workspace.content.id} />
-                <input type="hidden" name="media_asset_id" value={asset.id} />
-                <button className="button primary" type="submit">Approve loop</button>
-              </form>
-            )}
-            {seamState(asset) === "repair_available" ? (
-              <form action={approveLivingArtworkLoop}>
-                <HiddenContext artistId={artistId} contentItemId={workspace.content.id} />
-                <input type="hidden" name="media_asset_id" value={asset.id} />
-                <button className="button" type="submit">Approve as-is</button>
-              </form>
-            ) : null}
-          </div>
+          <p className="living-artwork-helper">The preview loops continuously so the exact end → start boundary repeats while you listen with your eyes.</p>
+
+          {state === "blocked" ? (
+            <form action={importLivingArtworkLoop} className="living-artwork-import-form">
+              <HiddenContext artistId={artistId} contentItemId={workspace.content.id} />
+              <label className="field wide">
+                <span>Replace the short loop</span>
+                <input type="file" name="loop_file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm,.m4v" required />
+              </label>
+              <button className="button primary" type="submit">Import replacement</button>
+            </form>
+          ) : (
+            <div className="actions">
+              {state === "repair_available" ? (
+                <form action={repairLivingArtworkLoop}>
+                  <HiddenContext artistId={artistId} contentItemId={workspace.content.id} />
+                  <input type="hidden" name="media_asset_id" value={asset.id} />
+                  <button className="button primary" type="submit">Auto repair seam</button>
+                </form>
+              ) : (
+                <form action={approveLivingArtworkLoop}>
+                  <HiddenContext artistId={artistId} contentItemId={workspace.content.id} />
+                  <input type="hidden" name="media_asset_id" value={asset.id} />
+                  <button className="button primary" type="submit">Approve loop</button>
+                </form>
+              )}
+              {state === "repair_available" ? (
+                <form action={approveLivingArtworkLoop}>
+                  <HiddenContext artistId={artistId} contentItemId={workspace.content.id} />
+                  <input type="hidden" name="media_asset_id" value={asset.id} />
+                  <button className="button" type="submit">Approve as-is</button>
+                </form>
+              ) : null}
+            </div>
+          )}
 
           <CompactEvidence label="Technical loop check">
             <p>Ensemblis compares the normalized start/end boundary and luminance continuity. The raw provider/import remains in Media Library history even when you approve a repaired version.</p>
             <pre>{JSON.stringify({
               seamState: metadata.seam_state ?? "unknown",
+              endpointSimilarity: metadata.seam_similarity ?? null,
+              boundaryWindowSimilarity: metadata.boundary_window_similarity ?? null,
+              colorDelta: metadata.color_delta ?? null,
+              freezeSuspected: metadata.freeze_suspected === true,
               repaired: metadata.repaired === true,
               repairMs: metadata.repair_ms ?? 0,
             }, null, 2)}</pre>
