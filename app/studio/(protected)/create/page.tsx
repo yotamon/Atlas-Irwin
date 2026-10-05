@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
 import { startOutcomeCreative } from "@/app/studio/create-actions";
 import { PageHeader, Status } from "@/components/studio/ui";
@@ -5,9 +6,10 @@ import { TrackPreview } from "@/components/studio/track-preview";
 import { creativeSourceHierarchy } from "@/lib/artist-operating/domain";
 import { loadArtistOperatingContext } from "@/lib/artist-operating/server";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
+import { lifecycleLabel, releaseLifecycle } from "@/lib/marketing/release-lifecycle";
 import { requireArtistContext } from "@/lib/studio/artist-context";
 import { recommendCreativeDirections } from "@/lib/studio/creative-directions";
-import { resolveCreateOutcomeIntent } from "@/lib/studio/create-outcomes";
+import { resolveCreateOutcome, resolveCreateOutcomeIntent } from "@/lib/studio/create-outcomes";
 import { momentEvidenceSummary } from "@/lib/studio/evidence-labels";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { curateReleaseMoments } from "@/lib/studio/moments-curator";
@@ -25,7 +27,11 @@ function deliverableLabel(platform: string, format: string) {
   return `${platform} ${format}`.replace(/Instagram Instagram/i, "Instagram");
 }
 
-export default async function CreatePage({ searchParams }: { searchParams: Promise<{ track?: string; release?: string; moment?: string; outcome?: string }> }) {
+export default async function CreatePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ track?: string; release?: string; moment?: string; outcome?: string; mode?: string }>;
+}) {
   const params = await searchParams;
   const artist = await requireArtistContext();
   const supabase = await createClient();
@@ -36,7 +42,7 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
   const [operatingContext, momentsResult, releasesResult, tracksResult] = await Promise.all([
     loadArtistOperatingContext({ db: supabase, artist }),
     momentsDb.from("moments").select("*").eq("artist_id", artist.artistId).eq("state", "approved").order("confidence", { ascending: false }).order("start_ms", { ascending: true }).limit(24),
-    music.from("releases").select("id,title,release_date,active_release").eq("owner_id", artist.userId).eq("artist_id", artist.artistId).order("updated_at", { ascending: false }),
+    music.from("releases").select("id,title,release_date,active_release,artwork_url,cover_asset,status,is_archived").eq("owner_id", artist.userId).eq("artist_id", artist.artistId).order("updated_at", { ascending: false }),
     music.from("tracks").select("id,title,release_id,audio_url,is_primary").eq("owner_id", artist.userId).eq("artist_id", artist.artistId),
   ]);
   const firstError = [momentsResult, releasesResult, tracksResult].find((result) => result.error)?.error;
@@ -66,10 +72,18 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
       : curation.curated;
   const directionMoments = requestedMoments.length ? requestedMoments : curation.curated;
   const preferredOutcome = resolveCreateOutcomeIntent(params.outcome);
-  const rankedDirections = recommendCreativeDirections({ moments: directionMoments, activeReleaseId: activeRelease?.id ?? null });
-  const directions = preferredOutcome
-    ? rankedDirections.toSorted((left, right) => Number(right.outcome.id === preferredOutcome.id) - Number(left.outcome.id === preferredOutcome.id) || left.rank - right.rank)
+  const preferredMomentOutcome = preferredOutcome?.sourceMode === "moment" ? preferredOutcome : null;
+  const rankedDirections = recommendCreativeDirections({
+    moments: directionMoments,
+    activeReleaseId: activeRelease?.id ?? null,
+  });
+  const directions = preferredMomentOutcome
+    ? rankedDirections.toSorted((left, right) =>
+        Number(right.outcome.id === preferredMomentOutcome.id)
+        - Number(left.outcome.id === preferredMomentOutcome.id)
+        || left.rank - right.rank)
     : rankedDirections;
+  const visualOutcome = resolveCreateOutcome("visual");
   const sourceHierarchy = creativeSourceHierarchy(operatingContext.profile);
   const backAction = requestedTrack
     ? { href: href(`/studio/music/${requestedTrack.id}`), label: "Back to track" }
@@ -96,11 +110,21 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
     },
   ];
 
+  const coverUrl = activeRelease?.artwork_url || activeRelease?.cover_asset || null;
+  const visualRequested = preferredOutcome?.id === "visual";
+  const lifecycle = activeRelease
+    ? releaseLifecycle({
+        releaseDate: activeRelease.release_date,
+        status: activeRelease.status,
+        isArchived: activeRelease.is_archived,
+      })
+    : null;
+
   return (
     <div className="studio-v2-page create-polish-page ensemblis-create-page">
       <PageHeader
         title="Create"
-        description="Choose the deliverable. Ensemblis chooses the strongest musical source and carries the artist context with it."
+        description="Choose the deliverable. Release visuals start from the artwork; music-led creative starts from the strongest approved musical source."
         action={backAction ? <Link className="button" href={backAction.href}>{backAction.label}</Link> : undefined}
       />
 
@@ -109,9 +133,66 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
           <div>
             <span className="section-label">Creating for</span>
             <strong>{activeRelease.title}</strong>
-            <small>{requestedMoment ? `${requestedTrack?.title || "Track"} · ${requestedMoment.label}` : requestedTrack ? requestedTrack.title : "Best approved musical sections"}</small>
+            <small>{requestedMoment
+              ? `${requestedTrack?.title || "Track"} · ${requestedMoment.label}`
+              : requestedTrack
+                ? requestedTrack.title
+                : "Release artwork, identity and approved music stay connected"}</small>
           </div>
-          <Link href={href(`/studio/releases/${activeRelease.id}?stage=create#moments`)}>Review source sections</Link>
+          <Link href={href(`/studio/releases/${activeRelease.id}`)}>Open release</Link>
+        </section>
+      ) : null}
+
+      {activeRelease && visualOutcome ? (
+        <section className={`create-deliverable-section release-visual-entry ${visualRequested ? "is-requested" : ""}`}>
+          <div className="v2-section-heading">
+            <div>
+              <span className="section-label">{visualRequested ? "Requested visual" : "From the release artwork"}</span>
+              <h2>Create a release visual</h2>
+              <p>Make a clean or promotional Story / feed design first. Animation is optional and comes after you approve the static visual.</p>
+            </div>
+          </div>
+
+          <article className={`create-deliverable-card release-visual-create-card ${visualRequested ? "is-recommended is-primary-recommendation" : ""}`}>
+            <div className="create-deliverable-head">
+              <span>Instagram · static first</span>
+              {visualRequested ? <Status>Requested</Status> : <Status>Zero-spend default</Status>}
+            </div>
+
+            <div className="release-visual-create-body">
+              <div className="release-visual-create-source">
+                {coverUrl ? (
+                  <img src={coverUrl} alt={`${activeRelease.title} cover artwork`} />
+                ) : (
+                  <div className="release-visual-create-source-missing">
+                    <span>Artwork needed</span>
+                  </div>
+                )}
+              </div>
+              <div>
+                <h3>{visualOutcome.shortLabel}</h3>
+                <p>{visualOutcome.description}</p>
+                <div className="release-visual-create-facts">
+                  <span>{lifecycle ? lifecycleLabel(lifecycle) : "Release"}</span>
+                  <span>{activeRelease.release_date || "No release date set"}</span>
+                  <span>Story · portrait · square</span>
+                </div>
+                <p className="create-direction-rationale">
+                  Start with the actual release identity. Choose Clean, Out Now, Out Friday, Pre-save, Listen Now or your own copy, then animate only if motion improves it.
+                </p>
+                <form action={startOutcomeCreative} className="create-direction-action">
+                  <input type="hidden" name="artist_id" value={artist.artistId} />
+                  <input type="hidden" name="release_id" value={activeRelease.id} />
+                  <input type="hidden" name="outcome" value="visual" />
+                  {params.mode ? <input type="hidden" name="mode" value={params.mode} /> : null}
+                  <button className="button primary" type="submit">Create visual</button>
+                </form>
+                {!coverUrl ? (
+                  <small>You can still open the workflow and choose another approved visual source.</small>
+                ) : null}
+              </div>
+            </div>
+          </article>
         </section>
       ) : null}
 
@@ -119,9 +200,11 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
         <section className="create-deliverable-section">
           <div className="v2-section-heading">
             <div>
-              <span className="section-label">Recommended for this music</span>
-              <h2>What do you want to make?</h2>
-              <p>{requestedMoment ? "This is the exact musical section you selected. Choose how you want to use it." : "Three strong options, already paired with the musical section most likely to make each one work."}</p>
+              <span className="section-label">From the music</span>
+              <h2>Music-led creative</h2>
+              <p>{requestedMoment
+                ? "This is the exact musical section you selected. Choose how you want to use it."
+                : "These options are paired with the musical section most likely to make each one work."}</p>
             </div>
           </div>
 
@@ -133,14 +216,14 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
               const startSeconds = Math.max(0, moment.start_ms / 1000);
               const endSeconds = Math.max(startSeconds, moment.end_ms / 1000);
               const evidence = momentEvidenceSummary(moment);
-              const isPrimaryDirection = preferredOutcome
-                ? preferredOutcome.id === direction.outcome.id
+              const isPrimaryDirection = preferredMomentOutcome
+                ? preferredMomentOutcome.id === direction.outcome.id
                 : direction.rank === 1;
               return (
                 <article className={`create-deliverable-card ${isPrimaryDirection ? "is-recommended is-primary-recommendation" : "is-alternative"}`} key={direction.id}>
                   <div className="create-deliverable-head">
                     <span>{deliverableLabel(direction.outcome.platform, direction.outcome.format)}</span>
-                    {preferredOutcome?.id === direction.outcome.id ? <Status>Requested</Status> : isPrimaryDirection ? <Status>Best next option</Status> : null}
+                    {preferredMomentOutcome?.id === direction.outcome.id ? <Status>Requested</Status> : isPrimaryDirection ? <Status>Best next option</Status> : null}
                   </div>
                   <h3>{direction.outcome.shortLabel}</h3>
                   <p>{direction.outcome.description}</p>
@@ -173,9 +256,9 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
       ) : (
         <section className="v2-section">
           <div className="v2-calm-state compact">
-            <strong>No strong musical source is ready yet.</strong>
-            <p>Add and analyze music first. Ensemblis will wait for real musical evidence rather than manufacture generic content.</p>
-            <Link className="button primary" href={href("/studio/music?view=add")}>Add music</Link>
+            <strong>No music-led source is ready yet.</strong>
+            <p>Release Visual remains available above. Reels and lyric-led creative will appear after Ensemblis has an approved musical section.</p>
+            <Link className="button" href={href("/studio/music?view=add")}>Review music</Link>
           </div>
         </section>
       )}
@@ -183,8 +266,8 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
       <aside className="create-next-action-callout">
         <div>
           <span className="section-label">Not sure?</span>
-          <strong>Use the first recommendation.</strong>
-          <p>It is the best current match between the music, the artist and a useful deliverable.</p>
+          <strong>{activeRelease ? "Start with the deliverable you actually need." : "Start by preparing the release."}</strong>
+          <p>Static release visuals do not need music analysis. Music-led creative uses evidence only when it is relevant.</p>
         </div>
         <Link className="button" href={href("/studio")}>Back to Today</Link>
       </aside>
