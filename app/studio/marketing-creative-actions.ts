@@ -84,7 +84,6 @@ export async function prepareContentCreativeGeneration(form: FormData) {
   const quality = qualitySchema.parse(value(form, "quality") || "balanced");
   const mediaKind = mediaKindSchema.parse(value(form, "media_kind") || "auto");
   const creativeIntent = value(form, "creative_intent") === "seamless_loop" ? "seamless_loop" as const : "standard" as const;
-  const motionPreset = value(form, "motion_preset") || "subtle_pulse";
   const { data: content, error: contentError } = await marketing.from("content_items")
     .select("*")
     .eq("id", contentItemId)
@@ -95,6 +94,11 @@ export async function prepareContentCreativeGeneration(form: FormData) {
   if (content.status === "Published" || content.status === "Archived") {
     throw new Error("Published or archived content cannot start a new creative generation.");
   }
+
+  const storedMotionPreset = creativeIntent === "seamless_loop"
+    ? content.production_notes?.match(/\[living-artwork:v1 preset=([a-z0-9_]+)\]/i)?.[1] ?? null
+    : null;
+  const motionPreset = value(form, "motion_preset") || storedMotionPreset || "subtle_pulse";
 
   const db = createServiceClient();
   const referenceContext = await loadCreativeReferenceContext({
