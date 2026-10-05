@@ -12,6 +12,7 @@ import {
 } from "@/lib/marketing/living-artwork";
 import {
   enqueueLivingArtworkNormalization,
+  enqueueLivingArtworkSocial,
   enqueueLivingArtworkVisualizer,
 } from "@/lib/marketing/living-artwork-media";
 import { loadLivingArtworkWorkspace } from "@/lib/marketing/living-artwork-workspace";
@@ -317,6 +318,48 @@ export async function renderLivingArtworkFullTrack(form: FormData) {
     entity_type: "content_item",
     entity_id: contentItemId,
     payload: json({ mediaJobId: job.id, type: "full_track_vertical" }),
+  });
+  refresh(contentItemId);
+}
+
+
+export async function renderLivingArtworkSocial(form: FormData) {
+  const { artist, contentItemId } = await context(form);
+  const workspace = await loadLivingArtworkWorkspace({
+    ownerId: artist.userId,
+    artistId: artist.artistId,
+    contentItemId,
+  });
+  const loop = workspace.approvedLoopAsset;
+  if (!loop?.public_url) throw new Error("Approve the loop before exporting short-form video.");
+  if (!workspace.track?.audio_url) throw new Error("The track has no canonical audio source.");
+
+  const startSeconds = workspace.content.audio_timestamp_start ?? 0;
+  const endSeconds = workspace.content.audio_timestamp_end;
+  const durationSeconds = typeof endSeconds === "number" && endSeconds > startSeconds
+    ? endSeconds - startSeconds
+    : 12;
+  const job = await enqueueLivingArtworkSocial({
+    ownerId: artist.userId,
+    artistId: artist.artistId,
+    campaignId: workspace.content.campaign_id,
+    releaseId: workspace.content.release_id,
+    contentItemId,
+    loopAssetId: loop.id,
+    loopAssetUrl: loop.public_url,
+    audioUrl: workspace.track.audio_url,
+    audioStartMs: Math.round(startSeconds * 1000),
+    durationMs: Math.round(Math.max(4, Math.min(60, durationSeconds)) * 1000),
+  });
+  const marketing = asMarketingClient(createServiceClient());
+  await marketing.from("marketing_events").insert({
+    owner_id: artist.userId,
+    artist_id: artist.artistId,
+    campaign_id: workspace.content.campaign_id,
+    event_type: "loop_export_started",
+    entity_type: "content_item",
+    entity_id: contentItemId,
+    payload: json({ mediaJobId: job.id, type: "social_vertical" }),
   });
   refresh(contentItemId);
 }
