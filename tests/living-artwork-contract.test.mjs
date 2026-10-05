@@ -94,13 +94,15 @@ test("Loop Kit prepares a deterministic portrait source frame with explicit line
   const prep = await read("components/studio/living-artwork-loop-kit-prep.tsx");
   const actions = await read("app/studio/living-artwork-actions.ts");
   const context = await read("lib/marketing/creative-context.ts");
+  const domain = await read("lib/marketing/living-artwork.ts");
 
   assert.match(prep, /canvas\.width = WIDTH/);
   assert.match(prep, /canvas\.height = HEIGHT/);
   assert.match(prep, /const WIDTH = 1080/);
   assert.match(prep, /const HEIGHT = 1920/);
   assert.match(prep, /drawContain/);
-  assert.match(actions, /living_artwork_source_frame/);
+  assert.match(domain, /LIVING_ARTWORK_SOURCE_FRAME_ROLE = "living_artwork_source_frame"/);
+  assert.match(actions, /LIVING_ARTWORK_SOURCE_FRAME_ROLE/);
   assert.match(actions, /source_asset_id/);
   assert.match(context, /living_artwork_source_frame/);
 });
