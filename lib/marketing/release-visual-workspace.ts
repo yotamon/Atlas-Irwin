@@ -120,7 +120,10 @@ export async function loadReleaseVisualWorkspace(input: {
   const selectedSourceAssetUrl = await previewUrl(service, selectedSourceAsset ?? null);
   const release = releaseResult.data;
   const fallbackArtworkUrl = release.artwork_url
-    || (typeof release.cover_asset === "string" && /^https?:\\/\\//i.test(release.cover_asset) ? release.cover_asset : null);
+    || (typeof release.cover_asset === "string"
+      && (release.cover_asset.startsWith("https://") || release.cover_asset.startsWith("http://"))
+      ? release.cover_asset
+      : null);
   const sourceUrl = selectedSourceAssetUrl ?? fallbackArtworkUrl ?? null;
 
   const eligibleAssets = [...new Map(
