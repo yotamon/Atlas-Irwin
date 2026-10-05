@@ -15,13 +15,13 @@ def test_identical_boundary_is_ready() -> None:
     assert result["luminance_delta"] == 0.0
 
 
-def test_large_boundary_jump_needs_review() -> None:
+def test_large_boundary_jump_is_blocked() -> None:
     first = np.zeros((32, 32, 3), dtype=np.uint8)
     last = np.full((32, 32, 3), 255, dtype=np.uint8)
 
     result = _boundary_metrics_arrays(first, last)
 
-    assert result["state"] == "needs_review"
+    assert result["state"] == "blocked"
     assert result["similarity"] == 0.0
     assert result["luminance_delta"] == 1.0
 
