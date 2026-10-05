@@ -134,16 +134,17 @@ export async function loadReleaseVisualWorkspace(input: {
     url: await previewUrl(service, asset),
   })));
 
-  const candidateLink = contentLinks.find((link) => link.role === RELEASE_VISUAL_CANDIDATE_ROLE) ?? null;
-  const primaryLink = contentLinks.find((link) => link.role === RELEASE_VISUAL_PRIMARY_ROLE && link.is_primary)
-    ?? contentLinks.find((link) => link.role === RELEASE_VISUAL_PRIMARY_ROLE)
-    ?? null;
+  const candidateLink = contentLinks.find((link) =>
+    link.role === RELEASE_VISUAL_CANDIDATE_ROLE && link.is_primary
+  ) ?? null;
+  const primaryLink = contentLinks.find((link) =>
+    link.role === RELEASE_VISUAL_PRIMARY_ROLE && link.is_primary
+  ) ?? null;
   const candidateAsset = candidateLink ? assetById.get(candidateLink.media_asset_id) ?? null : null;
   const primaryAsset = primaryLink ? assetById.get(primaryLink.media_asset_id) ?? null : null;
 
   const assetForRole = (role: string) => {
-    const link = contentLinks.find((candidate) => candidate.role === role && candidate.is_primary)
-      ?? contentLinks.find((candidate) => candidate.role === role);
+    const link = contentLinks.find((candidate) => candidate.role === role && candidate.is_primary);
     return link ? assetById.get(link.media_asset_id) ?? null : null;
   };
 
