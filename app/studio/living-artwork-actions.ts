@@ -439,8 +439,16 @@ export async function approveLivingArtworkLoop(form: FormData) {
   if (approveError) throw new Error(approveError.message);
 
   const marketing = asMarketingClient(service);
+  const { data: currentContent, error: currentError } = await marketing.from("content_items")
+    .select("campaign_id,production_notes,asset_url")
+    .eq("id", contentItemId)
+    .eq("owner_id", artist.userId)
+    .eq("artist_id", artist.artistId)
+    .single();
+  if (currentError || !currentContent) throw new Error(currentError?.message || "Living Artwork content could not be loaded.");
+  const belongsToReleaseVisual = currentContent.production_notes?.includes("[release-visual:v1") ?? false;
   const { data: content, error: contentError } = await marketing.from("content_items").update({
-    asset_url: asset.public_url,
+    asset_url: belongsToReleaseVisual ? currentContent.asset_url : asset.public_url,
     approval_status: "approved",
   }).eq("id", contentItemId)
     .eq("owner_id", artist.userId)
