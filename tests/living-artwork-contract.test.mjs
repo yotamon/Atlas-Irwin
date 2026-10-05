@@ -4,12 +4,15 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("visual Create outcome owns the Living Artwork workflow", async () => {
+test("Living Artwork remains the downstream motion continuation of Release Visual", async () => {
   const outcomes = await read("lib/studio/create-outcomes.ts");
   const domain = await read("lib/marketing/living-artwork.ts");
+  const releaseVisualActions = await read("app/studio/release-visual-actions.ts");
 
   assert.match(outcomes, /id: "visual"/);
-  assert.match(outcomes, /workflow: "living_artwork"/);
+  assert.match(outcomes, /workflow: "release_visual"/);
+  assert.match(releaseVisualActions, /animateApprovedReleaseVisual/);
+  assert.match(releaseVisualActions, /living_artwork_source/);
   for (const stage of ["source", "motion", "make_loop", "review", "export"]) {
     assert.ok(domain.includes(`"${stage}"`), `missing Living Artwork stage ${stage}`);
   }
@@ -114,9 +117,24 @@ test("Living Artwork exposes durable resume and retry behavior", async () => {
   const media = await read("lib/marketing/living-artwork-media.ts");
   const ui = await read("components/studio/living-artwork-workflow.tsx");
 
-  assert.match(snapshot, /latestLivingArtwork/);
-  assert.match(today, /Living Artwork/);
+  assert.match(snapshot, /latestVisualCreative/);
+  assert.match(snapshot, /\[release-visual:v1/);
+  assert.match(snapshot, /\[living-artwork:v1/);
+  assert.match(today, /latestVisualCreative/);
   assert.match(media, /reuseOrRetryExistingJob/);
   assert.match(media, /job\.status === "failed"/);
   assert.match(ui, /Retry loop check/);
+});
+
+
+test("Living Artwork preserves an explicit approved 9:16 Release Visual without reframing", async () => {
+  const context = await read("lib/marketing/creative-context.ts");
+  const workspace = await read("lib/marketing/living-artwork-workspace.ts");
+  const prep = await read("components/studio/living-artwork-loop-kit-prep.tsx");
+  const actions = await read("app/studio/living-artwork-actions.ts");
+
+  assert.match(context, /role === "living_artwork_source".*score \+= 240/s);
+  assert.match(workspace, /exactPortrait: sourceAsset\?\.width === 1080 && sourceAsset\?\.height === 1920/);
+  assert.match(prep, /if \(!exactPortrait\)/);
+  assert.match(actions, /workspace\.source\.exactPortrait && workspace\.source\.assetId/);
 });
