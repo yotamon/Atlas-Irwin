@@ -96,10 +96,12 @@ export function LivingArtworkLoopKitPrep({
   artistId,
   contentItemId,
   sourceUrl,
+  exactPortrait = false,
 }: {
   artistId: string;
   contentItemId: string;
   sourceUrl: string;
+  exactPortrait?: boolean;
 }) {
   const router = useRouter();
   const [preset, setPreset] = useState<LivingArtworkMotionPresetId>("subtle_pulse");
@@ -110,12 +112,14 @@ export function LivingArtworkLoopKitPrep({
     setError(null);
     startTransition(async () => {
       try {
-        const sourceFrame = await buildPortraitSourceFrame(sourceUrl);
         const form = new FormData();
         form.set("artist_id", artistId);
         form.set("content_item_id", contentItemId);
         form.set("motion_preset", preset);
-        form.set("source_frame", sourceFrame);
+        if (!exactPortrait) {
+          const sourceFrame = await buildPortraitSourceFrame(sourceUrl);
+          form.set("source_frame", sourceFrame);
+        }
         await prepareLivingArtworkLoopKit(form);
         router.refresh();
       } catch (cause) {
@@ -145,10 +149,12 @@ export function LivingArtworkLoopKitPrep({
         ))}
       </div>
       <button className="button primary" type="button" onClick={prepare} disabled={pending}>
-        {pending ? "Preparing portrait frame…" : "Prepare free Loop Kit"}
+        {pending ? (exactPortrait ? "Preparing Loop Kit…" : "Preparing portrait frame…") : "Prepare free Loop Kit"}
       </button>
       <small className="living-artwork-helper">
-        Ensemblis prepares a portrait frame locally in your browser: the original artwork stays intact over a softly extended background.
+        {exactPortrait
+          ? "This approved visual is already 1080×1920, so Ensemblis uses the exact raster as both first and last frame without reframing it."
+          : "Ensemblis prepares a portrait frame locally in your browser: the original artwork stays intact over a softly extended background."}
       </small>
       {error ? <p className="ensemblis-notice" data-tone="danger" role="alert">{error}</p> : null}
     </div>
