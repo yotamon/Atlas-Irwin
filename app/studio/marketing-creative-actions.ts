@@ -298,6 +298,23 @@ export async function approvePreparedCreativeGeneration(form: FormData) {
   const { data: content } = await marketing.from("content_items")
     .select("id,release_id,campaign_id")
     .eq("id", contentItemId).eq("owner_id", artist.userId).eq("artist_id", artist.artistId).maybeSingle();
+  if (content && inputContext.creativeIntent === "seamless_loop") {
+    const { error: eventError } = await marketing.from("marketing_events").insert({
+      owner_id: artist.userId,
+      artist_id: artist.artistId,
+      campaign_id: content.campaign_id,
+      event_type: "loop_generation_started",
+      entity_type: "content_item",
+      entity_id: content.id,
+      payload: json({
+        generationRunId: run.id,
+        provider: run.provider,
+        model: run.model,
+        estimatedCostUsd: run.estimated_cost_usd,
+      }),
+    });
+    if (eventError) throw new Error(eventError.message);
+  }
   if (content) revalidateCreativePaths(content);
 }
 
