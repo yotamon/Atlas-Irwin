@@ -23,3 +23,14 @@ def test_large_boundary_jump_needs_review() -> None:
     assert result["state"] == "needs_review"
     assert result["similarity"] == 0.0
     assert result["luminance_delta"] == 1.0
+
+
+def test_near_boundary_is_repairable() -> None:
+    first = np.full((32, 32, 3), 100, dtype=np.uint8)
+    last = np.full((32, 32, 3), 132, dtype=np.uint8)
+
+    result = _boundary_metrics_arrays(first, last)
+
+    assert result["state"] == "repair_available"
+    assert 0.8 <= result["similarity"] < 0.92
+    assert 0.0 < result["color_delta"] <= 0.14
