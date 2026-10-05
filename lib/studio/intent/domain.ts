@@ -50,14 +50,18 @@ function cleanObject(value: string) {
 
 function createIntent(query: string): ClassifiedStudioIntent | null {
   const lower = query.toLowerCase();
-  if (/\b(?:animate|loop)\b/.test(lower) && /\b(?:artwork|cover|visual|image)\b/.test(lower)) {
+  const livingArtworkIntent = (
+    /\b(?:animate|loop|looping|visualizer)\b/.test(lower)
+    && /\b(?:artwork|cover|visual|image)\b/.test(lower)
+  ) || /\b(?:reel|story|short)\s+background\b.*\b(?:artwork|cover|visual|image)\b/.test(lower);
+  if (livingArtworkIntent) {
     return {
       kind: "create_from_object",
       objectType: "any",
       objectQuery: cleanObject(
         query
-          .replace(/\b(?:animate|loop|make|create|generate|turn)\b/gi, " ")
-          .replace(/\b(?:this|a|an|the|artwork|cover|visual|image|visualizer|loop)\b/gi, " ")
+          .replace(/\b(?:animate|loop|looping|visualizer|make|create|generate|turn)\b/gi, " ")
+          .replace(/\b(?:this|a|an|the|artwork|cover|visual|image|visualizer|loop|reel|story|short|background)\b/gi, " ")
           .replace(/\b(?:from|for|using|into)\b/gi, " "),
       ),
       desiredOutcome: "visual",
