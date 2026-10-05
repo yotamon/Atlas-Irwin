@@ -7,6 +7,7 @@ import {
   deriveLivingArtworkStage,
   LIVING_ARTWORK_FULL_TRACK_ROLE,
   LIVING_ARTWORK_LOOP_ROLE,
+  LIVING_ARTWORK_SOCIAL_ROLE,
 } from "./living-artwork";
 import { createServiceClient } from "@/lib/supabase/service";
 import { asMomentAwareMarketingClient, asMomentsClient } from "@/lib/studio/moments-db";
@@ -89,7 +90,7 @@ export async function loadLivingArtworkWorkspace(input: {
     .eq("owner_id", input.ownerId)
     .eq("artist_id", input.artistId)
     .eq("content_item_id", content.id)
-    .in("role", [LIVING_ARTWORK_LOOP_ROLE, LIVING_ARTWORK_FULL_TRACK_ROLE])\n    .order("created_at", { ascending: false });
+    .in("role", [LIVING_ARTWORK_LOOP_ROLE, LIVING_ARTWORK_FULL_TRACK_ROLE, LIVING_ARTWORK_SOCIAL_ROLE])\n    .order("created_at", { ascending: false });
   if (linksError) throw new Error(linksError.message);
   const assetIds = [...new Set((links ?? []).map((link) => link.media_asset_id))];
   const { data: assets, error: assetsError } = assetIds.length
@@ -106,13 +107,15 @@ export async function loadLivingArtworkWorkspace(input: {
     ?? (links ?? []).find((link) => link.role === LIVING_ARTWORK_FULL_TRACK_ROLE)
     ?? null;
   const fullTrackAsset = fullTrackLink ? assetById.get(fullTrackLink.media_asset_id) ?? null : null;
+  const socialLink = (links ?? []).find((link) => link.role === LIVING_ARTWORK_SOCIAL_ROLE) ?? null;
+  const socialAsset = socialLink ? assetById.get(socialLink.media_asset_id) ?? null : null;
 
   const { data: jobs, error: jobsError } = await mediaJobs.from("marketing_media_jobs")
     .select("*")
     .eq("owner_id", input.ownerId)
     .eq("artist_id", input.artistId)
     .eq("content_item_id", content.id)
-    .in("job_type", ["normalize_loop_video", "render_loop_visualizer"])
+    .in("job_type", ["normalize_loop_video", "render_loop_visualizer", "finish_social_video"])
     .order("created_at", { ascending: false })
     .limit(12);
   if (jobsError) throw new Error(jobsError.message);
@@ -155,5 +158,6 @@ export async function loadLivingArtworkWorkspace(input: {
     approvedLoopAsset,
     approvedLoopLink,
     fullTrackAsset,
+    socialAsset,
   };
 }
