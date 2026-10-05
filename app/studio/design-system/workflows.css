@@ -1139,7 +1139,7 @@
 }
 
 .living-artwork-preview video {
-  background: #050505;
+  background: var(--en-black);
 }
 
 .living-artwork-helper {
