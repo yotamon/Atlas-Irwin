@@ -5,8 +5,8 @@ import { Sandbox } from "@vercel/sandbox";
 import { mediaWorkerDispatchFailure } from "@/lib/media-worker/failures";
 
 export const MEDIA_WORKER_CALLBACK_HASH_KEY = "__atlas_callback_token_sha256";
-const MEDIA_WORKER_RUNTIME_VERSION = 13;
-const MEDIA_WORKER_BOOTSTRAP_VERSION = 12;
+const MEDIA_WORKER_RUNTIME_VERSION = 14;
+const MEDIA_WORKER_BOOTSTRAP_VERSION = 13;
 const MEDIA_WORKER_SANDBOX_GENERATION = 2;
 const MEDIA_WORKER_PYTHON_VERSION = "3.13.14";
 const MEDIA_WORKER_SANDBOX_IMAGE = "vercel/sandbox/universal:latest";
@@ -253,6 +253,7 @@ files = {
     "app/social_finishing.py": f"{base}/app/social_finishing.py",
     "app/loop_video.py": f"{base}/app/loop_video.py",
     "app/loop_visualizer.py": f"{base}/app/loop_visualizer.py",
+    "app/video_loop.py": f"{base}/app/video_loop.py",
     "app/video_director_finishing.py": f"{base}/app/video_director_finishing.py",
     "app/automix_model.py": f"{base}/app/automix_model.py",
     "app/automix_intelligence.py": f"{base}/app/automix_intelligence.py",
