@@ -288,14 +288,14 @@ Remaining exit work:
 #### P1.9 Artist-first creative UX - #110 - **Complete**
 PRs #115-#118 shipped Quick Video, shared durable Director state, representative-preview/budget flow, automatic master + socials delivery, exact approved-Moment lineage and artist-scoped Creative Memory retrieval. Director Pro preserves expert controls and existing spend safety.
 
-#### P1.9b Release Visual / cover-to-social artwork - #289 - **Planned in PR #290**
+#### P1.9b Release Visual / cover-to-social artwork - #289 - **Implementation in PR #290; validation active**
 Release Visual fixes the remaining gap before Living Artwork: an artist should be able to turn approved release artwork into a polished static social visual before deciding whether motion adds value.
 
 Canonical journey:
 
 `release cover → Release Visual → optional Living Artwork → export / publish`
 
-Planned exit work:
+Implemented scope in PR #290:
 - make the existing `visual` Create outcome release-first rather than Moment-first;
 - add a contextual five-stage Release Visual workflow for Source → Message → Design → Review → Use;
 - support deterministic Clean / Out Now / Out Friday / Pre-save / Listen Now / Custom typography;
