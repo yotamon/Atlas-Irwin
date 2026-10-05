@@ -38,3 +38,36 @@ test("Living Artwork reuses canonical media lineage and durable media jobs", asy
   assert.match(spec, /normalize_loop_video/);
   assert.match(spec, /render_loop_visualizer/);
 });
+
+
+test("native loop routing requires identical start and end frame media", async () => {
+  const router = await read("lib/marketing/creative-router.ts");
+  assert.match(router, /creativeIntent === "seamless_loop"/);
+  assert.match(router, /role: "start_image", url: source\.url/);
+  assert.match(router, /role: "end_image", url: source\.url/);
+  assert.match(router, /supportsStartImage/);
+  assert.match(router, /supportsEndImage/);
+});
+
+test("Living Artwork UI is staged and exposes zero-spend plus deterministic export paths", async () => {
+  const ui = await read("components/studio/living-artwork-workflow.tsx");
+  const actions = await read("app/studio/living-artwork-actions.ts");
+
+  assert.match(ui, /Prepare free Loop Kit/);
+  assert.match(ui, /Generate inside Ensemblis instead/);
+  assert.match(ui, /Import and check loop/);
+  assert.match(ui, /Auto repair seam/);
+  assert.match(ui, /Render full-track video/);
+  assert.match(ui, /Render short-form video/);
+  assert.match(actions, /enqueueLivingArtworkNormalization/);
+  assert.match(actions, /enqueueLivingArtworkVisualizer/);
+  assert.match(actions, /enqueueLivingArtworkSocial/);
+});
+
+test("full-track visualizer repeats video and leaves music processing to delivery encoding only", async () => {
+  const worker = await read("services/media-worker/app/loop_visualizer.py");
+  assert.match(worker, /"-stream_loop"/);
+  assert.match(worker, /duration_source": "canonical_audio_probe"/);
+  assert.match(worker, /audio_processing": "delivery_codec_only"/);
+  assert.doesNotMatch(worker, /alimiter|loudnorm|acompressor|equalizer/);
+});
