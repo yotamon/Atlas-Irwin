@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-import shutil
+import re
 import tempfile
 from pathlib import Path
 from typing import Any, Literal
@@ -9,7 +9,31 @@ from typing import Any, Literal
 import httpx
 from pydantic import BaseModel, Field
 
-from .main import download, ffmpeg, sha256_file, upload_file, validate_remote_url
+from .main import FFMPEG_BINARY, download, ffmpeg, sha256_file, upload_file, validate_remote_url
+
+
+async def _probe_duration_seconds(path: Path) -> float:
+    process = await asyncio.create_subprocess_exec(
+        FFMPEG_BINARY,
+        "-hide_banner",
+        "-i",
+        str(path),
+        "-f",
+        "null",
+        "-",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _, stderr = await process.communicate()
+    text = stderr.decode("utf-8", errors="replace")
+    match = re.search(r"Duration:\\s*(\\d+):(\\d+):(\\d+(?:\\.\\d+)?)", text)
+    if not match:
+        raise RuntimeError("Could not determine canonical audio duration.")
+    hours, minutes, seconds = match.groups()
+    duration = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+    if duration <= 0 or duration > 20 * 60:
+        raise RuntimeError("Canonical audio duration must be between 1 second and 20 minutes.")
+    return duration
 
 
 class LoopVisualizerWorkerRequest(BaseModel):
@@ -32,9 +56,9 @@ async def render_loop_visualizer_job(payload: dict[str, Any], workdir: Path) -> 
     width = int(payload.get("width") or 1080)
     height = int(payload.get("height") or 1920)
     fps = int(payload.get("fps") or 30)
-    duration_ms = int(payload.get("duration_ms") or 0)
-    if duration_ms < 1000 or duration_ms > 20 * 60 * 1000:
-        raise ValueError("Full-track visualizer duration must be between 1 second and 20 minutes.")
+    requested_duration_ms = int(payload.get("duration_ms") or 0)
+    if requested_duration_ms < 1000 or requested_duration_ms > 20 * 60 * 1000:
+        raise ValueError("Full-track visualizer duration hint must be between 1 second and 20 minutes.")
     if width < 240 or height < 240 or width > 2160 or height > 3840 or fps < 12 or fps > 60:
         raise ValueError("Invalid visualizer dimensions or frame rate")
 
@@ -42,8 +66,9 @@ async def render_loop_visualizer_job(payload: dict[str, Any], workdir: Path) -> 
     audio_source = workdir / "canonical-audio"
     output = workdir / "full-track-visualizer.mp4"
     await asyncio.gather(download(source_url, loop_source), download(audio_url, audio_source))
-
-    duration = f"{duration_ms / 1000.0:.3f}"
+    canonical_duration_seconds = await _probe_duration_seconds(audio_source)
+    duration_ms = round(canonical_duration_seconds * 1000)
+    duration = f"{canonical_duration_seconds:.3f}"
     vf = (
         f"scale={width}:{height}:force_original_aspect_ratio=increase,"
         f"crop={width}:{height},fps={fps},setsar=1,format=yuv420p"
@@ -91,6 +116,8 @@ async def render_loop_visualizer_job(payload: dict[str, Any], workdir: Path) -> 
         "mime_type": "video/mp4",
         "sha256": await asyncio.to_thread(sha256_file, output),
         "duration_ms": duration_ms,
+        "requested_duration_ms": requested_duration_ms,
+        "duration_source": "canonical_audio_probe",
         "width": width,
         "height": height,
         "fps": fps,
