@@ -106,7 +106,9 @@ jobs:
           -r apps/library-bridge/renderer/requirements-windows-arm64.txt
       - name: Verify Python dependency binaries are ARM64 native
         run: python apps/library-bridge/renderer/verify_windows_arm64_python.py
-      - name: Prepare pinned Windows ARM64 FFmpeg
+      - name: Prepare verified Windows ARM64 FFmpeg
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: python apps/library-bridge/renderer/prepare_native_ffmpeg.py --target-triple aarch64-pc-windows-msvc --output apps/library-bridge/renderer/.native-tools/windows-arm64/ffmpeg.exe
       - name: Build and verify Windows ARM64 sidecar
         run: python apps/library-bridge/renderer/build_sidecar.py --target-triple aarch64-pc-windows-msvc --ffmpeg-binary apps/library-bridge/renderer/.native-tools/windows-arm64/ffmpeg.exe
