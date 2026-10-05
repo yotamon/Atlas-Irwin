@@ -16,6 +16,7 @@ import type { ArtistScopedMusicDatabase } from "@/types/artist-scoped-music-data
 import {
   LIVING_ARTWORK_FULL_TRACK_ROLE,
   LIVING_ARTWORK_LOOP_ROLE,
+  LIVING_ARTWORK_SOCIAL_ROLE,
 } from "@/lib/marketing/living-artwork";
 
 export const runtime = "nodejs";
@@ -170,7 +171,7 @@ async function registerFinishedAsset(input: {
 
 async function registerLivingArtworkWorkerAsset(input: {
   jobId: string;
-  jobType: "normalize_loop_video" | "render_loop_visualizer";
+  jobType: "normalize_loop_video" | "render_loop_visualizer" | "finish_social_video";
   ownerId: string;
   artistId: string;
   campaignId: string | null;
@@ -200,6 +201,7 @@ async function registerLivingArtworkWorkerAsset(input: {
   let asset = existing;
   if (!asset) {
     const isLoop = input.jobType === "normalize_loop_video";
+    const isFullTrack = input.jobType === "render_loop_visualizer";
     const { data, error } = await db.from("media_assets").insert({
       owner_id: input.ownerId,
       bucket_name: bucket,
@@ -214,14 +216,20 @@ async function registerLivingArtworkWorkerAsset(input: {
       duration_ms: Number(input.result.duration_ms) || null,
       visibility: "public",
       metadata: json({
-        title: isLoop ? "Living Artwork loop" : "Living Artwork full-track visualizer",
+        title: isLoop
+          ? "Living Artwork loop"
+          : isFullTrack
+            ? "Living Artwork full-track visualizer"
+            : "Living Artwork social video",
         description: isLoop
           ? "Normalized and seam-checked by Ensemblis Media Worker."
-          : "Rendered deterministically from an approved Living Artwork loop and canonical track audio.",
-        tags: ["ensemblis-generated", "living-artwork", isLoop ? "loop" : "full-track-visualizer"],
+          : isFullTrack
+            ? "Rendered deterministically from an approved Living Artwork loop and canonical track audio."
+            : "Short-form social video finished deterministically from an approved Living Artwork loop.",
+        tags: ["ensemblis-generated", "living-artwork", isLoop ? "loop" : isFullTrack ? "full-track-visualizer" : "social-export"],
         artist_id: input.artistId,
         upload_source: "ensemblis-media-worker",
-        source_kind: isLoop ? "normalized_loop" : "loop_visualizer",
+        source_kind: isLoop ? "normalized_loop" : isFullTrack ? "loop_visualizer" : "loop_social",
         marketing_media_job_id: input.jobId,
         marketing_generation_run_id: input.generationRunId,
         source_asset_id: typeof input.requestPayload.source_asset_id === "string" ? input.requestPayload.source_asset_id : null,
@@ -244,7 +252,9 @@ async function registerLivingArtworkWorkerAsset(input: {
 
   const role = input.jobType === "normalize_loop_video"
     ? LIVING_ARTWORK_LOOP_ROLE
-    : LIVING_ARTWORK_FULL_TRACK_ROLE;
+    : input.jobType === "render_loop_visualizer"
+      ? LIVING_ARTWORK_FULL_TRACK_ROLE
+      : LIVING_ARTWORK_SOCIAL_ROLE;
   const shouldBePrimary = input.jobType === "render_loop_visualizer";
   if (shouldBePrimary) {
     const { error: demoteError } = await music.from("media_links")
@@ -276,7 +286,11 @@ async function registerLivingArtworkWorkerAsset(input: {
     role,
     display_order: 0,
     is_primary: shouldBePrimary,
-    caption: input.jobType === "normalize_loop_video" ? "Living Artwork loop candidate" : "Full-track Living Artwork visualizer",
+    caption: input.jobType === "normalize_loop_video"
+      ? "Living Artwork loop candidate"
+      : input.jobType === "render_loop_visualizer"
+        ? "Full-track Living Artwork visualizer"
+        : "Living Artwork social export",
     alt_text: null,
   };
   const { error: linkError } = existingLink
@@ -291,7 +305,11 @@ async function reconcileLivingArtworkWorker(input: {
   requestPayload: Record<string, unknown>;
   result: Record<string, unknown>;
 }) {
-  if (input.job.job_type !== "normalize_loop_video" && input.job.job_type !== "render_loop_visualizer") {
+  if (
+    input.job.job_type !== "normalize_loop_video"
+    && input.job.job_type !== "render_loop_visualizer"
+    && input.job.job_type !== "finish_social_video"
+  ) {
     throw new Error("Unsupported Living Artwork reconciliation job.");
   }
   const db = marketing();
@@ -423,7 +441,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, retrying: !terminal });
   }
 
-  if (job.job_type === "normalize_loop_video" || job.job_type === "render_loop_visualizer") {
+  const livingArtworkSocial = job.job_type === "finish_social_video"
+    && requestPayload.living_artwork_export === "social";
+  if (job.job_type === "normalize_loop_video" || job.job_type === "render_loop_visualizer" || livingArtworkSocial) {
     try {
       const asset = await reconcileLivingArtworkWorker({ job, requestPayload, result });
       cleanup();
