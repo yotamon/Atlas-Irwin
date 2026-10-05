@@ -58,6 +58,16 @@ export async function enqueueLivingArtworkNormalization(input: {
   const bucket = "public-media";
   const outputPath = `${input.ownerId}/library/marketing/${input.artistId}/living-artwork/${input.contentItemId}/loops/${jobId}.mp4`;
   const publicUrl = service.storage.from(bucket).getPublicUrl(outputPath).data.publicUrl;
+  const reviewFrames = [0.08, 0.5, 0.92].map((ratio, index) => {
+    const framePath = `${input.ownerId}/library/marketing/${input.artistId}/living-artwork/${input.contentItemId}/qc/full-track-${jobId}-${index + 1}.jpg`;
+    return {
+      index: index + 1,
+      ratio,
+      upload_bucket: bucket,
+      upload_path: framePath,
+      public_url: service.storage.from(bucket).getPublicUrl(framePath).data.publicUrl,
+    };
+  });
 
   const { data, error } = await db.from("marketing_media_jobs").insert({
     id: jobId,
@@ -142,6 +152,7 @@ export async function enqueueLivingArtworkVisualizer(input: {
       height: LIVING_ARTWORK_TARGET.height,
       fps: LIVING_ARTWORK_TARGET.fps,
       duration_mode: "full_audio",
+      review_frames: reviewFrames,
     }),
     result_payload: json({}),
     attempt_count: 0,
