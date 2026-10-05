@@ -71,3 +71,19 @@ test("full-track visualizer repeats video and leaves music processing to deliver
   assert.match(worker, /audio_processing": "delivery_codec_only"/);
   assert.doesNotMatch(worker, /alimiter|loudnorm|acompressor|equalizer/);
 });
+
+
+test("full-track visualizer verifies streams, duration and temporal review evidence", async () => {
+  const worker = await read("services/media-worker/app/loop_visualizer.py");
+  const loopHelper = await read("services/media-worker/app/video_loop.py");
+  const social = await read("services/media-worker/app/social_finishing.py");
+
+  assert.match(worker, /has_video/);
+  assert.match(worker, /has_audio/);
+  assert.match(worker, /duration_delta_ms/);
+  assert.match(worker, /review_frame_results/);
+  assert.match(worker, /extract_review_frames/);
+  assert.match(loopHelper, /"-stream_loop", "-1", "-i"/);
+  assert.match(worker, /looped_video_input_args/);
+  assert.match(social, /looped_video_input_args/);
+});
