@@ -119,7 +119,7 @@ test("Release Visual Create start is release-first and resumable", async () => {
   assert.match(page, /Release Visual remains available above/);
   assert.match(actions, /outcome\.sourceMode === "release"/);
   assert.match(actions, /moment_id: null/);
-  assert.match(actions, /\[release-visual:v1\]/);
+  assert.match(actions, /RELEASE_VISUAL_MARKER/);
   assert.match(actions, /\/studio\/create\/visual\//);
   assert.match(actions, /Could not start Release Visual/);
 });
