@@ -18,6 +18,7 @@ import { directContentCreative } from "@/lib/marketing/creative-treatment";
 import { creativeProvider, isCreativeDefiniteRejection } from "@/lib/marketing/creative-providers";
 import { CREATIVE_PROVIDER_IDS, type CreativeGenerationRequest, type CreativeProviderId } from "@/lib/marketing/creative-provider-types";
 import { getSiteUrl } from "@/lib/site-url";
+import { buildLivingArtworkPrompt } from "@/lib/marketing/living-artwork";
 import { resolveArtistContext, resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { Json } from "@/types/database";
@@ -82,6 +83,8 @@ export async function prepareContentCreativeGeneration(form: FormData) {
   const contentItemId = uuid.parse(value(form, "content_item_id"));
   const quality = qualitySchema.parse(value(form, "quality") || "balanced");
   const mediaKind = mediaKindSchema.parse(value(form, "media_kind") || "auto");
+  const creativeIntent = value(form, "creative_intent") === "seamless_loop" ? "seamless_loop" as const : "standard" as const;
+  const motionPreset = value(form, "motion_preset") || "subtle_pulse";
   const { data: content, error: contentError } = await marketing.from("content_items")
     .select("*")
     .eq("id", contentItemId)
@@ -109,7 +112,7 @@ export async function prepareContentCreativeGeneration(form: FormData) {
     context: referenceContext,
     outputKind,
   });
-  const prompt = buildCohesiveVisualPrompt({
+  const cohesivePrompt = buildCohesiveVisualPrompt({
     context: referenceContext,
     contentTitle: content.title,
     platform: content.platform,
@@ -118,6 +121,17 @@ export async function prepareContentCreativeGeneration(form: FormData) {
     hook: content.hook_text,
     outputKind,
   });
+  const prompt = creativeIntent === "seamless_loop"
+    ? `${cohesivePrompt}\n\n${buildLivingArtworkPrompt({
+        presetId: motionPreset,
+        artistContext: [
+          referenceContext.brand.visualWorld,
+          referenceContext.brand.continuityRules,
+          referenceContext.release.visualDirection,
+        ].filter(Boolean).join(" "),
+        releaseTitle: referenceContext.release.title,
+      })}`
+    : cohesivePrompt;
   const route = routeMarketingCreative({
     platform: content.platform,
     format: content.format,
@@ -125,6 +139,7 @@ export async function prepareContentCreativeGeneration(form: FormData) {
     prompt,
     quality,
     mediaKind,
+    creativeIntent,
     audioStart: content.audio_timestamp_start,
     audioEnd: content.audio_timestamp_end,
     context: referenceContext,
@@ -151,6 +166,8 @@ export async function prepareContentCreativeGeneration(form: FormData) {
       assetType: route.assetType,
       quality,
       mediaKind,
+      creativeIntent,
+      motionPreset: creativeIntent === "seamless_loop" ? motionPreset : null,
       request: route.request,
       referenceContext,
       treatment,
@@ -184,7 +201,7 @@ export async function prepareContentCreativeGeneration(form: FormData) {
     owner_id: artist.userId,
     artist_id: artist.artistId,
     campaign_id: content.campaign_id,
-    event_type: "content.ai_asset_prepared",
+    event_type: creativeIntent === "seamless_loop" ? "loop_generation_prepared" : "content.ai_asset_prepared",
     entity_type: "content_item",
     entity_id: content.id,
     payload: json({
