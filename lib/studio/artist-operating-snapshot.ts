@@ -247,15 +247,15 @@ export async function loadArtistOperatingSnapshot({
       id: latestVisualCreativeRow.id,
       title: latestVisualCreativeRow.title,
       eyebrow: motion ? "Living Artwork" : "Release Visual",
-      status: approved
-        ? motion ? "Ready to export" : "Ready to use"
-        : "In progress",
-      detail: approved
-        ? motion
-          ? "Approved motion is ready for export or deterministic reuse."
-          : "Approved static visual is ready for another format or optional animation."
-        : motion
-          ? "Living Artwork is in progress · continue from the saved motion and media state."
+      status: motion
+        ? "Motion workflow"
+        : approved
+          ? "Ready to use"
+          : "In progress",
+      detail: motion
+        ? "Continue Living Artwork from the approved visual source, or review/export any completed motion output."
+        : approved
+          ? "Approved static visual is ready for another format or optional animation."
           : "Release Visual is in progress · continue the cover-to-social design.",
       href: href(motion
         ? `/studio/create/loop/${latestVisualCreativeRow.id}`
