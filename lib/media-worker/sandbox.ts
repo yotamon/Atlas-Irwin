@@ -5,8 +5,8 @@ import { Sandbox } from "@vercel/sandbox";
 import { mediaWorkerDispatchFailure } from "@/lib/media-worker/failures";
 
 export const MEDIA_WORKER_CALLBACK_HASH_KEY = "__atlas_callback_token_sha256";
-const MEDIA_WORKER_RUNTIME_VERSION = 12;
-const MEDIA_WORKER_BOOTSTRAP_VERSION = 11;
+const MEDIA_WORKER_RUNTIME_VERSION = 13;
+const MEDIA_WORKER_BOOTSTRAP_VERSION = 12;
 const MEDIA_WORKER_SANDBOX_GENERATION = 2;
 const MEDIA_WORKER_PYTHON_VERSION = "3.13.14";
 const MEDIA_WORKER_SANDBOX_IMAGE = "vercel/sandbox/universal:latest";
