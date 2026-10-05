@@ -1,5 +1,6 @@
 "use server";
 
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { saveContentV2 } from "@/app/studio/content-actions-v2";
 import { requireStudioAdmin } from "@/lib/auth/studio";
@@ -8,7 +9,8 @@ import { loadArtistOperatingContext } from "@/lib/artist-operating/server";
 import { artistMemoryBrief, loadArtistMemoryForConsumer } from "@/lib/artist-memory/server";
 import { resolveArtistContext } from "@/lib/studio/artist-context";
 import { resolveCreateOutcome } from "@/lib/studio/create-outcomes";
-import { asMomentsClient } from "@/lib/studio/moments-db";
+import { asMomentAwareMarketingClient, asMomentsClient } from "@/lib/studio/moments-db";
+import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 
 const uuid = z.uuid();
 function value(form: FormData, key: string) { return String(form.get(key) ?? "").trim(); }
@@ -37,6 +39,59 @@ export async function startOutcomeCreative(form: FormData) {
     artistCreativePolicyBrief(operatingContext.profile),
     rememberedDirection ? `Bounded Artist Memory (${memory.maxEffect.replaceAll("_", " ")}):\n${rememberedDirection}` : null,
   ].filter(Boolean).join("\n\n");
+
+  if (outcome.workflow === "living_artwork") {
+    const marketing = asMomentAwareMarketingClient(supabase);
+    const { data: campaign, error: campaignError } = await marketing.from("campaigns")
+      .select("id")
+      .eq("owner_id", artist.userId)
+      .eq("artist_id", artist.artistId)
+      .eq("release_id", moment.release_id)
+      .not("status", "eq", "archived")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (campaignError) throw new Error(campaignError.message);
+
+    const { data: content, error: contentError } = await marketing.from("content_items").insert({
+      owner_id: artist.userId,
+      artist_id: artist.artistId,
+      release_id: moment.release_id,
+      campaign_id: campaign?.id ?? null,
+      moment_id: moment.id,
+      title: `${moment.label} · ${outcome.titleSuffix}`,
+      platform: outcome.platform,
+      format: outcome.format,
+      goal: outcome.goal,
+      status: "Draft",
+      scheduled_at: null,
+      hook_text: null,
+      caption: null,
+      cta: null,
+      asset_url: null,
+      visual_prompt: null,
+      production_notes: notes,
+      performance_notes: null,
+      audio_timestamp_start: Math.floor(moment.start_ms / 1000),
+      audio_timestamp_end: Math.ceil(moment.end_ms / 1000),
+      source: "manual",
+      approval_status: "not_required",
+    }).select("id").single();
+    if (contentError || !content) throw new Error(contentError?.message || "Could not start Living Artwork.");
+
+    const { error: eventError } = await marketing.from("marketing_events").insert({
+      owner_id: artist.userId,
+      artist_id: artist.artistId,
+      campaign_id: campaign?.id ?? null,
+      event_type: "loop_workflow_started",
+      entity_type: "content_item",
+      entity_id: content.id,
+      payload: { releaseId: moment.release_id, momentId: moment.id, outcome: outcome.id },
+    });
+    if (eventError) throw new Error(eventError.message);
+
+    redirect(ensemblisArtistHref(`/studio/create/loop/${content.id}`, artist.artistId));
+  }
 
   const production = new FormData();
   production.set("artist_id", artist.artistId);
