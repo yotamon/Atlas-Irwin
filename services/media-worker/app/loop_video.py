@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 import httpx
 import numpy as np
-from PIL import Image
+
 from pydantic import BaseModel, Field
 
 from .main import FFMPEG_BINARY, download, ffmpeg, sha256_file, upload_file, validate_remote_url
