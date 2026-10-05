@@ -293,11 +293,6 @@ export async function renderLivingArtworkFullTrack(form: FormData) {
   const loop = workspace.approvedLoopAsset;
   if (!loop?.public_url) throw new Error("Approve the loop before exporting a full-track visualizer.");
   if (!workspace.track?.audio_url) throw new Error("The track has no canonical audio source.");
-  const durationSeconds = workspace.track.duration;
-  if (typeof durationSeconds !== "number" || !Number.isFinite(durationSeconds) || durationSeconds <= 0) {
-    throw new Error("The track needs a known duration before full-track rendering.");
-  }
-
   const job = await enqueueLivingArtworkVisualizer({
     ownerId: artist.userId,
     artistId: artist.artistId,
@@ -307,7 +302,6 @@ export async function renderLivingArtworkFullTrack(form: FormData) {
     loopAssetId: loop.id,
     loopAssetUrl: loop.public_url,
     audioUrl: workspace.track.audio_url,
-    durationMs: Math.round(durationSeconds * 1000),
   });
   const marketing = asMarketingClient(createServiceClient());
   await marketing.from("marketing_events").insert({
