@@ -12,11 +12,10 @@ import {
   prepareContentCreativeGeneration,
   refreshCreativeGeneration,
 } from "@/app/studio/marketing-creative-actions";
-import { CompactEvidence } from "@/components/studio/ux-v4-widgets";
+import { CompactEvidence, WorkflowStepper } from "@/components/studio/ux-v4-widgets";
 import { LivingArtworkLoopKitPrep } from "@/components/studio/living-artwork-loop-kit-prep";
 import { ButtonLink, Disclosure, PageHeader, Status } from "@/components/studio/ui";
 import {
-  LIVING_ARTWORK_MOTION_PRESETS,
   LIVING_ARTWORK_STAGES,
   LIVING_ARTWORK_TARGET,
   type LivingArtworkStage,
@@ -96,25 +95,14 @@ function SourcePreview({ src, label }: { src: string; label: string }) {
 }
 
 function WorkflowProgress({ current }: { current: LivingArtworkStage }) {
-  const currentIndex = LIVING_ARTWORK_STAGES.indexOf(current);
   return (
-    <nav className="en-workflow-stepper living-artwork-stepper" aria-label="Living Artwork progress">
-      {LIVING_ARTWORK_STAGES.map((stage, index) => {
-        const active = stage === current;
-        const complete = index < currentIndex;
-        return (
-          <span
-            key={stage}
-            className={active ? "is-active" : complete ? "is-complete" : undefined}
-            aria-current={active ? "step" : undefined}
-            data-workflow-stage={stage}
-          >
-            <b>{complete ? "✓" : index + 1}</b>
-            <strong>{stageLabel(stage)}</strong>
-          </span>
-        );
-      })}
-    </nav>
+    <WorkflowStepper
+      current={current}
+      steps={LIVING_ARTWORK_STAGES.map((stage) => ({
+        id: stage,
+        label: stageLabel(stage),
+      }))}
+    />
   );
 }
 
