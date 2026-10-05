@@ -14,7 +14,7 @@ import {
   refreshCreativeGeneration,
 } from "@/app/studio/marketing-creative-actions";
 import { CompactEvidence, WorkflowStepper } from "@/components/studio/ux-v4-widgets";
-import { LivingArtworkLoopKitPrep } from "@/components/studio/living-artwork-loop-kit-prep";
+import { LivingArtworkCopyButton, LivingArtworkLoopKitPrep } from "@/components/studio/living-artwork-loop-kit-prep";
 import { ButtonLink, Disclosure, PageHeader, Status } from "@/components/studio/ui";
 import {
   LIVING_ARTWORK_STAGES,
@@ -261,12 +261,19 @@ function MakeLoopStage({ workspace, artistId }: { workspace: Workspace; artistId
           <div>
             <Status tone="success">Loop Kit ready</Status>
             <strong>{LIVING_ARTWORK_TARGET.aspectRatio} · about {LIVING_ARTWORK_TARGET.recommendedDurationSeconds}s</strong>
-            <p>Use the artwork shown above as both <b>first frame</b> and <b>last frame</b>.</p>
+            <p>Use this exact portrait frame as both <b>first frame</b> and <b>last frame</b>.</p>
           </div>
+          {workspace.source?.url ? (
+            <div className="living-artwork-loop-kit-source">
+              <SourcePreview src={workspace.source.url} label={workspace.source.label} />
+              <a className="button" href={workspace.source.url} target="_blank" rel="noreferrer">Open / save portrait frame</a>
+            </div>
+          ) : null}
           <label className="field wide">
             <span>Loop-aware prompt</span>
             <textarea rows={9} readOnly value={prompt} />
           </label>
+          <LivingArtworkCopyButton text={prompt} />
         </div>
       ) : (
         <p className="ensemblis-notice">Choose a motion direction first to prepare the free Loop Kit.</p>
