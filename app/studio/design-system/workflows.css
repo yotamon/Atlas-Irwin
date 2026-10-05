@@ -1027,3 +1027,217 @@
     flex: 1 1 8rem;
   }
 }
+
+/* Living Artwork --------------------------------------------------------- */
+
+.living-artwork-page {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.living-artwork-context-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--studio-border);
+  border-radius: var(--radius-lg);
+  background: var(--studio-surface);
+}
+
+.living-artwork-context-strip > div {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.living-artwork-context-strip strong,
+.living-artwork-context-strip small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.living-artwork-stepper {
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.living-artwork-stepper > span {
+  min-width: 7.5rem;
+  display: grid;
+  grid-template-columns: 1.75rem 1fr;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--studio-text-muted);
+}
+
+.living-artwork-stepper > span b {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--studio-border);
+  font-size: .75rem;
+}
+
+.living-artwork-stepper > span.is-active {
+  background: var(--studio-surface-raised);
+  color: var(--studio-text);
+}
+
+.living-artwork-stepper > span.is-active b,
+.living-artwork-stepper > span.is-complete b {
+  border-color: var(--studio-accent);
+  color: var(--studio-accent);
+}
+
+.living-artwork-stage {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.living-artwork-stage h2 {
+  margin: 0;
+}
+
+.living-artwork-stage-grid {
+  display: grid;
+  grid-template-columns: minmax(15rem, .78fr) minmax(0, 1.22fr);
+  gap: clamp(var(--space-4), 4vw, var(--space-7));
+  align-items: start;
+}
+
+.living-artwork-stage-copy {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.living-artwork-source-frame,
+.living-artwork-preview {
+  overflow: hidden;
+  width: min(100%, 25rem);
+  aspect-ratio: 9 / 16;
+  border-radius: var(--radius-xl);
+  background: var(--studio-surface-raised);
+  border: 1px solid var(--studio-border);
+  box-shadow: var(--shadow-sm);
+}
+
+.living-artwork-source-frame img,
+.living-artwork-preview video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.living-artwork-preview video {
+  background: #050505;
+}
+
+.living-artwork-helper {
+  color: var(--studio-text-muted);
+  font-size: .92rem;
+}
+
+.living-artwork-motion-form,
+.living-artwork-native-form,
+.living-artwork-import-form,
+.living-artwork-loop-kit {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.living-artwork-preset-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.living-artwork-preset {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  padding: var(--space-3);
+  border: 1px solid var(--studio-border);
+  border-radius: var(--radius-md);
+  background: var(--studio-surface);
+  cursor: pointer;
+}
+
+.living-artwork-preset:has(input:checked) {
+  border-color: var(--studio-accent);
+  background: var(--studio-surface-raised);
+}
+
+.living-artwork-preset input {
+  margin-top: .2rem;
+}
+
+.living-artwork-preset span {
+  display: grid;
+  gap: .25rem;
+}
+
+.living-artwork-preset small {
+  color: var(--studio-text-muted);
+}
+
+.living-artwork-generation-card,
+.living-artwork-export-card,
+.living-artwork-loop-kit {
+  padding: var(--space-4);
+  border: 1px solid var(--studio-border);
+  border-radius: var(--radius-lg);
+  background: var(--studio-surface-raised);
+}
+
+.living-artwork-generation-card,
+.living-artwork-export-card {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.living-artwork-generation-card .actions,
+.living-artwork-export-card .actions {
+  margin-top: var(--space-1);
+}
+
+.living-artwork-loop-kit textarea {
+  font: inherit;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.living-artwork-stage pre {
+  overflow-x: auto;
+  font-size: .78rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@media (max-width: 760px) {
+  .living-artwork-context-strip {
+    align-items: flex-start;
+  }
+
+  .living-artwork-stage-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .living-artwork-source-frame,
+  .living-artwork-preview {
+    width: min(100%, 20rem);
+    justify-self: center;
+  }
+
+  .living-artwork-stepper > span {
+    min-width: 6.5rem;
+  }
+}
