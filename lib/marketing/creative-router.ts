@@ -174,6 +174,9 @@ export function routeMarketingCreative(input: CreativeRouteInput): CreativeRoute
   const ratio = input.creativeIntent === "seamless_loop"
     ? "9:16" as const
     : input.aspectRatio ?? inferredAspectRatio(input.platform, input.format, outputKind);
+  if (input.creativeIntent === "seamless_loop" && !providerAvailability().get("higgsfield")) {
+    throw new Error("Native seamless-loop generation is unavailable until a verified start/end-frame provider is connected.");
+  }
   const selected = chooseCandidate(input.quality, outputKind, ratio);
   let model = input.creativeIntent === "seamless_loop"
     ? loopModelForQuality(input.quality)
