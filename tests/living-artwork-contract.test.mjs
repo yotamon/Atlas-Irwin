@@ -54,7 +54,7 @@ test("Living Artwork UI is staged and exposes zero-spend plus deterministic expo
   const actions = await read("app/studio/living-artwork-actions.ts");
 
   assert.match(ui, /Prepare free Loop Kit/);
-  assert.match(ui, /Generate inside Ensemblis instead/);
+  assert.match(ui, /Generate the loop inside Ensemblis instead/);
   assert.match(ui, /Import and check loop/);
   assert.match(ui, /Auto repair seam/);
   assert.match(ui, /Render full-track video/);
@@ -66,7 +66,8 @@ test("Living Artwork UI is staged and exposes zero-spend plus deterministic expo
 
 test("full-track visualizer repeats video and leaves music processing to delivery encoding only", async () => {
   const worker = await read("services/media-worker/app/loop_visualizer.py");
-  assert.match(worker, /"-stream_loop"/);
+  const loopHelper = await read("services/media-worker/app/video_loop.py");
+  assert.match(loopHelper, /"-stream_loop", "-1", "-i"/);
   assert.match(worker, /duration_source": "canonical_audio_probe"/);
   assert.match(worker, /audio_processing": "delivery_codec_only"/);
   assert.doesNotMatch(worker, /alimiter|loudnorm|acompressor|equalizer/);
@@ -86,4 +87,33 @@ test("full-track visualizer verifies streams, duration and temporal review evide
   assert.match(loopHelper, /"-stream_loop", "-1", "-i"/);
   assert.match(worker, /looped_video_input_args/);
   assert.match(social, /looped_video_input_args/);
+});
+
+
+test("Loop Kit prepares a deterministic portrait source frame with explicit lineage", async () => {
+  const prep = await read("components/studio/living-artwork-loop-kit-prep.tsx");
+  const actions = await read("app/studio/living-artwork-actions.ts");
+  const context = await read("lib/marketing/creative-context.ts");
+
+  assert.match(prep, /canvas\.width = WIDTH/);
+  assert.match(prep, /canvas\.height = HEIGHT/);
+  assert.match(prep, /const WIDTH = 1080/);
+  assert.match(prep, /const HEIGHT = 1920/);
+  assert.match(prep, /drawContain/);
+  assert.match(actions, /living_artwork_source_frame/);
+  assert.match(actions, /source_asset_id/);
+  assert.match(context, /living_artwork_source_frame/);
+});
+
+test("Living Artwork exposes durable resume and retry behavior", async () => {
+  const snapshot = await read("lib/studio/artist-operating-snapshot.ts");
+  const today = await read("app/studio/(protected)/page.tsx");
+  const media = await read("lib/marketing/living-artwork-media.ts");
+  const ui = await read("components/studio/living-artwork-workflow.tsx");
+
+  assert.match(snapshot, /latestLivingArtwork/);
+  assert.match(today, /Living Artwork/);
+  assert.match(media, /reuseOrRetryExistingJob/);
+  assert.match(media, /job\.status === "failed"/);
+  assert.match(ui, /Retry loop check/);
 });
