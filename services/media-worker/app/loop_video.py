@@ -46,17 +46,23 @@ async def _probe_duration_seconds(path: Path) -> float:
     return duration
 
 
-async def _extract_boundary_frames(path: Path, workdir: Path) -> tuple[Path, Path]:
-    first = workdir / "loop-first.png"
-    last = workdir / "loop-last.png"
-    await ffmpeg("-ss", "0.000", "-i", str(path), "-frames:v", "1", "-vf", "scale=256:256", str(first))
-    await ffmpeg("-sseof", "-0.050", "-i", str(path), "-frames:v", "1", "-vf", "scale=256:256", str(last))
-    if not first.exists() or not last.exists():
+async def _extract_boundary_frames(path: Path, workdir: Path) -> dict[str, Path]:
+    frames = {
+        "first": workdir / "loop-first.png",
+        "start_window": workdir / "loop-start-window.png",
+        "end_window": workdir / "loop-end-window.png",
+        "last": workdir / "loop-last.png",
+    }
+    await ffmpeg("-ss", "0.000", "-i", str(path), "-frames:v", "1", "-vf", "scale=256:256", str(frames["first"]))
+    await ffmpeg("-ss", "0.120", "-i", str(path), "-frames:v", "1", "-vf", "scale=256:256", str(frames["start_window"]))
+    await ffmpeg("-sseof", "-0.170", "-i", str(path), "-frames:v", "1", "-vf", "scale=256:256", str(frames["end_window"]))
+    await ffmpeg("-sseof", "-0.050", "-i", str(path), "-frames:v", "1", "-vf", "scale=256:256", str(frames["last"]))
+    if any(not frame.exists() for frame in frames.values()):
         raise RuntimeError("Could not extract loop boundary frames.")
-    return first, last
+    return frames
 
 
-def _boundary_metrics_arrays(first: np.ndarray, last: np.ndarray) -> dict[str, float | str]:
+def _pair_metrics_arrays(first: np.ndarray, last: np.ndarray) -> dict[str, float]:
     if first.shape != last.shape:
         raise ValueError("Loop boundary frames must have matching dimensions.")
     first = np.asarray(first, dtype=np.float32)
@@ -64,28 +70,61 @@ def _boundary_metrics_arrays(first: np.ndarray, last: np.ndarray) -> dict[str, f
     rmse = float(np.sqrt(np.mean(np.square(first - last))) / 255.0)
     similarity = max(0.0, min(1.0, 1.0 - rmse))
     luminance_delta = float(abs(first.mean() - last.mean()) / 255.0)
-    if similarity >= 0.94 and luminance_delta <= 0.04:
-        state = "ready"
-    elif similarity >= 0.84 and luminance_delta <= 0.10:
-        state = "repair_available"
-    else:
-        state = "needs_review"
+    first_channels = first.reshape(-1, first.shape[-1]).mean(axis=0)
+    last_channels = last.reshape(-1, last.shape[-1]).mean(axis=0)
+    color_delta = float(np.mean(np.abs(first_channels - last_channels)) / 255.0)
     return {
         "similarity": round(similarity, 5),
         "luminance_delta": round(luminance_delta, 5),
-        "state": state,
+        "color_delta": round(color_delta, 5),
     }
 
 
-def _boundary_metrics(first_path: Path, last_path: Path) -> dict[str, float | str]:
+def _classify_boundary(endpoint: dict[str, float], window: dict[str, float]) -> str:
+    effective_similarity = min(endpoint["similarity"], window["similarity"])
+    luminance_delta = max(endpoint["luminance_delta"], window["luminance_delta"])
+    color_delta = max(endpoint["color_delta"], window["color_delta"])
+    if effective_similarity >= 0.92 and luminance_delta <= 0.05 and color_delta <= 0.06:
+        return "ready"
+    if effective_similarity >= 0.80 and luminance_delta <= 0.12 and color_delta <= 0.14:
+        return "repair_available"
+    return "needs_review"
+
+
+def _boundary_metrics_arrays(first: np.ndarray, last: np.ndarray) -> dict[str, float | str]:
+    endpoint = _pair_metrics_arrays(first, last)
+    return {**endpoint, "state": _classify_boundary(endpoint, endpoint)}
+
+
+def _load_rgb(path: Path) -> np.ndarray:
     # Pillow is part of the production worker image, but importing it lazily keeps
     # unrelated audio-only test profiles able to import the shared worker runner.
     from PIL import Image
 
-    with Image.open(first_path) as first_image, Image.open(last_path) as last_image:
-        first = np.asarray(first_image.convert("RGB"), dtype=np.float32)
-        last = np.asarray(last_image.convert("RGB"), dtype=np.float32)
-    return _boundary_metrics_arrays(first, last)
+    with Image.open(path) as image:
+        return np.asarray(image.convert("RGB"), dtype=np.float32)
+
+
+def _boundary_metrics(frames: dict[str, Path]) -> dict[str, float | str | bool]:
+    first = _load_rgb(frames["first"])
+    start_window = _load_rgb(frames["start_window"])
+    end_window = _load_rgb(frames["end_window"])
+    last = _load_rgb(frames["last"])
+
+    endpoint = _pair_metrics_arrays(first, last)
+    window = _pair_metrics_arrays(start_window, end_window)
+    start_motion = 1.0 - _pair_metrics_arrays(first, start_window)["similarity"]
+    end_motion = 1.0 - _pair_metrics_arrays(end_window, last)["similarity"]
+    freeze_suspected = max(start_motion, end_motion) < 0.002
+
+    return {
+        "state": _classify_boundary(endpoint, window),
+        "similarity": endpoint["similarity"],
+        "boundary_window_similarity": window["similarity"],
+        "luminance_delta": max(endpoint["luminance_delta"], window["luminance_delta"]),
+        "color_delta": max(endpoint["color_delta"], window["color_delta"]),
+        "freeze_suspected": freeze_suspected,
+    }
 
 
 async def _normalize(source: Path, target: Path, width: int, height: int, fps: int) -> None:
@@ -171,8 +210,8 @@ async def normalize_loop_video_job(payload: dict[str, Any], workdir: Path) -> di
     if duration < 1.0 or duration > 20.5:
         raise RuntimeError("Living Artwork loops must be between 1 and 20 seconds.")
 
-    first, last = await _extract_boundary_frames(normalized, workdir)
-    before = _boundary_metrics(first, last)
+    frames = await _extract_boundary_frames(normalized, workdir)
+    before = _boundary_metrics(frames)
     output = normalized
     repair_ms = 0
     repaired = False
@@ -181,8 +220,8 @@ async def normalize_loop_video_job(payload: dict[str, Any], workdir: Path) -> di
         repaired_output = workdir / "repaired-loop.mp4"
         repair_ms = await _repair_seam(normalized, repaired_output, duration)
         repaired_duration = await _probe_duration_seconds(repaired_output)
-        repaired_first, repaired_last = await _extract_boundary_frames(repaired_output, workdir)
-        after = _boundary_metrics(repaired_first, repaired_last)
+        repaired_frames = await _extract_boundary_frames(repaired_output, workdir)
+        after = _boundary_metrics(repaired_frames)
         if after["state"] == "repair_available":
             # One deterministic repair attempt is the bounded policy. If the seam
             # remains imperfect, hand the result to the artist rather than looping.
@@ -206,7 +245,11 @@ async def normalize_loop_video_job(payload: dict[str, Any], workdir: Path) -> di
         "fps": fps,
         "seam_state": after["state"],
         "seam_similarity": after["similarity"],
+        "boundary_window_similarity": after["boundary_window_similarity"],
         "luminance_delta": after["luminance_delta"],
+        "color_delta": after["color_delta"],
+        "frame_count_estimate": round(duration * fps),
+        "freeze_suspected": after["freeze_suspected"],
         "repaired": repaired,
         "repair_ms": repair_ms,
         "before_repair": before if repaired else None,
