@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from .main import FFMPEG_BINARY, download, ffmpeg, sha256_file, upload_file, validate_remote_url
 from .video_director_finishing import extract_review_frames
+from .video_loop import looped_video_input_args
 
 
 def _duration_from_probe_text(text: str) -> float:
@@ -97,10 +98,7 @@ async def render_loop_visualizer_job(payload: dict[str, Any], workdir: Path) -> 
         f"crop={width}:{height},fps={fps},setsar=1,format=yuv420p"
     )
     await ffmpeg(
-        "-stream_loop",
-        "-1",
-        "-i",
-        str(loop_source),
+        *looped_video_input_args(loop_source),
         "-i",
         str(audio_source),
         "-t",
