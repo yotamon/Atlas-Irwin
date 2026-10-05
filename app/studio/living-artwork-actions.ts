@@ -188,8 +188,11 @@ export async function prepareLivingArtworkLoopKit(form: FormData) {
   });
   if (!workspace.source) throw new Error("Choose or attach artwork before preparing a loop.");
   const file = form.get("source_frame");
-  if (!(file instanceof File)) throw new Error("Prepare the portrait source frame before creating the Loop Kit.");
-  const stored = await storeLivingArtworkSourceFrame({ artist, contentItemId, workspace, file });
+  const stored = workspace.source.exactPortrait && workspace.source.assetId
+    ? { asset: { id: workspace.source.assetId }, publicUrl: workspace.source.url }
+    : file instanceof File
+      ? await storeLivingArtworkSourceFrame({ artist, contentItemId, workspace, file })
+      : (() => { throw new Error("Prepare the portrait source frame before creating the Loop Kit."); })();
   const preset = livingArtworkMotionPreset(value(form, "motion_preset"));
   const manifest = createLoopKitManifest({
     artistId: artist.artistId,
@@ -207,9 +210,15 @@ export async function prepareLivingArtworkLoopKit(form: FormData) {
   });
 
   const marketing = asMarketingClient(createServiceClient());
+  const existingNotes = (workspace.content.production_notes ?? "")
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("[living-artwork:v1"))
+    .join("\n")
+    .trim();
+  const livingNote = `[living-artwork:v1 preset=${preset.id}] Prepare a seamless short loop from the approved visual source. Use the exact same source as first and last frame.`;
   const { error: updateError } = await marketing.from("content_items").update({
     visual_prompt: manifest.prompt,
-    production_notes: `[living-artwork:v1 preset=${preset.id}] Prepare a seamless short loop from the approved visual source. Use the exact same source as first and last frame.`,
+    production_notes: [existingNotes, livingNote].filter(Boolean).join("\n\n"),
   }).eq("id", contentItemId)
     .eq("owner_id", artist.userId)
     .eq("artist_id", artist.artistId);
