@@ -92,8 +92,9 @@ export function recommendCreativeDirections({
   const limit = Math.max(1, Math.min(CREATIVE_DIRECTION_MAX_RESULTS, maxResults));
   const activeReleaseMoments = activeReleaseId ? moments.filter((moment) => moment.release_id === activeReleaseId) : [];
   const sourceMoments = activeReleaseMoments.length ? activeReleaseMoments : moments;
+  const momentOutcomes = CREATE_OUTCOMES.filter((outcome) => outcome.sourceMode === "moment");
   const candidates: CreativeDirectionCandidate[] = sourceMoments.flatMap((moment) =>
-    CREATE_OUTCOMES.map((outcome) => ({
+    momentOutcomes.map((outcome) => ({
       moment,
       outcome,
       score: outcomeScore(moment, outcome.id),
