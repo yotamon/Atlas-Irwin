@@ -40,6 +40,7 @@ Launcher policy:
 | /studio/releases/new | Music | Release creation workflow | Contextual | Prepare release | Direct |
 | /studio/releases/[id] | Music | Release object | Primary object | Music / search / Continue | Direct |
 | /studio/create | Global action | Outcome launcher | Contextual | global Create / object action | Direct |
+| /studio/create/loop/[id] | Create | Living Artwork staged workflow | Contextual | Create visual outcome / Track / Release / intent | Context only |
 | /studio/video | Create | Video workflow | Contextual | Create / Release | Context only |
 | /studio/video/[id] | Create | Creative asset object | Contextual | Continue / asset | Context only |
 | /studio/growth | Grow | Growth workspace | Primary | Primary nav | Direct |
