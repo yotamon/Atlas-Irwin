@@ -16,7 +16,7 @@ export type MarketingMediaJob = {
   release_id: string | null;
   content_item_id: string;
   generation_run_id: string | null;
-  job_type: "finish_social_video";
+  job_type: "finish_social_video" | "normalize_loop_video" | "render_loop_visualizer";
   status: "planned" | "queued" | "running" | "completed" | "failed" | "cancelled";
   idempotency_key: string;
   request_payload: Json;
