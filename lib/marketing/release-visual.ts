@@ -32,6 +32,7 @@ export const RELEASE_VISUAL_PACKAGE_IDS = [
 export type ReleaseVisualPackageId = (typeof RELEASE_VISUAL_PACKAGE_IDS)[number];
 
 export const RELEASE_VISUAL_SOURCE_ROLE = "release_visual_source";
+export const RELEASE_VISUAL_CANDIDATE_ROLE = "release_visual_candidate";
 export const RELEASE_VISUAL_PRIMARY_ROLE = "release_visual_primary";
 export const RELEASE_VISUAL_STORY_ROLE = "release_visual_story";
 export const RELEASE_VISUAL_FEED_ROLE = "release_visual_feed_portrait";
