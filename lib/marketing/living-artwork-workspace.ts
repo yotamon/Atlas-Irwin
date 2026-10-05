@@ -91,7 +91,8 @@ export async function loadLivingArtworkWorkspace(input: {
     .eq("owner_id", input.ownerId)
     .eq("artist_id", input.artistId)
     .eq("content_item_id", content.id)
-    .in("role", [LIVING_ARTWORK_LOOP_ROLE, LIVING_ARTWORK_FULL_TRACK_ROLE, LIVING_ARTWORK_SOCIAL_ROLE])\n    .order("created_at", { ascending: false });
+    .in("role", [LIVING_ARTWORK_LOOP_ROLE, LIVING_ARTWORK_FULL_TRACK_ROLE, LIVING_ARTWORK_SOCIAL_ROLE])
+    .order("created_at", { ascending: false });
   if (linksError) throw new Error(linksError.message);
   const assetIds = [...new Set((links ?? []).map((link) => link.media_asset_id))];
   const { data: assets, error: assetsError } = assetIds.length
