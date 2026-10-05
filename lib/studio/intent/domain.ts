@@ -50,8 +50,8 @@ function cleanObject(value: string) {
 
 function createIntent(query: string): ClassifiedStudioIntent | null {
   const lower = query.toLowerCase();
-  const livingArtworkIntent = (
-    /\b(?:animate|loop|looping|visualizer)\b/.test(lower)
+  const livingArtworkIntent = /\bvisualizer\b/.test(lower) || (
+    /\b(?:animate|loop|looping)\b/.test(lower)
     && /\b(?:artwork|cover|visual|image)\b/.test(lower)
   ) || /\b(?:reel|story|short)\s+background\b.*\b(?:artwork|cover|visual|image)\b/.test(lower);
   if (livingArtworkIntent) {
