@@ -281,7 +281,6 @@ function MakeLoopStage({ workspace, artistId }: { workspace: Workspace; artistId
                 <option value="premium">Premium</option>
               </select>
             </label>
-            <input type="hidden" name="motion_preset" value="subtle_pulse" />
             <p>The portrait frame and loop prompt are ready. Ensemblis will show the exact provider quote before submitting any paid generation.</p>
             <button className="button" type="submit">Prepare native generation</button>
           </form>
