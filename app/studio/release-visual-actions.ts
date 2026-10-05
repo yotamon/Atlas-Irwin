@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireStudioAdmin } from "@/lib/auth/studio";
+import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { rankReleaseVisualLayouts } from "@/lib/marketing/release-visual-layout";
 import { socialPlatformPackages } from "@/lib/marketing/platform-packages";
 import {
@@ -992,4 +993,53 @@ export async function saveReleaseVisualDerivative(form: FormData) {
   });
   if (eventError) throw new Error(eventError.message);
   refresh(contentItemId, workspace.release.id);
+}
+
+
+export async function animateApprovedReleaseVisual(form: FormData) {
+  const { artist, contentItemId } = await context(form);
+  const workspace = await loadReleaseVisualWorkspace({
+    ownerId: artist.userId,
+    artistId: artist.artistId,
+    contentItemId,
+  });
+  if (!workspace.approvedRun || !workspace.approvedSpec || !workspace.primaryAsset) {
+    throw new Error("Approve the static Release Visual before starting motion.");
+  }
+  const story = workspace.storyAsset;
+  if (!story?.public_url || story.width !== 1080 || story.height !== 1920) {
+    throw new Error("Create the Story 9:16 format before starting Living Artwork.");
+  }
+
+  await setPrimaryRole({
+    ownerId: artist.userId,
+    artistId: artist.artistId,
+    releaseId: workspace.release.id,
+    contentItemId,
+    mediaAssetId: story.id,
+    role: LIVING_ARTWORK_EXPLICIT_SOURCE_ROLE,
+    caption: "Approved Release Visual used as exact Living Artwork source",
+  });
+
+  const marketing = asMarketingClient(createServiceClient());
+  const { error: eventError } = await marketing.from("marketing_events").insert({
+    owner_id: artist.userId,
+    artist_id: artist.artistId,
+    campaign_id: workspace.content.campaign_id,
+    event_type: "release_visual_animation_started",
+    entity_type: "content_item",
+    entity_id: contentItemId,
+    payload: json({
+      releaseId: workspace.release.id,
+      sourceAssetId: story.id,
+      sourcePackageId: "instagram-story-image",
+      exactPortraitSource: true,
+      zeroSpendStaticSource: true,
+    }),
+  });
+  if (eventError) throw new Error(eventError.message);
+  refresh(contentItemId, workspace.release.id);
+  return {
+    href: ensemblisArtistHref(`/studio/create/loop/${contentItemId}`, artist.artistId),
+  };
 }
