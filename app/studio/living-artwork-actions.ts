@@ -8,6 +8,7 @@ import { createLoopKitManifest } from "@/lib/marketing/loop-kit";
 import {
   LIVING_ARTWORK_LOOP_ROLE,
   LIVING_ARTWORK_RAW_LOOP_ROLE,
+  LIVING_ARTWORK_SOURCE_FRAME_ROLE,
   livingArtworkMotionPreset,
 } from "@/lib/marketing/living-artwork";
 import {
@@ -24,6 +25,7 @@ import type { Json } from "@/types/database";
 
 const uuid = z.uuid();
 const MAX_LOOP_BYTES = 150 * 1024 * 1024;
+const MAX_SOURCE_FRAME_BYTES = 12 * 1024 * 1024;
 
 function value(form: FormData, key: string) {
   return String(form.get(key) ?? "").trim();
@@ -47,6 +49,130 @@ function refresh(contentItemId: string) {
   revalidatePath("/studio/production");
 }
 
+async function storeLivingArtworkSourceFrame(input: {
+  artist: Awaited<ReturnType<typeof resolveArtistContext>>;
+  contentItemId: string;
+  workspace: Awaited<ReturnType<typeof loadLivingArtworkWorkspace>>;
+  file: File;
+}) {
+  if (input.file.size <= 0 || input.file.size > MAX_SOURCE_FRAME_BYTES) {
+    throw new Error("Prepared portrait frame must be a non-empty PNG under 12 MB.");
+  }
+  if (input.file.type.toLowerCase() !== "image/png") {
+    throw new Error("Prepared portrait frame must be a PNG image.");
+  }
+
+  const service = createServiceClient();
+  const bytes = Buffer.from(await input.file.arrayBuffer());
+  const hash = createHash("sha256").update(bytes).digest("hex");
+  const bucket = "public-media";
+  const path = `${input.artist.userId}/library/marketing/${input.artist.artistId}/living-artwork/${input.contentItemId}/source/${hash}.png`;
+  const publicUrl = service.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+  const { error: uploadError } = await service.storage.from(bucket).upload(path, bytes, {
+    contentType: "image/png",
+    cacheControl: "31536000",
+    upsert: false,
+  });
+  if (uploadError && !uploadError.message.toLowerCase().includes("already exists")) {
+    throw new Error(uploadError.message);
+  }
+
+  const { data: existingAsset, error: lookupError } = await service.from("media_assets")
+    .select("*")
+    .eq("owner_id", input.artist.userId)
+    .eq("storage_path", path)
+    .limit(1)
+    .maybeSingle();
+  if (lookupError) throw new Error(lookupError.message);
+
+  let asset = existingAsset;
+  if (!asset) {
+    const { data, error } = await service.from("media_assets").insert({
+      owner_id: input.artist.userId,
+      bucket_name: bucket,
+      storage_path: path,
+      public_url: publicUrl,
+      asset_type: "social_image",
+      mime_type: "image/png",
+      file_size: bytes.length,
+      content_hash: hash,
+      width: 1080,
+      height: 1920,
+      visibility: "public",
+      metadata: json({
+        title: "Living Artwork portrait source",
+        description: "Deterministic 9:16 source frame prepared from approved artwork without generative AI.",
+        tags: [`artist:${input.artist.artistId}`, "living-artwork", "source-frame", "deterministic"],
+        artist_id: input.artist.artistId,
+        release_id: input.workspace.content.release_id,
+        content_item_id: input.contentItemId,
+        source_asset_id: input.workspace.source?.assetId ?? null,
+        source_url: input.workspace.source?.url ?? null,
+        upload_source: "living-artwork-browser-render",
+        source_kind: "derived_portrait_frame",
+        render_contract: "living-artwork-source-v1",
+      }),
+    }).select("*").single();
+    if (error || !data) throw new Error(error?.message || "Portrait source frame could not be registered.");
+    asset = data;
+  }
+
+  const music = asArtistScopedMusicClient(service);
+  const { error: demoteError } = await music.from("media_links").update({ is_primary: false })
+    .eq("owner_id", input.artist.userId)
+    .eq("artist_id", input.artist.artistId)
+    .eq("content_item_id", input.contentItemId)
+    .eq("role", LIVING_ARTWORK_SOURCE_FRAME_ROLE);
+  if (demoteError) throw new Error(demoteError.message);
+
+  const { data: existingLink, error: linkLookupError } = await music.from("media_links")
+    .select("id")
+    .eq("owner_id", input.artist.userId)
+    .eq("artist_id", input.artist.artistId)
+    .eq("content_item_id", input.contentItemId)
+    .eq("media_asset_id", asset.id)
+    .eq("role", LIVING_ARTWORK_SOURCE_FRAME_ROLE)
+    .limit(1)
+    .maybeSingle();
+  if (linkLookupError) throw new Error(linkLookupError.message);
+
+  const linkRow = {
+    owner_id: input.artist.userId,
+    artist_id: input.artist.artistId,
+    media_asset_id: asset.id,
+    release_id: input.workspace.content.release_id,
+    track_id: input.workspace.track?.id ?? null,
+    content_item_id: input.contentItemId,
+    role: LIVING_ARTWORK_SOURCE_FRAME_ROLE,
+    display_order: 0,
+    is_primary: true,
+    caption: "Prepared Living Artwork 9:16 source frame",
+    alt_text: null,
+  };
+  const { error: linkError } = existingLink
+    ? await music.from("media_links").update(linkRow).eq("id", existingLink.id).eq("artist_id", input.artist.artistId)
+    : await music.from("media_links").insert(linkRow);
+  if (linkError) throw new Error(linkError.message);
+
+  return { asset, publicUrl };
+}
+
+export async function prepareLivingArtworkSourceFrame(form: FormData) {
+  const { artist, contentItemId } = await context(form);
+  const workspace = await loadLivingArtworkWorkspace({
+    ownerId: artist.userId,
+    artistId: artist.artistId,
+    contentItemId,
+  });
+  if (!workspace.source) throw new Error("Choose or attach artwork before preparing a portrait frame.");
+  const file = form.get("source_frame");
+  if (!(file instanceof File)) throw new Error("The portrait source frame is missing.");
+
+  const stored = await storeLivingArtworkSourceFrame({ artist, contentItemId, workspace, file });
+  refresh(contentItemId);
+  return { assetId: stored.asset.id, url: stored.publicUrl };
+}
+
 export async function prepareLivingArtworkLoopKit(form: FormData) {
   const { artist, contentItemId } = await context(form);
   const workspace = await loadLivingArtworkWorkspace({
@@ -55,13 +181,16 @@ export async function prepareLivingArtworkLoopKit(form: FormData) {
     contentItemId,
   });
   if (!workspace.source) throw new Error("Choose or attach artwork before preparing a loop.");
+  const file = form.get("source_frame");
+  if (!(file instanceof File)) throw new Error("Prepare the portrait source frame before creating the Loop Kit.");
+  const stored = await storeLivingArtworkSourceFrame({ artist, contentItemId, workspace, file });
   const preset = livingArtworkMotionPreset(value(form, "motion_preset"));
   const manifest = createLoopKitManifest({
     artistId: artist.artistId,
     releaseId: workspace.content.release_id,
     contentItemId,
-    sourceAssetId: workspace.source.assetId,
-    sourceFrameUrl: workspace.source.url,
+    sourceAssetId: stored.asset.id,
+    sourceFrameUrl: stored.publicUrl,
     motionPreset: preset.id,
     artistContext: [
       workspace.context.brand.visualWorld,
