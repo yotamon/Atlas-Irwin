@@ -33,6 +33,12 @@ function HiddenContext({ artistId, contentItemId }: { artistId: string; contentI
   );
 }
 
+function assetTitle(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return "Release visual";
+  const title = (metadata as { title?: unknown }).title;
+  return typeof title === "string" && title.trim() ? title : "Release visual";
+}
+
 function SourceImage({ src, label }: { src: string; label: string }) {
   return (
     <div className="release-visual-source-preview">
@@ -76,9 +82,7 @@ function SourceChoices({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={url} alt="" />
             <span>
-              <strong>{typeof (asset.metadata as Record<string, unknown>)?.title === "string"
-                ? String((asset.metadata as Record<string, unknown>).title)
-                : "Release visual"}</strong>
+              <strong>{assetTitle(asset.metadata)}</strong>
               <small>{asset.width && asset.height ? `${asset.width}×${asset.height}` : "Approved release media"}</small>
             </span>
           </button>
