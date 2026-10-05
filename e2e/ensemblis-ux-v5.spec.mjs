@@ -140,7 +140,7 @@ test.describe("Ensemblis UX V5 authenticated acceptance", () => {
     await result.click();
 
     await expect(page.getByRole("heading", { name: "Create" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Music-led creative" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "What do you want to make?" })).toBeVisible();
     await auditCheckpoint(page, "03-create");
     await expect(page.getByText("Requested", { exact: true }).first()).toBeVisible();
   });
