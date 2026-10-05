@@ -1,6 +1,7 @@
 import numpy as np
 
 from app.loop_video import _boundary_metrics_arrays
+from app.loop_visualizer import _duration_from_probe_text
 
 
 def test_identical_boundary_is_ready() -> None:
@@ -34,3 +35,8 @@ def test_near_boundary_is_repairable() -> None:
     assert result["state"] == "repair_available"
     assert 0.8 <= result["similarity"] < 0.92
     assert 0.0 < result["color_delta"] <= 0.14
+
+
+def test_visualizer_probe_parses_canonical_media_duration() -> None:
+    text = "Duration: 00:03:12.340, start: 0.000000, bitrate: 320 kb/s"
+    assert _duration_from_probe_text(text) == 192.34
