@@ -4,6 +4,7 @@ import {
   importLivingArtworkLoop,
   prepareLivingArtworkLoopKit,
   renderLivingArtworkFullTrack,
+  renderLivingArtworkSocial,
   repairLivingArtworkLoop,
 } from "@/app/studio/living-artwork-actions";
 import {
@@ -430,9 +431,23 @@ function ExportStage({ workspace, artistId }: { workspace: Workspace; artistId: 
           )}
 
           <div className="living-artwork-export-card">
+            {workspace.socialAsset?.public_url ? <Status tone="success">Ready</Status> : null}
             <strong>Reel / Story / Short</strong>
-            <p>The same approved loop can be used for short-form content without generating new motion. Social packaging remains deterministic.</p>
-            <ButtonLink href={ensemblisArtistHref(`/studio/production?edit=${workspace.content.id}`, artistId)}>Open social creative</ButtonLink>
+            <p>The same approved loop uses the selected musical Moment for a short vertical export. No new motion is generated.</p>
+            {workspace.socialAsset?.public_url ? (
+              <a className="button primary" href={workspace.socialAsset.public_url} target="_blank" rel="noreferrer">Open short-form video</a>
+            ) : workspace.jobs.some((job) =>
+              job.job_type === "finish_social_video"
+              && record(job.request_payload).living_artwork_export === "social"
+              && ["planned", "queued", "running"].includes(job.status)
+            ) ? (
+              <Status>Working</Status>
+            ) : (
+              <form action={renderLivingArtworkSocial}>
+                <HiddenContext artistId={artistId} contentItemId={workspace.content.id} />
+                <button className="button" type="submit">Render short-form video</button>
+              </form>
+            )}
           </div>
         </div>
       </div>
