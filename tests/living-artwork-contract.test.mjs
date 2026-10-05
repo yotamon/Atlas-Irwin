@@ -12,7 +12,7 @@ test("Living Artwork remains the downstream motion continuation of Release Visua
   assert.match(outcomes, /id: "visual"/);
   assert.match(outcomes, /workflow: "release_visual"/);
   assert.match(releaseVisualActions, /animateApprovedReleaseVisual/);
-  assert.match(releaseVisualActions, /living_artwork_source/);
+  assert.match(releaseVisualActions, /LIVING_ARTWORK_EXPLICIT_SOURCE_ROLE/);
   for (const stage of ["source", "motion", "make_loop", "review", "export"]) {
     assert.ok(domain.includes(`"${stage}"`), `missing Living Artwork stage ${stage}`);
   }
