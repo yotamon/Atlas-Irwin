@@ -191,27 +191,35 @@ function MotionAndKitStage({ workspace, artistId }: { workspace: Workspace; arti
           </CompactEvidence>
 
           <Disclosure label="Generate inside Ensemblis instead">
-            <form action={prepareContentCreativeGeneration} className="living-artwork-native-form">
-              <HiddenContext artistId={artistId} contentItemId={contentId} />
-              <input type="hidden" name="creative_intent" value="seamless_loop" />
-              <input type="hidden" name="media_kind" value="video" />
-              <label className="field">
-                <span>Motion</span>
-                <select name="motion_preset" defaultValue="subtle_pulse">
-                  {LIVING_ARTWORK_MOTION_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
-                </select>
-              </label>
-              <label className="field">
-                <span>Quality</span>
-                <select name="quality" defaultValue="balanced">
-                  <option value="economy">Economy</option>
-                  <option value="balanced">Balanced · recommended</option>
-                  <option value="premium">Premium</option>
-                </select>
-              </label>
-              <p>Ensemblis will prepare the request first and show the exact provider quote before any paid generation is submitted.</p>
-              <button className="button" type="submit">Prepare native generation</button>
-            </form>
+            {workspace.nativeLoopGenerationConfigured ? (
+              <form action={prepareContentCreativeGeneration} className="living-artwork-native-form">
+                <HiddenContext artistId={artistId} contentItemId={contentId} />
+                <input type="hidden" name="creative_intent" value="seamless_loop" />
+                <input type="hidden" name="media_kind" value="video" />
+                <label className="field">
+                  <span>Motion</span>
+                  <select name="motion_preset" defaultValue="subtle_pulse">
+                    {LIVING_ARTWORK_MOTION_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Quality</span>
+                  <select name="quality" defaultValue="balanced">
+                    <option value="economy">Economy</option>
+                    <option value="balanced">Balanced · recommended</option>
+                    <option value="premium">Premium</option>
+                  </select>
+                </label>
+                <p>Ensemblis will prepare the request first and show the exact provider quote before any paid generation is submitted.</p>
+                <button className="button" type="submit">Prepare native generation</button>
+              </form>
+            ) : (
+              <div className="v2-calm-state compact">
+                <strong>Native loop generation is not connected.</strong>
+                <p>The free Loop Kit remains fully available. Connect a verified start/end-frame provider before trying to generate inside Ensemblis.</p>
+                <ButtonLink href={ensemblisArtistHref("/studio/connections", artistId)}>Open Connections</ButtonLink>
+              </div>
+            )}
           </Disclosure>
         </div>
       </div>
@@ -312,6 +320,20 @@ function MakeLoopStage({ workspace, artistId }: { workspace: Workspace; artistId
       )}
 
       <GenerationState workspace={workspace} artistId={artistId} />
+
+      {workspace.latestFailedJob ? (
+        <div className="living-artwork-generation-card">
+          <Status tone="danger">Blocked</Status>
+          <strong>
+            {workspace.latestFailedJob.job_type === "normalize_loop_video"
+              ? "Loop check needs another attempt"
+              : workspace.latestFailedJob.job_type === "render_loop_visualizer"
+                ? "Full-track render needs another attempt"
+                : "Short-form export needs another attempt"}
+          </strong>
+          <p>{workspace.latestFailedJob.error || "The media worker could not complete this step. Your approved sources are still safe."}</p>
+        </div>
+      ) : null}
 
       {workspace.activeJob ? (
         <div className="living-artwork-generation-card">
