@@ -203,7 +203,7 @@ test("release validation includes fully native Windows ARM64 audio runtime", asy
   assert.ok(workflow.includes("--no-binary=imageio-ffmpeg --no-deps imageio-ffmpeg==0.6.0"));
   assert.ok(workflow.includes("--no-binary=python-stretch python-stretch==0.3.1"));
   assert.ok(workflow.includes("verify_windows_arm64_python.py"));
-  assert.ok(workflow.includes("Prepare pinned Windows ARM64 FFmpeg"));
+  assert.ok(workflow.includes("Prepare verified Windows ARM64 FFmpeg"));
   assert.ok(workflow.includes("--ffmpeg-binary apps/library-bridge/renderer/.native-tools/windows-arm64/ffmpeg.exe"));
   assert.ok(workflow.includes("Build and verify Windows ARM64 sidecar"));
   assert.ok(workflow.includes("Build Windows ARM64 Tauri release bundle"));
