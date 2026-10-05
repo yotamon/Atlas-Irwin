@@ -169,6 +169,7 @@ function MotionAndKitStage({ workspace, artistId }: { workspace: Workspace; arti
             artistId={artistId}
             contentItemId={contentId}
             sourceUrl={source.url}
+            exactPortrait={source.exactPortrait}
           />
 
           <CompactEvidence label="What is the Loop Kit?">
