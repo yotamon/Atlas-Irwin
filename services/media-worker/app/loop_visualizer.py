@@ -56,9 +56,7 @@ async def render_loop_visualizer_job(payload: dict[str, Any], workdir: Path) -> 
     width = int(payload.get("width") or 1080)
     height = int(payload.get("height") or 1920)
     fps = int(payload.get("fps") or 30)
-    requested_duration_ms = int(payload.get("duration_ms") or 0)
-    if requested_duration_ms < 1000 or requested_duration_ms > 20 * 60 * 1000:
-        raise ValueError("Full-track visualizer duration hint must be between 1 second and 20 minutes.")
+    requested_duration_ms = int(payload.get("duration_ms") or 0) or None
     if width < 240 or height < 240 or width > 2160 or height > 3840 or fps < 12 or fps > 60:
         raise ValueError("Invalid visualizer dimensions or frame rate")
 
