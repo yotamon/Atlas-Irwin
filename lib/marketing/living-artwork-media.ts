@@ -101,12 +101,8 @@ export async function enqueueLivingArtworkVisualizer(input: {
   loopAssetId: string;
   loopAssetUrl: string;
   audioUrl: string;
-  durationMs: number;
 }) {
-  if (!Number.isFinite(input.durationMs) || input.durationMs < 1_000 || input.durationMs > 20 * 60 * 1000) {
-    throw new Error("Full-track visualizer requires a valid music duration up to 20 minutes.");
-  }
-  const fingerprint = stableKey(`${input.loopAssetId}|${input.audioUrl}|${input.durationMs}`);
+  const fingerprint = stableKey(`${input.loopAssetId}|${input.audioUrl}|canonical-audio-duration`);
   const idempotencyKey = `living-artwork:full-track:${input.contentItemId}:${fingerprint}`;
   const db = client();
   const existing = await existingJob(db, input.artistId, idempotencyKey);
@@ -139,7 +135,6 @@ export async function enqueueLivingArtworkVisualizer(input: {
       source_url: input.loopAssetUrl,
       source_asset_id: input.loopAssetId,
       audio_url: input.audioUrl,
-      duration_ms: Math.round(input.durationMs),
       upload_bucket: bucket,
       upload_path: outputPath,
       public_url: publicUrl,
