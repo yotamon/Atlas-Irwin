@@ -28,9 +28,9 @@ import {
   type ReleaseVisualSpec,
 } from "@/lib/marketing/release-visual";
 import { loadReleaseVisualWorkspace } from "@/lib/marketing/release-visual-workspace";
-import { asMarketingClient } from "@/lib/marketing/db";
 import { resolveArtistContext } from "@/lib/studio/artist-context";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
+import { asMomentAwareMarketingClient } from "@/lib/studio/moments-db";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { Json } from "@/types/database";
 import type { CreativeDerivativeDatabase } from "@/types/creative-derivative-database";
@@ -175,7 +175,7 @@ export async function selectReleaseVisualSource(form: FormData) {
   });
   const requestedAssetId = value(form, "source_asset_id");
   const service = createServiceClient();
-  const marketing = asMarketingClient(service);
+  const marketing = asMomentAwareMarketingClient(service);
   const music = asArtistScopedMusicClient(service);
 
   const { error: demoteError } = await music.from("media_links").update({ is_primary: false })
@@ -301,7 +301,7 @@ export async function saveReleaseVisualMessage(form: FormData) {
   };
 
   const service = createServiceClient();
-  const marketing = asMarketingClient(service);
+  const marketing = asMomentAwareMarketingClient(service);
   await clearRenderedSelection({
     ownerId: artist.userId,
     artistId: artist.artistId,
@@ -461,7 +461,7 @@ export async function saveReleaseVisualCandidate(form: FormData) {
     caption: `${target.format} Release Visual · awaiting approval`,
   });
 
-  const marketing = asMarketingClient(service);
+  const marketing = asMomentAwareMarketingClient(service);
   const { error: updateError } = await marketing.from("content_items").update({
     visual_prompt: JSON.stringify(spec),
     hook_text: spec.copy.headline,
@@ -503,7 +503,7 @@ export async function returnReleaseVisualToDesign(form: FormData) {
   });
   const service = createServiceClient();
   const music = asArtistScopedMusicClient(service);
-  const marketing = asMarketingClient(service);
+  const marketing = asMomentAwareMarketingClient(service);
   const { error: linkError } = await music.from("media_links").update({ is_primary: false })
     .eq("owner_id", artist.userId)
     .eq("artist_id", artist.artistId)
@@ -541,7 +541,7 @@ export async function approveReleaseVisual(form: FormData) {
     : createHash("sha256").update(JSON.stringify(spec)).digest("hex");
 
   const service = createServiceClient();
-  const marketing = asMarketingClient(service);
+  const marketing = asMomentAwareMarketingClient(service);
   const { data: runs, error: runsError } = await marketing.from("generation_runs")
     .select("*")
     .eq("owner_id", artist.userId)
@@ -839,7 +839,7 @@ export async function saveReleaseVisualDerivative(form: FormData) {
     return;
   }
 
-  const marketing = asMarketingClient(service);
+  const marketing = asMomentAwareMarketingClient(service);
   let childId = claim.derivative_content_item_id;
   if (!childId) {
     const { data: child, error: childError } = await marketing.from("content_items").insert({
@@ -1021,7 +1021,7 @@ export async function animateApprovedReleaseVisual(form: FormData) {
     caption: "Approved Release Visual used as exact Living Artwork source",
   });
 
-  const marketing = asMarketingClient(createServiceClient());
+  const marketing = asMomentAwareMarketingClient(createServiceClient());
   const { error: eventError } = await marketing.from("marketing_events").insert({
     owner_id: artist.userId,
     artist_id: artist.artistId,
