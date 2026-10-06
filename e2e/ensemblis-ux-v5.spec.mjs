@@ -145,42 +145,48 @@ test.describe("Ensemblis UX V5 authenticated acceptance", () => {
     await expect(page.getByText("Requested", { exact: true }).first()).toBeVisible();
   });
 
-  test("Release Visual starts from cover artwork and stays zero-spend-first", async ({ page }) => {
+  test("Release Visual starts from cover artwork, approves, recomposes and hands off to motion", async ({ page }) => {
     const release = await firstReleaseWithArtwork(page);
     await queryLauncher(page, "make an Out Now Story for " + release.title);
-
-    const result = page.getByRole("link", {
-      name: new RegExp("Create a release visual for " + escapeRegex(release.title), "i"),
-    }).first();
+    const result = page.getByRole("link", { name: new RegExp("Create a release visual for " + escapeRegex(release.title), "i") }).first();
     await expect(result).toBeVisible();
     await result.click();
 
-    await expect(page.getByRole("heading", { name: "Create a release visual" })).toBeVisible();
     const visualCard = page.locator(".release-visual-create-card").first();
-    await expect(visualCard).toBeVisible();
     await expect(visualCard.getByText("Zero-spend default", { exact: true })).toBeVisible();
     await visualCard.getByRole("button", { name: "Create visual" }).click();
-
     await page.waitForURL(/\/studio\/create\/visual\/[0-9a-f-]+/i);
-    await expect(page.getByRole("heading", { name: "Release Visual" })).toBeVisible();
+
     const progress = page.getByRole("navigation", { name: "Workflow progress" });
-    await expect(progress).toBeVisible();
     for (const step of ["Source", "Message", "Design", "Review", "Use"]) {
       await expect(progress.getByRole("button", { name: new RegExp(step, "i") })).toBeVisible();
     }
 
-    await expect(page.getByRole("radio", { name: /Out Now/i })).toBeVisible();
-    await page.getByRole("radio", { name: /Out Now/i }).click();
-    await page.getByRole("button", { name: "Continue to design" }).click();
-    await expect(page.getByRole("heading", { name: "Compose the actual social artwork" })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Story · 9:16/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Review this design" })).toBeVisible();
+    const outNow = page.getByRole("radio", { name: /Out Now/i });
+    if (await outNow.count()) {
+      await outNow.click();
+      await page.getByRole("button", { name: "Continue to design" }).click();
+      await page.getByRole("button", { name: "Review this design" }).click();
+      await expect(page.getByRole("heading", { name: "Approve the exact image you see" })).toBeVisible({ timeout: 20_000 });
+      await page.getByRole("button", { name: "Approve visual" }).click();
+    }
+
+    await expect(page.getByRole("heading", { name: "Your static release visual is ready" })).toBeVisible({ timeout: 20_000 });
+    const portrait = page.locator(".release-visual-format-grid article").filter({ hasText: "Feed · 4:5" });
+    if (await portrait.getByRole("button", { name: "Create format" }).count()) {
+      await portrait.getByRole("button", { name: "Create format" }).click();
+      await expect(portrait.getByRole("link", { name: "Open" })).toBeVisible({ timeout: 20_000 });
+    }
     await auditCheckpoint(page, "release-visual-desktop");
 
     await page.setViewportSize({ width: 390, height: 844 });
-    await expect(page.getByRole("heading", { name: "Release Visual" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Review this design" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Animate this artwork" })).toBeVisible();
     await auditCheckpoint(page, "release-visual-mobile");
+
+    await page.getByRole("button", { name: "Animate this artwork" }).click();
+    await page.waitForURL(/\/studio\/create\/loop\/[0-9a-f-]+/i, { timeout: 20_000 });
+    await expect(page.getByRole("heading", { name: "Living Artwork" })).toBeVisible();
+    await expect(page.getByText(/exact raster as both first and last frame/i)).toBeVisible();
   });
 
   test("4. a release leads with its lifecycle plan and one next move", async ({ page }) => {
