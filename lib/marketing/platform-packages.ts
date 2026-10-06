@@ -58,6 +58,24 @@ const PACKAGES: SocialPlatformPackage[] = [
     ],
   },
   {
+    id: "instagram-story-image",
+    platform: "Instagram",
+    format: "Story",
+    outputKind: "image",
+    width: 1080,
+    height: 1920,
+    aspectRatio: "9:16",
+    minDurationSeconds: null,
+    maxDurationSeconds: null,
+    maxAssets: 1,
+    safeArea: { topPercent: 12, rightPercent: 8, bottomPercent: 18, leftPercent: 8 },
+    rules: [
+      "Treat the Story as an intentional vertical poster rather than a stretched cover.",
+      "Keep exact promotional typography inside the safe area.",
+      "Reserve enough clean lower space for native link stickers when needed.",
+    ],
+  },
+  {
     id: "instagram-feed-portrait",
     platform: "Instagram",
     format: "Feed Post",
@@ -72,6 +90,23 @@ const PACKAGES: SocialPlatformPackage[] = [
     rules: [
       "Use editorial composition rather than a social template.",
       "Typography and logos belong to deterministic finishing, not generative rendering.",
+    ],
+  },
+  {
+    id: "instagram-square",
+    platform: "Instagram",
+    format: "Square Post",
+    outputKind: "image",
+    width: 1080,
+    height: 1080,
+    aspectRatio: "1:1",
+    minDurationSeconds: null,
+    maxDurationSeconds: null,
+    maxAssets: 1,
+    safeArea: { topPercent: 6, rightPercent: 6, bottomPercent: 6, leftPercent: 6 },
+    rules: [
+      "Preserve the release artwork without stretching it.",
+      "Keep promotional typography concise and readable at small feed sizes.",
     ],
   },
   {

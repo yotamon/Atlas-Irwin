@@ -1,7 +1,7 @@
 ﻿# Ensemblis UX V5 Route Inventory
 
-**Status:** Canonical V5 route ownership and discoverability contract — reconciled against PR #280 implementation
-**Date:** 2026-10-04
+**Status:** Canonical V5 route ownership and discoverability contract — reconciled against PR #290 implementation
+**Date:** 2026-10-06
 **Architecture:** `docs/ensemblis-ux-architecture-v5.md`
 
 ## Contract
@@ -40,7 +40,8 @@ Launcher policy:
 | /studio/releases/new | Music | Release creation workflow | Contextual | Prepare release | Direct |
 | /studio/releases/[id] | Music | Release object | Primary object | Music / search / Continue | Direct |
 | /studio/create | Global action | Outcome launcher | Contextual | global Create / object action | Direct |
-| /studio/create/loop/[id] | Create | Living Artwork staged workflow | Contextual | Create visual outcome / Track / Release / intent | Context only |
+| /studio/create/visual/[id] | Create | Release Visual staged workflow | Contextual | Create visual / Release / intent / Continue | Context only |
+| /studio/create/loop/[id] | Create | Living Artwork motion continuation | Contextual | approved visual → Animate / explicit motion intent | Context only |
 | /studio/video | Create | Video workflow | Contextual | Create / Release | Context only |
 | /studio/video/[id] | Create | Creative asset object | Contextual | Continue / asset | Context only |
 | /studio/growth | Grow | Growth workspace | Primary | Primary nav | Direct |
@@ -102,6 +103,8 @@ A route fails V5 if:
 6. a compatibility route becomes the only path to a user-facing capability.
 
 This inventory must be reconciled again on the final PR head before merge.
+
+PR #290 implements `/studio/create/visual/[id]` as the contextual Release Visual owner and keeps `/studio/create/loop/[id]` as its optional motion continuation.
 
 
 ## Human-factors containment reconciliation — 2026-10-04

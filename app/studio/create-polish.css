@@ -238,3 +238,356 @@
     gap: 0.2rem;
   }
 }
+
+
+/* Release Visual: release-first static social creative with optional Living Artwork continuation. */
+
+.studio-root .release-visual-entry {
+  margin-top: 1rem;
+}
+
+.studio-root .release-visual-create-body,
+.studio-root .release-visual-stage-grid,
+.studio-root .release-visual-composer {
+  display: grid;
+  grid-template-columns: minmax(15rem, .72fr) minmax(0, 1.28fr);
+  gap: clamp(1rem, 2.5vw, 2rem);
+  align-items: start;
+}
+
+.studio-root .release-visual-create-source,
+.studio-root .release-visual-source-preview,
+.studio-root .release-visual-composer-preview {
+  overflow: hidden;
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius);
+  background: color-mix(in srgb, var(--en-surface-raised) 72%, transparent);
+}
+
+.studio-root .release-visual-create-source {
+  aspect-ratio: 1;
+}
+
+.studio-root .release-visual-create-source img,
+.studio-root .release-visual-source-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.studio-root .release-visual-create-source-missing {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  color: var(--en-muted);
+  font-size: .75rem;
+}
+
+.studio-root .release-visual-create-body > div:last-child,
+.studio-root .release-visual-stage-copy,
+.studio-root .release-visual-composer-controls {
+  display: grid;
+  gap: .8rem;
+  min-width: 0;
+}
+
+.studio-root .release-visual-create-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+}
+
+.studio-root .release-visual-create-facts span {
+  padding: .28rem .5rem;
+  border: 1px solid var(--en-line);
+  border-radius: 999px;
+  color: var(--en-muted);
+  font-size: .64rem;
+}
+
+.studio-root .release-visual-page {
+  width: min(100%, 88rem);
+  margin: 0 auto;
+}
+
+.studio-root .release-visual-context-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 1rem 0 1.2rem;
+  padding: .85rem 1rem;
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius);
+  background: color-mix(in srgb, var(--en-surface-raised) 60%, transparent);
+}
+
+.studio-root .release-visual-context-strip > div {
+  display: grid;
+  gap: .15rem;
+  min-width: 0;
+}
+
+.studio-root .release-visual-context-strip strong {
+  color: var(--en-ink);
+}
+
+.studio-root .release-visual-context-strip small,
+.studio-root .release-visual-helper {
+  color: var(--en-muted);
+  font-size: .68rem;
+  line-height: 1.45;
+}
+
+.studio-root .release-visual-stage {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.studio-root .release-visual-source-preview {
+  width: min(100%, 31rem);
+  aspect-ratio: 9 / 16;
+  justify-self: center;
+}
+
+.studio-root .release-visual-source-preview img {
+  object-fit: contain;
+  background: color-mix(in srgb, var(--en-surface-raised) 78%, black 22%);
+}
+
+.studio-root .release-visual-source-choices,
+.studio-root .release-visual-choice-grid,
+.studio-root .release-visual-layout-grid,
+.studio-root .release-visual-format-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .65rem;
+}
+
+.studio-root .release-visual-choice-grid.compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.studio-root .release-visual-source-option,
+.studio-root .release-visual-choice,
+.studio-root .release-visual-layout-card {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: .72rem;
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-sm);
+  background: color-mix(in srgb, var(--en-surface-raised) 65%, transparent);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 150ms ease, background-color 150ms ease, transform 150ms ease;
+}
+
+.studio-root .release-visual-source-option {
+  display: grid;
+  grid-template-columns: 3.8rem minmax(0, 1fr);
+  gap: .7rem;
+  align-items: center;
+}
+
+.studio-root .release-visual-source-option img,
+.studio-root .release-visual-source-placeholder {
+  width: 3.8rem;
+  height: 3.8rem;
+  border-radius: .55rem;
+  object-fit: cover;
+  background: var(--en-surface-raised);
+}
+
+.studio-root .release-visual-source-placeholder {
+  display: grid;
+  place-items: center;
+  color: var(--en-muted);
+  font-size: .62rem;
+}
+
+.studio-root .release-visual-source-option span,
+.studio-root .release-visual-choice,
+.studio-root .release-visual-layout-card {
+  display: grid;
+  gap: .18rem;
+}
+
+.studio-root .release-visual-source-option strong,
+.studio-root .release-visual-choice strong,
+.studio-root .release-visual-layout-card strong,
+.studio-root .release-visual-format-grid strong {
+  color: var(--en-ink);
+  font-size: .75rem;
+}
+
+.studio-root .release-visual-source-option small,
+.studio-root .release-visual-choice small,
+.studio-root .release-visual-layout-card small,
+.studio-root .release-visual-format-grid small {
+  color: var(--en-muted);
+  font-size: .64rem;
+  line-height: 1.4;
+}
+
+.studio-root .release-visual-choice:hover,
+.studio-root .release-visual-choice:focus-visible,
+.studio-root .release-visual-layout-card:hover,
+.studio-root .release-visual-layout-card:focus-visible,
+.studio-root .release-visual-source-option:hover,
+.studio-root .release-visual-source-option:focus-visible,
+.studio-root .release-visual-choice.is-selected,
+.studio-root .release-visual-layout-card.is-selected {
+  border-color: color-mix(in srgb, var(--en-accent) 58%, var(--en-line));
+  background: color-mix(in srgb, var(--en-accent-soft) 40%, var(--en-surface-raised));
+  outline: none;
+}
+
+.studio-root .release-visual-choice:hover,
+.studio-root .release-visual-layout-card:hover {
+  transform: translateY(-1px);
+}
+
+.studio-root .release-visual-message-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.studio-root .release-visual-copy-grid {
+  margin-top: .25rem;
+}
+
+.studio-root .release-visual-composer-preview {
+  position: sticky;
+  top: 1rem;
+  display: grid;
+  place-items: center;
+  padding: clamp(.75rem, 2vw, 1.4rem);
+  min-height: 30rem;
+}
+
+.studio-root .release-visual-composer-preview canvas {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: min(72vh, 46rem);
+  border-radius: .65rem;
+  box-shadow: 0 1.1rem 3rem rgba(0,0,0,.28);
+}
+
+.studio-root .release-visual-preview-status {
+  position: absolute;
+  inset: auto .75rem .75rem auto;
+  padding: .3rem .5rem;
+  border-radius: 999px;
+  background: rgba(0,0,0,.7);
+  color: white;
+  font-size: .62rem;
+}
+
+.studio-root .release-visual-layout-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.studio-root .release-visual-copy-edit {
+  margin-top: .2rem;
+}
+
+.studio-root .release-visual-use-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .55rem;
+}
+
+.studio-root .release-visual-next-block {
+  display: grid;
+  gap: .7rem;
+  margin-top: .4rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--en-line);
+}
+
+.studio-root .release-visual-next-block h3,
+.studio-root .release-visual-next-block p {
+  margin: 0;
+}
+
+.studio-root .release-visual-format-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.studio-root .release-visual-format-grid > article {
+  display: grid;
+  gap: .45rem;
+  padding: .75rem;
+  border: 1px solid var(--en-line);
+  border-radius: var(--en-radius-sm);
+  background: color-mix(in srgb, var(--en-surface-raised) 58%, transparent);
+}
+
+.studio-root .release-visual-format-grid .button {
+  width: 100%;
+  margin-top: .25rem;
+}
+
+.studio-root .release-visual-animate-action {
+  display: grid;
+  justify-items: start;
+  gap: .45rem;
+}
+
+.studio-root .release-visual-offscreen-canvas {
+  display: none !important;
+}
+
+@media (max-width: 940px) {
+  .studio-root .release-visual-create-body,
+  .studio-root .release-visual-stage-grid,
+  .studio-root .release-visual-composer {
+    grid-template-columns: 1fr;
+  }
+
+  .studio-root .release-visual-composer-preview {
+    position: static;
+    min-height: 24rem;
+  }
+
+  .studio-root .release-visual-source-preview {
+    width: min(100%, 24rem);
+  }
+}
+
+@media (max-width: 720px) {
+  .studio-root .release-visual-context-strip {
+    align-items: flex-start;
+  }
+
+  .studio-root .release-visual-source-choices,
+  .studio-root .release-visual-choice-grid,
+  .studio-root .release-visual-choice-grid.compact,
+  .studio-root .release-visual-format-grid,
+  .studio-root .release-visual-layout-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .studio-root .release-visual-composer-preview {
+    min-height: 20rem;
+    padding: .6rem;
+  }
+
+  .studio-root .release-visual-composer-preview canvas {
+    max-height: 66vh;
+  }
+
+  .studio-root .release-visual-use-actions {
+    display: grid;
+  }
+
+  .studio-root .release-visual-use-actions .button {
+    width: 100%;
+  }
+}

@@ -94,6 +94,7 @@ async function semanticIntent(input: {
       objectType: StudioIntentObjectType;
       objectQuery: string;
       desiredOutcome: string | null;
+      createMode?: "static" | "motion" | null;
     }>({
       ownerId: input.ownerId,
       artistId: input.artistId,
@@ -106,6 +107,7 @@ async function semanticIntent(input: {
         "Resolve only the user's intended product action and the object words they supplied.",
         "Do not invent track or release names. Keep objectQuery empty when no object is named.",
         "Use create_from_object for requests to make a reel, clip, post, visualizer, artwork or other creative from music.",
+        "For visual create requests, set createMode=static for cover-to-social artwork and createMode=motion for animation, looping artwork or a visualizer.",
         "Use prepare_release for getting a release ready or preparing it for distribution.",
         "Use release_readiness for questions asking whether a release is ready.",
         "Use release_results for questions asking how a release is performing.",
@@ -237,6 +239,20 @@ function actionForTrack(intent: ClassifiedStudioIntent, track: TrackCandidate, a
     };
   }
   if (intent.kind === "create_from_object") {
+    if (intent.desiredOutcome === "visual" && track.linked_release_id) {
+      const mode = intent.createMode ? `&mode=${encodeURIComponent(intent.createMode)}` : "";
+      return {
+        id: `intent:create-visual:${track.id}`,
+        resultType: "action",
+        eyebrow: intent.createMode === "motion" ? "Animate" : "Create",
+        label: intent.createMode === "motion" ? `Animate artwork for ${track.title}` : `Create a release visual for ${track.title}`,
+        detail: intent.createMode === "motion"
+          ? "Start from the approved release visual identity, then continue into Living Artwork."
+          : "Turn the release artwork into a polished static social visual without requiring a musical Moment.",
+        href: href(`/studio/create?release=${track.linked_release_id}&outcome=visual${mode}`),
+        primary: true,
+      };
+    }
     if (!track.linked_track_id) {
       return {
         id: `intent:create-needs-release-context:${track.id}`,
@@ -300,13 +316,25 @@ function actionForRelease(intent: ClassifiedStudioIntent, release: ReleaseCandid
   }
   if (intent.kind === "create_from_object") {
     const outcome = intent.desiredOutcome ? `&outcome=${encodeURIComponent(intent.desiredOutcome)}` : "";
+    const mode = intent.createMode ? `&mode=${encodeURIComponent(intent.createMode)}` : "";
+    const visual = intent.desiredOutcome === "visual";
     return {
       id: `intent:create-release:${release.id}`,
       resultType: "action",
-      eyebrow: "Create",
-      label: `Create for ${release.title}`,
-      detail: intent.desiredOutcome ? `Use the strongest musical source and make a ${intent.desiredOutcome}.` : "Use the strongest approved musical source for this release.",
-      href: href(`/studio/create?release=${release.id}${outcome}`),
+      eyebrow: visual && intent.createMode === "motion" ? "Animate" : "Create",
+      label: visual
+        ? intent.createMode === "motion"
+          ? `Animate artwork for ${release.title}`
+          : `Create a release visual for ${release.title}`
+        : `Create for ${release.title}`,
+      detail: visual
+        ? intent.createMode === "motion"
+          ? "Start from the approved release visual identity, then continue into Living Artwork."
+          : "Turn the release artwork into a polished Story or feed visual before deciding whether it needs motion."
+        : intent.desiredOutcome
+          ? `Use the strongest musical source and make a ${intent.desiredOutcome}.`
+          : "Use the strongest approved musical source for this release.",
+      href: href(`/studio/create?release=${release.id}${outcome}${mode}`),
       primary: true,
     };
   }
