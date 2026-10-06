@@ -1,7 +1,7 @@
 ﻿# Ensemblis UX V5 Route Inventory
 
-**Status:** Canonical V5 route ownership and discoverability contract — reconciled against PR #280 implementation
-**Date:** 2026-10-04
+**Status:** Canonical V5 route ownership and discoverability contract — reconciled against PR #290 implementation
+**Date:** 2026-10-06
 **Architecture:** `docs/ensemblis-ux-architecture-v5.md`
 
 ## Contract
