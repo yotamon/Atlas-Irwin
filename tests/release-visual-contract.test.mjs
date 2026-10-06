@@ -16,11 +16,11 @@ async function domainModule() {
   const compiled = ts.transpileModule(stitched, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
-  const exports = {};
-  const fn = new Function("module", "exports", compiled + "\nmodule.exports = { defaultReleaseVisualMessage, defaultReleaseVisualCopy, deriveReleaseVisualStage, releaseVisualRoleForPackage };");
-  const module = { exports };
-  fn(module, exports);
-  return module.exports;
+  const exportsObject = {};
+  const fn = new Function("runtimeModule", "exports", compiled.replaceAll("module.exports", "runtimeModule.exports") + "\nruntimeModule.exports = { defaultReleaseVisualMessage, defaultReleaseVisualCopy, deriveReleaseVisualStage, releaseVisualRoleForPackage };");
+  const runtimeModule = { exports: exportsObject };
+  fn(runtimeModule, exportsObject);
+  return runtimeModule.exports;
 }
 
 test("visual Create outcome stays compatible but is release-owned", async () => {
