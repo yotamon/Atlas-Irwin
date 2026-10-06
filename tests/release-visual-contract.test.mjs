@@ -151,10 +151,13 @@ test("Release Visual uses one deterministic renderer for preview and final PNG",
 
 test("Release Visual persists one approved spec and true deterministic image derivatives", async () => {
   const actions = await read("app/studio/release-visual-actions.ts");
+  const derivatives = await read("lib/marketing/creative-derivatives.ts");
   const migration = await read("supabase/migrations/20261006003000_release_visual_derivative_strategy.sql");
   const types = await read("types/creative-derivative-database.ts");
 
   assert.match(actions, /releaseVisualSpec: spec/);
+  assert.match(derivatives, /creativeDerivativeStrategy/);
+  assert.match(derivatives, /"deterministic_image_recompose"/);
   assert.match(actions, /strategy: "deterministic_image_recompose"/);
   assert.match(actions, /parent_run_id: workspace\.approvedRun\.id/);
   assert.match(actions, /zeroGenerationSpend: true/);
@@ -188,4 +191,26 @@ test("Release Visual is contextual across Release, Today and Launcher", async ()
   assert.match(today, /latestVisualCreative/);
   assert.match(intent, /createMode\?: "static" \| "motion" \| null/);
   assert.match(intent, /releaseVisualStaticIntent/);
+});
+
+
+test("Release Visual approval stays publication-compatible without a second publishing system", async () => {
+  const actions = await read("app/studio/release-visual-actions.ts");
+  const spec = await read("docs/superpowers/specs/2026-10-06-release-visual-workflow-design.md");
+
+  assert.match(actions, /asset_url: workspace\.candidateAsset\.public_url/);
+  assert.match(actions, /approval_status: "approved"/);
+  assert.match(actions, /asset_url: stored\.publicUrl/);
+  assert.doesNotMatch(actions, /create table|publication_jobs.*insert/s);
+  assert.match(spec, /no auto-publish/i);
+});
+
+test("Release Visual static composition remains useful when generative visuals are disabled", async () => {
+  const actions = await read("app/studio/release-visual-actions.ts");
+  const composer = await read("components/studio/release-visual-composer.tsx");
+
+  assert.doesNotMatch(actions, /creative-router|creative-provider|higgsfield|fal\.ai|veo/i);
+  assert.doesNotMatch(composer, /creative-router|creative-provider|higgsfield|fal\.ai|veo/i);
+  assert.match(actions, /actual_cost_usd: 0/);
+  assert.match(composer, /No generative credits are used/);
 });
