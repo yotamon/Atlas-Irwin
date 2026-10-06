@@ -795,7 +795,7 @@ export async function saveReleaseVisualDerivative(form: FormData) {
 
   const service = createServiceClient();
   const derivativeDb = service as unknown as SupabaseClient<CreativeDerivativeDatabase>;
-  let { data: claim, error: claimError } = await derivativeDb.from("creative_derivatives")
+  const { data: existingClaim, error: claimError } = await derivativeDb.from("creative_derivatives")
     .select("*")
     .eq("owner_id", artist.userId)
     .eq("artist_id", artist.artistId)
@@ -803,6 +803,7 @@ export async function saveReleaseVisualDerivative(form: FormData) {
     .eq("target_package_id", stored.target.id)
     .maybeSingle();
   if (claimError) throw new Error(claimError.message);
+  let claim = existingClaim;
 
   if (!claim) {
     const inserted = await derivativeDb.from("creative_derivatives").insert({
