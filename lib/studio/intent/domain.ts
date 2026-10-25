@@ -21,6 +21,7 @@ export type ClassifiedStudioIntent = {
   objectType: StudioIntentObjectType;
   objectQuery: string;
   desiredOutcome: string | null;
+  createMode?: "static" | "motion" | null;
   confidence: "high" | "medium" | "low";
   source: "deterministic" | "semantic";
 };
@@ -50,6 +51,27 @@ function cleanObject(value: string) {
 
 function createIntent(query: string): ClassifiedStudioIntent | null {
   const lower = query.toLowerCase();
+  const releaseVisualStaticIntent = (
+    /\b(?:out now|out friday|pre[- ]?save|listen now)\b/.test(lower)
+    && /\b(?:story|post|artwork|visual|cover|instagram)\b/.test(lower)
+  ) || /\b(?:release visual|release post)\b/.test(lower)
+    || /\b(?:cover|artwork)\b.*\b(?:fit|for|to)\b.*\binstagram\b/.test(lower);
+  if (releaseVisualStaticIntent) {
+    return {
+      kind: "create_from_object",
+      objectType: "release",
+      objectQuery: cleanObject(
+        query
+          .replace(/\b(?:make|create|generate|turn|fit)\b/gi, " ")
+          .replace(/\b(?:out now|out friday|pre[- ]?save|listen now|instagram|story|post|artwork|visual|cover)\b/gi, " ")
+          .replace(/\b(?:this|a|an|the|from|for|using|into|to)\b/gi, " "),
+      ),
+      desiredOutcome: "visual",
+      createMode: "static",
+      confidence: "high",
+      source: "deterministic",
+    };
+  }
   const livingArtworkIntent = /\bvisualizer\b/.test(lower) || (
     /\b(?:animate|loop|looping)\b/.test(lower)
     && /\b(?:artwork|cover|visual|image)\b/.test(lower)
@@ -65,6 +87,7 @@ function createIntent(query: string): ClassifiedStudioIntent | null {
           .replace(/\b(?:from|for|using|into)\b/gi, " "),
       ),
       desiredOutcome: "visual",
+      createMode: "motion",
       confidence: "high",
       source: "deterministic",
     };
@@ -226,6 +249,7 @@ export function semanticIntentSchema() {
       objectType: { type: "string", enum: ["track", "release", "mix", "any"] },
       objectQuery: { type: "string" },
       desiredOutcome: { anyOf: [{ type: "string" }, { type: "null" }] },
+      createMode: { anyOf: [{ type: "string", enum: ["static", "motion"] }, { type: "null" }] },
     },
   } as const;
 }

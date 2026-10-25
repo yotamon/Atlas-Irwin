@@ -96,7 +96,26 @@ test("Living Artwork launcher aliases resolve to the visual Create outcome", asy
     const result = classifyStudioIntent(query);
     assert.equal(result.kind, "create_from_object", query);
     assert.equal(result.desiredOutcome, "visual", query);
+    assert.equal(result.createMode, "motion", query);
     assert.equal(result.confidence, "high", query);
   }
 });
 
+
+
+test("static Release Visual launcher aliases stay separate from motion intent", async () => {
+  const { classifyStudioIntent } = await intentModule();
+  for (const query of [
+    "make an Out Now Story for Funkable",
+    "Out Friday artwork for Funkable",
+    "make Funkable cover fit Instagram",
+    "create a release visual for Funkable",
+  ]) {
+    const result = classifyStudioIntent(query);
+    assert.equal(result.kind, "create_from_object", query);
+    assert.equal(result.objectType, "release", query);
+    assert.equal(result.desiredOutcome, "visual", query);
+    assert.equal(result.createMode, "static", query);
+    assert.equal(result.confidence, "high", query);
+  }
+});

@@ -10,6 +10,7 @@ export const CREATE_OUTCOMES = [
     mediaKind: "video",
     titleSuffix: "discovery cut",
     workflow: "standard",
+    sourceMode: "moment",
   },
   {
     id: "streams",
@@ -22,6 +23,7 @@ export const CREATE_OUTCOMES = [
     mediaKind: "video",
     titleSuffix: "stream driver",
     workflow: "standard",
+    sourceMode: "moment",
   },
   {
     id: "lyric",
@@ -34,18 +36,20 @@ export const CREATE_OUTCOMES = [
     mediaKind: "video",
     titleSuffix: "lyric creative",
     workflow: "standard",
+    sourceMode: "moment",
   },
   {
     id: "visual",
     label: "Build recognition",
-    shortLabel: "Create a memorable visual loop",
-    description: "Extend the artist visual world around this Moment so repeated exposure feels coherent and recognizable rather than like a new AI aesthetic.",
+    shortLabel: "Create release visuals",
+    description: "Turn the release artwork into a polished social visual, then animate it only when motion adds value.",
     platform: "Instagram",
-    format: "Mood video",
-    goal: "Saves",
-    mediaKind: "video",
-    titleSuffix: "visual loop",
-    workflow: "living_artwork",
+    format: "Release visual",
+    goal: "Recognition",
+    mediaKind: "image",
+    titleSuffix: "release visual",
+    workflow: "release_visual",
+    sourceMode: "release",
   },
 ] as const;
 

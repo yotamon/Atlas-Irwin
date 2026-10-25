@@ -288,6 +288,27 @@ Remaining exit work:
 #### P1.9 Artist-first creative UX - #110 - **Complete**
 PRs #115-#118 shipped Quick Video, shared durable Director state, representative-preview/budget flow, automatic master + socials delivery, exact approved-Moment lineage and artist-scoped Creative Memory retrieval. Director Pro preserves expert controls and existing spend safety.
 
+#### P1.9b Release Visual / cover-to-social artwork - #289 - **Implemented in PR #290; validation complete**
+Release Visual fixes the remaining gap before Living Artwork: an artist should be able to turn approved release artwork into a polished static social visual before deciding whether motion adds value.
+
+Canonical journey:
+
+`release cover → Release Visual → optional Living Artwork → export / publish`
+
+Implemented scope in PR #290:
+- make the existing `visual` Create outcome release-first rather than Moment-first;
+- add a contextual five-stage Release Visual workflow for Source → Message → Design → Review → Use;
+- support deterministic Clean / Out Now / Out Friday / Pre-save / Listen Now / Custom typography;
+- render true 9:16, 4:5 and 1:1 recompositions from one approved composition spec with zero generative spend;
+- reuse Visual Brand DNA as bounded style evidence without replacing release identity;
+- hand the exact approved 9:16 visual into Living Artwork without destructive reframing;
+- unify Release, Action Launcher and Today/Continue discovery around one visual creative family;
+- preserve existing campaign, publication, Media Library, spend and Living Artwork contracts.
+
+The architecture/spec and execution plan live in:
+- `docs/superpowers/specs/2026-10-06-release-visual-workflow-design.md`
+- `docs/superpowers/plans/2026-10-06-release-visual-workflow.md`
+
 #### P1.9a Living Artwork / loop-first visual creative - #285 - **Implementation in PR #286; acceptance active**
 Living Artwork extends the existing visual Create outcome rather than adding a new subsystem. The implementation keeps one short approved motion loop as the reusable source of truth.
 

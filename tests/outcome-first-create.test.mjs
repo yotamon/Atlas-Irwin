@@ -63,7 +63,8 @@ test("creative outcome catalog maps human goals to deterministic delivery defaul
     "Build recognition",
     'goal: "Reach"',
     'goal: "Streams"',
-    'format: "Mood video"',
+    'format: "Release visual"',
+    'sourceMode: "release"',
     "resolveCreateOutcome",
   ]) assert.ok(outcomes.includes(phrase), `outcome catalog must retain ${phrase}`);
 });

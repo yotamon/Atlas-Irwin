@@ -66,6 +66,21 @@ async function firstRelease(page) {
   return { title, href };
 }
 
+
+async function firstReleaseWithArtwork(page) {
+  await openStudio(page, "/studio/releases");
+  const releases = page.locator(".release-catalog-row");
+  const count = await releases.count();
+  for (let index = 0; index < count; index += 1) {
+    const release = releases.nth(index);
+    if (!(await release.locator(".release-catalog-artwork img").count())) continue;
+    const title = (await release.locator(".release-catalog-copy strong").textContent())?.trim();
+    const href = await release.getAttribute("href");
+    if (title && href) return { title, href };
+  }
+  throw new Error("Studio E2E requires at least one release with artwork.");
+}
+
 async function queryLauncher(page, query) {
   await openStudio(page, "/studio");
   await page.getByRole("button", { name: "Tell Ensemblis what you want to do" }).click();
@@ -130,37 +145,48 @@ test.describe("Ensemblis UX V5 authenticated acceptance", () => {
     await expect(page.getByText("Requested", { exact: true }).first()).toBeVisible();
   });
 
-  test("Living Artwork is discoverable, contextual and zero-spend-first", async ({ page }) => {
-    const track = await firstPlayableCatalogTrack(page);
-    await queryLauncher(page, "visualizer for " + track.title);
-
-    const result = page.getByRole("link", {
-      name: new RegExp("Create from " + escapeRegex(track.title), "i"),
-    }).first();
+  test("Release Visual starts from cover artwork, approves, recomposes and hands off to motion", async ({ page }) => {
+    const release = await firstReleaseWithArtwork(page);
+    await queryLauncher(page, "make an Out Now Story for " + release.title);
+    const result = page.getByRole("link", { name: new RegExp("Create a release visual for " + escapeRegex(release.title), "i") }).first();
     await expect(result).toBeVisible();
     await result.click();
 
-    await expect(page.getByRole("heading", { name: "What do you want to make?" })).toBeVisible();
-    const visualCard = page.locator(".create-deliverable-card").filter({
-      has: page.getByRole("heading", { name: "Create a memorable visual loop" }),
-    }).first();
-    await expect(visualCard).toBeVisible();
-    await visualCard.getByRole("button", { name: "Create Mood video" }).click();
+    const visualCard = page.locator(".release-visual-create-card").first();
+    await expect(visualCard.getByText("Zero-spend default", { exact: true })).toBeVisible();
+    await visualCard.getByRole("button", { name: "Create visual" }).click();
+    await page.waitForURL(/\/studio\/create\/visual\/[0-9a-f-]+/i);
 
-    await page.waitForURL(/\/studio\/create\/loop\/[0-9a-f-]+/i);
-    await expect(page.getByRole("heading", { name: "Living Artwork" })).toBeVisible();
     const progress = page.getByRole("navigation", { name: "Workflow progress" });
-    await expect(progress).toBeVisible();
-    for (const step of ["Source", "Motion", "Make loop", "Review loop", "Export"]) {
+    for (const step of ["Source", "Message", "Design", "Review", "Use"]) {
       await expect(progress.getByRole("button", { name: new RegExp(step, "i") })).toBeVisible();
     }
-    await expect(page.getByRole("button", { name: "Prepare free Loop Kit" })).toBeVisible();
-    await auditCheckpoint(page, "living-artwork-desktop");
+
+    const outNow = page.getByRole("radio", { name: /Out Now/i });
+    if (await outNow.count()) {
+      await outNow.click();
+      await page.getByRole("button", { name: "Continue to design" }).click();
+      await page.getByRole("button", { name: "Review this design" }).click();
+      await expect(page.getByRole("heading", { name: "Approve the exact image you see" })).toBeVisible({ timeout: 20_000 });
+      await page.getByRole("button", { name: "Approve visual" }).click();
+    }
+
+    await expect(page.getByRole("heading", { name: "Your static release visual is ready" })).toBeVisible({ timeout: 20_000 });
+    const portrait = page.locator(".release-visual-format-grid article").filter({ hasText: "Feed · 4:5" });
+    if (await portrait.getByRole("button", { name: "Create format" }).count()) {
+      await portrait.getByRole("button", { name: "Create format" }).click();
+      await expect(portrait.getByRole("link", { name: "Open" })).toBeVisible({ timeout: 20_000 });
+    }
+    await auditCheckpoint(page, "release-visual-desktop");
 
     await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.getByRole("button", { name: "Animate this artwork" })).toBeVisible();
+    await auditCheckpoint(page, "release-visual-mobile");
+
+    await page.getByRole("button", { name: "Animate this artwork" }).click();
+    await page.waitForURL(/\/studio\/create\/loop\/[0-9a-f-]+/i, { timeout: 20_000 });
     await expect(page.getByRole("heading", { name: "Living Artwork" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Prepare free Loop Kit" })).toBeVisible();
-    await auditCheckpoint(page, "living-artwork-mobile");
+    await expect(page.getByText(/exact raster as both first and last frame/i)).toBeVisible();
   });
 
   test("4. a release leads with its lifecycle plan and one next move", async ({ page }) => {

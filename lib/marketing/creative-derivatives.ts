@@ -30,6 +30,21 @@ function outputKind(value: unknown): SocialOutputKind | null {
   return value === "image" || value === "video" ? value : null;
 }
 
+export function creativeDerivativeStrategy(input: {
+  kind: SocialOutputKind;
+  sourceProvider?: string | null;
+  sourceModel?: string | null;
+}): CreativeDerivative["strategy"] {
+  if (input.kind === "video") return "deterministic_video_repackage";
+  if (
+    input.sourceProvider === "ensemblis-compositor"
+    && (input.sourceModel === "release-visual-v1" || input.sourceModel === "release-visual-derivative-v1")
+  ) {
+    return "deterministic_image_recompose";
+  }
+  return "reuse_approved_image";
+}
+
 async function connectedAccounts(ownerId: string, artistId: string) {
   const social = createServiceClient() as unknown as SupabaseClient<SocialDatabase>;
   const { data, error } = await social.from("social_channel_accounts")
@@ -177,9 +192,11 @@ async function createOneDerivative(input: {
     throw new Error("Creative derivative lineage does not match the active artist.");
   }
   const client = db();
-  const strategy: CreativeDerivative["strategy"] = input.kind === "video"
-    ? "deterministic_video_repackage"
-    : "reuse_approved_image";
+  const strategy = creativeDerivativeStrategy({
+    kind: input.kind,
+    sourceProvider: input.masterRun.provider,
+    sourceModel: input.masterRun.model,
+  });
   const claim = await claimDerivative({
     ownerId: input.ownerId,
     artistId: input.artistId,

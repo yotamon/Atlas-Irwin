@@ -235,22 +235,33 @@ export async function loadArtistOperatingSnapshot({
   const momentRows = momentsResult.data ?? [];
   const campaigns = campaignsResult.data ?? [];
   const content = contentResult.data ?? [];
-  const latestLivingArtworkRow = content
-    .filter((item) => item.production_notes?.includes("[living-artwork:v1"))
+  const latestVisualCreativeRow = content
+    .filter((item) =>
+      item.production_notes?.includes("[release-visual:v1")
+      || item.production_notes?.includes("[living-artwork:v1"))
     .sort((left, right) => Date.parse(right.updated_at) - Date.parse(left.updated_at))[0] ?? null;
-  const latestLivingArtwork = latestLivingArtworkRow ? {
-    id: latestLivingArtworkRow.id,
-    title: latestLivingArtworkRow.title,
-    status: latestLivingArtworkRow.approval_status === "approved"
-      ? "Ready to export"
-      : latestLivingArtworkRow.production_notes
-        ? "In progress"
-        : "Setup",
-    detail: latestLivingArtworkRow.approval_status === "approved"
-      ? "Approved Living Artwork loop · export or reuse it without another generation."
-      : "Living Artwork workflow in progress · continue from the saved source, motion and media state.",
-    href: href(`/studio/create/loop/${latestLivingArtworkRow.id}`),
-  } : null;
+  const latestVisualCreative = latestVisualCreativeRow ? (() => {
+    const motion = latestVisualCreativeRow.production_notes?.includes("[living-artwork:v1") ?? false;
+    const approved = latestVisualCreativeRow.approval_status === "approved";
+    return {
+      id: latestVisualCreativeRow.id,
+      title: latestVisualCreativeRow.title,
+      eyebrow: motion ? "Living Artwork" : "Release Visual",
+      status: motion
+        ? "Motion workflow"
+        : approved
+          ? "Ready to use"
+          : "In progress",
+      detail: motion
+        ? "Continue Living Artwork from the approved visual source, or review/export any completed motion output."
+        : approved
+          ? "Approved static visual is ready for another format or optional animation."
+          : "Release Visual is in progress · continue the cover-to-social design.",
+      href: href(motion
+        ? `/studio/create/loop/${latestVisualCreativeRow.id}`
+        : `/studio/create/visual/${latestVisualCreativeRow.id}`),
+    };
+  })() : null;
   const automation = automationResult.data ?? [];
   const publications = publicationResult.data ?? [];
   const nextActions = nextActionsResult.data ?? [];
@@ -487,7 +498,7 @@ export async function loadArtistOperatingSnapshot({
     activeRelease,
     latestTrack,
     latestMix,
-    latestLivingArtwork,
+    latestVisualCreative,
     activeMission,
     momentRecommendation,
     primaryMission,

@@ -19,7 +19,7 @@ export type CreativeDerivative = {
   target_platform: string;
   target_format: string;
   target_package_id: string;
-  strategy: "reuse_approved_image" | "deterministic_video_repackage";
+  strategy: "reuse_approved_image" | "deterministic_image_recompose" | "deterministic_video_repackage";
   auto_approve: boolean;
   status: "planned" | "processing" | "ready" | "failed" | "cancelled";
   error: string | null;
