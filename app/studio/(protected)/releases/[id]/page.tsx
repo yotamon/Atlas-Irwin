@@ -77,6 +77,8 @@ export default async function ReleaseDetail({
         playbookTasks={snapshot.playbookTasks}
         providerScheduledCount={snapshot.providerScheduledCount}
         vaultTracks={snapshot.vaultTracks}
+        deliverySignal={snapshot.deliverySignal}
+        smartLinkEventCount={snapshot.smartLinkEventCount}
       />
       {stage === "create" ? <MomentReviewPanel
         releaseId={snapshot.release.id}
