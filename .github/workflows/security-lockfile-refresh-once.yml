@@ -1,0 +1,58 @@
+name: Temporary security lockfile refresh
+
+# One-time, owner-only branch job. Never merge this workflow into main.
+on:
+  push:
+    branches:
+      - fix/security-audit-20261103
+    paths:
+      - .github/workflows/security-lockfile-refresh-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  lockfile:
+    if: github.actor == 'yotamon' && github.ref == 'refs/heads/fix/security-audit-20261103'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Generate lockfile from patched manifest
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund --fetch-retries=2
+      - name: Repair the remaining compatible transitive dependencies
+        run: |
+          npm audit fix --package-lock-only --ignore-scripts --no-fund || echo "Nonproduction or unfixed advisories remain to inspect"
+      - name: Fail on critical and high production security advisories
+        run: npm audit --omit=dev --audit-level=high
+      - name: Verify Next and Zod resolutions
+        run: |
+          node - <<'NODE'
+          const lock = require('./package-lock.json');
+          const next = lock.packages['node_modules/next']?.version;
+          const zod = lock.packages['node_modules/zod']?.version;
+          console.log({ next, zod });
+          if (!/^16\.(?:[5-9]|4\.(?:[1-9]|\d{2,}))/.test(next ?? '') && !/^16\.4\.[1-9]\d*$/.test(next ?? '')) {
+            throw new Error('Next resolution is not in the expected patched 16.x range');
+          }
+          if (!/^4\.[6-9]\.|^4\.[1-9]\d+\./.test(zod ?? '')) {
+            throw new Error('Zod resolution is below the patched range');
+          }
+          NODE
+      - name: Commit only the regenerated lockfile
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- package-lock.json
+          if git diff --cached --quiet; then
+            echo 'No lockfile changes required'
+          else
+            git commit -m 'fix(security): regenerate vetted production dependency lockfile'
+            git push origin HEAD:refs/heads/fix/security-audit-20261103
+          fi
