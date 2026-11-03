@@ -19,6 +19,7 @@ import { createUploadedMasteringReference } from "@/app/studio/mastering-referen
 import { createClient } from "@/lib/supabase/client";
 import { ResumableUploadAuthorizationError, uploadResumableMedia } from "@/lib/supabase/resumable-upload";
 import { musicFilenameIdentity } from "@/lib/studio/music-filename-identity";
+import { normalizeAudioMime } from "@/lib/studio/music-upload-file";
 import {
   compatibleMediaTypes,
   defaultMediaType,
@@ -68,22 +69,6 @@ function humanFormat(file: File) {
 
 function cleanAudioTitle(name: string) {
   return name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
-}
-
-// Windows and cloud-downloaded WAV/AIFF/FLAC files can arrive without a MIME
-// type. Normalize only untyped/octet-stream known audio extensions so the same
-// browser validator, signed upload and server-side media checks remain aligned.
-function normalizeAudioMime(file: File): File {
-  if (file.type.startsWith("audio/")) return file;
-  if (file.type && file.type !== "application/octet-stream") return file;
-  const extension = file.name.split(".").at(-1)?.toLowerCase() ?? "";
-  const types: Record<string, string> = {
-    wav: "audio/wav", wave: "audio/wav", flac: "audio/flac",
-    aif: "audio/aiff", aiff: "audio/aiff", mp3: "audio/mpeg",
-    m4a: "audio/mp4",
-  };
-  const mime = types[extension];
-  return mime ? new File([file], file.name, { type: mime, lastModified: file.lastModified }) : file;
 }
 
 async function reportTransportFailure({
