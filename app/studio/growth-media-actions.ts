@@ -8,6 +8,7 @@ import { kickMediaWorkerQueue } from "@/lib/media-worker/queue";
 import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asGrowthClient } from "@/lib/studio/growth-db";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
+import { musicFilenameIdentity } from "@/lib/studio/music-filename-identity";
 import { vaultAnalysisReadiness } from "@/lib/studio/vault-analysis";
 import type { Json } from "@/types/database";
 
@@ -21,9 +22,6 @@ function json(value: unknown) {
 }
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
-}
-function fileTitle(input: string) {
-  return input.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
 }
 function hasMusicMap(value: Json) {
   return Boolean(value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length);
@@ -140,13 +138,15 @@ export async function createVaultTrackFromMedia(form: FormData) {
     : {};
   const originalName = typeof metadata.original_name === "string" ? metadata.original_name : "Unreleased track";
   const requestedTitle = value(form, "title");
-  const title = z.string().min(1).max(300).parse(requestedTitle || fileTitle(originalName));
+  const identity = musicFilenameIdentity(originalName);
+  const title = z.string().min(1).max(300).parse(requestedTitle || identity.title);
   const durationSeconds = asset.duration_ms ? Math.round(asset.duration_ms / 1000) : null;
   const { data: track, error } = await growth.from("track_vault").insert({
     owner_id: user.id,
     artist_id: artist.artistId,
     media_asset_id: asset.id,
     title,
+    version: identity.version,
     status: "mastered",
     audio_url: asset.public_url,
     duration_seconds: durationSeconds,
