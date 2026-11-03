@@ -9,7 +9,7 @@ export type MusicFilenameIdentity = {
 };
 
 const AUDIO_EXTENSION = /\.(?:wav|wave|flac|aif|aiff|mp3|m4a)(?:\s*\(\d+\))?$/i;
-const KNOWN_VERSION = /\s+\((remastered?(?:\s+x?\d+)?|master(?:ed)?(?:\s+v?\d+)?|final master|final mix|mix\s+v\d+|v\d+)\)$/i;
+const KNOWN_VERSION = /\s+\((remaster(?:ed)?(?:\s+x?\d+)?|master(?:ed)?(?:\s+v?\d+)?|final master|final mix|mix\s+v\d+|v\d+)\)$/i;
 
 export function musicFilenameIdentity(filename: string): MusicFilenameIdentity {
   const normalized = filename.trim().replace(AUDIO_EXTENSION, "")
