@@ -69,6 +69,22 @@ function cleanAudioTitle(name: string) {
   return name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
+// Windows and cloud-downloaded WAV/AIFF/FLAC files can arrive without a MIME
+// type. Normalize only untyped/octet-stream known audio extensions so the same
+// browser validator, signed upload and server-side media checks remain aligned.
+function normalizeAudioMime(file: File): File {
+  if (file.type.startsWith("audio/")) return file;
+  if (file.type && file.type !== "application/octet-stream") return file;
+  const extension = file.name.split(".").at(-1)?.toLowerCase() ?? "";
+  const types: Record<string, string> = {
+    wav: "audio/wav", wave: "audio/wav", flac: "audio/flac",
+    aif: "audio/aiff", aiff: "audio/aiff", mp3: "audio/mpeg",
+    m4a: "audio/mp4",
+  };
+  const mime = types[extension];
+  return mime ? new File([file], file.name, { type: mime, lastModified: file.lastModified }) : file;
+}
+
 async function reportTransportFailure({
   transport,
   stage,
@@ -194,7 +210,7 @@ export function MediaUploader({
   const [busy, setBusy] = useState(false);
 
   function addFiles(files: FileList | File[]) {
-    const source = Array.from(files);
+    const source = Array.from(files).map((file) => audioOnly ? normalizeAudioMime(file) : file);
     const rejectedEmpty = source.filter((file) => file.size <= 0);
     const rejectedSize = source.filter((file) => file.size > uploadLimit);
     const rejectedType = source.filter((file) => audioOnly && !file.type.startsWith("audio/"));
@@ -218,11 +234,18 @@ export function MediaUploader({
 
     setItems((current) => {
       const signatures = new Set(current.map((item) => `${item.file.name}:${item.file.size}:${item.file.lastModified}`));
-      return [...current, ...next.filter((file) => !signatures.has(`${file.name}:${file.size}:${file.lastModified}`)).map((file) => ({
-        file,
-        role: (isCompatibleMediaType(defaultRole, file.type) ? defaultRole : defaultMediaType(file.type) ?? defaultRole),
-        state: "ready" as const,
-      }))];
+      const fresh: UploadItem[] = [];
+      for (const file of next) {
+        const signature = `${file.name}:${file.size}:${file.lastModified}`;
+        if (signatures.has(signature)) continue;
+        signatures.add(signature); // Also deduplicate within this one drop/selection.
+        fresh.push({
+          file,
+          role: isCompatibleMediaType(defaultRole, file.type) ? defaultRole : defaultMediaType(file.type) ?? defaultRole,
+          state: "ready",
+        });
+      }
+      return [...current, ...fresh];
     });
   }
 
