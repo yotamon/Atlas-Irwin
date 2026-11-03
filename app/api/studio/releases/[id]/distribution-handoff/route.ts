@@ -30,7 +30,7 @@ export async function GET(
     metadataResult, writersResult, contributorsResult, profilesResult, issuesResult,
   ] = await Promise.all([
     db.from("releases").select("*").eq("id", id).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
-    db.from("tracks").select("*").eq("release_id", id).eq("owner_id", user.id).eq("artist_id", artist.artistId).order("display_order"),
+    db.from("tracks").select("*").eq("release_id", id).eq("owner_id", user.id).order("display_order"),
     db.from("release_distribution_configs").select("*").eq("release_id", id).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
     db.from("distribution_release_metadata").select("*").eq("release_id", id).eq("owner_id", user.id).eq("artist_id", artist.artistId).maybeSingle(),
     db.from("distribution_track_metadata").select("*").eq("owner_id", user.id).eq("artist_id", artist.artistId),
