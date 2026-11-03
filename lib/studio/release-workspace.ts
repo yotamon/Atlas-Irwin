@@ -8,6 +8,8 @@ import { asMomentsClient } from "@/lib/studio/moments-db";
 import { curateCalibratedReleaseMoments } from "@/lib/studio/moments-calibrated-curator";
 import { asMarketingClient } from "@/lib/marketing/db";
 import { asGrowthClient } from "@/lib/studio/growth-db";
+import { asSmartLinksClient } from "@/lib/smart-links/db";
+import { loadReleaseDeliverySignal } from "@/lib/studio/release-delivery-signal-server";
 import { getPublicReleases } from "@/lib/public-catalog";
 import type { ArtistContext } from "@/lib/studio/artist-context";
 import type { Database, MusicVideoProject } from "@/types/database";
@@ -181,9 +183,28 @@ export async function loadReleaseWorkspaceSnapshot(input: {
     publicReleases = (await getPublicReleases()).filter((item) => item.artist === input.artist.artistName);
   }
 
+  // These are read-only signals. A successful public-site publish is not proof
+  // that the distributor accepted this exact release.
+  const [deliverySignal, smartLinkEventsResult] = await Promise.all([
+    loadReleaseDeliverySignal({
+      db: input.db,
+      ownerId: input.ownerId,
+      artistId: input.artist.artistId,
+      releaseId: input.releaseId,
+      releaseStatus: release.status,
+    }),
+    asSmartLinksClient(input.db).from("smart_link_events")
+      .select("id", { count: "exact", head: true })
+      .eq("owner_id", input.ownerId)
+      .eq("artist_id", input.artist.artistId)
+      .eq("release_id", input.releaseId),
+  ]);
+
   return {
     release,
     tracks,
+    deliverySignal,
+    smartLinkEventCount: smartLinkEventsResult.error ? null : (smartLinkEventsResult.count ?? 0),
     placement: placementResult.data,
     mediaLinks,
     mediaAssets: mediaAssetsResult.data ?? [],
