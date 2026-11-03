@@ -122,8 +122,10 @@ export default async function ReleaseDistributionArtistView({ params, searchPara
         </div>
         <p>Ensemblis keeps provider operations out of the way. Complete the canonical release facts and decisions below; the provider package stays an implementation detail.</p>
       </div>
-      <div className="actions"><Link className="button" href="/studio/distribution">All releases</Link></div>
+      <div className="actions"><a className="button" href={`/api/studio/releases/${release.id}/distribution-handoff?artist=${encodeURIComponent(artist.artistId)}`} download>Export distributor handoff</a><Link className="button" href="/studio/distribution">All releases</Link></div>
     </header>
+
+    <div className="distribution-feedback" role="note"><strong>Using a distributor outside Ensemblis?</strong><span>Export a private metadata handoff with unresolved checks. It never uploads audio, declares rights, approves distribution or records a submission. Use the exact approved master and keep the distributor receipt separately.</span></div>
 
     {feedback.error ? <div className="distribution-feedback error" role="alert"><strong>Action needed</strong><span>{feedback.error}</span></div> : null}
     {feedback.notice ? <div className="distribution-feedback success" role="status"><strong>Done</strong><span>{feedback.notice}</span></div> : null}
