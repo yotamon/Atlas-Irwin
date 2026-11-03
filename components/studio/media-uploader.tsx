@@ -18,6 +18,7 @@ import { reportMediaUploadTransportFailure } from "@/app/studio/media-upload-dia
 import { createUploadedMasteringReference } from "@/app/studio/mastering-reference-actions";
 import { createClient } from "@/lib/supabase/client";
 import { ResumableUploadAuthorizationError, uploadResumableMedia } from "@/lib/supabase/resumable-upload";
+import { musicFilenameIdentity } from "@/lib/studio/music-filename-identity";
 import {
   compatibleMediaTypes,
   defaultMediaType,
@@ -431,7 +432,10 @@ export function MediaUploader({
         if (masterIntake) {
           const vaultForm = new FormData();
           vaultForm.set("media_asset_id", result.id);
-          vaultForm.set("title", items.length === 1 && title.trim() ? title.trim() : cleanAudioTitle(item.file.name));
+          // An empty title asks the server to derive the canonical song title and
+          // mastering version from the asset filename. Do not accidentally turn
+          // "(Remastered x2)" into part of the song's permanent title.
+          vaultForm.set("title", items.length === 1 ? title.trim() : "");
           await createVaultTrackFromMedia(vaultForm);
         }
         if (releaseMasterMode && releaseId) {
@@ -616,7 +620,7 @@ export function MediaUploader({
       ) : null}
 
       {!releaseMasterMode ? <div className="form-grid media-upload-fields">
-        <label className="field"><span>{musicIntakeMode ? `Title ${items.length > 1 ? "(file names are used for bulk uploads)" : "(optional)"}` : `Display name ${items.length > 1 ? "(file names are used for bulk imports)" : ""}`}</span><input value={title} onChange={(event) => setTitle(event.target.value)} disabled={items.length > 1} placeholder={items[0] ? cleanAudioTitle(items[0].file.name) : musicIntakeMode ? "Uses the file name when empty" : "Shown in the library"} /></label>
+        <label className="field"><span>{musicIntakeMode ? `Title ${items.length > 1 ? "(file names are used for bulk uploads)" : "(optional)"}` : `Display name ${items.length > 1 ? "(file names are used for bulk imports)" : ""}`}</span><input value={title} onChange={(event) => setTitle(event.target.value)} disabled={items.length > 1} placeholder={items[0] ? (musicIntakeMode || vaultMode ? musicFilenameIdentity(items[0].file.name).title : cleanAudioTitle(items[0].file.name)) : musicIntakeMode ? "Uses the file name when empty" : "Shown in the library"} /></label>
         {!musicIntakeMode ? <>
           <label className="field"><span>Tags</span><input value={tags} onChange={(event) => setTags(event.target.value)} placeholder={vaultMode ? "mastered, nu-disco, priority" : "release, artwork, blue-hour"} /></label>
           <label className="field wide"><span>Notes</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={2} placeholder={vaultMode ? "Optional source/rights notes. Track-specific creative notes can be refined in the Vault." : "Creative context, rights, source, or intended use"} /></label>
