@@ -1,5 +1,6 @@
 import type { ReleaseLifecycle } from "@/lib/marketing/release-lifecycle";
 import { missionStateLabel, type MissionStateLabel } from "./decision-language";
+import type { DeliverySignal } from "./release-delivery-signal";
 
 export type MissionAttention = "blocking" | "recommended" | "optional";
 
@@ -32,6 +33,7 @@ export type ReleaseMissionInput = {
   hasListeningDestination: boolean;
   hasPrimaryHook: boolean;
   providerScheduledCount?: number;
+  deliverySignal?: DeliverySignal | null;
 };
 
 const BLOCKING_ATTENTION: Pick<ReleaseMissionItem, "attention"> = { attention: "blocking" };
@@ -81,6 +83,18 @@ export function deriveReleaseMission(input: ReleaseMissionInput): ReleaseMission
       "The release date anchors lifecycle planning, distribution timing and campaign scheduling.",
       `${releaseHref}#release-details`,
       BLOCKING_ATTENTION.attention,
+    ));
+  }
+
+  // Delivery is not proven by publishing the artist website or by attaching an audio file.
+  // Legacy catalog releases can remain live without an Ensemblis provider record.
+  if (input.deliverySignal?.requiresAttention && input.lifecycle !== "catalog") {
+    recommendations.push(item(
+      "distribution",
+      input.deliverySignal.kind === "ready_for_approval" ? "Approve music distribution" : input.deliverySignal.label,
+      input.deliverySignal.detail,
+      `${releaseHref}/distribution`,
+      "recommended",
     ));
   }
 
