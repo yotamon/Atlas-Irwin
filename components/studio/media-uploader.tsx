@@ -18,6 +18,8 @@ import { reportMediaUploadTransportFailure } from "@/app/studio/media-upload-dia
 import { createUploadedMasteringReference } from "@/app/studio/mastering-reference-actions";
 import { createClient } from "@/lib/supabase/client";
 import { ResumableUploadAuthorizationError, uploadResumableMedia } from "@/lib/supabase/resumable-upload";
+import { musicFilenameIdentity } from "@/lib/studio/music-filename-identity";
+import { normalizeAudioMime } from "@/lib/studio/music-upload-file";
 import {
   compatibleMediaTypes,
   defaultMediaType,
@@ -194,7 +196,7 @@ export function MediaUploader({
   const [busy, setBusy] = useState(false);
 
   function addFiles(files: FileList | File[]) {
-    const source = Array.from(files);
+    const source = Array.from(files).map((file) => audioOnly ? normalizeAudioMime(file) : file);
     const rejectedEmpty = source.filter((file) => file.size <= 0);
     const rejectedSize = source.filter((file) => file.size > uploadLimit);
     const rejectedType = source.filter((file) => audioOnly && !file.type.startsWith("audio/"));
@@ -218,11 +220,18 @@ export function MediaUploader({
 
     setItems((current) => {
       const signatures = new Set(current.map((item) => `${item.file.name}:${item.file.size}:${item.file.lastModified}`));
-      return [...current, ...next.filter((file) => !signatures.has(`${file.name}:${file.size}:${file.lastModified}`)).map((file) => ({
-        file,
-        role: (isCompatibleMediaType(defaultRole, file.type) ? defaultRole : defaultMediaType(file.type) ?? defaultRole),
-        state: "ready" as const,
-      }))];
+      const fresh: UploadItem[] = [];
+      for (const file of next) {
+        const signature = `${file.name}:${file.size}:${file.lastModified}`;
+        if (signatures.has(signature)) continue;
+        signatures.add(signature); // Also deduplicate within this one drop/selection.
+        fresh.push({
+          file,
+          role: isCompatibleMediaType(defaultRole, file.type) ? defaultRole : defaultMediaType(file.type) ?? defaultRole,
+          state: "ready",
+        });
+      }
+      return [...current, ...fresh];
     });
   }
 
@@ -408,7 +417,10 @@ export function MediaUploader({
         if (masterIntake) {
           const vaultForm = new FormData();
           vaultForm.set("media_asset_id", result.id);
-          vaultForm.set("title", items.length === 1 && title.trim() ? title.trim() : cleanAudioTitle(item.file.name));
+          // An empty title asks the server to derive the canonical song title and
+          // mastering version from the asset filename. Do not accidentally turn
+          // "(Remastered x2)" into part of the song's permanent title.
+          vaultForm.set("title", items.length === 1 ? title.trim() : "");
           await createVaultTrackFromMedia(vaultForm);
         }
         if (releaseMasterMode && releaseId) {
@@ -593,7 +605,7 @@ export function MediaUploader({
       ) : null}
 
       {!releaseMasterMode ? <div className="form-grid media-upload-fields">
-        <label className="field"><span>{musicIntakeMode ? `Title ${items.length > 1 ? "(file names are used for bulk uploads)" : "(optional)"}` : `Display name ${items.length > 1 ? "(file names are used for bulk imports)" : ""}`}</span><input value={title} onChange={(event) => setTitle(event.target.value)} disabled={items.length > 1} placeholder={items[0] ? cleanAudioTitle(items[0].file.name) : musicIntakeMode ? "Uses the file name when empty" : "Shown in the library"} /></label>
+        <label className="field"><span>{musicIntakeMode ? `Title ${items.length > 1 ? "(file names are used for bulk uploads)" : "(optional)"}` : `Display name ${items.length > 1 ? "(file names are used for bulk imports)" : ""}`}</span><input value={title} onChange={(event) => setTitle(event.target.value)} disabled={items.length > 1} placeholder={items[0] ? (musicIntakeMode || vaultMode ? musicFilenameIdentity(items[0].file.name).title : cleanAudioTitle(items[0].file.name)) : musicIntakeMode ? "Uses the file name when empty" : "Shown in the library"} /></label>
         {!musicIntakeMode ? <>
           <label className="field"><span>Tags</span><input value={tags} onChange={(event) => setTags(event.target.value)} placeholder={vaultMode ? "mastered, nu-disco, priority" : "release, artwork, blue-hour"} /></label>
           <label className="field wide"><span>Notes</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={2} placeholder={vaultMode ? "Optional source/rights notes. Track-specific creative notes can be refined in the Vault." : "Creative context, rights, source, or intended use"} /></label>
