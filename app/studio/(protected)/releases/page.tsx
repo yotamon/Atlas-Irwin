@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { MusicLibraryNav } from "@/components/studio/music-library-nav";
 import { ReleaseCatalog } from "@/components/studio/release-catalog";
+import { ReleaseRunway } from "@/components/studio/release-runway";
 import { EmptyState, Page, PageHeader } from "@/components/studio/ui";
 import { requireStudioAdmin } from "@/lib/auth/studio";
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
@@ -78,6 +79,9 @@ export default async function ReleasesPage({
         action={<Link className="button primary" href={href("/studio/releases/new")}>New release</Link>}
       />
       <MusicLibraryNav artistId={artist.artistId} active="releases" />
+      {!params.q && !params.status && !params.publish && !params.homepage ? (
+        <ReleaseRunway releases={enriched} artistId={artist.artistId} renderedAt={new Date().toISOString()} />
+      ) : null}
       {filtered.length ? (
         <ReleaseCatalog
           releases={filtered}
