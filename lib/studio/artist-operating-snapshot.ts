@@ -26,6 +26,7 @@ import {
 } from "./operating-preferences";
 import { asArtistScopedOperationalClient } from "./operational-db";
 import { deriveReleaseMission } from "./release-mission";
+import { loadReleaseDeliverySignal } from "./release-delivery-signal-server";
 
 export type OperatingWorkingItem = {
   id: string;
@@ -341,6 +342,13 @@ export async function loadArtistOperatingSnapshot({
 
   const activeReleaseContentIds = new Set(activeRelease ? content.filter((item) => item.release_id === activeRelease.id).map((item) => item.id) : []);
   const activeProviderScheduledCount = publications.filter((job) => job.content_item_id && activeReleaseContentIds.has(job.content_item_id) && String(job.status) === "provider_scheduled").length;
+  const activeDeliverySignal = activeRelease ? await loadReleaseDeliverySignal({
+    db,
+    ownerId: userId,
+    artistId: artist.artistId,
+    releaseId: activeRelease.id,
+    releaseStatus: activeRelease.status,
+  }) : null;
   const activeMission = activeRelease ? deriveReleaseMission({
     releaseId: activeRelease.id,
     lifecycle: releaseLifecycle({ releaseDate: activeRelease.release_date, status: activeRelease.status, isArchived: activeRelease.is_archived }, now),
@@ -352,6 +360,7 @@ export async function loadArtistOperatingSnapshot({
     hasListeningDestination: Boolean(activeRelease.smart_link_url || activeRelease.spotify_url || activeRelease.soundcloud_url || activeRelease.youtube_url),
     hasPrimaryHook: Boolean(activeRelease.primary_hook),
     providerScheduledCount: activeProviderScheduledCount,
+    deliverySignal: activeDeliverySignal,
   }) : null;
   const activeDistribution = activeRelease ? await loadDistributionArtistState(db, userId, artist.artistId, activeRelease.id) : null;
 
