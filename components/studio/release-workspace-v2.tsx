@@ -8,6 +8,7 @@ import { ReleaseMasteringCoherence } from "@/components/studio/release-mastering
 import { ensemblisArtistHref } from "@/lib/ensemblis-product";
 import { lifecycleLabel, releaseLifecycle } from "@/lib/marketing/release-lifecycle";
 import { deriveReleaseMission } from "@/lib/studio/release-mission";
+import type { DeliverySignal } from "@/lib/studio/release-delivery-signal";
 import type { ContentItem, MetricSnapshot, Release, Track } from "@/types/database";
 import type { VaultTrack } from "@/types/growth-database";
 
@@ -44,7 +45,7 @@ function resultInsight(metrics: MetricSnapshot[]) {
   return "There is listening activity, but not enough durable intent yet to declare a winning creative angle. Keep testing from the strongest musical sections.";
 }
 
-export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, campaign, stage, renderedAt, artistId, playbookTasks = [], providerScheduledCount = 0, vaultTracks = [] }: {
+export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, campaign, stage, renderedAt, artistId, playbookTasks = [], providerScheduledCount = 0, vaultTracks = [], deliverySignal = null, smartLinkEventCount = null }: {
   release: Release;
   tracks: Track[];
   contentItems: ContentItem[];
@@ -56,6 +57,8 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
   playbookTasks?: PlaybookTask[];
   providerScheduledCount?: number;
   vaultTracks?: VaultTrack[];
+  deliverySignal?: DeliverySignal | null;
+  smartLinkEventCount?: number | null;
 }) {
   const href = (path: string) => ensemblisArtistHref(path, artistId);
   const renderTime = new Date(renderedAt);
@@ -82,6 +85,7 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
     hasListeningDestination: Boolean(release.smart_link_url || release.spotify_url || release.soundcloud_url || release.youtube_url),
     hasPrimaryHook: Boolean(release.primary_hook),
     providerScheduledCount,
+    deliverySignal,
   });
   const missionAttention = [...mission.blockers, ...mission.recommendations];
   const nextMissionItem = missionAttention[0] ?? mission.optional[0] ?? null;
@@ -110,7 +114,7 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
         { label: "Release plan", value: mission.label },
         { label: "Needs attention", value: missionAttention.length },
         { label: "Tracks", value: tracks.length },
-        { label: "Masters", value: tracks.length ? `${mastersReady}/${tracks.length}` : "None" },
+        { label: "Masters attached", value: tracks.length ? `${mastersReady}/${tracks.length}` : "None" },
       ]}
       tabs={topTabs}
     />
@@ -140,9 +144,10 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
           <div><span className="section-label">Readiness</span><h2 id="release-readiness-heading">Music, identity, promotion and listening path</h2></div>
         </div>
         <div className="release-mission-checklist" aria-label="Release readiness">
-          <div><span className={hasMasterAudio ? "is-ready" : ""} aria-hidden>●</span><strong>Music</strong><small>{tracks.length ? `${mastersReady}/${tracks.length} masters ready` : "Tracks needed"}</small></div>
+          <div><span className={hasMasterAudio ? "is-ready" : ""} aria-hidden>●</span><strong>Music</strong><small>{tracks.length ? `${mastersReady}/${tracks.length} masters attached · verify audio before delivery` : "Tracks needed"}</small></div>
           <div><span className={release.artwork_url || release.cover_asset ? "is-ready" : ""} aria-hidden>●</span><strong>Identity</strong><small>{release.artwork_url || release.cover_asset ? "Artwork ready" : "Artwork needed"}</small></div>
-          <div><span className={campaign ? "is-ready" : ""} aria-hidden>●</span><strong>Promotion</strong><small>{campaign ? "Plan active" : "Plan preparing"}</small></div>
+          <div><span className={campaign ? "is-ready" : ""} aria-hidden>●</span><strong>Promotion</strong><small>{campaign ? `Plan ${campaign.status.toLowerCase()}` : "Plan preparing"}</small></div>
+          <div><span className={deliverySignal?.providerConfirmed ? "is-ready" : ""} aria-hidden>●</span><strong>Distribution</strong><small>{deliverySignal?.label ?? "Not verified"}</small></div>
           <div><span className={release.smart_link_url || release.spotify_url || release.soundcloud_url || release.youtube_url ? "is-ready" : ""} aria-hidden>●</span><strong>Listening</strong><small>{release.smart_link_url || release.spotify_url || release.soundcloud_url || release.youtube_url ? "Destination ready" : "Destination needed"}</small></div>
         </div>
 
@@ -196,7 +201,7 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
     {activeStage === "distribution" ? <section className="v2-section release-distribution-workspace">
       <div className="v2-section-heading"><div><span className="section-label">Distribution</span><h2>Get the music live, then keep every listening path coherent</h2><p>DSP delivery, public destinations and campaign publishing belong to this release. Specialist platform controls stay one level deeper.</p></div></div>
       <div className="v2-publish-grid">
-        <article><span>Music distribution</span><strong>DSP delivery</strong><small>Readiness, rights, provenance, stores and delivery status</small><Link href={href(`/studio/releases/${release.id}/distribution`)}>Open delivery →</Link></article>
+        <article><span>Music distribution</span><strong>{deliverySignal?.label ?? "Delivery not verified"}</strong><small>{deliverySignal?.detail ?? "Readiness, rights, provenance, stores and provider confirmation still need review."}</small><Link href={href(`/studio/releases/${release.id}/distribution`)}>Open delivery →</Link></article>
         <article><span>Listening destination</span><strong>{[release.spotify_url,release.soundcloud_url,release.youtube_url].filter(Boolean).length}/3 linked</strong><small>Spotify, SoundCloud and YouTube</small><Link href={href(`/studio/releases/${release.id}?view=advanced&tab=music`)}>Manage destinations →</Link></article>
         <article><span>Artist web</span><strong>{release.publish_state === "live" ? "Live" : "Not live"}</strong><small>Public catalog and release presence</small><Link href={href(`/studio/releases/${release.id}?view=advanced&tab=website`)}>Website controls →</Link></article>
         <article><span>Campaign publishing</span><strong>{releaseDateLocked ? `${providerScheduledCount} scheduled` : `${scheduled.length} ready`}</strong><small>{missingAsset.length ? `${missingAsset.length} still need assets` : "No asset blocker detected"}</small><Link href={href(`/studio/production?release=${release.id}`)}>Open creative assets →</Link></article>
@@ -210,6 +215,7 @@ export function ReleaseWorkspaceV2({ release, tracks, contentItems, metrics, cam
         <article><strong>{listeners.toLocaleString()}</strong><span>listeners</span><small>Unique audience signal</small></article>
         <article><strong>{saves.toLocaleString()}</strong><span>saves</span><small>Retention intent</small></article>
         <article><strong>{playlistAdds.toLocaleString()}</strong><span>playlist adds</span><small>Durable catalog intent</small></article>
+        <article><strong>{smartLinkEventCount == null ? "Not verified" : smartLinkEventCount.toLocaleString()}</strong><span>Smart Link events</span><small>Recorded first-party landings and actions, not confirmed streams</small></article>
       </div>
       <div className="release-result-insight"><span className="section-label">What this means</span><strong>{resultInsight(metrics)}</strong><div className="actions"><Link className="button primary" href={href("/studio/growth?view=opportunities")}>Review opportunities</Link><Link className="button" href={href("/studio/memory")}>What Ensemblis knows</Link></div></div>
     </section> : null}
