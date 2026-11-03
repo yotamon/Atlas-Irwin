@@ -10,9 +10,9 @@ async function loadDeliverySignal() {
   const compiled = ts.transpileModule(input, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
-  const module = { exports: {} };
-  new Function("module", "exports", compiled)(module, module.exports);
-  return module.exports.deriveDeliverySignal;
+  const runtimeModule = { exports: {} };
+  new Function("module", "exports", compiled)(runtimeModule, runtimeModule.exports);
+  return runtimeModule.exports.deriveDeliverySignal;
 }
 
 test("a live website or legacy release never invents DSP confirmation", async () => {
