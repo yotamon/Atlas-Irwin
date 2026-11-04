@@ -6,6 +6,7 @@ import { resolveDefaultArtistContext } from "@/lib/studio/artist-context";
 import { deriveDistributionArtistState } from "@/lib/distribution/artist-facing";
 import { normalizeAiProvenance, type DistributionRights } from "@/lib/distribution/domain";
 import { loadMasterReadinessByTrack } from "@/lib/mastering/distribution-readiness";
+import { loadReleaseDeliverySignal } from "@/lib/studio/release-delivery-signal-server";
 import { saveDistributionReleaseMetadata } from "@/app/studio/distribution-release-metadata-actions";
 import {
   addDistributionTrackContributor,
@@ -104,6 +105,17 @@ export default async function ReleaseDistributionArtistView({ params, searchPara
     openIssues: issuesResult.data ?? [],
     masterReadinessByTrack,
   });
+  const deliverySignal = await loadReleaseDeliverySignal({
+    db: supabase,
+    ownerId: user.id,
+    artistId: artist.artistId,
+    releaseId: release.id,
+    releaseStatus: release.status,
+  });
+  const deliveryLabel = state.submitted ? deliverySignal.label : state.label;
+  const deliveryTone = state.submitted
+    ? deliverySignal.kind === "confirmed_live" ? "live" : deliverySignal.requiresAttention ? "attention" : "good"
+    : state.tone;
   const locked = state.submitted && !["rejected", "error"].includes(config?.state ?? "");
   const rights = rightsFrom(config?.rights);
   const ai = normalizeAiProvenance(config?.ai_provenance);
@@ -118,9 +130,10 @@ export default async function ReleaseDistributionArtistView({ params, searchPara
         <Link className="v2-back-link" href={`/studio/releases/${release.id}`}>← {release.title}</Link>
         <div className="distribution-title-row">
           <div><span className="section-label">Release Mission · Distribution</span><h1>Deliver {release.title}</h1></div>
-          <span className={`distribution-state ${stateClass(state.tone)}`}>{state.label}</span>
+          <span className={`distribution-state ${stateClass(deliveryTone)}`}>{deliveryLabel}</span>
         </div>
         <p>Ensemblis keeps provider operations out of the way. Complete the canonical release facts and decisions below; the provider package stays an implementation detail.</p>
+        {state.submitted && deliverySignal.requiresAttention ? <p role="status">{deliverySignal.detail}</p> : null}
       </div>
       <div className="actions"><a className="button" href={`/api/studio/releases/${release.id}/distribution-handoff?artist=${encodeURIComponent(artist.artistId)}`} download>Export distributor handoff</a><Link className="button" href="/studio/distribution">All releases</Link></div>
     </header>

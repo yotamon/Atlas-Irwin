@@ -31,11 +31,30 @@ export async function loadReleaseDeliverySignal(input: {
   ]);
 
   const configuredProvider = config.data?.provider ?? "revelator";
+  const [submissions, storeDeliveries] = await Promise.all([
+    db.from("distribution_submissions")
+      .select("id")
+      .eq("owner_id", input.ownerId)
+      .eq("artist_id", input.artistId)
+      .eq("release_id", input.releaseId)
+      .eq("provider", configuredProvider)
+      .limit(1),
+    db.from("distribution_deliveries")
+      .select("id", { count: "exact", head: true })
+      .eq("owner_id", input.ownerId)
+      .eq("artist_id", input.artistId)
+      .eq("release_id", input.releaseId)
+      .eq("provider", configuredProvider)
+      .eq("state", "live"),
+  ]);
+
   const account = accounts.data?.find((row) => row.provider === configuredProvider);
   return deriveDeliverySignal({
     releaseIsLive: input.releaseStatus?.toLowerCase() === "live",
     providerState: config.data?.state ?? null,
     accountStatus: account?.status ?? null,
-    evidenceUnavailable: Boolean(accounts.error || config.error),
+    hasSubmissionRecord: Boolean(submissions.data?.length),
+    liveStoreCount: storeDeliveries.count ?? 0,
+    evidenceUnavailable: Boolean(accounts.error || config.error || submissions.error || storeDeliveries.error),
   });
 }

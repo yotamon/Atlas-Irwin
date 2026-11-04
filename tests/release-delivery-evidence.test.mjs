@@ -44,11 +44,21 @@ test("approval readiness is not a submission or a live release", async () => {
   assert.equal(ready.kind, "ready_for_approval");
   assert.equal(ready.requiresAttention, true);
   assert.equal(ready.providerConfirmed, false);
-  const sent = derive({ releaseIsLive: false, providerState: "under_review", accountStatus: "active" });
+  const missingReceipt = derive({ releaseIsLive: false, providerState: "under_review", accountStatus: "active" });
+  assert.equal(missingReceipt.kind, "unavailable");
+  assert.equal(missingReceipt.providerConfirmed, false);
+  const sent = derive({ releaseIsLive: false, providerState: "under_review", accountStatus: "active", hasSubmissionRecord: true });
   assert.equal(sent.kind, "in_flight");
   assert.equal(sent.providerConfirmed, true);
   assert.equal(sent.label, "Submitted to distributor");
-  const live = derive({ releaseIsLive: false, providerState: "live", accountStatus: "active" });
+  const falseLive = derive({ releaseIsLive: false, providerState: "live", accountStatus: "active" });
+  assert.equal(falseLive.kind, "unavailable");
+  assert.equal(falseLive.providerConfirmed, false);
+  const unverifiedStores = derive({ releaseIsLive: false, providerState: "live", accountStatus: "active", hasSubmissionRecord: true, liveStoreCount: 0 });
+  assert.equal(unverifiedStores.kind, "in_flight");
+  assert.equal(unverifiedStores.requiresAttention, true);
+  assert.match(unverifiedStores.label, /stores unverified/i);
+  const live = derive({ releaseIsLive: false, providerState: "live", accountStatus: "active", hasSubmissionRecord: true, liveStoreCount: 2 });
   assert.equal(live.kind, "confirmed_live");
   assert.equal(live.providerConfirmed, true);
 });
@@ -69,6 +79,10 @@ test("delivery readback preserves owner/artist scopes and never writes or submit
   const loader = await source("lib/studio/release-delivery-signal-server.ts");
   assert.match(loader, /\.from\("distribution_accounts"\)/);
   assert.match(loader, /\.from\("release_distribution_configs"\)/);
+  assert.match(loader, /\.from\("distribution_submissions"\)/);
+  assert.match(loader, /\.from\("distribution_deliveries"\)/);
+  assert.match(loader, /\.eq\("provider", configuredProvider\)/);
+  assert.match(loader, /\.eq\("state", "live"\)/);
   assert.match(loader, /\.eq\("owner_id", input\.ownerId\)/);
   assert.match(loader, /\.eq\("artist_id", input\.artistId\)/);
   assert.match(loader, /\.eq\("release_id", input\.releaseId\)/);
@@ -76,12 +90,13 @@ test("delivery readback preserves owner/artist scopes and never writes or submit
 });
 
 test("Release and Today show the same delivery evidence, without treating visits as streams", async () => {
-  const [mission, release, snapshot, today, page] = await Promise.all([
+  const [mission, release, snapshot, today, page, distribution] = await Promise.all([
     source("lib/studio/release-mission.ts"),
     source("components/studio/release-workspace-v2.tsx"),
     source("lib/studio/release-workspace.ts"),
     source("lib/studio/artist-operating-snapshot.ts"),
     source("app/studio/(protected)/releases/[id]/page.tsx"),
+    source("app/studio/(protected)/releases/[id]/distribution/release-distribution-artist-view.tsx"),
   ]);
   assert.match(mission, /input\.deliverySignal\?\.requiresAttention/);
   assert.match(release, /deliverySignal=|deliverySignal,/);
@@ -90,4 +105,6 @@ test("Release and Today show the same delivery evidence, without treating visits
   assert.match(snapshot, /asSmartLinksClient\(input\.db\)\.from\("smart_link_events"\)/);
   assert.match(today, /deliverySignal: activeDeliverySignal/);
   assert.match(page, /deliverySignal=\{snapshot\.deliverySignal\}/);
+  assert.match(distribution, /loadReleaseDeliverySignal/);
+  assert.match(distribution, /deliveryLabel/);
 });
