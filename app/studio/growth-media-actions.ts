@@ -9,6 +9,7 @@ import { resolveActiveArtistContext } from "@/lib/studio/artist-context";
 import { asGrowthClient } from "@/lib/studio/growth-db";
 import { asArtistScopedMusicClient } from "@/lib/studio/music-db";
 import { musicFilenameIdentity } from "@/lib/studio/music-filename-identity";
+import { originalMasterEligibility } from "@/lib/studio/original-master-eligibility";
 import { vaultAnalysisReadiness } from "@/lib/studio/vault-analysis";
 import type { Json } from "@/types/database";
 
@@ -120,7 +121,7 @@ export async function createVaultTrackFromMedia(form: FormData) {
   const artist = await resolveActiveArtistContext(supabase, user);
   const growth = asGrowthClient(supabase);
   const assetId = z.uuid().parse(value(form, "media_asset_id"));
-  const { data: asset, error: assetError } = await supabase.from("media_assets").select("id,public_url,mime_type,duration_ms,metadata").eq("id", assetId).eq("owner_id", user.id).single();
+  const { data: asset, error: assetError } = await supabase.from("media_assets").select("id,public_url,asset_type,mime_type,duration_ms,metadata").eq("id", assetId).eq("owner_id", user.id).single();
   if (assetError || !asset) throw new Error(assetError?.message || "Media asset not found.");
   if (!asset.mime_type?.startsWith("audio/")) throw new Error("Only audio assets can become mastered tracks.");
   if (!asset.public_url) throw new Error("Track Intelligence requires a public media URL.");
@@ -132,6 +133,16 @@ export async function createVaultTrackFromMedia(form: FormData) {
     .maybeSingle();
   if (existingError) throw new Error(existingError.message);
   if (existing) return { id: existing.id, deduplicated: true };
+
+  // A source-track import must never silently adopt an unrelated artist asset,
+  // a rendered mastering derivative, or a DJ mix from the shared media library.
+  const eligibility = originalMasterEligibility({
+    assetType: asset.asset_type,
+    mimeType: asset.mime_type,
+    metadata: asset.metadata,
+    artistId: artist.artistId,
+  });
+  if (!eligibility.allowed) throw new Error(eligibility.reason);
 
   const metadata = asset.metadata && typeof asset.metadata === "object" && !Array.isArray(asset.metadata)
     ? asset.metadata as Record<string, Json>
