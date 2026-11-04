@@ -5,6 +5,13 @@ on:
     branches: [main]
     paths:
       - "supabase/migrations/**"
+  workflow_dispatch:
+    inputs:
+      expected_migrations:
+        description: "Exact ordered pending version_name batch, comma-separated"
+        required: true
+        type: string
+        default: "20261005003000_living_artwork_media_jobs,20261006003000_release_visual_derivative_strategy"
 
 concurrency:
   group: production-supabase-migrations
@@ -16,6 +23,8 @@ permissions:
 jobs:
   migrate:
     name: deploy canonical migrations
+    # No branch other than main may deploy, including through manual dispatch.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: Production
@@ -51,6 +60,12 @@ jobs:
 
       - name: Verify production is an exact canonical prefix
         run: node scripts/check-supabase-migration-parity.mjs --allow-pending
+
+      - name: Require exact requested batch for manual deployment
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          EXPECTED_MIGRATIONS: ${{ inputs.expected_migrations }}
+        run: node scripts/verify-production-migration-batch.mjs
 
       - name: Link production project
         run: supabase link --project-ref "$SUPABASE_PROJECT_ID"
