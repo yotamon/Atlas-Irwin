@@ -27,6 +27,8 @@ export type DeliverySignalInput = {
   releaseIsLive: boolean;
   providerState: string | null;
   accountStatus: string | null;
+  hasSubmissionRecord?: boolean;
+  liveStoreCount?: number;
   evidenceUnavailable?: boolean;
 };
 
@@ -48,6 +50,28 @@ export function deriveDeliverySignal(input: DeliverySignalInput): DeliverySignal
     };
   }
 
+  // Status alone is insufficient evidence: a submitted release must have a
+  // durable submission receipt, and "Live" must also have store-level proof.
+  if (input.providerState === "live" && !input.hasSubmissionRecord) {
+    return {
+      kind: "unavailable",
+      label: "Missing distributor submission receipt",
+      detail: "The release is marked live without a canonical distribution submission. Verify the provider record before promoting it.",
+      requiresAttention: true,
+      providerConfirmed: false,
+    };
+  }
+
+  if (input.providerState === "live" && !(input.liveStoreCount && input.liveStoreCount > 0)) {
+    return {
+      kind: "in_flight",
+      label: "Distributor live state; stores unverified",
+      detail: "The provider state is live, but no store delivery is confirmed live in Ensemblis. Verify at least one actual store listing.",
+      requiresAttention: true,
+      providerConfirmed: true,
+    };
+  }
+
   if (input.providerState === "live") {
     return {
       kind: "confirmed_live",
@@ -55,6 +79,16 @@ export function deriveDeliverySignal(input: DeliverySignalInput): DeliverySignal
       detail: "The connected distributor reports this release as live. Verify each store destination before promotion.",
       requiresAttention: false,
       providerConfirmed: true,
+    };
+  }
+
+  if (input.providerState && IN_FLIGHT_STATES.has(input.providerState) && !input.hasSubmissionRecord) {
+    return {
+      kind: "unavailable",
+      label: "Missing distributor submission receipt",
+      detail: "The provider workflow has a submitted state but no canonical submission record. Verify its actual receipt before continuing.",
+      requiresAttention: true,
+      providerConfirmed: false,
     };
   }
 
