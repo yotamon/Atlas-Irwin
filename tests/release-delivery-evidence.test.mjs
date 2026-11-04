@@ -90,12 +90,13 @@ test("delivery readback preserves owner/artist scopes and never writes or submit
 });
 
 test("Release and Today show the same delivery evidence, without treating visits as streams", async () => {
-  const [mission, release, snapshot, today, page] = await Promise.all([
+  const [mission, release, snapshot, today, page, distribution] = await Promise.all([
     source("lib/studio/release-mission.ts"),
     source("components/studio/release-workspace-v2.tsx"),
     source("lib/studio/release-workspace.ts"),
     source("lib/studio/artist-operating-snapshot.ts"),
     source("app/studio/(protected)/releases/[id]/page.tsx"),
+    source("app/studio/(protected)/releases/[id]/distribution/release-distribution-artist-view.tsx"),
   ]);
   assert.match(mission, /input\.deliverySignal\?\.requiresAttention/);
   assert.match(release, /deliverySignal=|deliverySignal,/);
@@ -104,4 +105,6 @@ test("Release and Today show the same delivery evidence, without treating visits
   assert.match(snapshot, /asSmartLinksClient\(input\.db\)\.from\("smart_link_events"\)/);
   assert.match(today, /deliverySignal: activeDeliverySignal/);
   assert.match(page, /deliverySignal=\{snapshot\.deliverySignal\}/);
+  assert.match(distribution, /loadReleaseDeliverySignal/);
+  assert.match(distribution, /deliveryLabel/);
 });
