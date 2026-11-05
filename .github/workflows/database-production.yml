@@ -5,6 +5,10 @@ on:
     branches: [main]
     paths:
       - "supabase/migrations/**"
+      # Workflow updates also warrant a protected canonical migration reconciliation.
+      # This permits applying already-reviewed backlogged migrations without editing
+      # immutable SQL files or writing fake no-op migrations.
+      - ".github/workflows/database-production.yml"
   workflow_dispatch:
     inputs:
       expected_migrations:
