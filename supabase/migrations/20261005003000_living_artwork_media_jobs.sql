@@ -1,4 +1,3 @@
--- Deployment note (2026-11-05): existing canonical SQL unchanged; trigger protected Production migration workflow for the two reviewed pending migrations.
 -- Ensemblis #285: extend the existing durable marketing media queue for Living Artwork.
 -- Keep one queue/recovery model; do not introduce a parallel workflow table.
 
