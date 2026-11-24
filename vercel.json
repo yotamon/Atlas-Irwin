@@ -8,10 +8,5 @@
     }
   },
   "ignoreCommand": "node scripts/vercel-ignore-build.mjs",
-  "crons": [
-    {
-      "path": "/api/cron/marketing",
-      "schedule": "15 3 * * *"
-    }
-  ]
+  "crons": []
 }
